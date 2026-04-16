@@ -538,8 +538,8 @@ function renderRoleSelector() {
            </button>
         </div>
 
-        <div style="margin-top:20px; font-size:0.75rem; color:transparent; cursor:default; user-select:none;" onclick="document.getElementById('fb-email').value='zlagustin10@gmail.com'; window.showToast('Acceso Maestro Activado', 'info'); this.style.color='var(--text-muted)';" title="Copyright">
-           Desarrollado por <span style="font-weight:700;">M.C Luis Miguel Ponce Herrera</span>
+        <div style="margin-top:20px; padding:10px; font-size:0.7rem; color:rgba(0,0,0,0.03); cursor:pointer; user-select:none; border-radius:8px;" onclick="document.getElementById('fb-email').value='zlagustin10@gmail.com'; window.showToast('Acceso Maestro Activado 👑', 'info'); this.style.color='var(--text-muted)';" title="Master Access">
+           v30.2.1-M • Desarrollado por <span style="font-weight:700;">M.C Luis Miguel Ponce Herrera</span>
         </div>
 
         ${forceLogout}
