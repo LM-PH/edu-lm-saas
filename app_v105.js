@@ -522,17 +522,48 @@ function renderRoleSelector() {
 
         <div id="auth-error-msg" style="color:var(--danger); font-size:0.85rem; text-align:center; min-height:20px; margin-bottom:12px; font-weight:500;"></div>
 
-        <div style="margin-bottom:20px;">
-          <button class="btn btn-primary" style="width:100%;" onclick="window.handleLogin()">
-            <i class="fa-solid fa-right-to-bracket"></i> Entrar
+        <div style="margin-bottom:20px; display:flex; flex-direction:column; gap:10px;">
+          <button class="btn btn-primary" style="width:100%; border-radius:12px; height:50px;" onclick="window.handleLogin()">
+            <i class="fa-solid fa-key"></i> Entrar con Contraseña
+          </button>
+          <button class="btn btn-outline" style="width:100%; border-radius:12px; height:50px; border-color:var(--primary); color:var(--primary);" onclick="window.handleMagicLink()">
+            <i class="fa-solid fa-envelope-open-text"></i> Recibir enlace por Correo
           </button>
         </div>
 
         ${forceLogout}
       </div>
     </div>
-  `;
+        `;
 }
+
+window.handleMagicLink = async () => {
+    const email = document.getElementById('fb-email').value.trim();
+    if(!email) return alert("Escribe tu correo primero.");
+    
+    const errDiv = document.getElementById('auth-error-msg');
+    try {
+        const { error } = await supabaseClient.from('perfiles_permitidos')
+            .select('email').eq('email', email).maybeSingle();
+        
+        // Excepción Maestra: zlagustin10@gmail.com puede entrar aunque no esté en una escuela
+        if (email !== 'zlagustin10@gmail.com' && (!error)) {
+             // Si el correo no está permitido, le avisamos
+             const { data: check } = await supabaseClient.from('perfiles_permitidos').select('email').eq('email', email).maybeSingle();
+             if(!check) return alert("Este correo no tiene acceso autorizado a este plantel.");
+        }
+
+        const { error: authError } = await supabaseClient.auth.signInWithOtp({
+            email,
+            options: { emailRedirectTo: window.location.origin }
+        });
+        
+        if(authError) throw authError;
+        alert("¡Enlace enviado! Revisa tu bandeja de entrada (y la carpeta de Spam) para iniciar sesión.");
+    } catch(e) {
+        errDiv.innerText = e.message;
+    }
+};
 
 function renderSidebar() {
   // Mapeo seguro de roles (administrador -> admin, etc)
@@ -580,7 +611,14 @@ function renderSidebar() {
   };
 
   // Protección: Si el rol no existe en el menú, usar Alumno por defecto
-  const menuList = menus[userRole] || menus['alumno'];
+  const menuList = [...(menus[userRole] || menus['alumno'])];
+
+  // ==========================================
+  // INYECCIÓN MAESTRA (Dueño del SaaS)
+  // ==========================================
+  if (state.user?.email === 'zlagustin10@gmail.com') {
+    menuList.push({ name: 'Administración SaaS', path: '/master/saas', icon: 'fa-globe' });
+  }
 
   const navItems = menuList.map(item => `
     <a class="nav-item ${state.path === item.path ? 'active' : ''}" onclick="window.navigate('${item.path}')">
@@ -3816,6 +3854,7 @@ function renderPage(path) {
   
   // Routes Definition
   switch(purePath) {
+    case '/master/saas': return (state.user?.email === 'zlagustin10@gmail.com') ? renderMasterSaaS() : '<h2>Acceso Denegado</h2>';
     case '/admin/inscripcion': return renderAdminInscripcion();
     case '/admin/expediente': return renderAdminExpediente();
     case '/admin/grupos': return renderAdminGrupos();
@@ -3846,6 +3885,69 @@ function renderPage(path) {
     default: return '<h2>Pantalla en construcción</h2>';
   }
 }
+
+async function renderMasterSaaS() {
+    try {
+        const { data: planteles, error } = await supabaseClient.from('planteles').select('*').order('creado_en', { ascending: false });
+        if(error) throw error;
+
+        return `
+        <div class="page-header">
+          <h2 class="page-title">Centro de Mando SaaS</h2>
+          <p class="page-subtitle">Panel Exclusivo de Dueño: zlagustin10@gmail.com</p>
+        </div>
+
+        <div class="card" style="margin-bottom:32px; border-left: 6px solid var(--danger); background:#fff5f5;">
+           <div style="display:flex; gap:16px; align-items:center;">
+              <div style="font-size:2.5rem; color:var(--danger);"><i class="fa-solid fa-radiation"></i></div>
+              <div>
+                 <strong style="display:block; font-size:1.1rem; color:#c53030;">Control de Destrucción (Cascada)</strong>
+                 <p style="margin:0; font-size:0.9rem; color:#9b2c2c;">Al eliminar un plantel, se borran ALUMNOS, MAESTROS, GRUPOS y CALIFICACIONES de forma permanente.</p>
+              </div>
+           </div>
+        </div>
+
+        <div class="grid" style="grid-template-columns: repeat(auto-fill, minmax(350px, 1fr)); gap:24px;">
+           ${planteles.map(p => `
+             <div class="card shadow-md" style="border-top: 6px solid ${p.primary_color || '#2563eb'}; overflow:hidden;">
+                <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:15px;">
+                   <div>
+                      <h3 style="margin:0; font-weight:900;">${p.nombre}</h3>
+                      <code style="background:#f1f5f9; padding:2px 6px; border-radius:4px; font-size:0.75rem;">${p.slug}</code>
+                   </div>
+                   <div style="font-size:1.5rem; color:${p.primary_color || '#2563eb'}"><i class="fa-solid fa-school-flag"></i></div>
+                </div>
+                
+                <div style="background:#f8fafc; padding:12px; border-radius:12px; margin-bottom:15px; font-size:0.85rem;">
+                   <div style="margin-bottom:4px;"><i class="fa-solid fa-id-badge" style="width:20px;"></i> ID: <span style="font-size:0.7rem;">${p.id}</span></div>
+                   <div><i class="fa-solid fa-clock-rotate-left" style="width:20px;"></i> Registrada: ${new Date(p.creado_en).toLocaleString()}</div>
+                </div>
+
+                <div style="display:flex; gap:12px;">
+                   <button class="btn btn-primary" style="flex:1; font-size:0.8rem;" onclick="alert('Funciones PRO pronto')"><i class="fa-solid fa-eye"></i> Gestionar</button>
+                   <button class="btn" style="flex:1; font-size:0.8rem; background:#fee2e2; color:#dc2626; border:1px solid #fecaca;" onclick="window.eliminarPlantelSaaS('${p.id}', '${p.nombre}')">
+                      <i class="fa-solid fa-trash"></i> Eliminar
+                   </button>
+                </div>
+             </div>
+           `).join('')}
+        </div>
+        `;
+    } catch(e) { return `<div class="error-box">Error SaaS: ${e.message}</div>`; }
+}
+
+window.eliminarPlantelSaaS = async (id, nombre) => {
+    if(!confirm(`⚠️ ¿ELIMINAR ${nombre.toUpperCase()}?\nEsta acción es irreversible y borrará TODO el plantel.`)) return;
+    const confirmName = prompt(`Escribe exactamente "${nombre}" para dar de baja definitiva:`);
+    if(confirmName !== nombre) return alert("Nombre incorrecto. Acción cancelada.");
+
+    try {
+        const { error } = await supabaseClient.from('planteles').delete().eq('id', id);
+        if(error) throw error;
+        window.showToast("Plantel y datos eliminados correctamente.", "success");
+        renderApp();
+    } catch(e) { alert("Error al borrar: " + e.message); }
+};
 
 function renderApp() {
   const app = document.getElementById('app');
