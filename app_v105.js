@@ -304,23 +304,26 @@ function renderSetupScreen() {
 
     if (currentStep === 0) {
         return `
-        <div style="display:flex; justify-content:center; align-items:center; min-height:100vh; background:var(--primary-dark); padding:20px;">
-          <div class="card shadow-lg" style="width:100%; max-width:500px; padding:40px; border-top: 6px solid var(--primary); text-align:center; animation: fadeIn 0.5s;">
-            <div style="font-size:3.5rem; color:var(--primary); margin-bottom:20px;"><i class="fa-solid fa-graduation-cap"></i></div>
-            <h1 style="margin-bottom:10px;">¡Bienvenido a ${CONFIG.appName}!</h1>
-            <p style="color:var(--text-muted); margin-bottom:32px;">Antes de comenzar, dinos cuál es tu situación:</p>
+        <div style="display:flex; justify-content:center; align-items:center; min-height:100vh; background:linear-gradient(135deg, var(--primary-dark) 0%, #1e293b 100%); padding:20px;">
+          <div class="card shadow-lg" style="width:100%; max-width:450px; padding:40px; border-radius:24px; text-align:center; animation: fadeIn 0.8s ease-out; background:rgba(255,255,255,0.98); backdrop-filter: blur(10px);">
+            <div style="font-size:4rem; color:var(--primary); margin-bottom:20px; filter: drop-shadow(0 4px 6px rgba(37, 99, 235, 0.2));"><i class="fa-solid fa-graduation-cap"></i></div>
+            <h1 style="margin-bottom:12px; font-weight:800; letter-spacing:-0.02em;">¡Bienvenido a ${CONFIG.appName}!</h1>
+            <p style="color:var(--text-muted); margin-bottom:32px; font-size:1.05rem;">Antes de comenzar, dinos cuál es tu situación:</p>
             
             <div style="display:flex; flex-direction:column; gap:16px;">
-                <button class="btn btn-primary" style="height:60px; font-size:1.1rem;" onclick="state.setupStep = 1; renderApp();">
+                <button class="btn btn-primary" style="height:64px; font-size:1.1rem; border-radius:16px; font-weight:600; box-shadow: 0 10px 15px -3px rgba(37, 99, 235, 0.3);" onclick="state.setupStep = 1; renderApp();">
                     <i class="fa-solid fa-user-tie"></i> Soy Director (Nuevo Plantel)
                 </button>
-                <button class="btn btn-outline" style="height:60px; font-size:1.1rem; border-color:var(--primary); color:var(--primary);" onclick="state.setupStep = 2; renderApp();">
+                <button class="btn btn-outline" style="height:64px; font-size:1.1rem; border-radius:16px; border-width:2px; border-color:var(--primary); color:var(--primary); font-weight:600;" onclick="state.setupStep = 2; renderApp();">
                     <i class="fa-solid fa-school-circle-check"></i> Mi escuela ya está registrada
                 </button>
             </div>
-            <p style="margin-top:24px; font-size:0.8rem; color:var(--text-muted); line-height:1.5;">
+            
+            <hr style="margin:32px 0; border:0; border-top:1px solid #e2e8f0;">
+
+            <p style="font-size:0.85rem; color:var(--text-muted); line-height:1.6;">
                 Edu-LM v30.2 - Gestión Escolar Inteligente<br>
-                <span style="font-weight:700; color:var(--primary); opacity:0.8;">M.C Luis Miguel Ponce Herrera</span>
+                <span style="font-weight:700; color:var(--primary); font-size:0.95rem;">M.C Luis Miguel Ponce Herrera</span>
             </p>
           </div>
         </div>
@@ -329,26 +332,26 @@ function renderSetupScreen() {
 
     if (currentStep === 1) { // Lógica Director
         return `
-        <div style="display:flex; justify-content:center; align-items:center; min-height:100vh; background:var(--primary-light); padding:20px;">
-          <div class="card shadow-lg" style="width:100%; max-width:500px; padding:40px; border-top: 6px solid var(--primary); animation: slideDown 0.5s;">
-            <button onclick="state.setupStep = 0; renderApp();" style="border:none; background:none; color:var(--primary); cursor:pointer; font-weight:600; margin-bottom:15px;"><i class="fa-solid fa-arrow-left"></i> Volver</button>
-            <h1 style="color:var(--text-main); line-height:1.1; margin-bottom:10px;">Registro de Plantel</h1>
-            <p style="color:var(--text-muted); margin-bottom:24px;">Configura tu escuela como Director Fundador.</p>
+        <div style="display:flex; justify-content:center; align-items:center; min-height:100vh; background:var(--page-bg); padding:20px;">
+          <div class="card shadow-lg" style="width:100%; max-width:480px; padding:40px; border-radius:24px; text-align:center; animation: scaleIn 0.4s ease-out;">
+            <button onclick="state.setupStep = 0; renderApp();" style="border:none; background:none; color:var(--primary); cursor:pointer; font-weight:700; margin-bottom:20px; font-size:1rem;"><i class="fa-solid fa-arrow-left"></i> Volver</button>
+            <h1 style="color:var(--text-main); margin-bottom:8px;">Registro de Plantel</h1>
+            <p style="color:var(--text-muted); margin-bottom:32px;">Configura tu escuela como Director Fundador.</p>
 
-            <div id="setupForm">
-                <div class="form-group">
-                    <label class="form-label">Nombre de la Escuela (En MAYÚSCULAS)</label>
-                    <input type="text" id="setupEscuela" class="form-input" placeholder="EJ: ESCUELA SECUNDARIA TECNICA NO. 1" oninput="this.value = this.value.toUpperCase()">
+            <div id="setupForm" style="text-align:left;">
+                <div class="form-group" style="margin-bottom:20px;">
+                    <label class="form-label" style="font-weight:600; margin-bottom:8px; display:block;">Nombre de la Escuela (Mayúsculas)</label>
+                    <input type="text" id="setupEscuela" class="form-input" style="height:54px; text-align:center; font-weight:700; border-radius:12px;" placeholder="EJ: ESCUELA SECUNDARIA TECNICA NO. 1" oninput="this.value = this.value.toUpperCase()">
                 </div>
-                <div class="form-group">
-                    <label class="form-label">Nombre del Director</label>
-                    <input type="text" id="setupDirector" class="form-input" placeholder="Nombre completo...">
+                <div class="form-group" style="margin-bottom:20px;">
+                    <label class="form-label" style="font-weight:600; margin-bottom:8px; display:block;">Nombre del Director</label>
+                    <input type="text" id="setupDirector" class="form-input" style="height:54px; text-align:center; border-radius:12px;" placeholder="Nombre completo...">
                 </div>
-                <div class="form-group">
-                    <label class="form-label">Tu Correo Institucional</label>
-                    <input type="email" id="setupCorreo" class="form-input" placeholder="director@escuela.com">
+                <div class="form-group" style="margin-bottom:32px;">
+                    <label class="form-label" style="font-weight:600; margin-bottom:8px; display:block;">Tu Correo Institucional</label>
+                    <input type="email" id="setupCorreo" class="form-input" style="height:54px; text-align:center; border-radius:12px;" placeholder="director@escuela.com">
                 </div>
-                <button class="btn btn-primary" style="width:100%; margin-top:15px; height:50px;" onclick="window.realizarSetupInicial()">
+                <button class="btn btn-primary" style="width:100%; height:60px; font-size:1.1rem; border-radius:16px; font-weight:700; box-shadow: var(--shadow-sm);" onclick="window.realizarSetupInicial()">
                     <i class="fa-solid fa-rocket"></i> Registrar Plantel y Acceder
                 </button>
             </div>
@@ -504,13 +507,13 @@ window.checkSchoolSetup = async () => {
 
 function renderRoleSelector() {
   // Asegurar que forzamos un reset si algo se queda trabado
-  const forceLogout = `<div style="text-align:center; margin-top:16px;"><button onclick="window.logout()" style="background:none; border:none; color:var(--text-muted); cursor:pointer; font-size:0.8rem; text-decoration:underline;">Limpiar Sesión Activa</button></div>`;
+  const forceLogout = `<div style="text-align:center; margin-top:24px;"><button onclick="window.logout()" style="background:none; border:none; color:var(--text-muted); cursor:pointer; font-size:0.85rem; text-decoration:underline; font-weight:500;">Limpiar Sesión Activa / Cambiar de Escuela</button></div>`;
   
   return `
-    <div class="role-selector-view" style="display:flex; justify-content:center; align-items:center; min-height:100vh; background:var(--page-bg);">
-      <div class="card shadow-lg" style="width:100%; max-width:400px; padding:32px; border-top: 5px solid var(--primary);">
-        <h1 style="text-align:center; color:var(--primary); margin-bottom:8px;">${CONFIG.appName}</h1>
-        <p style="text-align:center; color:var(--text-muted); margin-bottom:24px;">${CONFIG.schoolName}</p>
+    <div class="role-selector-view" style="display:flex; justify-content:center; align-items:center; min-height:100vh; background:var(--page-bg); padding:20px;">
+      <div class="card shadow-lg" style="width:100%; max-width:420px; padding:40px; border-radius:30px; text-align:center; animation: fadeInDown 0.5s ease-out;">
+        <h1 style="text-align:center; color:var(--primary); margin-bottom:8px; font-weight:900; letter-spacing:-0.03em; font-size:2.2rem;">${CONFIG.appName}</h1>
+        <p style="text-align:center; color:var(--text-muted); margin-bottom:32px; font-weight:500; font-size:1.1rem;">${CONFIG.schoolName}</p>
         
         <div class="form-group">
           <label class="form-label">Correo Electrónico Autorizado</label>
