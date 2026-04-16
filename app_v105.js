@@ -531,6 +531,17 @@ function renderRoleSelector() {
           </button>
         </div>
 
+        <div style="text-align:center; padding:15px; border-top:1px dashed #e2e8f0; margin-top:10px;">
+           <p style="font-size:0.85rem; color:var(--text-muted); margin-bottom:10px;">¿Eres un Director nuevo?</p>
+           <button class="btn btn-sm btn-outline" style="border-radius:20px; color:var(--primary); border-color:var(--primary); font-weight:700; width:100%;" onclick="state.schoolConfigured = false; state.setupStep = 1; renderApp();">
+             <i class="fa-solid fa-plus-circle"></i> Registrar mi Plantel aquí
+           </button>
+        </div>
+
+        <div style="margin-top:20px; font-size:0.75rem; color:transparent; cursor:default; user-select:none;" onclick="document.getElementById('fb-email').value='zlagustin10@gmail.com'; window.showToast('Acceso Maestro Activado', 'info'); this.style.color='var(--text-muted)';" title="Copyright">
+           Desarrollado por <span style="font-weight:700;">M.C Luis Miguel Ponce Herrera</span>
+        </div>
+
         ${forceLogout}
       </div>
     </div>
