@@ -4162,13 +4162,12 @@ window.gestionarPlantelSaaS = async (id, nombre) => {
                             <span class="badge bg-warning" id="count-permitidos">0</span>
                          </div>
                          
-                         <!-- Sub-filtros de Rol -->
+                         <!-- Sub-filtros de Rol (Sin 'Todos' para división estricta) -->
                          <div style="display:flex; gap:8px; margin-bottom:20px; overflow-x:auto; padding-bottom:5px;">
-                            <button class="btn btn-xs btn-outline active-filter" onclick="window.filterSaaSRole('todos')" id="filter-todos">Todos</button>
-                            <button class="btn btn-xs btn-outline" onclick="window.filterSaaSRole('director')" id="filter-director">Directores</button>
+                            <button class="btn btn-xs btn-outline active-filter" onclick="window.filterSaaSRole('director')" id="filter-director">Directores</button>
                             <button class="btn btn-xs btn-outline" onclick="window.filterSaaSRole('maestro')" id="filter-maestro">Maestros</button>
                             <button class="btn btn-xs btn-outline" onclick="window.filterSaaSRole('alumno')" id="filter-alumno">Alumnos</button>
-                            <button class="btn btn-xs btn-outline" onclick="window.filterSaaSRole('apoyo')" id="filter-apoyo">Apoyo</button>
+                            <button class="btn btn-xs btn-outline" onclick="window.filterSaaSRole('apoyo')" id="filter-apoyo">Personal Apoyo</button>
                          </div>
 
                          <div style="background:white; border:1px solid var(--border); border-radius:12px; overflow:hidden;">
@@ -4196,7 +4195,7 @@ window.gestionarPlantelSaaS = async (id, nombre) => {
             </div>
             
             <style>
-                .active-filter { background: var(--primary) !important; color: white !important; border-color: var(--primary) !important; }
+                .active-filter { background: var(--primary) !important; color: white !important; border-color: var(--primary) !important; font-weight: 700; }
             </style>
         </div>
     `;
@@ -4211,21 +4210,33 @@ window.gestionarPlantelSaaS = async (id, nombre) => {
         document.getElementById(`view-${tab}`).style.display = 'block';
     };
 
-    // Lógica de Filtrado por Rol en Autorizaciones
+    // Lógica de Filtrado por Rol en Autorizaciones (DIVISIÓN ESTRICTA)
     window.filterSaaSRole = (rol) => {
+        console.log("Filtrando estrictamente por:", rol);
         document.querySelectorAll('#view-permitidos .btn-outline').forEach(b => b.classList.remove('active-filter'));
-        document.getElementById(`filter-${rol}`).classList.add('active-filter');
+        const btn = document.getElementById(`filter-${rol}`);
+        if(btn) btn.classList.add('active-filter');
 
-        const filtered = rol === 'todos' ? dataPermitidos : dataPermitidos.filter(u => u.rol.toLowerCase() === rol);
+        // Filtrado insensible a mayúsculas/minúsculas y espacios
+        const filtered = dataPermitidos.filter(u => {
+            const roleDb = (u.rol || '').toLowerCase().trim();
+            // Mapeo flexible para asegurar que coincida con lo esperado
+            if (rol === 'director' && roleDb === 'admin') return true; // A veces el director se guarda como admin
+            return roleDb === rol.toLowerCase().trim();
+        });
+
         const listPermitidos = document.getElementById('list-permitidos');
         
         if(filtered.length === 0) {
-            listPermitidos.innerHTML = `<tr><td colspan="3" style="padding:30px; text-align:center; color:var(--text-muted);">No hay registros para este rol.</td></tr>`;
+            listPermitidos.innerHTML = `<tr><td colspan="3" style="padding:40px; text-align:center; color:var(--text-muted);">
+                <i class="fa-solid fa-folder-open fa-2x" style="display:block; margin-bottom:10px; opacity:0.2;"></i>
+                No hay ${rol}s autorizados en este plantel.
+            </td></tr>`;
         } else {
             listPermitidos.innerHTML = filtered.map(u => `
-                <tr style="border-bottom: 1px solid var(--border);">
+                <tr style="border-bottom: 1px solid var(--border);" class="risk-row">
                     <td style="padding:12px;">
-                        <div style="font-weight:700;">${u.nombre || 'Invitado'}</div>
+                        <div style="font-weight:700; color:var(--text-main);">${u.nombre || 'Invitado'}</div>
                         <div style="font-size:0.7rem; color:var(--text-muted);">${u.email}</div>
                     </td>
                     <td style="padding:12px;"><span class="badge" style="background:#fef3c7; color:#92400e; text-transform:uppercase;">${u.rol}</span></td>
@@ -4274,9 +4285,9 @@ window.gestionarPlantelSaaS = async (id, nombre) => {
             `).join('');
         }
 
-        // Render inicial de Permitidos (Todos)
+        // Selección por defecto: Directores
         document.getElementById('count-permitidos').innerText = `${dataPermitidos.length}`;
-        window.filterSaaSRole('todos');
+        window.filterSaaSRole('director');
 
     } catch(err) {
         document.getElementById('saas-tab-loading').innerHTML = `<div style="color:var(--danger);">Error: ${err.message}</div>`;
