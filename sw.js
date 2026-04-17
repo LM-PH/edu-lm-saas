@@ -1,9 +1,9 @@
-const CACHE_NAME = 'edulm-cache-v31';
+const CACHE_NAME = 'edulm-cache-v33';
 const ASSETS_TO_CACHE = [
   './',
   './index.html',
   './styles.css',
-  './app_v105.js?v=201',
+  './saas_master_core.js?v=FORCE_UPDATE_FINAL',
   './manifest.json',
   './icon-192.png',
   './icon-512.png'

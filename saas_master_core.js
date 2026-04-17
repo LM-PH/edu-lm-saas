@@ -4074,7 +4074,9 @@ async function renderMasterSaaS() {
                 </div>
 
                 <div style="display:flex; gap:12px;">
-                   <button class="btn btn-primary" style="flex:1; font-size:0.8rem;" onclick="alert('Funciones PRO pronto')"><i class="fa-solid fa-eye"></i> Gestionar</button>
+                   <button class="btn btn-primary" style="flex:1; font-size:0.8rem;" onclick="window.gestionarPlantelSaaS('${p.id}', '${p.nombre}')">
+                      <i class="fa-solid fa-users-gear"></i> Gestionar
+                   </button>
                    <button class="btn" style="flex:1; font-size:0.8rem; background:#fee2e2; color:#dc2626; border:1px solid #fecaca;" onclick="window.eliminarPlantelSaaS('${p.id}', '${p.nombre}')">
                       <i class="fa-solid fa-trash"></i> Eliminar
                    </button>
@@ -4085,6 +4087,147 @@ async function renderMasterSaaS() {
         `;
     } catch(e) { return `<div class="error-box">Error SaaS: ${e.message}</div>`; }
 }
+
+window.gestionarPlantelSaaS = async (id, nombre) => {
+    console.log("Iniciando gestión para:", nombre, id);
+    
+    // 1. Asegurar que supaAdmin existe (posible fix de inicialización racing)
+    let admin = window.supaAdmin;
+    if(!admin && typeof supabase !== 'undefined') {
+        admin = supabase.createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE, {
+            auth: { autoRefreshToken: false, persistSession: false, detectSessionInUrl: false }
+        });
+    }
+    if(!admin) {
+        alert("Error crítico: El cliente administrativo no pudo inicializarse. Recarga la página.");
+        return;
+    }
+
+    // 2. Crear/Abrir Modal
+    const modalId = 'modal-gestion-saas';
+    let modal = document.getElementById(modalId);
+    if(!modal) {
+        modal = document.createElement('div');
+        modal.id = modalId;
+        modal.className = 'modal-overlay';
+        modal.style.zIndex = '10001';
+        document.body.appendChild(modal);
+    }
+
+    modal.innerHTML = `
+        <div class="modal-content" style="max-width: 800px; width: 95%; max-height: 90vh; overflow-y: auto; position: relative;">
+            <button class="modal-close" onclick="window.cerrarModalSaaS()" style="position: sticky; top: 0; right: 0; background: white; border-radius: 50%; width: 30px; height: 30px; display: grid; place-items: center; box-shadow: var(--shadow-md);">&times;</button>
+            <h3 style="margin-bottom: 5px; font-weight: 800; color: var(--primary);"><i class="fa-solid fa-users-viewfinder"></i> Usuarios en Plantel</h3>
+            <p style="color: var(--text-muted); font-size: 0.9rem; margin-bottom: 24px;">Administrando: <strong>${nombre}</strong></p>
+
+            <div id="saas-gestion-loading" style="text-align:center; padding: 40px;">
+                <i class="fa-solid fa-spinner fa-spin fa-3x" style="color: var(--primary);"></i>
+                <p style="margin-top: 15px; font-weight: 600;">Consultando Base de Datos...</p>
+            </div>
+
+            <div id="saas-gestion-content" style="display:none;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                    <div style="display:flex; gap:10px;">
+                        <button class="btn btn-xs btn-primary active" id="btn-show-perfiles">Usuarios Activos</button>
+                    </div>
+                    <span id="saas-user-count" class="badge bg-success" style="font-size: 0.75rem;">0 Registrados</span>
+                </div>
+                
+                <div style="background: white; border: 1px solid var(--border); border-radius: 12px; overflow: hidden; box-shadow: var(--shadow-sm);">
+                    <table style="width: 100%; border-collapse: collapse; font-size: 0.85rem;">
+                        <thead style="background: var(--page-bg); text-align: left;">
+                            <tr>
+                                <th style="padding: 12px;">Usuario / Perfil</th>
+                                <th style="padding: 12px;">Rol Sistema</th>
+                                <th style="padding: 12px; text-align: center;">Acciones</th>
+                            </tr>
+                        </thead>
+                        <tbody id="saas-users-list">
+                            <!-- Aquí se cargarán los perfiles -->
+                        </tbody>
+                    </table>
+                </div>
+
+                <div style="margin-top: 24px; padding-top: 20px; border-top: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center;">
+                    <p style="font-size: 0.75rem; color: var(--text-muted);">ID Plantel: <code>${id}</code></p>
+                    <div style="display:flex; gap:10px;">
+                        <button class="btn btn-outline" onclick="window.cerrarModalSaaS()">Cerrar</button>
+                        <button class="btn btn-primary" onclick="alert('Pronto podrás agregar usuarios manualmente desde aquí')">
+                            <i class="fa-solid fa-user-plus"></i> Forzar Usuario
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+
+    try {
+        // Consultamos la tabla 'perfiles' que es donde están los usuarios REALES registrados
+        const { data: perfiles, error } = await admin
+            .from('perfiles')
+            .select('*')
+            .eq('plantel_id', id)
+            .order('nombre', { ascending: true });
+
+        if(error) {
+            console.error("Error Supabase:", error);
+            throw error;
+        }
+
+        const listCont = document.getElementById('saas-users-list');
+        const countSpan = document.getElementById('saas-user-count');
+        
+        document.getElementById('saas-gestion-loading').style.display = 'none';
+        document.getElementById('saas-gestion-content').style.display = 'block';
+
+        countSpan.innerText = `${perfiles.length} Usuarios`;
+
+        if(perfiles.length === 0) {
+            listCont.innerHTML = `<tr><td colspan="3" style="padding: 40px; text-align: center; color: var(--text-muted);">
+                <i class="fa-solid fa-user-slash fa-2x" style="display:block; margin-bottom:10px; opacity:0.3;"></i>
+                No hay usuarios registrados legalmente en este plantel.
+            </td></tr>`;
+        } else {
+            listCont.innerHTML = perfiles.map(u => `
+                <tr style="border-bottom: 1px solid var(--border);" class="risk-row">
+                    <td style="padding: 12px;">
+                        <div style="display:flex; align-items:center; gap:10px;">
+                            <div style="width:32px; height:32px; border-radius:50%; background:var(--primary); color:white; display:grid; place-items:center; font-weight:900; font-size:0.7rem;">
+                                ${u.nombre ? u.nombre.charAt(0).toUpperCase() : '?'}
+                            </div>
+                            <div>
+                                <div style="font-weight: 700; color: var(--text-main);">${u.nombre || 'Sin Nombre'}</div>
+                                <div style="font-size: 0.7rem; color: var(--text-muted);">${u.email || 'vinc_id: '+u.id}</div>
+                            </div>
+                        </div>
+                    </td>
+                    <td style="padding: 12px;">
+                         <span class="badge" style="background:#f1f5f9; color:var(--primary); font-size:0.65rem; text-transform:uppercase;">${u.rol || 'Sin Rol'}</span>
+                    </td>
+                    <td style="padding: 12px; text-align: center;">
+                        <button class="btn btn-xs btn-outline" onclick="alert('Ver detalles de ${u.nombre}')"><i class="fa-solid fa-circle-info"></i></button>
+                    </td>
+                </tr>
+            `).join('');
+        }
+
+    } catch(err) {
+        console.error("Fallo Fatal al Gestionar:", err);
+        document.getElementById('saas-gestion-loading').innerHTML = `
+            <div style="color: var(--danger); padding: 20px;">
+                <i class="fa-solid fa-triangle-exclamation fa-3x"></i>
+                <h4 style="margin-top:10px;">Error de Conexión</h4>
+                <p style="font-size:0.8rem; margin: 10px 0;">${err.message}</p>
+                <button class="btn btn-sm btn-primary" onclick="window.gestionarPlantelSaaS('${id}', '${nombre}')">Reintentar</button>
+            </div>
+        `;
+    }
+};
+
+window.cerrarModalSaaS = () => {
+    const modal = document.getElementById('modal-gestion-saas');
+    if(modal) modal.remove();
+};
 
 window.eliminarPlantelSaaS = async (id, nombre) => {
     if(!confirm(`⚠️ ¿ELIMINAR ${nombre.toUpperCase()}?\nEsta acción es irreversible y borrará TODO el plantel.`)) return;
