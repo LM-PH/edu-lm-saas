@@ -4162,12 +4162,12 @@ window.gestionarPlantelSaaS = async (id, nombre) => {
                             <span class="badge bg-warning" id="count-permitidos">0</span>
                          </div>
                          
-                         <!-- Sub-filtros de Rol (Sin 'Todos' para división estricta) -->
+                         <!-- Sub-filtros de Rol (Actualizados según DB) -->
                          <div style="display:flex; gap:8px; margin-bottom:20px; overflow-x:auto; padding-bottom:5px;">
-                            <button class="btn btn-xs btn-outline active-filter" onclick="window.filterSaaSRole('director')" id="filter-director">Directores</button>
+                            <button class="btn btn-xs btn-outline active-filter" onclick="window.filterSaaSRole('directivo')" id="filter-directivo">Directivos</button>
                             <button class="btn btn-xs btn-outline" onclick="window.filterSaaSRole('maestro')" id="filter-maestro">Maestros</button>
                             <button class="btn btn-xs btn-outline" onclick="window.filterSaaSRole('alumno')" id="filter-alumno">Alumnos</button>
-                            <button class="btn btn-xs btn-outline" onclick="window.filterSaaSRole('apoyo')" id="filter-apoyo">Personal Apoyo</button>
+                            <button class="btn btn-xs btn-outline" onclick="window.filterSaaSRole('administrativo')" id="filter-administrativo">Administrativo</button>
                          </div>
 
                          <div style="background:white; border:1px solid var(--border); border-radius:12px; overflow:hidden;">
@@ -4210,18 +4210,18 @@ window.gestionarPlantelSaaS = async (id, nombre) => {
         document.getElementById(`view-${tab}`).style.display = 'block';
     };
 
-    // Lógica de Filtrado por Rol en Autorizaciones (DIVISIÓN ESTRICTA)
+    // Lógica de Filtrado por Rol en Autorizaciones (AJUSTADO A DB)
     window.filterSaaSRole = (rol) => {
-        console.log("Filtrando estrictamente por:", rol);
+        console.log("Filtrando por rol DB:", rol);
         document.querySelectorAll('#view-permitidos .btn-outline').forEach(b => b.classList.remove('active-filter'));
         const btn = document.getElementById(`filter-${rol}`);
         if(btn) btn.classList.add('active-filter');
 
-        // Filtrado insensible a mayúsculas/minúsculas y espacios
         const filtered = dataPermitidos.filter(u => {
             const roleDb = (u.rol || '').toLowerCase().trim();
-            // Mapeo flexible para asegurar que coincida con lo esperado
-            if (rol === 'director' && roleDb === 'admin') return true; // A veces el director se guarda como admin
+            // Soporte para variaciones comunes
+            if (rol === 'directivo' && (roleDb === 'admin' || roleDb === 'director')) return true;
+            if (rol === 'administrativo' && (roleDb === 'apoyo' || roleDb === 'personal')) return true;
             return roleDb === rol.toLowerCase().trim();
         });
 
@@ -4230,7 +4230,7 @@ window.gestionarPlantelSaaS = async (id, nombre) => {
         if(filtered.length === 0) {
             listPermitidos.innerHTML = `<tr><td colspan="3" style="padding:40px; text-align:center; color:var(--text-muted);">
                 <i class="fa-solid fa-folder-open fa-2x" style="display:block; margin-bottom:10px; opacity:0.2;"></i>
-                No hay ${rol}s autorizados en este plantel.
+                No hay perfiles de "${rol}" registrados aquí.
             </td></tr>`;
         } else {
             listPermitidos.innerHTML = filtered.map(u => `
@@ -4277,7 +4277,7 @@ window.gestionarPlantelSaaS = async (id, nombre) => {
                         <div style="font-weight:700;">${u.nombre || 'Anon'}</div>
                         <div style="font-size:0.7rem; color:var(--text-muted);">${u.email || '-'}</div>
                     </td>
-                    <td style="padding:12px;"><span class="badge" style="background:#e0f2fe; color:#0369a1;">${u.rol}</span></td>
+                    <td style="padding:12px;"><span class="badge" style="background:#e0f2fe; color:#0369a1;">${u.rol === 'directivo' ? 'Directivo' : u.rol}</span></td>
                     <td style="padding:12px; text-align:center;">
                         <button class="btn btn-xs btn-outline" onclick="console.log('${u.id}')"><i class="fa-solid fa-eye"></i></button>
                     </td>
@@ -4285,9 +4285,9 @@ window.gestionarPlantelSaaS = async (id, nombre) => {
             `).join('');
         }
 
-        // Selección por defecto: Directores
+        // Selección por defecto: Directivos
         document.getElementById('count-permitidos').innerText = `${dataPermitidos.length}`;
-        window.filterSaaSRole('director');
+        window.filterSaaSRole('directivo');
 
     } catch(err) {
         document.getElementById('saas-tab-loading').innerHTML = `<div style="color:var(--danger);">Error: ${err.message}</div>`;
