@@ -4089,22 +4089,16 @@ async function renderMasterSaaS() {
 }
 
 window.gestionarPlantelSaaS = async (id, nombre) => {
-    console.log("Iniciando gestión para:", nombre, id);
+    console.log("Gestionando plantel con pestañas:", nombre);
     
-    // 1. Asegurar que supaAdmin existe (posible fix de inicialización racing)
     let admin = window.supaAdmin;
     if(!admin && typeof supabase !== 'undefined') {
         admin = supabase.createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE, {
             auth: { autoRefreshToken: false, persistSession: false, detectSessionInUrl: false }
         });
     }
-    if(!admin) {
-        alert("Error crítico: El cliente administrativo no pudo inicializarse. Recarga la página.");
-        return;
-    }
 
-    // 2. Crear/Abrir Modal
-    const modalId = 'modal-gestion-saas';
+    const modalId = 'modal-tabs-saas';
     let modal = document.getElementById(modalId);
     if(!modal) {
         modal = document.createElement('div');
@@ -4114,113 +4108,153 @@ window.gestionarPlantelSaaS = async (id, nombre) => {
         document.body.appendChild(modal);
     }
 
+    // Estructura Base con Pestañas
     modal.innerHTML = `
-        <div class="modal-content" style="max-width: 800px; width: 95%; max-height: 90vh; overflow-y: auto; position: relative;">
-            <button class="modal-close" onclick="window.cerrarModalSaaS()" style="position: sticky; top: 0; right: 0; background: white; border-radius: 50%; width: 30px; height: 30px; display: grid; place-items: center; box-shadow: var(--shadow-md);">&times;</button>
-            <h3 style="margin-bottom: 5px; font-weight: 800; color: var(--primary);"><i class="fa-solid fa-users-viewfinder"></i> Usuarios en Plantel</h3>
-            <p style="color: var(--text-muted); font-size: 0.9rem; margin-bottom: 24px;">Administrando: <strong>${nombre}</strong></p>
-
-            <div id="saas-gestion-loading" style="text-align:center; padding: 40px;">
-                <i class="fa-solid fa-spinner fa-spin fa-3x" style="color: var(--primary);"></i>
-                <p style="margin-top: 15px; font-weight: 600;">Consultando Base de Datos...</p>
+        <div class="modal-content" style="max-width: 850px; width: 95%; max-height: 90vh; overflow-y: auto; padding: 0; display:flex; flex-direction:column;">
+            <!-- Header Fijo -->
+            <div style="padding: 24px; border-bottom: 1px solid var(--border); background: #fff; position: sticky; top: 0; z-index: 10;">
+                <button class="modal-close" onclick="window.cerrarModalSaaS()" style="float:right;">&times;</button>
+                <h3 style="margin:0; color: var(--primary); font-weight: 800;"><i class="fa-solid fa-server"></i> Gestión de Plantel</h3>
+                <p style="margin:0; color: var(--text-muted); font-size: 0.9rem;">${nombre}</p>
+                
+                <div class="tabs" style="margin-top: 20px; gap: 4px;">
+                    <button class="tab-btn active" id="tab-activos" onclick="window.switchSaaSTab('activos')">
+                        <i class="fa-solid fa-user-check"></i> Usuarios Activos
+                    </button>
+                    <button class="tab-btn" id="tab-permitidos" onclick="window.switchSaaSTab('permitidos')">
+                        <i class="fa-solid fa-user-plus"></i> Autorizaciones
+                    </button>
+                </div>
             </div>
 
-            <div id="saas-gestion-content" style="display:none;">
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
-                    <div style="display:flex; gap:10px;">
-                        <button class="btn btn-xs btn-primary active" id="btn-show-perfiles">Usuarios Activos</button>
-                    </div>
-                    <span id="saas-user-count" class="badge bg-success" style="font-size: 0.75rem;">0 Registrados</span>
-                </div>
-                
-                <div style="background: white; border: 1px solid var(--border); border-radius: 12px; overflow: hidden; box-shadow: var(--shadow-sm);">
-                    <table style="width: 100%; border-collapse: collapse; font-size: 0.85rem;">
-                        <thead style="background: var(--page-bg); text-align: left;">
-                            <tr>
-                                <th style="padding: 12px;">Usuario / Perfil</th>
-                                <th style="padding: 12px;">Rol Sistema</th>
-                                <th style="padding: 12px; text-align: center;">Acciones</th>
-                            </tr>
-                        </thead>
-                        <tbody id="saas-users-list">
-                            <!-- Aquí se cargarán los perfiles -->
-                        </tbody>
-                    </table>
+            <!-- Contenido Scrollable -->
+            <div style="padding: 24px; flex: 1;">
+                <div id="saas-tab-loading" style="text-align:center; padding: 40px;">
+                    <i class="fa-solid fa-sync fa-spin fa-2x" style="color: var(--primary);"></i>
+                    <p>Sincronizando con Supabase...</p>
                 </div>
 
-                <div style="margin-top: 24px; padding-top: 20px; border-top: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center;">
-                    <p style="font-size: 0.75rem; color: var(--text-muted);">ID Plantel: <code>${id}</code></p>
-                    <div style="display:flex; gap:10px;">
-                        <button class="btn btn-outline" onclick="window.cerrarModalSaaS()">Cerrar</button>
-                        <button class="btn btn-primary" onclick="alert('Pronto podrás agregar usuarios manualmente desde aquí')">
-                            <i class="fa-solid fa-user-plus"></i> Forzar Usuario
-                        </button>
+                <div id="saas-tab-content" style="display:none;">
+                    <!-- Tabla Activos -->
+                    <div id="view-activos" class="tab-view">
+                         <div style="display:flex; justify-content:space-between; margin-bottom:15px; align-items:center;">
+                            <h4 style="margin:0;">Personal Registrado</h4>
+                            <span class="badge bg-success" id="count-activos">0</span>
+                         </div>
+                         <div style="background:white; border:1px solid var(--border); border-radius:12px; overflow:hidden;">
+                            <table style="width:100%; border-collapse:collapse; font-size:0.85rem;">
+                                <thead style="background:#f8fafc; text-align:left;">
+                                    <tr>
+                                        <th style="padding:12px;">Usuario</th>
+                                        <th style="padding:12px;">Rol</th>
+                                        <th style="padding:12px; text-align:center;">Detalles</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="list-activos"></tbody>
+                            </table>
+                         </div>
+                    </div>
+
+                    <!-- Tabla Permitidos -->
+                    <div id="view-permitidos" class="tab-view" style="display:none;">
+                         <div style="display:flex; justify-content:space-between; margin-bottom:15px; align-items:center;">
+                            <h4 style="margin:0;">Permisos & Invitaciones</h4>
+                            <span class="badge bg-warning" id="count-permitidos">0</span>
+                         </div>
+                         <div style="background:white; border:1px solid var(--border); border-radius:12px; overflow:hidden;">
+                            <table style="width:100%; border-collapse:collapse; font-size:0.85rem;">
+                                <thead style="background:#f8fafc; text-align:left;">
+                                    <tr>
+                                        <th style="padding:12px;">Nombre / Email</th>
+                                        <th style="padding:12px;">Rol Asignado</th>
+                                        <th style="padding:12px;">Estado</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="list-permitidos"></tbody>
+                            </table>
+                         </div>
                     </div>
                 </div>
+            </div>
+
+            <!-- Footer Fijo -->
+            <div style="padding: 16px 24px; border-top: 1px solid var(--border); background: #f8fafc; display: flex; justify-content: space-between; align-items: center; border-bottom-left-radius: var(--radius-lg); border-bottom-right-radius: var(--radius-lg);">
+                 <code style="font-size:0.65rem; color:var(--text-muted);">REF: ${id}</code>
+                 <button class="btn btn-primary btn-sm" onclick="alert('Funcionalidad para agregar autorizaciones próximamente')">
+                    <i class="fa-solid fa-plus"></i> Nueva Autorización
+                 </button>
             </div>
         </div>
     `;
 
-    try {
-        // Consultamos la tabla 'perfiles' que es donde están los usuarios REALES registrados
-        const { data: perfiles, error } = await admin
-            .from('perfiles')
-            .select('*')
-            .eq('plantel_id', id)
-            .order('nombre', { ascending: true });
+    // Lógica de cambio de Pestañas
+    window.switchSaaSTab = (tab) => {
+        document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+        document.querySelectorAll('.tab-view').forEach(v => v.style.display = 'none');
+        
+        document.getElementById(`tab-${tab}`).classList.add('active');
+        document.getElementById(`view-${tab}`).style.display = 'block';
+    };
 
-        if(error) {
-            console.error("Error Supabase:", error);
-            throw error;
+    window.cerrarModalSaaS = () => { if(modal) modal.remove(); };
+
+    try {
+        // Consultar AMBAS tablas en paralelo
+        const [resActivos, resPermitidos] = await Promise.all([
+            admin.from('perfiles').select('*').eq('plantel_id', id).order('nombre'),
+            admin.from('perfiles_permitidos').select('*').eq('plantel_id', id).order('nombre')
+        ]);
+
+        if(resActivos.error) throw resActivos.error;
+        if(resPermitidos.error) throw resPermitidos.error;
+
+        document.getElementById('saas-tab-loading').style.display = 'none';
+        document.getElementById('saas-tab-content').style.display = 'block';
+
+        // Render Activos
+        const listActivos = document.getElementById('list-activos');
+        document.getElementById('count-activos').innerText = `${resActivos.data.length} Activos`;
+        
+        if(resActivos.data.length === 0) {
+            listActivos.innerHTML = `<tr><td colspan="3" style="padding:20px; text-align:center; color:var(--text-muted);">Sin usuarios registrados.</td></tr>`;
+        } else {
+            listActivos.innerHTML = resActivos.data.map(u => `
+                <tr style="border-bottom: 1px solid var(--border);">
+                    <td style="padding:12px;">
+                        <div style="font-weight:700;">${u.nombre || 'Anon'}</div>
+                        <div style="font-size:0.7rem; color:var(--text-muted);">${u.email || '-'}</div>
+                    </td>
+                    <td style="padding:12px;"><span class="badge" style="background:#e0f2fe; color:#0369a1;">${u.rol}</span></td>
+                    <td style="padding:12px; text-align:center;">
+                        <button class="btn btn-xs btn-outline" onclick="console.log('${u.id}')"><i class="fa-solid fa-eye"></i></button>
+                    </td>
+                </tr>
+            `).join('');
         }
 
-        const listCont = document.getElementById('saas-users-list');
-        const countSpan = document.getElementById('saas-user-count');
-        
-        document.getElementById('saas-gestion-loading').style.display = 'none';
-        document.getElementById('saas-gestion-content').style.display = 'block';
+        // Render Permitidos
+        const listPermitidos = document.getElementById('list-permitidos');
+        document.getElementById('count-permitidos').innerText = `${resPermitidos.data.length} Autorizados`;
 
-        countSpan.innerText = `${perfiles.length} Usuarios`;
-
-        if(perfiles.length === 0) {
-            listCont.innerHTML = `<tr><td colspan="3" style="padding: 40px; text-align: center; color: var(--text-muted);">
-                <i class="fa-solid fa-user-slash fa-2x" style="display:block; margin-bottom:10px; opacity:0.3;"></i>
-                No hay usuarios registrados legalmente en este plantel.
-            </td></tr>`;
+        if(resPermitidos.data.length === 0) {
+            listPermitidos.innerHTML = `<tr><td colspan="3" style="padding:20px; text-align:center; color:var(--text-muted);">Sin autorizaciones pendientes.</td></tr>`;
         } else {
-            listCont.innerHTML = perfiles.map(u => `
-                <tr style="border-bottom: 1px solid var(--border);" class="risk-row">
-                    <td style="padding: 12px;">
-                        <div style="display:flex; align-items:center; gap:10px;">
-                            <div style="width:32px; height:32px; border-radius:50%; background:var(--primary); color:white; display:grid; place-items:center; font-weight:900; font-size:0.7rem;">
-                                ${u.nombre ? u.nombre.charAt(0).toUpperCase() : '?'}
-                            </div>
-                            <div>
-                                <div style="font-weight: 700; color: var(--text-main);">${u.nombre || 'Sin Nombre'}</div>
-                                <div style="font-size: 0.7rem; color: var(--text-muted);">${u.email || 'vinc_id: '+u.id}</div>
-                            </div>
-                        </div>
+            listPermitidos.innerHTML = resPermitidos.data.map(u => `
+                <tr style="border-bottom: 1px solid var(--border);">
+                    <td style="padding:12px;">
+                        <div style="font-weight:700;">${u.nombre || 'Invitado'}</div>
+                        <div style="font-size:0.7rem; color:var(--text-muted);">${u.email}</div>
                     </td>
-                    <td style="padding: 12px;">
-                         <span class="badge" style="background:#f1f5f9; color:var(--primary); font-size:0.65rem; text-transform:uppercase;">${u.rol || 'Sin Rol'}</span>
-                    </td>
-                    <td style="padding: 12px; text-align: center;">
-                        <button class="btn btn-xs btn-outline" onclick="alert('Ver detalles de ${u.nombre}')"><i class="fa-solid fa-circle-info"></i></button>
+                    <td style="padding:12px;"><span class="badge" style="background:#fef3c7; color:#92400e;">${u.rol}</span></td>
+                    <td style="padding:12px;">
+                        <span class="badge ${u.estado === 'activo' ? 'bg-success' : 'bg-warning'}" style="font-size:0.6rem;">${u.estado}</span>
                     </td>
                 </tr>
             `).join('');
         }
 
     } catch(err) {
-        console.error("Fallo Fatal al Gestionar:", err);
-        document.getElementById('saas-gestion-loading').innerHTML = `
-            <div style="color: var(--danger); padding: 20px;">
-                <i class="fa-solid fa-triangle-exclamation fa-3x"></i>
-                <h4 style="margin-top:10px;">Error de Conexión</h4>
-                <p style="font-size:0.8rem; margin: 10px 0;">${err.message}</p>
-                <button class="btn btn-sm btn-primary" onclick="window.gestionarPlantelSaaS('${id}', '${nombre}')">Reintentar</button>
-            </div>
-        `;
+        document.getElementById('saas-tab-loading').innerHTML = `<div style="color:var(--danger);">Error: ${err.message}</div>`;
     }
 };
 
