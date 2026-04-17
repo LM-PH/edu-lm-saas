@@ -4110,7 +4110,7 @@ window.gestionarPlantelSaaS = async (id, nombre) => {
 
     // Estructura Base con Pestañas
     modal.innerHTML = `
-        <div class="modal-content" style="max-width: 850px; width: 95%; max-height: 90vh; overflow-y: auto; padding: 0; display:flex; flex-direction:column;">
+        <div class="modal-content" style="max-width: 900px; width: 95%; max-height: 90vh; overflow-y: auto; padding: 0; display:flex; flex-direction:column;">
             <!-- Header Fijo -->
             <div style="padding: 24px; border-bottom: 1px solid var(--border); background: #fff; position: sticky; top: 0; z-index: 10;">
                 <button class="modal-close" onclick="window.cerrarModalSaaS()" style="float:right;">&times;</button>
@@ -4147,7 +4147,7 @@ window.gestionarPlantelSaaS = async (id, nombre) => {
                                     <tr>
                                         <th style="padding:12px;">Usuario</th>
                                         <th style="padding:12px;">Rol</th>
-                                        <th style="padding:12px; text-align:center;">Detalles</th>
+                                        <th style="padding:12px; text-align:center;">Acciones</th>
                                     </tr>
                                 </thead>
                                 <tbody id="list-activos"></tbody>
@@ -4155,12 +4155,22 @@ window.gestionarPlantelSaaS = async (id, nombre) => {
                          </div>
                     </div>
 
-                    <!-- Tabla Permitidos -->
+                    <!-- Tabla Permitidos CON FILTROS POR ROL -->
                     <div id="view-permitidos" class="tab-view" style="display:none;">
                          <div style="display:flex; justify-content:space-between; margin-bottom:15px; align-items:center;">
                             <h4 style="margin:0;">Permisos & Invitaciones</h4>
                             <span class="badge bg-warning" id="count-permitidos">0</span>
                          </div>
+                         
+                         <!-- Sub-filtros de Rol -->
+                         <div style="display:flex; gap:8px; margin-bottom:20px; overflow-x:auto; padding-bottom:5px;">
+                            <button class="btn btn-xs btn-outline active-filter" onclick="window.filterSaaSRole('todos')" id="filter-todos">Todos</button>
+                            <button class="btn btn-xs btn-outline" onclick="window.filterSaaSRole('director')" id="filter-director">Directores</button>
+                            <button class="btn btn-xs btn-outline" onclick="window.filterSaaSRole('maestro')" id="filter-maestro">Maestros</button>
+                            <button class="btn btn-xs btn-outline" onclick="window.filterSaaSRole('alumno')" id="filter-alumno">Alumnos</button>
+                            <button class="btn btn-xs btn-outline" onclick="window.filterSaaSRole('apoyo')" id="filter-apoyo">Apoyo</button>
+                         </div>
+
                          <div style="background:white; border:1px solid var(--border); border-radius:12px; overflow:hidden;">
                             <table style="width:100%; border-collapse:collapse; font-size:0.85rem;">
                                 <thead style="background:#f8fafc; text-align:left;">
@@ -4184,22 +4194,52 @@ window.gestionarPlantelSaaS = async (id, nombre) => {
                     <i class="fa-solid fa-plus"></i> Nueva Autorización
                  </button>
             </div>
+            
+            <style>
+                .active-filter { background: var(--primary) !important; color: white !important; border-color: var(--primary) !important; }
+            </style>
         </div>
     `;
 
-    // Lógica de cambio de Pestañas
+    let dataPermitidos = [];
+
+    // Lógica de cambio de Pestañas Principales
     window.switchSaaSTab = (tab) => {
         document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
         document.querySelectorAll('.tab-view').forEach(v => v.style.display = 'none');
-        
         document.getElementById(`tab-${tab}`).classList.add('active');
         document.getElementById(`view-${tab}`).style.display = 'block';
+    };
+
+    // Lógica de Filtrado por Rol en Autorizaciones
+    window.filterSaaSRole = (rol) => {
+        document.querySelectorAll('#view-permitidos .btn-outline').forEach(b => b.classList.remove('active-filter'));
+        document.getElementById(`filter-${rol}`).classList.add('active-filter');
+
+        const filtered = rol === 'todos' ? dataPermitidos : dataPermitidos.filter(u => u.rol.toLowerCase() === rol);
+        const listPermitidos = document.getElementById('list-permitidos');
+        
+        if(filtered.length === 0) {
+            listPermitidos.innerHTML = `<tr><td colspan="3" style="padding:30px; text-align:center; color:var(--text-muted);">No hay registros para este rol.</td></tr>`;
+        } else {
+            listPermitidos.innerHTML = filtered.map(u => `
+                <tr style="border-bottom: 1px solid var(--border);">
+                    <td style="padding:12px;">
+                        <div style="font-weight:700;">${u.nombre || 'Invitado'}</div>
+                        <div style="font-size:0.7rem; color:var(--text-muted);">${u.email}</div>
+                    </td>
+                    <td style="padding:12px;"><span class="badge" style="background:#fef3c7; color:#92400e; text-transform:uppercase;">${u.rol}</span></td>
+                    <td style="padding:12px;">
+                        <span class="badge ${u.estado === 'activo' ? 'bg-success' : 'bg-warning'}" style="font-size:0.6rem;">${u.estado}</span>
+                    </td>
+                </tr>
+            `).join('');
+        }
     };
 
     window.cerrarModalSaaS = () => { if(modal) modal.remove(); };
 
     try {
-        // Consultar AMBAS tablas en paralelo
         const [resActivos, resPermitidos] = await Promise.all([
             admin.from('perfiles').select('*').eq('plantel_id', id).order('nombre'),
             admin.from('perfiles_permitidos').select('*').eq('plantel_id', id).order('nombre')
@@ -4208,12 +4248,14 @@ window.gestionarPlantelSaaS = async (id, nombre) => {
         if(resActivos.error) throw resActivos.error;
         if(resPermitidos.error) throw resPermitidos.error;
 
+        dataPermitidos = resPermitidos.data;
+
         document.getElementById('saas-tab-loading').style.display = 'none';
         document.getElementById('saas-tab-content').style.display = 'block';
 
         // Render Activos
         const listActivos = document.getElementById('list-activos');
-        document.getElementById('count-activos').innerText = `${resActivos.data.length} Activos`;
+        document.getElementById('count-activos').innerText = `${resActivos.data.length}`;
         
         if(resActivos.data.length === 0) {
             listActivos.innerHTML = `<tr><td colspan="3" style="padding:20px; text-align:center; color:var(--text-muted);">Sin usuarios registrados.</td></tr>`;
@@ -4232,26 +4274,9 @@ window.gestionarPlantelSaaS = async (id, nombre) => {
             `).join('');
         }
 
-        // Render Permitidos
-        const listPermitidos = document.getElementById('list-permitidos');
-        document.getElementById('count-permitidos').innerText = `${resPermitidos.data.length} Autorizados`;
-
-        if(resPermitidos.data.length === 0) {
-            listPermitidos.innerHTML = `<tr><td colspan="3" style="padding:20px; text-align:center; color:var(--text-muted);">Sin autorizaciones pendientes.</td></tr>`;
-        } else {
-            listPermitidos.innerHTML = resPermitidos.data.map(u => `
-                <tr style="border-bottom: 1px solid var(--border);">
-                    <td style="padding:12px;">
-                        <div style="font-weight:700;">${u.nombre || 'Invitado'}</div>
-                        <div style="font-size:0.7rem; color:var(--text-muted);">${u.email}</div>
-                    </td>
-                    <td style="padding:12px;"><span class="badge" style="background:#fef3c7; color:#92400e;">${u.rol}</span></td>
-                    <td style="padding:12px;">
-                        <span class="badge ${u.estado === 'activo' ? 'bg-success' : 'bg-warning'}" style="font-size:0.6rem;">${u.estado}</span>
-                    </td>
-                </tr>
-            `).join('');
-        }
+        // Render inicial de Permitidos (Todos)
+        document.getElementById('count-permitidos').innerText = `${dataPermitidos.length}`;
+        window.filterSaaSRole('todos');
 
     } catch(err) {
         document.getElementById('saas-tab-loading').innerHTML = `<div style="color:var(--danger);">Error: ${err.message}</div>`;
