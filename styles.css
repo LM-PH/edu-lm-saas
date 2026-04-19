@@ -978,3 +978,68 @@ body {
   color: white;
   box-shadow: 0 4px 10px rgba(59, 130, 246, 0.2);
 }
+
+/* Maestros Selection List Styles */
+.lista-maestros-container {
+    max-height: 250px;
+    overflow-y: auto;
+    background: #f8fafc;
+    border-radius: var(--radius-md);
+    border: 1px solid var(--border);
+    padding: 8px;
+}
+
+.lista-maestros-container::-webkit-scrollbar {
+    width: 6px;
+}
+.lista-maestros-container::-webkit-scrollbar-thumb {
+    background: var(--border);
+    border-radius: 10px;
+}
+
+.maestro-item-directo {
+    padding: 12px 16px;
+    margin-bottom: 6px;
+    background: white;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border);
+    cursor: pointer;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    transition: var(--transition);
+    font-weight: 500;
+    color: var(--text-main);
+}
+
+.maestro-item-directo:last-child {
+    margin-bottom: 0;
+}
+
+.maestro-item-directo:hover {
+    background: var(--surface-hover);
+    border-color: var(--primary-light);
+    transform: translateX(4px);
+    box-shadow: var(--shadow-sm);
+}
+
+.maestro-item-directo.active {
+    background: var(--primary-light);
+    color: white;
+    border-color: var(--primary);
+    box-shadow: 0 4px 10px rgba(59, 130, 246, 0.3);
+}
+
+.maestro-item-directo span {
+    flex: 1;
+}
+
+.maestro-item-directo i {
+    font-size: 0.8rem;
+    opacity: 0.5;
+    margin-left: 10px;
+}
+
+.maestro-item-directo.active i {
+    opacity: 1;
+}

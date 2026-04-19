@@ -1386,10 +1386,10 @@ function renderAdminMaestros() {
 
       <div class="card" style="flex:1.5; min-width:350px;">
         <h3 style="margin-bottom:16px"><i class="fa-solid fa-book text-success"></i> 2. Añadir Materia al Maestro</h3>
-        <div class="form-group" style="background: #fffbeb; padding: 15px; border-radius: 12px; border: 2px solid #f59e0b; margin-bottom: 25px;">
-          <h4 style="margin:0 0 10px 0; color:#b45309;"><i class="fa-solid fa-user-check"></i> PASO 1: Toca el nombre del Maestro</h4>
-          <div id="listaSeleccionMaestrosDirecta" style="max-height:200px; overflow-y:auto; background:#fef3c7; padding:10px; border-radius:8px; border:1px inset #f59e0b;">
-             <p style="text-align:center; color:#b45309;">Cargando lista de maestros...</p>
+        <div class="form-group" style="margin-bottom: 25px;">
+          <h4 style="margin:0 0 10px 0; color:var(--primary); font-size: 0.9rem; font-weight: 700;"><i class="fa-solid fa-user-check"></i> PASO 1: Selecciona al Maestro</h4>
+          <div id="listaSeleccionMaestrosDirecta" class="lista-maestros-container">
+             <p style="text-align:center; color:var(--text-muted); font-size: 0.85rem; padding: 20px;">Cargando lista de maestros...</p>
           </div>
           <input type="hidden" id="selMaestroMateriasV110" value="">
         </div>
@@ -8394,10 +8394,9 @@ window.loadSelectsMaestros = async () => {
                 listDirecta.innerHTML = '<p style="text-align:center; padding:10px;">No hay maestros registrados.</p>';
             } else {
                 listDirecta.innerHTML = teachers.map(t => `
-                    <div class="maestro-item-directo" onclick="window.seleccionarMaestroDirecto('${t.email}', '${t.nombre}')" 
-                         style="padding:10px; border-bottom:1px solid #fde68a; cursor:pointer; font-weight:bold; color:#92400e; display:flex; justify-content:space-between; align-items:center;">
+                    <div class="maestro-item-directo" onclick="window.seleccionarMaestroDirecto('${t.email}', '${t.nombre}', this)">
                         <span>${t.display}</span>
-                        <i class="fa-solid fa-chevron-right" style="font-size:0.8rem; opacity:0.5;"></i>
+                        <i class="fa-solid fa-circle-check"></i>
                     </div>
                 `).join('');
             }
@@ -8413,7 +8412,7 @@ window.loadSelectsMaestros = async () => {
     }
 };
 
-window.seleccionarMaestroDirecto = (email, nombre) => {
+window.seleccionarMaestroDirecto = (email, nombre, element) => {
     const inputId = document.getElementById('selMaestroMateriasV110');
     if(inputId) {
         inputId.value = email;
@@ -8421,11 +8420,9 @@ window.seleccionarMaestroDirecto = (email, nombre) => {
         if(window.loadMateriasDeMaestro) window.loadMateriasDeMaestro(email);
         if(window.loadGruposDeMaestro) window.loadGruposDeMaestro(email);
         
-        // Efecto visual de selección
-        document.querySelectorAll('.maestro-item-directo').forEach(el => {
-            el.style.background = 'transparent';
-            if(el.innerText.includes(nombre.toUpperCase())) el.style.background = '#fef3c7';
-        });
+        // Manejo de estado activo
+        document.querySelectorAll('.maestro-item-directo').forEach(el => el.classList.remove('active'));
+        if(element) element.classList.add('active');
         
         window.showToast(`Maestro ${nombre} seleccionado`, 'success');
     }
