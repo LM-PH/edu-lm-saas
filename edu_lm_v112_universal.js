@@ -732,14 +732,18 @@ function renderAdminInscripcion() {
           </div>
         </div>
         
-        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px;">
+        <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; margin-bottom: 16px;">
           <div class="form-group" style="margin-bottom:0;">
-            <label class="form-label">Estatura (Metros)</label>
-            <input type="number" id="estatura" class="form-input" placeholder="Ej. 1.65" step="0.01">
+            <label class="form-label">Estatura (Mts)</label>
+            <input type="number" id="estatura" class="form-input" placeholder="1.65" step="0.01">
           </div>
           <div class="form-group" style="margin-bottom:0;">
             <label class="form-label">Peso (Kg)</label>
-            <input type="number" id="peso" class="form-input" placeholder="Ej. 55.5" step="0.1">
+            <input type="number" id="peso" class="form-input" placeholder="55.5" step="0.1">
+          </div>
+          <div class="form-group" style="margin-bottom:0;">
+            <label class="form-label">Talla Zapato</label>
+            <input type="text" id="tallaZapato" class="form-input" placeholder="25.5">
           </div>
         </div>
 
@@ -6772,6 +6776,9 @@ function attachDOMEvents() {
           const email = document.getElementById('contactoAcceso').value;
           const grado = document.getElementById('gradoInput').value;
           const grupoNom = document.getElementById('grupoInput').value;
+          const estatura = document.getElementById('estatura')?.value;
+          const peso = document.getElementById('peso')?.value;
+          const tallaZapato = document.getElementById('tallaZapato')?.value;
           const tallerValue = tlInput ? tlInput.value : null;
 
           if(!curp || !nombre || !email || !grado || !grupoNom || !edad) {
@@ -6815,6 +6822,7 @@ function attachDOMEvents() {
             const { error: errAlumno } = await supabaseClient.from('alumnos').insert([{ 
                curp, nombre, edad: parseInt(edad, 10),
                matricula, grupo_id: grId, grado: grado, contacto_email: email, taller: tallerValue,
+               estatura, peso, talla_zapato: tallaZapato,
                plantel_id: finalPlantel
             }]);
             if(errAlumno) throw errAlumno;
