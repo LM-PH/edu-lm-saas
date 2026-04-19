@@ -4020,7 +4020,9 @@ async function renderMasterSaaS() {
                 </div>
 
                 <div style="display:flex; gap:12px;">
-                   <button class="btn btn-primary" style="flex:1; font-size:0.8rem;" onclick="alert('Funciones PRO pronto')"><i class="fa-solid fa-eye"></i> Gestionar</button>
+                   <button class="btn btn-primary" style="flex:1; font-size:0.8rem;" onclick="window.gestionarPlantelSaaS('${p.id}', '${p.nombre}')">
+                      <i class="fa-solid fa-eye"></i> Gestionar
+                   </button>
                    <button class="btn" style="flex:1; font-size:0.8rem; background:#fee2e2; color:#dc2626; border:1px solid #fecaca;" onclick="window.eliminarPlantelSaaS('${p.id}', '${p.nombre}')">
                       <i class="fa-solid fa-trash"></i> Eliminar
                    </button>
@@ -4044,6 +4046,14 @@ window.eliminarPlantelSaaS = async (id, nombre) => {
         window.showToast("Plantel y datos eliminados correctamente.", "success");
         renderApp();
     } catch(e) { alert("Error al borrar: " + e.message); }
+};
+
+window.gestionarPlantelSaaS = (id, nombre) => {
+    state.plantelId = id;
+    CONFIG.schoolName = nombre;
+    state.path = '/admin/inscripcion';
+    window.showToast(`Entrando a modo gestión: ${nombre}`, 'success');
+    renderApp();
 };
 
 async function renderApp() {
