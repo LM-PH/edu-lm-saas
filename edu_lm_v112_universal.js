@@ -608,6 +608,17 @@ function renderSidebar() {
   const menus = {
     master: [
       { name: 'Administración SaaS', path: '/master/saas', icon: 'fa-globe' },
+      ...(state.plantelId ? [
+          { type: 'divider', text: `Gestionando: ${CONFIG.schoolName}` },
+          { name: 'Inscripción', path: '/admin/inscripcion', icon: 'fa-user-plus' },
+          { name: 'Boletas y Calificaciones', path: '/admin/calificaciones', icon: 'fa-star-half-stroke' },
+          { name: 'Expediente Digital', path: '/admin/expediente', icon: 'fa-folder-open' },
+          { name: 'Grupos y Asignación', path: '/admin/grupos', icon: 'fa-users-gear' },
+          { name: 'Maestros y Materias', path: '/admin/maestros', icon: 'fa-chalkboard-user' },
+          { name: 'Trámites y Constancias', path: '/admin/tramites', icon: 'fa-file-signature' },
+          { name: 'Horarios de Clase', path: '/admin/horarios', icon: 'fa-calendar-days' },
+          { name: 'Comunicados Oficiales', path: '/admin/comunicados', icon: 'fa-bullhorn' },
+      ] : [])
     ],
     admin: [
       { name: 'Inscripción', path: '/admin/inscripcion', icon: 'fa-user-plus' },
@@ -655,12 +666,17 @@ function renderSidebar() {
   // Protección: Si el rol no existe en el menú, usar Alumno por defecto
   const menuList = menus[userRole] ? [...menus[userRole]] : [...menus['alumno']];
 
-  const navItems = menuList.map(item => `
-    <a class="nav-item ${state.path === item.path ? 'active' : ''}" onclick="window.navigate('${item.path}')">
-      <i class="fa-solid ${item.icon} w-5 text-center"></i>
-      <span>${item.name}</span>
-    </a>
-  `).join('');
+  const navItems = menuList.map(item => {
+    if (item.type === 'divider') {
+      return `<div style="padding:15px 20px 8px; font-size:0.65rem; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.12em; font-weight:800; border-top:1px solid rgba(0,0,0,0.05); margin-top:8px;">${item.text}</div>`;
+    }
+    return `
+      <a class="nav-item ${state.path === item.path ? 'active' : ''}" onclick="window.navigate('${item.path}')">
+        <i class="fa-solid ${item.icon} w-5 text-center"></i>
+        <span>${item.name}</span>
+      </a>
+    `;
+  }).join('');
 
   const roleNames = { master: 'Creador del Sistema', admin: 'Admin', directivo: 'Directivo', maestro: 'Maestro', apoyo: 'Trabajo Social', alumno: 'Estudiante', admin: 'Admin', administrativo: 'Admin' };
 
