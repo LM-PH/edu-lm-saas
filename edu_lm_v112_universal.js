@@ -618,7 +618,8 @@ function renderSidebar() {
       { name: 'Expediente Digital', path: '/admin/expediente', icon: 'fa-folder-open' },
       { name: 'Grupos y Asignación', path: '/admin/grupos', icon: 'fa-users-gear' },
       { name: 'Maestros y Materias', path: '/admin/maestros', icon: 'fa-chalkboard-user' },
-      { name: 'Reporte Calificaciones', path: '/admin/calificaciones', icon: 'fa-chart-pie' },
+      { name: 'Boletas y Calificaciones', path: '/admin/calificaciones', icon: 'fa-star-half-stroke' },
+
       { name: 'Trámites y Constancias', path: '/admin/tramites', icon: 'fa-file-signature' },
       { name: 'Comunicados Oficiales', path: '/admin/comunicados', icon: 'fa-bullhorn' },
     ],
@@ -640,10 +641,12 @@ function renderSidebar() {
       { name: 'Avisos Oficiales', path: '/apoyo/comunicados', icon: 'fa-bullhorn' },
     ],
     directivo: [
+      { name: 'Boletas y Calificaciones', path: '/admin/calificaciones', icon: 'fa-star-half-stroke' },
       { name: 'Autorizaciones', path: '/directivo/autorizaciones', icon: 'fa-stamp' },
       { name: 'Gestión de Personal', path: '/directivo/gestion-personal', icon: 'fa-id-card-clip' },
       { name: 'Avisos Oficiales', path: '/apoyo/comunicados', icon: 'fa-bullhorn' }
     ],
+
     alumno: [
       { name: 'Credencial Digital', path: '/alumno/credencial', icon: 'fa-id-card' },
       { name: 'Avisos y Timeline', path: '/alumno/timeline', icon: 'fa-bell' },
