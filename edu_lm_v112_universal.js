@@ -597,29 +597,10 @@ function renderSidebar() {
     ],
     admin: [
       { name: 'Inscripción', path: '/admin/inscripcion', icon: 'fa-user-plus' },
-      { name: 'Expediente Digital', path: '/admin/expediente', icon: 'fa-folder-open' },
-      { name: 'Grupos y Asignación', path: '/admin/grupos', icon: 'fa-users-gear' },
-      { name: 'Maestros y Materias', path: '/admin/maestros', icon: 'fa-chalkboard-user' },
-      { name: 'Reporte Calificaciones', path: '/admin/calificaciones', icon: 'fa-chart-pie' },
-      { name: 'Trámites y Constancias', path: '/admin/tramites', icon: 'fa-file-signature' },
-      { name: 'Comunicados Oficiales', path: '/admin/comunicados', icon: 'fa-bullhorn' },
-    ],
-    administrativo: [ // Alias de seguridad para evitar fallback al alumno
-      { name: 'Inscripción', path: '/admin/inscripcion', icon: 'fa-user-plus' },
-      { name: 'Expediente Digital', path: '/admin/expediente', icon: 'fa-folder-open' },
-      { name: 'Grupos y Asignación', path: '/admin/grupos', icon: 'fa-users-gear' },
-      { name: 'Maestros y Materias', path: '/admin/maestros', icon: 'fa-chalkboard-user' },
-      { name: 'Reporte Calificaciones', path: '/admin/calificaciones', icon: 'fa-chart-pie' },
-      { name: 'Trámites y Constancias', path: '/admin/tramites', icon: 'fa-file-signature' },
-      { name: 'Comunicados Oficiales', path: '/admin/comunicados', icon: 'fa-bullhorn' },
-    ],
-    admin: [ // Alias de seguridad para evitar fallback al alumno
-      { name: 'Inscripción', path: '/admin/inscripcion', icon: 'fa-user-plus' },
-      { name: 'Expediente Digital', path: '/admin/expediente', icon: 'fa-folder-open' },
-      { name: 'Grupos y Asignación', path: '/admin/grupos', icon: 'fa-users-gear' },
-      { name: 'Maestros y Materias', path: '/admin/maestros', icon: 'fa-chalkboard-user' },
       { name: 'Boletas y Calificaciones', path: '/admin/calificaciones', icon: 'fa-star-half-stroke' },
-
+      { name: 'Expediente Digital', path: '/admin/expediente', icon: 'fa-folder-open' },
+      { name: 'Grupos y Asignación', path: '/admin/grupos', icon: 'fa-users-gear' },
+      { name: 'Maestros y Materias', path: '/admin/maestros', icon: 'fa-chalkboard-user' },
       { name: 'Trámites y Constancias', path: '/admin/tramites', icon: 'fa-file-signature' },
       { name: 'Comunicados Oficiales', path: '/admin/comunicados', icon: 'fa-bullhorn' },
     ],
@@ -646,14 +627,14 @@ function renderSidebar() {
       { name: 'Gestión de Personal', path: '/directivo/gestion-personal', icon: 'fa-id-card-clip' },
       { name: 'Avisos Oficiales', path: '/apoyo/comunicados', icon: 'fa-bullhorn' }
     ],
-
     alumno: [
+      { name: 'Boletas y Calificaciones', path: '/alumno/boletas', icon: 'fa-star-half-stroke' },
       { name: 'Credencial Digital', path: '/alumno/credencial', icon: 'fa-id-card' },
       { name: 'Avisos y Timeline', path: '/alumno/timeline', icon: 'fa-bell' },
-      { name: 'Boletas y Calificaciones', path: '/alumno/boletas', icon: 'fa-star-half-stroke' },
       { name: 'Trámites Escolares', path: '/alumno/tramites', icon: 'fa-file-pdf' },
     ]
   };
+
 
   // Protección: Si el rol no existe en el menú, usar Alumno por defecto
   const menuList = menus[userRole] ? [...menus[userRole]] : [...menus['alumno']];
