@@ -4084,7 +4084,7 @@ window.loadMisGruposMaestro = async () => {
         const { data: asigs, error } = await supabaseClient
             .from('asignaciones_maestros')
             .select('grupo_id, target_grado, materia, grupos(*)')
-            .eq('maestro_email', email);
+            .eq('docente_email', email);
 
         if(error) throw error;
         
@@ -5149,7 +5149,7 @@ window.loadTimelinePersonal = async (selectedDate) => {
             audArr.push('Maestro_' + userId);
             
             // Cargar asignaciones (grupos específicos y grados completos)
-            const { data: asig } = await supabaseClient.from('asignaciones_maestros').select('grupo_id, target_grado').eq('maestro_email', email);
+            const { data: asig } = await supabaseClient.from('asignaciones_maestros').select('grupo_id, target_grado').eq('docente_email', email);
             
             if(asig) {
                 for (const a of asig) {
@@ -5277,7 +5277,7 @@ window.loadActividadesMaestro = async () => {
         if (selGrupo && (selGrupo.innerHTML.includes("Cargando") || selGrupo.options.length <= 1)) {
             const { data: asigs, error: errAsigs } = await supabaseClient.from('asignaciones_maestros')
                .select('materia, grupo_id, target_grado, grupos(id, nombre)')
-               .eq('maestro_email', email)
+               .eq('docente_email', email)
                .or('grupo_id.not.is.null,target_grado.not.is.null');
                
             if(!errAsigs && asigs) {
@@ -5564,7 +5564,7 @@ window.loadListasMaestro = async () => {
         const email = (await supabaseClient.auth.getUser()).data.user.email;
         const { data: asigs } = await supabaseClient.from('asignaciones_maestros')
            .select('materia, grupo_id, target_grado, grupos(id, nombre)')
-           .eq('maestro_email', email)
+           .eq('docente_email', email)
            .or('grupo_id.not.is.null,target_grado.not.is.null');
            
         if(asigs && asigs.length > 0) {
@@ -6000,7 +6000,7 @@ window.loadGruposCalificacionesCarga = async () => {
         const email = (await supabaseClient.auth.getUser()).data.user.email;
         const { data: asigs } = await supabaseClient.from('asignaciones_maestros')
            .select('materia, grupo_id, target_grado, grupos(id, nombre)')
-           .eq('maestro_email', email)
+           .eq('docente_email', email)
            .or('grupo_id.not.is.null,target_grado.not.is.null');
            
         if(asigs && asigs.length > 0) {
@@ -7610,7 +7610,7 @@ window.loadGruposEncuadre = async () => {
         
         const { data: asigs } = await supabaseClient.from('asignaciones_maestros')
            .select('materia, grupo_id, target_grado, grupos(id, nombre)')
-           .eq('maestro_email', u.data.user.email)
+           .eq('docente_email', u.data.user.email)
            .or('grupo_id.not.is.null,target_grado.not.is.null');
            
         if(asigs && asigs.length > 0) {
@@ -8302,8 +8302,8 @@ window.crearMateriaMaestro = async () => {
         console.log(">>> [v114] REGISTRANDO MATERIA:", { email, profName, materia });
         
         const { error } = await supabaseClient.from('asignaciones_maestros').insert([{ 
-            maestro_email: email, 
-            maestro_nombre: profName,
+            docente_email: email, 
+            docente_nombre: profName,
             materia: materia, 
             grupo_id: null,
             plantel_id: currentPlantel
@@ -8454,7 +8454,7 @@ window.loadMateriasDeMaestro = async (email) => {
 
         const { data, error } = await supabaseClient.from('asignaciones_maestros')
             .select('materia')
-            .eq('maestro_email', email)
+            .eq('docente_email', email)
             .eq('plantel_id', currentPlantelID);
             
         if(error) throw error;
@@ -8491,7 +8491,7 @@ window.loadGruposDeMaestro = async (email) => {
     if(!list) return;
     if(!email) { list.innerHTML = '<li>Sin selección</li>'; return; }
     try {
-        const { data } = await supabaseClient.from('asignaciones_maestros').select('id, materia, target_grado, grupo_id, grupos(nombre)').eq('maestro_email', email);
+        const { data } = await supabaseClient.from('asignaciones_maestros').select('id, materia, target_grado, grupo_id, grupos(nombre)').eq('docente_email', email);
         
         // Filtramos para que solo se vean las que TIENEN un grupo o un grado asignado
         const asignacionesReales = (data || []).filter(d => d.grupo_id !== null || d.target_grado !== null);
@@ -8550,7 +8550,7 @@ window.crearAsignacionGrupoMaestro = async () => {
     try {
         // Verificar existencia previa
         let checkExist = supabaseClient.from('asignaciones_maestros').select('id')
-            .eq('maestro_email', email).eq('materia', mat);
+            .eq('docente_email', email).eq('materia', mat);
         
         if(finalGrupoId) checkExist = checkExist.eq('grupo_id', finalGrupoId);
         else checkExist = checkExist.eq('target_grado', targetGrado);
@@ -8559,8 +8559,8 @@ window.crearAsignacionGrupoMaestro = async () => {
         if(exist && exist.length > 0) throw new Error("Ya existe esta vinculación.");
 
         const { error: insErr } = await supabaseClient.from('asignaciones_maestros').insert([{ 
-            maestro_email: email, 
-            maestro_nombre: document.getElementById('selAsigMaestroBase').options[document.getElementById('selAsigMaestroBase').selectedIndex]?.text.split(' (')[0],
+            docente_email: email, 
+            docente_nombre: document.getElementById('selAsigMaestroBase').options[document.getElementById('selAsigMaestroBase').selectedIndex]?.text.split(' (')[0],
             materia: mat, 
             grupo_id: finalGrupoId,
             target_grado: targetGrado,
