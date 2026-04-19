@@ -690,16 +690,6 @@ function renderSidebar() {
           </div>
         </div>
         
-        <!-- PANEL DE DIAGNÓSTICO v112 -->
-        <div style="margin-top:10px; padding:10px; background:#1e293b; border-radius:10px; color:#94a3b8; font-size:0.6rem; border:1px solid #334155;">
-           <div style="color:yellow; font-weight:bold; margin-bottom:4px; display:flex; justify-content:space-between;">
-             <span>DIAGNÓSTICO v112</span>
-             <i class="fa-solid fa-shield-halved"></i>
-           </div>
-           <div>PLANTEL: <span style="color:white; font-family:monospace;">${state.plantelId || 'N/A'}</span></div>
-           <div>USUARIO: <span style="color:white;">${state.user?.email || 'OFFLINE'}</span></div>
-           <button class="btn btn-sm" style="margin-top:8px; width:100%; font-size:0.55rem; background:#334155; color:white; border:none;" onclick="window.location.reload()">FORZAR RECARGA</button>
-        </div>
       </div>
     </aside>
   `;
@@ -8328,28 +8318,22 @@ window.crearMateriaMaestro = async () => {
 };
 
 window.seleccionarMaestroDirecto = (email, element) => {
-    // 1. Quitar resaltado de otros
-    document.querySelectorAll('.card-maestro-selector').forEach(el => {
-        el.style.background = 'white';
-        el.style.border = '1px solid #ddd';
+    // 1. Quitar resaltado de otros usando la clase correcta
+    document.querySelectorAll('.maestro-item-directo').forEach(el => {
+        el.style.background = 'transparent';
+        el.style.borderBottom = '1px solid #fde68a';
     });
     
-    // 2. Resaltar el actual
-    element.style.background = '#fde68a';
+    // 2. Resaltar el actual (Estilo original ámbar)
+    element.style.background = '#fef3c7';
     element.style.border = '2px solid #f59e0b';
     
     // 3. Guardar el email en el campo oculto
     const hiddenInput = document.getElementById('selMaestroMateriasV110');
-    if(hiddenInput) {
-        hiddenInput.value = email;
-    }
+    if(hiddenInput) hiddenInput.value = email;
     
     // 4. Cargar materias de ese maestro automáticamente
     if(window.loadMateriasDeMaestro) window.loadMateriasDeMaestro(email);
-    
-    // 5. Feedback visual
-    const debug = document.getElementById('debugCountV111');
-    if(debug) debug.innerText = `Estado: Seleccionado ${email}`;
 };
 
 window.loadSelectsMaestros = async () => {
