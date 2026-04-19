@@ -44,10 +44,11 @@ const state = new Proxy(_state, {
   }
 });
 
-// WATCHDOG UNIVERSAL v112
+// WATCHDOG UNIVERSAL v135
 window.autoHumanize = () => {
     const selector = document.getElementById('selMaestroMateriasV110');
-    if(selector && selector.options.length > 0) {
+    // Si es un SELECT, revisamos opciones. Si es un INPUT, ignoramos (ya se humaniza al cargar)
+    if(selector && selector.tagName === 'SELECT' && selector.options.length > 0) {
         const text = selector.options[0].text;
         if(text.includes('Cargando') || text.includes('@')) {
             // Si el primer elemento es un correo o dice cargando, intentamos humanizar
@@ -55,7 +56,7 @@ window.autoHumanize = () => {
         }
     }
 };
-setInterval(window.autoHumanize, 2000); // Revisión constante cada 2 segundos
+setInterval(window.autoHumanize, 3000); // Revisión constante cada 3 segundos (menos agresivo)
 
 // Utils & Globals
 window.navigate = (path) => {
@@ -6579,6 +6580,8 @@ window.initEventosAdminGrupos = () => {
 
 window.initEventosAdminMaestros = () => {
     try {
+        const currentPlantelID = state.plantelId || state.user?.user_metadata?.plantel_id;
+        
         // 2. Gestión de Maestros y Materias
         const btnGuardarDoc = document.getElementById('btnGuardarMaestroSolo');
         if(btnGuardarDoc) {
@@ -6595,7 +6598,7 @@ window.initEventosAdminMaestros = () => {
                         email: emailValue, 
                         rol: rolValue, 
                         nombre: nombreValue,
-                        plantel_id: finalPlantel
+                        plantel_id: currentPlantelID
                     }], { onConflict: 'email' });
 
                     if(error) throw error;
@@ -8338,9 +8341,8 @@ window.seleccionarMaestroDirecto = (email, element) => {
 
 window.loadSelectsMaestros = async () => {
     try {
-        console.log(">>> [v117] Sincronización Global Iniciada...");
+        console.log(">>> [v135] Sincronización Global Iniciada...");
         
-        // 1. RECUPERACIÓN SEGURA DEL PLANTEL
         let currentP = state.plantelId || state.user?.user_metadata?.plantel_id;
         if(!currentP && state.user?.id) {
             const { data: pData } = await supabaseClient.from('perfiles').select('plantel_id').eq('id', state.user.id).single();
@@ -8348,14 +8350,11 @@ window.loadSelectsMaestros = async () => {
         }
 
         if(!currentP) {
-            console.warn(">>> [v117] No se pudo determinar el plantel para filtrar.");
+            console.warn(">>> [v135] No hay plantel.");
             return;
         }
 
-        // DIAGNÓSTICO v122
-        console.log(">>> [v122] Cargando maestros para plantel:", currentP);
-
-        // 2. OBTENCIÓN DE PERSONAL (V122: Maestros y Admins)
+        // 2. OBTENCIÓN DE PERSONAL (Maestros y Admins)
         let { data: staff, error: errProf } = await supabaseClient.from('perfiles_permitidos')
             .select('email, nombre, rol')
             .neq('rol', 'alumno')
@@ -8363,39 +8362,72 @@ window.loadSelectsMaestros = async () => {
             .order('nombre');
 
         if (!staff || staff.length === 0) {
-            console.warn(">>> [v122] Sin personal local, buscando global...");
             const { data: globalStaff } = await supabaseClient.from('perfiles_permitidos').select('email, nombre, rol').neq('rol', 'alumno');
             staff = globalStaff;
         }
 
         if (errProf) throw errProf;
         
-        // ALERTA DE DIAGNÓSTICO (Solo si hay pocos o ninguno)
-        if (!staff || staff.length === 0) {
-            alert("⚠️ ALERTA: No se encontró ningún personal registrado en la base de datos.");
-        }
-
-        // 3. MAPEO A CACHÉ INTERNA (Nombres limpios)
-        window.__teachersData = (staff || []).map(p => ({
+        // 3. MAPEO A CACHÉ INTERNA
+        const teachers = (staff || []).map(p => ({
             email: p.email,
             nombre: p.nombre || '',
-            display: (p.nombre && p.nombre !== 'Nuevo Usuario') ? `${p.nombre.toUpperCase()} (${p.email})` : p.email
+            display: (p.nombre && p.nombre !== 'Nuevo Usuario') ? `${p.nombre.toUpperCase()}` : p.email
         }));
+        window.__teachersData = teachers;
 
         // 4. ACTUALIZACIÓN DE SELECTORES
+        const optionsHtml = '<option value="">Elige Maestro...</option>' + teachers.map(t => `<option value="${t.email}">${t.display} (${t.email})</option>`).join('');
+        
         ['selMaestroMateriasV110', 'selAsigMaestroBase'].forEach(id => {
             const el = document.getElementById(id);
-            if(el) el.innerHTML = optionsHtml;
+            if(el) {
+                if(el.tagName === 'SELECT') el.innerHTML = optionsHtml;
+                else el.value = ''; 
+            }
         });
+
+        // 4.1 NUEVA LISTA DIRECTA (Paso 1 del Usuario)
+        const listDirecta = document.getElementById('listaSeleccionMaestrosDirecta');
+        if(listDirecta) {
+            if(teachers.length === 0) {
+                listDirecta.innerHTML = '<p style="text-align:center; padding:10px;">No hay maestros registrados.</p>';
+            } else {
+                listDirecta.innerHTML = teachers.map(t => `
+                    <div class="maestro-item-directo" onclick="window.seleccionarMaestroDirecto('${t.email}', '${t.nombre}')" 
+                         style="padding:10px; border-bottom:1px solid #fde68a; cursor:pointer; font-weight:bold; color:#92400e; display:flex; justify-content:space-between; align-items:center;">
+                        <span>${t.display}</span>
+                        <i class="fa-solid fa-chevron-right" style="font-size:0.8rem; opacity:0.5;"></i>
+                    </div>
+                `).join('');
+            }
+        }
 
         // 5. CARGAR GRUPOS DEL PLANTEL
         const { data: grupos } = await supabaseClient.from('grupos').select('id, nombre').eq('plantel_id', currentP).order('nombre');
         const sGr = document.getElementById('selAsigGrupoBase');
         if(sGr) sGr.innerHTML = '<option value="">Elige Grupo...</option>' + (grupos || []).map(g => `<option value="${g.id}">${g.nombre}</option>`).join('');
 
-        // Estabilización final v131
     } catch(e) { 
-        console.error(">>> [v117 ERROR] Error de carga:", e);
+        console.error(">>> [v135 ERROR] Error de carga:", e);
+    }
+};
+
+window.seleccionarMaestroDirecto = (email, nombre) => {
+    const inputId = document.getElementById('selMaestroMateriasV110');
+    if(inputId) {
+        inputId.value = email;
+        // Lanzar carga de materias y grupos vinculados
+        if(window.loadMateriasDeMaestro) window.loadMateriasDeMaestro(email);
+        if(window.loadGruposDeMaestro) window.loadGruposDeMaestro(email);
+        
+        // Efecto visual de selección
+        document.querySelectorAll('.maestro-item-directo').forEach(el => {
+            el.style.background = 'transparent';
+            if(el.innerText.includes(nombre.toUpperCase())) el.style.background = '#fef3c7';
+        });
+        
+        window.showToast(`Maestro ${nombre} seleccionado`, 'success');
     }
 };
 
