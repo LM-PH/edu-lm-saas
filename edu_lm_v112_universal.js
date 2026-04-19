@@ -5408,18 +5408,31 @@ window.finalizarActividad = async (id) => {
             // 4. Identificar quienes no cumplieron (no están en la lista de evaluados)
             const noCumplieron = (todosAlumnos || []).filter(a => !evaluadosIds.has(a.id));
 
-            // 5. Enviar comunicados automáticos
+            // 5. Asignar 0 automático y enviar comunicados
             if(noCumplieron.length > 0) {
+                // 5a. Insertar calificaciones en 0 para que existan los registros
+                const dataEval = noCumplieron.map(al => ({
+                    actividad_id: id,
+                    alumno_id: al.id,
+                    calificacion: 0,
+                    fecha_evaluacion: new Date().toISOString(),
+                    plantel_id: act.plantel_id || state.plantelId
+                }));
+                const { error: errZero } = await supabaseClient.from('evaluaciones_actividades').insert(dataEval);
+                if(errZero) console.error("Error al asignar 0 automático:", errZero);
+
+                // 5b. Enviar comunicados automáticos
                 const notifs = noCumplieron.map(al => ({
                     autor_id: act.maestro_id,
                     titulo: `🔔 INCUMPLIMIENTO: ${act.titulo}`,
-                    mensaje: `Se informa que el alumno no entregó o no cumplió con la actividad "${act.titulo}" en la asignatura de ${act.materia}. \n\n⚠️ Nota: Si el maestro lo permite, esta calificación aún puede ser modificada si el docente decide reabrir la actividad para una entrega extemporánea. Por favor, fomente el cumplimiento de sus tareas escolares.`,
+                    mensaje: `Se informa que el alumno no entregó o no cumplió con la actividad "${act.titulo}" en la asignatura de ${act.materia}. \n\n⚠️ Nota: Debido al incumplimiento, se ha asignado una calificación de 0. Si el maestro lo permite, esta calificación aún puede ser modificada si el docente decide reabrir la actividad para una entrega extemporánea. Por favor, fomente el cumplimiento de sus tareas escolares.`,
                     audiencia: `Alumno_${al.id}`,
                     plantel_id: act.plantel_id || state.plantelId
                 }));
                 const { error: errComs } = await supabaseClient.from('comunicados').insert(notifs);
                 if(errComs) console.error("Error al enviar avisos de incumplimiento:", errComs);
             }
+
 
         }
 
