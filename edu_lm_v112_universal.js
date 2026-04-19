@@ -4270,7 +4270,17 @@ window.registrarSaludAlumno = async () => {
             plantel_id: state.plantelId
         });
         if(error) throw error;
-        window.showToast('Registro de salud guardado.', 'success');
+        
+        // 2. Notificar al Alumno v132
+        await supabaseClient.from('comunicados').insert([{
+            autor_id: state.user.id,
+            titulo: `🩺 REGISTRO DE ATENCIÓN MÉDICA`,
+            mensaje: `Se ha registrado una atención en el área de salud/apoyo.\nMOTIVO: ${motivo}\nOBSERVACIONES: ${obs || 'Sin observaciones adicionales.'}\n\nAtentamente,\nÁrea de Apoyo Estudiantil`,
+            audiencia: `Alumno_${aid}`,
+            plantel_id: state.plantelId
+        }]);
+
+        window.showToast('Registro de salud guardado y notificado.', 'success');
         window.loadHistorialSalud();
         // Limpiar campos
         document.getElementById('motivoSalud').value = '';
@@ -4310,7 +4320,16 @@ window.registrarJustificanteMedico = async () => {
         // 2. Notificar a Maestros
         await window.notificarMaestrosJustificante(aid, motivo, inicio, fin);
 
-        window.showToast('Justificante generado y enviado a maestros.', 'success');
+        // 3. Notificar al Alumno v132
+        await supabaseClient.from('comunicados').insert([{
+            autor_id: state.user.id,
+            titulo: `📄 JUSTIFICANTE MÉDICO APROBADO`,
+            mensaje: `Se ha registrado y aprobado tu justificante médico.\nMOTIVO: ${motivo}\nPERIODO: ${inicio} al ${fin}\n\nLos docentes de tus materias han sido notificados para las consideraciones académicas correspondientes.`,
+            audiencia: `Alumno_${aid}`,
+            plantel_id: state.plantelId
+        }]);
+
+        window.showToast('Justificante generado y enviado a todos.', 'success');
         
         // Refrescar vistas
         if(window.loadHistorialSalud) window.loadHistorialSalud();
