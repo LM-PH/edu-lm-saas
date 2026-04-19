@@ -1396,23 +1396,11 @@ function renderAdminMaestros() {
       <div class="card" style="flex:1.5; min-width:350px;">
         <h3 style="margin-bottom:16px"><i class="fa-solid fa-book text-success"></i> 2. Añadir Materia al Maestro</h3>
         <div class="form-group" style="background: #fffbeb; padding: 15px; border-radius: 12px; border: 2px solid #f59e0b; margin-bottom: 25px;">
-          <h4 style="margin:0 0 10px 0; color:#b45309;"><i class="fa-solid fa-user-check"></i> PASO 1: Selecciona o Escribe al Maestro</h4>
-          
-          <div id="listaSeleccionMaestrosDirecta" style="max-height:180px; overflow-y:auto; background:white; padding:10px; border-radius:8px; border:1px solid #f59e0b; margin-bottom:12px;">
-             <p style="text-align:center; color:#b45309;">Cargando lista...</p>
+          <h4 style="margin:0 0 10px 0; color:#b45309;"><i class="fa-solid fa-user-check"></i> PASO 1: Toca el nombre del Maestro</h4>
+          <div id="listaSeleccionMaestrosDirecta" style="max-height:200px; overflow-y:auto; background:#fef3c7; padding:10px; border-radius:8px; border:1px inset #f59e0b;">
+             <p style="text-align:center; color:#b45309;">Cargando lista de maestros...</p>
           </div>
-
-          <div style="background:#fef3c7; padding:10px; border-radius:8px; border:1px dashed #f59e0b;">
-            <label class="form-label" style="color:#b45309; font-size:0.8rem;"><b>Opción B: ESCRIBIR CORREO MANUALMENTE</b> (Si no lo ves arriba)</label>
-            <input type="email" id="selMaestroMateriasV110" class="form-input" placeholder="ejemplo@correo.com" 
-                   style="border: 2px solid #f59e0b; background: white;" 
-                   oninput="this.style.background='#f0fdf4'; document.getElementById('debugCountV111').innerText='Estado: Correo manual ingresado'">
-          </div>
-
-          <button class="btn btn-primary" style="width:100%; background:#f59e0b; border:none; margin-top:10px; font-weight:bold;" onclick="window.loadSelectsMaestros()">
-             <i class="fa-solid fa-arrows-rotate"></i> RECARGAR LISTA DE MAESTROS
-          </button>
-          <p id="debugCountV111" style="font-size:0.8rem; margin-top:8px; text-align:center; color:#b45309; font-weight:bold;">Estado: Preparado para selección.</p>
+          <input type="hidden" id="selMaestroMateriasV110" value="">
         </div>
 
         <div class="form-group">
