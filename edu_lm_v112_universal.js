@@ -5859,13 +5859,14 @@ window.cargarAlumnosLista = async () => {
                         acts.forEach(act => {
                             const cellEval = evals.find(e => e.alumno_id === al.id && e.actividad_id === act.id);
                             let val = 0, isValida = false;
-                            if(cellEval && cellEval.calificacion) {
+                            if(cellEval && cellEval.calificacion !== undefined && cellEval.calificacion !== null) {
                                 actCells += `<td style="text-align:center; padding:12px; font-weight:bold; color:var(--primary)">${cellEval.calificacion}</td>`;
                                 val = parseFloat(cellEval.calificacion) || 0;
                                 sumNotas += val; countNotas++; isValida = true;
                             } else {
                                 actCells += `<td style="text-align:center; padding:12px; color:var(--text-muted)">-</td>`;
                             }
+
                             if(act.rubro_name) {
                                 hasRubros = true;
                                 if(!rubroGroups[act.rubro_name]) rubroGroups[act.rubro_name] = { suma: 0, count: 0, peso: parseFloat(act.rubro_peso) || 0 };
