@@ -7812,14 +7812,14 @@ window.cargarEncuadreActivo = async () => {
 
         if(isTec) {
             if(encExistente) {
-                const { error } = await supabaseClient.from('encuadres').update(payloadEnc).eq('id', encExistente.id);
+                const { error } = await supaAdmin.from('encuadres').update(payloadEnc).eq('id', encExistente.id);
                 if(error) throw error;
             } else {
-                const { error } = await supabaseClient.from('encuadres').insert([payloadEnc]);
+                const { error } = await supaAdmin.from('encuadres').insert([payloadEnc]);
                 if(error) throw error;
             }
         } else {
-            const { error } = await supabaseClient.from('encuadres').upsert(payloadEnc, { onConflict: 'grupo_id, materia, trimestre' });
+            const { error } = await supaAdmin.from('encuadres').upsert(payloadEnc, { onConflict: 'grupo_id, materia, trimestre' });
             if(error) throw error;
         }
 
