@@ -8393,27 +8393,7 @@ window.loadSelectsMaestros = async () => {
         const sGr = document.getElementById('selAsigGrupoBase');
         if(sGr) sGr.innerHTML = '<option value="">Elige Grupo...</option>' + (grupos || []).map(g => `<option value="${g.id}">${g.nombre}</option>`).join('');
 
-        // 6. AUTO-WATCHDOG v117: Monitor de Integridad del DOM
-        if(!window._v117WatchdogRunning) {
-            console.log(">>> [v117] Watchdog Activado.");
-            setInterval(() => {
-                const targetSelectors = ['selMaestroMateriasV110', 'selAsigMaestroBase'];
-                targetSelectors.forEach(id => {
-                    const el = document.getElementById(id);
-                    if (el && el.options.length > 1 && window.__teachersData) {
-                        const firstRealOption = el.options[1].text;
-                        if (firstRealOption.includes('@') && !firstRealOption.includes('(')) {
-                            console.warn(">>> [v117 Watchdog] Corrigiendo nombres...");
-                            const val = el.value;
-                            el.innerHTML = '<option value="">Elige personal...</option>' + 
-                               window.__teachersData.map(t => `<option value="${t.email}">${t.display}</option>`).join('');
-                            el.value = val;
-                        }
-                    }
-                });
-            }, 3000); 
-            window._v117WatchdogRunning = true;
-        }
+        // Estabilización final v131
     } catch(e) { 
         console.error(">>> [v117 ERROR] Error de carga:", e);
     }
