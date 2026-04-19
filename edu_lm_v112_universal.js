@@ -8108,8 +8108,9 @@ window.cargarSabanaGrupo = async () => {
     if(hold) hold.innerHTML = '<div style="color:var(--text-muted); font-size:0.9rem;"><i class="fa-solid fa-spinner fa-spin"></i> Consultando base de datos oficial...</div>';
     
     try {
-        // Obtenemos alumnos del grupo
-        const resAlums = await supabaseClient.from('alumnos').select('id, nombre').eq('grupo_id', gid).order('nombre');
+        // Obtenemos alumnos del grupo (v122: traemos taller para identificar tecnología)
+        const resAlums = await supabaseClient.from('alumnos').select('id, nombre, taller').eq('grupo_id', gid).order('nombre');
+
         if(!resAlums.data || resAlums.data.length === 0) {
             hold.innerHTML = '<div style="color:var(--warning); font-size:0.9rem;">No hay alumnos registrados en este grupo.</div>';
             return;
@@ -8132,13 +8133,19 @@ window.cargarSabanaGrupo = async () => {
         // Mapear alumnos
         let htmlRows = '';
         
-        // Para organizar columnas dinamicamente según las materias enviadas
+        // 4. Agrupar Materias (v122: Unificar todas las tecnologías en una sola columna "Tecnología")
         const matSet = new Set();
         califs.forEach(c => {
-            const mName = c.materia_nombre || (c.materia_id ? c.materia_id.nombre : 'Sin Nombre');
-            matSet.add(mName);
+            let mName = c.materia_nombre || (c.materia_id ? c.materia_id.nombre : 'Sin Nombre');
+            // Si el nombre contiene tecnología, lo tratamos como "Tecnología" para la UI
+            if(/tecnología|tecnologia/gi.test(mName)) {
+                matSet.add('Tecnología');
+            } else {
+                matSet.add(mName);
+            }
         });
         const materiasObj = Array.from(matSet);
+
         
         if (materiasObj.length === 0) {
             hold.innerHTML = '<div style="color:var(--text-muted); font-size:0.9rem;">Los maestros de este grupo aún no han enviado sus actas de calificación para este trimestre.</div>';
@@ -8153,15 +8160,25 @@ window.cargarSabanaGrupo = async () => {
             let matN = 0;
             
             materiasObj.forEach(mName => {
-                const cx = misC.find(x => (x.materia_nombre === mName) || (x.materia_id && x.materia_id.nombre === mName));
+                let cx;
+                if(mName === 'Tecnología') {
+                    // Buscar cualquier calificación que tenga "tecnología" en su nombre
+                    cx = misC.find(x => /tecnología|tecnologia/gi.test(x.materia_nombre || (x.materia_id?.nombre)));
+                } else {
+                    cx = misC.find(x => (x.materia_nombre === mName) || (x.materia_id && x.materia_id.nombre === mName));
+                }
+
                 if(cx) {
-                    cols += `<td style="color:var(--text-main)">${cx.calificacion}</td>`;
+                    // v122: Guardar el taller original en un atributo de datos para que la exportación y notif lo usen
+                    const tallerFull = cx.materia_nombre || (cx.materia_id?.nombre) || '';
+                    cols += `<td style="color:var(--text-main)" data-full-materia="${tallerFull}">${cx.calificacion}</td>`;
                     sump += Number(cx.calificacion);
                     matN++;
                 } else {
                     cols += `<td style="color:var(--text-muted)">-</td>`;
                 }
             });
+
             
             const promX = matN > 0 ? (sump/matN).toFixed(1) : '-';
             
@@ -8214,11 +8231,22 @@ window.exportarSabanaCalificaciones = () => {
         rows.forEach((row, index) => {
             const cols = Array.from(row.querySelectorAll('th, td'));
             const rowData = cols.map(col => {
-                let cellData = col.innerText.trim();
+                // v122: Si tiene el atributo data-full-materia (tecnología), usar ese para el CSV
+                let cellData = col.getAttribute('data-full-materia') || col.innerText.trim();
+                
+                // Si es la versión full para tecnología, agregarle el alias corto (ej. TC)
+                if(/tecnología|tecnologia/gi.test(cellData) && !cellData.includes('(')) {
+                    if(/computac/gi.test(cellData)) cellData += " (TC)";
+                    else if(/corte/gi.test(cellData)) cellData += " (TCYC)";
+                    else if(/estet/gi.test(cellData)) cellData += " (TE)";
+                    else if(/dibujo/gi.test(cellData)) cellData += " (TDT)";
+                }
+
                 // Limpiar saltos de línea y escapar comillas
                 cellData = cellData.replace(/"/g, '""').replace(/\n/g, ' ');
                 return `"${cellData}"`;
             }).join(',');
+
             csvContent += rowData + "\n";
         });
         
@@ -8285,13 +8313,22 @@ window.notificarRevisionSabana = async () => {
             let desgloseMaterias = "";
             let materiasReprobadas = 0;
             for(let i = 1; i < row.cells.length - 1; i++) {
-                const materiaNombre = headers[i] || `Materia ${i}`;
+                let materiaNombre = row.cells[i].getAttribute('data-full-materia') || headers[i] || `Materia ${i}`;
                 const calif = row.cells[i].innerText.trim();
                 const califNum = parseFloat(calif) || 0;
                 
+                // v122: Agregar alias corto si es tecnología
+                if(/tecnología|tecnologia/gi.test(materiaNombre) && !materiaNombre.includes('(')) {
+                    if(/computac/gi.test(materiaNombre)) materiaNombre += " (TC)";
+                    else if(/corte/gi.test(materiaNombre)) materiaNombre += " (TCYC)";
+                    else if(/estet/gi.test(materiaNombre)) materiaNombre += " (TE)";
+                    else if(/dibujo/gi.test(materiaNombre)) materiaNombre += " (TDT)";
+                }
+
                 desgloseMaterias += `• ${materiaNombre}: ${calif}\n`;
                 if(califNum > 0 && califNum < 6) materiasReprobadas++;
             }
+
 
             const aluMatch = alums.find(a => norm(a.nombre) === norm(nombreAlumno));
 
