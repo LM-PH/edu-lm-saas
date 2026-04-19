@@ -17,7 +17,7 @@ const supaAdmin = window.supabase ? window.supabase.createClient(SUPABASE_URL, S
 }) : null;
 
 // Global State
-const ADMIN_ROLES = ['admin', 'administrativo', 'admin', 'directivo'];
+const ADMIN_ROLES = ['admin', 'administrativo', 'directivo', 'master'];
 const esAdmin = (rol) => ADMIN_ROLES.includes(rol);
 
 let _state = {
