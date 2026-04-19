@@ -9162,8 +9162,8 @@ const startApp = async () => {
                 let finalPlantel = profile?.plantel_id || allowed?.plantel_id;
 
                 // Normalización Crítica (Unificación de Sinónimos)
-                if (esAdmin(rawRole) || rawRole === 'administrativo' || rawRole === 'admin') rawRole = 'admin';
-                if (rawRole === 'maestro' || rawRole === 'maestro') rawRole = 'maestro';
+                if ((esAdmin(rawRole) || rawRole === 'administrativo' || rawRole === 'admin') && rawRole !== 'master') rawRole = 'admin';
+                if (rawRole === 'maestro') rawRole = 'maestro';
 
                 // 4. LIMPIEZA PROFUNDA: Sincronizar Metadatos y Perfil si hay discrepancias
                 if (allowed) {
