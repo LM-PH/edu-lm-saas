@@ -8354,15 +8354,15 @@ window.loadSelectsMaestros = async () => {
             return;
         }
 
-        // 2. OBTENCIÓN DE PERSONAL (Maestros y Admins)
+        // 2. OBTENCIÓN DE PERSONAL (SOLO MAESTROS para esta vista)
         let { data: staff, error: errProf } = await supabaseClient.from('perfiles_permitidos')
             .select('email, nombre, rol')
-            .neq('rol', 'alumno')
+            .eq('rol', 'maestro')
             .eq('plantel_id', currentP)
             .order('nombre');
 
         if (!staff || staff.length === 0) {
-            const { data: globalStaff } = await supabaseClient.from('perfiles_permitidos').select('email, nombre, rol').neq('rol', 'alumno');
+            const { data: globalStaff } = await supabaseClient.from('perfiles_permitidos').select('email, nombre, rol').eq('rol', 'maestro');
             staff = globalStaff;
         }
 
