@@ -5012,7 +5012,10 @@ window.loadFirmantesEncuadre = async () => {
         let qAl = supabaseClient.from('alumnos').select('id, nombre, matricula').order('nombre');
         if(isTec) {
             const gNorm = targetGrado.includes('°') ? targetGrado : targetGrado + '°';
-            qAl = qAl.eq('grado', gNorm).ilike('taller', `%${mat.trim()}%`);
+            // v116: Robust matching for technologies (ignores accent in word Tecnología)
+            const cleanMat = mat.replace(/tecnología|tecnologia/gi, '').trim();
+            qAl = qAl.eq('grado', gNorm).ilike('taller', `%${cleanMat || mat}%`);
+
         } else {
             qAl = qAl.eq('grupo_id', gid);
         }
@@ -5375,17 +5378,64 @@ window.loadActividadesMaestro = async () => {
 window.finalizarActividad = async (id) => {
     if(!confirm("¿Deseas cerrar esta actividad? Se moverá al archivo pero podrás reabrirla si necesitas evaluar más alumnos.")) return;
     try {
+        // v117: Notificar automáticamente a quienes no cumplieron
+        // 1. Obtener detalles de la actividad
+        const { data: act } = await supabaseClient.from('actividades_maestro')
+            .select('titulo, grupo_id, target_grado, materia, maestro_id, plantel_id')
+            .eq('id', id).single();
+
+        if (act) {
+            // 2. Obtener lista de alumnos (mismo grupo o tecnología)
+            let qAlu = supabaseClient.from('alumnos').select('id, nombre');
+            if(act.grupo_id) {
+                qAlu = qAlu.eq('grupo_id', act.grupo_id);
+            } else if(act.target_grado) {
+                const gNorm = act.target_grado.includes('°') ? act.target_grado : act.target_grado + '°';
+                // Usamos la misma lógica robusta de búsqueda de tecnologías que implementamos antes
+                const cleanMat = act.materia.replace(/tecnología|tecnologia/gi, '').trim();
+                qAlu = qAlu.eq('grado', gNorm).ilike('taller', `%${cleanMat || act.materia}%`);
+            }
+            const { data: todosAlumnos } = await qAlu;
+
+            // 3. Obtener quienes ya tienen calificación
+            const { data: evaluados } = await supabaseClient.from('evaluaciones_actividades')
+                .select('alumno_id')
+                .eq('actividad_id', id);
+            
+            const evaluadosIds = new Set((evaluados || []).map(e => e.alumno_id));
+
+            // 4. Identificar quienes no cumplieron (no están en la lista de evaluados)
+            const noCumplieron = (todosAlumnos || []).filter(a => !evaluadosIds.has(a.id));
+
+            // 5. Enviar comunicados automáticos
+            if(noCumplieron.length > 0) {
+                const notifs = noCumplieron.map(al => ({
+                    autor_id: act.maestro_id,
+                    titulo: `🔔 INCUMPLIMIENTO: ${act.titulo}`,
+                    mensaje: `Se informa que el alumno no entregó o no cumplió con la actividad "${act.titulo}" en la asignatura de ${act.materia}. \n\n⚠️ Nota: Si el maestro lo permite, esta calificación aún puede ser modificada si el docente decide reabrir la actividad para una entrega extemporánea. Por favor, fomente el cumplimiento de sus tareas escolares.`,
+                    audiencia: `Alumno_${al.id}`,
+                    plantel_id: act.plantel_id || state.plantelId
+                }));
+                const { error: errComs } = await supabaseClient.from('comunicados').insert(notifs);
+                if(errComs) console.error("Error al enviar avisos de incumplimiento:", errComs);
+            }
+
+        }
+
+        // 6. Cerrar actividad oficialmente
         const { error } = await supabaseClient.from('actividades_maestro')
             .update({ finalizada: true, fecha_finalizacion: new Date().toISOString() })
             .eq('id', id);
+        
         if(error) throw error;
-        window.showToast("Actividad archivada exitosamente", "success");
+        window.showToast("Actividad archivada y avisos de incumplimiento enviados", "success");
         window.loadActividadesMaestro();
     } catch(err) {
         console.error(err);
-        alert("Error al cerrar actividad.");
+        alert("Error al cerrar actividad: " + err.message);
     }
 };
+
 
 window.reabrirActividad = async (id) => {
     try {
@@ -5660,7 +5710,10 @@ window.cargarAlumnosLista = async () => {
         let alumnosQuery = supabaseClient.from('alumnos').select('id, nombre, matricula, contacto_email');
         if(isTec) {
             const gNorm = targetGrado.includes('°') ? targetGrado : targetGrado + '°';
-            alumnosQuery = alumnosQuery.eq('grado', gNorm.trim()).ilike('taller', `%${materia.trim()}%`);
+            // v116: Robust matching for technologies
+            const cleanMat = materia.replace(/tecnología|tecnologia/gi, '').trim();
+            alumnosQuery = alumnosQuery.eq('grado', gNorm.trim()).ilike('taller', `%${cleanMat || materia}%`);
+
         } else {
             alumnosQuery = alumnosQuery.eq('grupo_id', gid);
         }
@@ -6060,7 +6113,10 @@ window.cargarBoletasGrupo = async () => {
         let alumnosQuery = supabaseClient.from('alumnos').select('id, nombre, matricula');
         if(isTec) {
             const gNorm = targetGrado.includes('°') ? targetGrado : targetGrado + '°';
-            alumnosQuery = alumnosQuery.eq('grado', gNorm).ilike('taller', `%${materiaText.trim()}%`);
+            // v116: Robust matching for technologies
+            const cleanMat = materiaText.replace(/tecnología|tecnologia/gi, '').trim();
+            alumnosQuery = alumnosQuery.eq('grado', gNorm).ilike('taller', `%${cleanMat || materiaText}%`);
+
         } else {
             alumnosQuery = alumnosQuery.eq('grupo_id', gid);
         }
@@ -7428,7 +7484,10 @@ window.openReporteModal = async () => {
             const targetGrado = parts[0];
             const materia = parts[1] || window.currentAulaMateria;
             const gNorm = targetGrado.includes('°') ? targetGrado : targetGrado + '°';
-            query = query.eq('grado', gNorm).ilike('taller', `%${materia.trim()}%`);
+            // v116: Robust matching for technologies
+            const cleanMat = materia.replace(/tecnología|tecnologia/gi, '').trim();
+            query = query.eq('grado', gNorm).ilike('taller', `%${cleanMat || materia}%`);
+
         } else {
             query = query.eq('grupo_id', window.currentAulaGrupoId);
         }
@@ -7827,7 +7886,10 @@ window.cargarEncuadreActivo = async () => {
         let alumnosQuery = supabaseClient.from('alumnos').select('id, nombre');
         if(isTec) {
             const gNorm = targetGrado.includes('°') ? targetGrado : targetGrado + '°';
-            alumnosQuery = alumnosQuery.eq('grado', gNorm).ilike('taller', `%${mat.trim()}%`);
+            // v116: Robust matching for technologies
+            const cleanMat = mat.replace(/tecnología|tecnologia/gi, '').trim();
+            alumnosQuery = alumnosQuery.eq('grado', gNorm).ilike('taller', `%${cleanMat || mat}%`);
+
         } else {
             alumnosQuery = alumnosQuery.eq('grupo_id', gid);
         }
