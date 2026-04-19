@@ -602,7 +602,7 @@ window.handleMagicLink = async () => {
 function renderSidebar() {
   // Mapeo seguro de roles (Sinonimia Total: admin/admin/administrativo -> admin)
   let userRole = state.role || 'alumno';
-  if (esAdmin(userRole)) userRole = 'admin';
+  if (esAdmin(userRole) && userRole !== 'master') userRole = 'admin';
   if (userRole === 'maestro') userRole = 'maestro';
 
   const menus = {
@@ -3939,6 +3939,8 @@ async function renderPage(path) {
   // Routes Definition
   switch(purePath) {
     case '/': 
+        // PRIORIDAD MAESTRA v138
+        if(state.role === 'master') return renderMasterSaaS();
         if(esAdmin(state.role)) return renderAdminInscripcion();
         if(state.role === 'directivo') return renderDirectivoAutorizaciones();
         if(state.role === 'maestro') return renderMaestroAula();
