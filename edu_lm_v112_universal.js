@@ -4457,13 +4457,42 @@ window.loadBoletasAlumno = async () => {
                    t.includes('CITATORIO');
         }).slice(0, 5); // Tomamos los 5 más recientes
 
-        // 3. Obtener calificaciones crudas
+        // 3. NUEVO: Buscar boletas en el bucket de Expediente Digital (PDFs)
+        let storageHtml = '';
+        try {
+            const { data: fileList } = await supabaseClient.storage.from('expedientes').list(alu.id.toString());
+            const boletasPdf = (fileList || []).filter(f => f.name.toLowerCase().includes('boleta'));
+            
+            if(boletasPdf.length > 0) {
+                storageHtml = `
+                    <div style="margin-top:25px; margin-bottom:15px;">
+                        <h3 style="margin:0; font-size:0.85rem; text-transform:uppercase; letter-spacing:1px; color:var(--text-muted); font-weight:700;">
+                            <i class="fa-solid fa-file-pdf"></i> Boletas Digitales Disponibles (PDF)
+                        </h3>
+                    </div>
+                    <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap:12px; margin-bottom:30px;">
+                        ${boletasPdf.map(f => {
+                            const publicUrl = supabaseClient.storage.from('expedientes').getPublicUrl(`${alu.id}/${f.name}`).data.publicUrl;
+                            return `
+                                <a href="${publicUrl}" target="_blank" class="card" style="padding:15px; text-decoration:none; display:flex; flex-direction:column; align-items:center; gap:8px; transition:var(--transition); border:1px solid var(--border);">
+                                    <i class="fa-solid fa-file-invoice" style="font-size:2rem; color:var(--danger)"></i>
+                                    <span style="font-size:0.75rem; font-weight:600; color:var(--text-main); text-align:center;">${f.name.replace('.pdf', '').replace(/_/g, ' ')}</span>
+                                    <div style="font-size:0.65rem; color:var(--text-muted)">Descargar PDF</div>
+                                </a>
+                            `;
+                        }).join('')}
+                    </div>
+                `;
+            }
+        } catch(e) { console.warn("Error consultando storage:", e); }
+
+        // 4. Obtener calificaciones crudas
         const { data: califs } = await supabaseClient.from('calificaciones')
            .select('*')
            .eq('alumno_id', alu.id)
            .order('trimestre', { ascending: false });
 
-        if((!califs || califs.length === 0) && (!reportes || reportes.length === 0)) {
+        if((!califs || califs.length === 0) && (!reportes || reportes.length === 0) && !storageHtml) {
             cont.innerHTML = `
                 <div class="card" style="text-align:center; padding:40px; border: 2px dashed var(--border); border-radius: 20px;">
                     <i class="fa-solid fa-graduation-cap fa-3x" style="color:var(--primary); opacity:0.1; margin-bottom:15px;"></i>
@@ -4524,6 +4553,7 @@ window.loadBoletasAlumno = async () => {
             </div>
             
             ${reportHtml}
+            ${storageHtml}
 
             ${tablesHtml ? `
                 <div style="margin-top:35px; margin-bottom:15px; border-top: 1px solid var(--border); padding-top:20px;">
