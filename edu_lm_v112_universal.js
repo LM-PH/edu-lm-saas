@@ -500,7 +500,7 @@ window.checkSchoolSetup = async () => {
             
             // NORMALIZACIÓN DE ROL (Unificación Total de Sinónimos)
             let normRole = profile.rol;
-            if (esAdmin(normRole)) normRole = 'admin';
+            if (esAdmin(normRole) && normRole !== 'master') normRole = 'admin';
             // Normalizar rol
 
             state.role = normRole; 
