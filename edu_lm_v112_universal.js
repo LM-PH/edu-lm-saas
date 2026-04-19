@@ -610,14 +610,7 @@ function renderSidebar() {
       { name: 'Administración SaaS', path: '/master/saas', icon: 'fa-globe' },
       ...(state.plantelId ? [
           { type: 'divider', text: `Gestionando: ${CONFIG.schoolName}` },
-          { name: 'Inscripción', path: '/admin/inscripcion', icon: 'fa-user-plus' },
-          { name: 'Boletas y Calificaciones', path: '/admin/calificaciones', icon: 'fa-star-half-stroke' },
-          { name: 'Expediente Digital', path: '/admin/expediente', icon: 'fa-folder-open' },
-          { name: 'Grupos y Asignación', path: '/admin/grupos', icon: 'fa-users-gear' },
-          { name: 'Maestros y Materias', path: '/admin/maestros', icon: 'fa-chalkboard-user' },
-          { name: 'Trámites y Constancias', path: '/admin/tramites', icon: 'fa-file-signature' },
-          { name: 'Horarios de Clase', path: '/admin/horarios', icon: 'fa-calendar-days' },
-          { name: 'Comunicados Oficiales', path: '/admin/comunicados', icon: 'fa-bullhorn' },
+          { name: 'Directorio de Gestión', path: '/master/gestion-perfiles', icon: 'fa-address-book' }
       ] : [])
     ],
     admin: [
