@@ -4537,21 +4537,43 @@ window.loadBoletasAlumno = async () => {
         let tablesHtml = periodos.map(p => {
             const pCalifs = califs.filter(c => c.trimestre === p);
             const prom = (pCalifs.reduce((acc, curr) => acc + curr.calificacion, 0) / pCalifs.length).toFixed(1);
-            
+            const pNum = parseFloat(prom);
+
+            // Determinar feedback automático v131
+            let sLabel = "EN MEJORA", sColor = "#f59e0b", sIcon = "fa-chart-line", sMsg = "Buen desempeño, pero puedes alcanzar la excelencia (9.1+). ¡Sigue esforzándote!";
+            if(pNum <= 5.9) {
+                sLabel = "ADVERTENCIA"; sColor = "#ef4444"; sIcon = "fa-triangle-exclamation"; sMsg = "Promedio reprobatorio. Se recomienda solicitar asesorías y regularizar actividades.";
+            } else if(pNum >= 9.1) {
+                sLabel = "EXCELENCIA"; sColor = "#10b981"; sIcon = "fa-trophy"; sMsg = "¡Felicidades! Tienes un desempeño sobresaliente. Sigue con esa disciplina.";
+            }
+
             return `
-                <div class="card" style="padding:0; overflow:hidden; border-radius:15px; margin-bottom:20px; border:1px solid var(--border)">
-                    <div style="background:var(--page-bg); padding:15px; border-bottom:1px solid var(--border); display:flex; justify-content:space-between; align-items:center;">
-                       <h4 style="margin:0; font-size:1rem;">Trimestre ${p}</h4>
-                       <span class="badge" style="background:var(--primary); color:white; font-size:0.9rem; padding:4px 10px;">Promedio: ${prom}</span>
+                <div class="card" style="padding:0; overflow:hidden; border-radius:18px; margin-bottom:24px; border:1px solid var(--border); box-shadow: 0 4px 12px rgba(0,0,0,0.03);">
+                    <div style="background:var(--page-bg); padding:18px 20px; border-bottom:1px solid var(--border); display:flex; justify-content:space-between; align-items:center;">
+                       <h4 style="margin:0; font-size:1.1rem; font-weight:800; color:var(--primary);">Trimestre ${p}</h4>
+                       <span class="badge" style="background:var(--primary); color:white; font-size:1rem; padding:6px 14px; border-radius:10px;">Promedio: ${prom}</span>
                     </div>
                     <table class="grades-table-pdf-source" data-trimestre="${p}" style="width:100%; border-collapse: collapse;">
                         ${pCalifs.map(c => `
                             <tr style="border-bottom: 1px solid var(--border);">
-                                <td style="padding:12px 15px; font-size:0.85rem; color:var(--text-main)">${c.materia_nombre}</td>
-                                <td style="padding:12px 15px; text-align:right; font-weight:bold; color:var(--primary); font-size:1rem;">${c.calificacion}</td>
+                                <td style="padding:14px 20px; font-size:0.9rem; color:var(--text-main); font-weight:500;">${c.materia_nombre}</td>
+                                <td style="padding:14px 20px; text-align:right; font-weight:800; color:var(--primary); font-size:1.1rem;">${c.calificacion}</td>
                             </tr>
                         `).join('')}
                     </table>
+                    
+                    <!-- Feedback Automático v131 -->
+                    <div style="background: #f8fafc; padding: 16px 20px; border-top: 2px solid ${sColor};">
+                        <div style="display:flex; gap:12px; align-items:flex-start;">
+                            <div style="width:36px; height:36px; border-radius:10px; background:${sColor}20; color:${sColor}; display:flex; align-items:center; justify-content:center; flex-shrink:0;">
+                                <i class="fa-solid ${sIcon}"></i>
+                            </div>
+                            <div>
+                                <div style="font-size:0.7rem; font-weight:900; color:${sColor}; letter-spacing:0.5px; margin-bottom:2px;">ESTADO: ${sLabel}</div>
+                                <div style="font-size:0.85rem; color:var(--text-muted); line-height:1.4; font-weight:500;">${sMsg}</div>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             `;
         }).join('');
@@ -4559,22 +4581,16 @@ window.loadBoletasAlumno = async () => {
         cont.innerHTML = `
             <div style="margin-bottom:20px; display:flex; justify-content:space-between; align-items:center;">
                 <h3 style="margin:0; font-size:0.85rem; text-transform:uppercase; letter-spacing:1px; color:var(--text-muted); font-weight:700;">
-                    <i class="fa-solid fa-list-check"></i> Reportes Académicos Recientes
+                    <i class="fa-solid fa-graduation-cap"></i> Mi Rendimiento Académico
                 </h3>
                 <button class="btn btn-sm" style="background:none; border:none; color:var(--primary); cursor:pointer;" onclick="window.loadBoletasAlumno()">
                     <i class="fa-solid fa-rotate"></i>
                 </button>
             </div>
             
-            ${reportHtml}
             ${storageHtml}
 
             ${tablesHtml ? `
-                <div style="margin-top:35px; margin-bottom:15px; border-top: 1px solid var(--border); padding-top:20px;">
-                    <h3 style="margin:0; font-size:0.85rem; text-transform:uppercase; letter-spacing:1px; color:var(--text-muted); font-weight:700;">
-                        <i class="fa-solid fa-table-list"></i> Detalle de Calificaciones en Sistema
-                    </h3>
-                </div>
                 ${tablesHtml}
             ` : ''}
 
