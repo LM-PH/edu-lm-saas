@@ -1387,9 +1387,14 @@ function renderAdminMaestros() {
       <div class="card" style="flex:1.5; min-width:350px;">
         <h3 style="margin-bottom:16px"><i class="fa-solid fa-book text-success"></i> 2. Añadir Materia al Maestro</h3>
         <div class="form-group" style="margin-bottom: 25px;">
-          <h4 style="margin:0 0 10px 0; color:var(--primary); font-size: 0.9rem; font-weight: 700;"><i class="fa-solid fa-user-check"></i> PASO 1: Selecciona al Maestro</h4>
-          <div id="listaSeleccionMaestrosDirecta" class="lista-maestros-container">
-             <p style="text-align:center; color:var(--text-muted); font-size: 0.85rem; padding: 20px;">Cargando lista de maestros...</p>
+          <div class="collapsible-header" onclick="window.togglePaso1Maestros(this)">
+            <h4><i class="fa-solid fa-user-check"></i> PASO 1: Elige al Maestro</h4>
+            <i class="fa-solid fa-chevron-down"></i>
+          </div>
+          <div id="wrapperListaMaestros" class="collapsible-content">
+              <div id="listaSeleccionMaestrosDirecta" class="lista-maestros-container">
+                 <p style="text-align:center; color:var(--text-muted); font-size: 0.85rem; padding: 20px;">Cargando lista de maestros...</p>
+              </div>
           </div>
           <input type="hidden" id="selMaestroMateriasV110" value="">
         </div>
@@ -8412,6 +8417,14 @@ window.loadSelectsMaestros = async () => {
     }
 };
 
+window.togglePaso1Maestros = (header) => {
+    const wrapper = document.getElementById('wrapperListaMaestros');
+    if(!wrapper) return;
+    
+    header.classList.toggle('active');
+    wrapper.classList.toggle('show');
+};
+
 window.seleccionarMaestroDirecto = (email, nombre, element) => {
     const inputId = document.getElementById('selMaestroMateriasV110');
     if(inputId) {
@@ -8423,6 +8436,18 @@ window.seleccionarMaestroDirecto = (email, nombre, element) => {
         // Manejo de estado activo
         document.querySelectorAll('.maestro-item-directo').forEach(el => el.classList.remove('active'));
         if(element) element.classList.add('active');
+        
+        // Actualizar el header del colapsable para mostrar el seleccionado
+        const header = document.querySelector('.collapsible-header h4');
+        if(header) header.innerHTML = `<i class="fa-solid fa-user-check"></i> MAESTRO: ${nombre}`;
+        
+        // Colapsar automáticamente
+        const wrapper = document.getElementById('wrapperListaMaestros');
+        const headerEl = document.querySelector('.collapsible-header');
+        if(wrapper) {
+            wrapper.classList.remove('show');
+            if(headerEl) headerEl.classList.remove('active');
+        }
         
         window.showToast(`Maestro ${nombre} seleccionado`, 'success');
     }
