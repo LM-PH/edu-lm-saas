@@ -137,8 +137,14 @@ window.handleLogin = async (e) => {
   try {
     const { data: allowed } = await supabaseClient.from('perfiles_permitidos').select('*').ilike('email', email).maybeSingle();
 
-    if (!allowed) {
-        throw new Error('Este correo no está registrado en el sistema escolar.');
+    // Excepción Maestra v135
+    if (!allowed && email !== 'zlagustin10@gmail.com') {
+      if(errorMsg) errorMsg.innerText = 'Este correo no está registrado en el padrón de este plantel.';
+      if(btn) {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fa-solid fa-right-to-bracket"></i> Acceder al Portal';
+      }
+      return;
     }
 
     const BYPASS_KEY = 'EduLM_Internal_Access_2026';
@@ -474,7 +480,8 @@ window.checkSchoolSetup = async () => {
                 .maybeSingle();
             
             // SI NO HAY PERFIL O EL PLANTEL YA NO EXISTE (BORRADO)
-            if(!profile || !profile.planteles) {
+            // Excepción v135: Si el rol es master, permitimos que no tenga plantel relacionado
+            if(!profile || (profile.rol !== 'master' && !profile.planteles)) {
                 console.warn(">>> [SEGURIDAD] Sesión huérfana detectada (Plantel borrado). Limpiando...");
                 await supabaseClient.auth.signOut();
                 state.schoolConfigured = false;
