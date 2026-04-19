@@ -4443,10 +4443,12 @@ window.loadBoletasAlumno = async () => {
 
         // 1. Obtener datos del alumno por correo (insensible a mayúsculas/minúsculas)
         const userEmail = u.data.user.email.toLowerCase();
-        const { data: alu } = await supabaseClient.from('alumnos')
+        const { data: als } = await supabaseClient.from('alumnos')
             .select('id, grupo_id, nombre, matricula, contacto_email')
-            .ilike('contacto_email', userEmail)
-            .single();
+            .ilike('contacto_email', userEmail);
+        
+        const alu = (als && als.length > 0) ? als[0] : null;
+
 
         if(!alu) {
             cont.innerHTML = '<div class="card" style="text-align:center; padding:30px; color:var(--text-muted)">No se encontró información del alumno vinculado.</div>';
@@ -6144,6 +6146,7 @@ window.cargarBoletasGrupo = async () => {
 
         // ORDENAMIENTO POR APELLIDO (Ponce Herrera Luis Miguel)
         const formatName = (n) => {
+            if(!n) return "Sin Nombre";
             const parts = n.trim().split(/\s+/);
             if(parts.length < 2) return n;
             // Asumimos: Nombres... Apellido1 Apellido2
@@ -6152,6 +6155,7 @@ window.cargarBoletasGrupo = async () => {
             const names = parts.slice(0, -2);
             return (surnames.join(' ') + ' ' + names.join(' ')).trim();
         };
+
 
         const alumnos = rawAlumnos.map(al => ({
             ...al,
@@ -6245,12 +6249,15 @@ window.cargarBoletasGrupo = async () => {
                     acts.forEach(act => {
                         const cellEval = evals.find(e => e.alumno_id === al.id && e.actividad_id === act.id);
                         let val = cellEval ? (parseFloat(cellEval.calificacion)||0) : 0;
-                        if(act.rubro_name) {
-                            if(!rubroGroups[act.rubro_name]) rubroGroups[act.rubro_name] = { suma:0, count:0, peso: parseFloat(act.rubro_peso)||0 };
-                            rubroGroups[act.rubro_name].count++;
-                            if(cellEval) rubroGroups[act.rubro_name].suma += val;
-                        }
+                        
+                        // Robustez: asegurar que el rubro existe
+                        let rName = act.rubro_name || "Otros";
+                        if(!rubroGroups[rName]) rubroGroups[rName] = { suma:0, count:0, peso: parseFloat(act.rubro_peso)||0 };
+                        
+                        rubroGroups[rName].count++;
+                        if(cellEval) rubroGroups[rName].suma += val;
                     });
+
                     Object.keys(rubroGroups).forEach(k => {
                         let rg = rubroGroups[k];
                         let promRubro = rg.count > 0 ? (rg.suma / rg.count) : 0;
