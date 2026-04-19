@@ -602,6 +602,7 @@ function renderSidebar() {
       { name: 'Grupos y Asignación', path: '/admin/grupos', icon: 'fa-users-gear' },
       { name: 'Maestros y Materias', path: '/admin/maestros', icon: 'fa-chalkboard-user' },
       { name: 'Trámites y Constancias', path: '/admin/tramites', icon: 'fa-file-signature' },
+      { name: 'Horarios de Clase', path: '/admin/horarios', icon: 'fa-calendar-days' },
       { name: 'Comunicados Oficiales', path: '/admin/comunicados', icon: 'fa-bullhorn' },
     ],
     maestro: [
@@ -631,6 +632,7 @@ function renderSidebar() {
       { name: 'Credencial Digital', path: '/alumno/credencial', icon: 'fa-id-card' },
       { name: 'Boletas y Calificaciones', path: '/alumno/boletas', icon: 'fa-star-half-stroke' },
       { name: 'Avisos y Timeline', path: '/alumno/timeline', icon: 'fa-bell' },
+      { name: 'Mi Horario', path: '/alumno/horario', icon: 'fa-calendar-days' },
       { name: 'Trámites Escolares', path: '/alumno/tramites', icon: 'fa-file-pdf' },
     ]
   };
@@ -3936,6 +3938,7 @@ async function renderPage(path) {
     case '/admin/maestros': return renderAdminMaestros();
     case '/admin/calificaciones': return renderAdminCalificaciones();
     case '/admin/tramites': return renderAdminTramites();
+    case '/admin/horarios': return renderAdminHorarios();
     case '/admin/comunicados': return renderAdminComunicados();
     case '/maestro/aula': return renderMaestroAula();
     case '/maestro/actividades': return renderMaestroActividades();
@@ -3953,6 +3956,7 @@ async function renderPage(path) {
     case '/alumno/credencial': return renderAlumnoCredencial();
     case '/alumno/timeline': return renderAlumnoTimeline();
     case '/alumno/boletas': return renderAlumnoBoletas();
+    case '/alumno/horario': return renderAlumnoHorario();
     case '/alumno/tramites': return renderAlumnoTramites();
     case '/directivo/autorizaciones': return renderDirectivoAutorizaciones();
     case '/directivo/gestion-personal': return renderDirectivoPersonal();
@@ -9316,6 +9320,256 @@ window.crearCitatorioPrueba = async (studentId) => {
     } catch(e) {
         console.error(e);
         alert("Error al crear prueba: " + e.message);
+    }
+};
+
+
+/** HORARIOS MODULE (v133) **/
+
+window.renderAdminHorarios = () => {
+    setTimeout(window.loadHorariosAdmin, 100);
+    return `
+        <div class="page-container">
+            <h2 class="page-title"><i class="fa-solid fa-calendar-days"></i> Gestión de Horarios</h2>
+            <p class="page-subtitle">Sube los horarios en PDF y asígnalos a grados o grupos específicos.</p>
+
+            <div style="display:grid; grid-template-columns: 1fr 1fr; gap:24px; margin-top:30px;">
+                <!-- Formulario -->
+                <div class="card">
+                    <h3 style="margin-top:0"><i class="fa-solid fa-cloud-arrow-up"></i> Nuevo Horario</h3>
+                    <div class="form-group">
+                        <label>Nombre del Horario (Ej: 1°A Matutino)</label>
+                        <input type="text" id="horarioNombre" class="form-input" placeholder="Nombre descriptivo">
+                    </div>
+                    <div class="form-group">
+                        <label>Asignar a Grupo (Opcional)</label>
+                        <select id="horarioGrupoId" class="form-input">
+                            <option value="">-- Todos los Grupos --</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Grado (Opcional)</label>
+                        <select id="horarioGrado" class="form-input">
+                            <option value="">-- Todos los Grados --</option>
+                            <option value="1">1° Grado</option>
+                            <option value="2">2° Grado</option>
+                            <option value="3">3° Grado</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Archivo PDF</label>
+                        <input type="file" id="horarioFile" class="form-input" accept=".pdf">
+                    </div>
+                    <button class="btn btn-primary btn-block" onclick="window.guardarHorario()">
+                        <i class="fa-solid fa-save"></i> Guardar y Subir
+                    </button>
+                </div>
+
+                <!-- Lista de Horarios -->
+                <div class="card">
+                    <h3 style="margin-top:0"><i class="fa-solid fa-table-list"></i> Horarios Registrados</h3>
+                    <div id="listaHorariosContenedor" style="display:flex; flex-direction:column; gap:12px;">
+                        <p style="text-align:center; opacity:0.5;">Cargando horarios...</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+};
+
+window.loadHorariosAdmin = async () => {
+    try {
+        // Cargar grupos para el select
+        const { data: grupos } = await supabaseClient.from('grupos').select('id, nombre, turno').order('nombre');
+        const sel = document.getElementById('horarioGrupoId');
+        if(sel && grupos) {
+            sel.innerHTML = '<option value="">-- Todos los Grupos --</option>' + 
+                grupos.map(g => `<option value="${g.id}">${g.nombre} - ${g.turno}</option>`).join('');
+        }
+
+        const { data, error } = await supabaseClient.from('horarios').select('*, grupos(nombre, turno)');
+        if(error) throw error;
+        
+        const cont = document.getElementById('listaHorariosContenedor');
+        if(!cont) return;
+
+        if(!data || data.length === 0) {
+            cont.innerHTML = '<p style="text-align:center; padding:20px; opacity:0.5;">No hay horarios registrados.</p>';
+            return;
+        }
+
+        cont.innerHTML = data.map(h => `
+            <div style="padding:16px; border:1px solid var(--border); border-radius:12px; display:flex; justify-content:space-between; align-items:center; background:white;">
+                <div>
+                    <div style="font-weight:700; color:var(--primary);">${h.nombre}</div>
+                    <div style="font-size:0.8rem; opacity:0.7;">
+                        ${h.grupos ? `Grupo: ${h.grupos.nombre}` : (h.grado ? `Grado: ${h.grado}°` : 'General')}
+                    </div>
+                </div>
+                <div style="display:flex; gap:8px;">
+                    <a href="${h.archivo_url}" target="_blank" class="btn btn-xs" style="background:#f1f5f9; color:var(--text-main);">
+                        <i class="fa-solid fa-eye"></i>
+                    </a>
+                    <button class="btn btn-xs btn-primary" onclick="window.notificarEstudiantesHorario('${h.id}')" title="Notificar a Estudiantes">
+                        <i class="fa-solid fa-paper-plane"></i>
+                    </button>
+                    <button class="btn btn-xs btn-danger" onclick="window.eliminarHorario('${h.id}')">
+                        <i class="fa-solid fa-trash"></i>
+                    </button>
+                </div>
+            </div>
+        `).join('');
+
+    } catch(e) { console.error(e); }
+};
+
+window.guardarHorario = async () => {
+    const nombre = document.getElementById('horarioNombre').value;
+    const gid = document.getElementById('horarioGrupoId').value;
+    const grado = document.getElementById('horarioGrado').value;
+    const fileInput = document.getElementById('horarioFile');
+    const file = fileInput.files[0];
+
+    if(!nombre || !file) return alert("Ingresa un nombre y selecciona un archivo PDF.");
+
+    window.showToast("Subiendo horario...", "info");
+
+    try {
+        const fileExt = file.name.split('.').pop();
+        const fileName = `horario_${Date.now()}.${fileExt}`;
+        const filePath = `horarios/${fileName}`;
+
+        const { error: uploadError } = await supabaseClient.storage
+            .from('horarios')
+            .upload(filePath, file);
+
+        if (uploadError) throw uploadError;
+
+        const { data: { publicUrl } } = supabaseClient.storage
+            .from('horarios')
+            .getPublicUrl(filePath);
+
+        const { error: insertError } = await supabaseClient.from('horarios').insert([{
+            nombre: nombre,
+            archivo_url: publicUrl,
+            grado: grado || null,
+            grupo_id: gid || null,
+            plantel_id: state.plantelId
+        }]);
+
+        if (insertError) throw insertError;
+
+        window.showToast("Horario guardado correctamente.", "success");
+        window.loadHorariosAdmin();
+        document.getElementById('horarioNombre').value = '';
+        fileInput.value = '';
+
+    } catch(e) {
+        console.error(e);
+        alert("Error al subir horario: " + e.message);
+    }
+};
+
+window.eliminarHorario = async (id) => {
+    if(!confirm("¿Estás seguro de eliminar este horario?")) return;
+    try {
+        const { error } = await supabaseClient.from('horarios').delete().eq('id', id);
+        if(error) throw error;
+        window.loadHorariosAdmin();
+    } catch(e) { console.error(e); }
+};
+
+window.notificarEstudiantesHorario = async (id) => {
+    try {
+        const { data: h } = await supabaseClient.from('horarios').select('*').eq('id', id).single();
+        if(!h) return;
+
+        let aud = 'Publico';
+        if(h.grupo_id) aud = `Grupo_${h.grupo_id}`;
+        else if(h.grado) aud = `Grado_${h.grado}`;
+
+        await supabaseClient.from('comunicados').insert([{
+            autor_id: state.user.id,
+            titulo: '📅 NUEVO HORARIO DE CLASE DISPONIBLE',
+            mensaje: `Se ha publicado un nuevo horario: ${h.nombre}. Ya puedes consultarlo en tu sección de "Mi Horario".`,
+            audiencia: aud,
+            plantel_id: state.plantelId
+        }]);
+
+        window.showToast("Notificación enviada a los estudiantes.", "success");
+    } catch(e) { console.error(e); }
+};
+
+/** STUDENT HORARIO VIEW **/
+
+window.renderAlumnoHorario = () => {
+    setTimeout(window.loadMiHorario, 100);
+    return `
+        <div class="mobile-app" style="background:var(--page-bg)">
+            <div class="mobile-header" style="text-align:center; padding: 24px 20px; background:var(--primary); color:white;">
+                <h2 style="margin:0">Mi Horario</h2>
+                <p style="margin:5px 0 0 0; opacity:0.8; font-size:rem;">Consulta tus clases y horarios</p>
+            </div>
+            <div class="mobile-content" style="padding:20px;">
+                <div id="miHorarioContenedor">
+                    <p style="text-align:center; opacity:0.5; padding:40px;">Buscando horarios asignados...</p>
+                </div>
+            </div>
+        </div>
+    `;
+};
+
+window.loadMiHorario = async () => {
+    const cont = document.getElementById('miHorarioContenedor');
+    if(!cont) return;
+
+    try {
+        const uRes = await supabaseClient.auth.getUser();
+        const { data: alu } = await supabaseClient.from('alumnos').select('*').eq('contacto_email', uRes.data.user.email).maybeSingle();
+        
+        if(!alu) {
+            cont.innerHTML = '<p style="text-align:center; padding:20px;">No se encontró tu registro de alumno.</p>';
+            return;
+        }
+
+        // Buscar por grupo o grado o general
+        const { data, error } = await supabaseClient.from('horarios')
+            .select('*')
+            .or(`grupo_id.eq.${alu.grupo_id},grado.eq.${alu.grado_estudios},and(grupo_id.is.null,grado.is.null)`)
+            .order('creado_en', { ascending: false });
+
+        if(error) throw error;
+
+        if(!data || data.length === 0) {
+            cont.innerHTML = `
+                <div style="text-align:center; padding:60px 20px; opacity:0.4;">
+                    <i class="fa-solid fa-calendar-xmark fa-3x"></i>
+                    <p style="margin-top:15px; font-weight:600;">Aún no hay un horario cargado para tu grupo.</p>
+                </div>
+            `;
+            return;
+        }
+
+        cont.innerHTML = data.map(h => `
+            <div class="card" style="padding:24px; border-radius:20px; border:none; box-shadow: 0 10px 25px rgba(0,0,0,0.05); margin-bottom:20px; background:white;">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
+                    <span style="font-size:0.7rem; font-weight:900; color:var(--primary); text-transform:uppercase; letter-spacing:1px; background:var(--primary)15; padding:6px 12px; border-radius:12px;">
+                        <i class="fa-solid fa-clock"></i> Horario Escolar
+                    </span>
+                    <span style="font-size:0.75rem; color:var(--text-muted);">${new Date(h.creado_en).toLocaleDateString()}</span>
+                </div>
+                <h3 style="margin:0 0 8px 0; font-size:1.3rem; font-weight:900;">${h.nombre}</h3>
+                <p style="margin:0 0 24px 0; font-size:0.9rem; color:var(--text-muted); line-height:1.5;">Haz clic en el botón de abajo para ver el archivo PDF con la distribución de tus clases.</p>
+                
+                <a href="${h.archivo_url}" target="_blank" class="btn btn-primary btn-block" style="border-radius:14px; padding:16px; font-weight:700; display:flex; align-items:center; justify-content:center; gap:10px;">
+                    <i class="fa-solid fa-file-pdf"></i> Ver Horario (PDF)
+                </a>
+            </div>
+        `).join('');
+
+    } catch(e) {
+        console.error(e);
+        cont.innerHTML = '<p>Error al cargar el horario.</p>';
     }
 };
 
