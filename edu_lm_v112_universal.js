@@ -3323,18 +3323,13 @@ function renderAlumnoTimeline() {
 function renderAlumnoBoletas() {
   setTimeout(() => { if(window.loadBoletasAlumno) window.loadBoletasAlumno(); }, 150);
   return `
-    <div class="mobile-app" style="background:var(--page-bg); min-height: 100vh;">
-      <div class="mobile-header" style="background: linear-gradient(135deg, var(--primary) 0%, var(--primary-hover) 100%); color:white; padding: 40px 20px 30px 20px; border-radius: 0 0 30px 30px; box-shadow: 0 10px 30px -10px var(--primary);">
-        <h2 style="margin:0; font-size: 1.8rem; font-weight: 800; letter-spacing: -0.02em;">Mi Desempeño</h2>
-        <p style="margin: 5px 0 0 0; opacity: 0.9; font-size: 0.9rem;">Consulta tus boletas y avisos oficiales</p>
+    <div class="mobile-app" style="background:var(--page-bg)">
+      <div class="mobile-header" style="text-align: center; padding-top: 32px; padding-bottom: 40px; background:var(--primary); color:white;">
+        <h2 style="margin:0">Mi Desempeño</h2>
+        <p style="margin:5px 0 0 0; opacity:0.8; font-size:0.9rem;">Consulta tus boletas y avisos</p>
       </div>
-      <div class="mobile-content" style="padding: 24px 16px;">
-         <div id="boletasContainer">
-            <div class="card" style="text-align:center; padding:60px 20px; border:none; background:none;">
-                <div class="spinner" style="margin: 0 auto 20px auto;"></div>
-                <p style="color:var(--text-muted); font-weight:500;">Sincronizando con el servidor...</p>
-            </div>
-         </div>
+      <div class="mobile-content" style="padding: 20px;">
+         <div id="boletasContainer"></div>
       </div>
     </div>
   `;
@@ -4461,6 +4456,9 @@ window.loadBoletasAlumno = async () => {
                    t.includes('BOLETA') || 
                    t.includes('EXCELENCIA') || 
                    t.includes('CALIFICACIONES') ||
+                   t.includes('ADVERTENCIA') ||
+                   t.includes('MEJORA') ||
+                   t.includes('REPORTE') ||
                    t.includes('CITATORIO');
         }).slice(0, 5); // Tomamos los 5 más recientes
 
