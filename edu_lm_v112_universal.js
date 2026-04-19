@@ -185,8 +185,8 @@ window.handleLogin = async (e) => {
     });
 
     state.user = authData.user;
-    state.plantelId = allowed.plantel_id;
-    window.login(allowed.rol);
+    state.plantelId = effectiveData.plantel_id;
+    window.login(effectiveData.rol);
 
   } catch (err) {
     if(errorMsg) {
@@ -505,7 +505,7 @@ window.checkSchoolSetup = async () => {
 
             state.role = normRole; 
             state.plantelId = profile.plantel_id;
-            CONFIG.schoolName = profile.planteles.nombre || 'Mi Escuela';
+            CONFIG.schoolName = profile.planteles?.nombre || 'Edu-LM SaaS';
             state.schoolConfigured = true;
 
             // DETERMINAR RUTA SEGÚN ROL RECUPERADO
