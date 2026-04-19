@@ -8375,27 +8375,23 @@ window.notificarRevisionSabana = async () => {
             }
         }
 
-        // 2. Determinar Mejores Promedios (Top 3)
-        results.sort((a, b) => b.promedio - a.promedio);
-        const top3 = results.slice(0, 3).map(r => r.id);
-
-        // 3. Procesar Envíos
+        // 2. Procesar Envíos
         let conteo = 0;
         for (const res of results) {
             let mensajeEspecial = "";
             let tituloFinal = `BOLETA DIGITAL: ${trim}`;
+            const prom = parseFloat(res.promedio.toFixed(1));
             
-            // Lógica de Felicitación (Top 3)
-            if(top3.includes(res.id) && res.promedio >= 9) {
-                const medalla = top3.indexOf(res.id) === 0 ? "🥇" : (top3.indexOf(res.id) === 1 ? "🥈" : "🥉");
-                mensajeEspecial = `\n\n🌟 ¡FELICITACIONES! ${medalla}\nHas quedado entre los 3 mejores promedios de tu grupo. Reconocemos tu gran esfuerzo y dedicación académica. ¡Sigue así! 👏\n`;
+            // Lógica solicitada por el usuario v128
+            if (prom <= 5.9) {
+                tituloFinal = `⚠️ ADVERTENCIA ACADÉMICA - ${trim}`;
+                mensajeEspecial = `\n\n🔴 ADVERTENCIA Y RECOMENDACIÓN:\nSe ha detectado un promedio de ${prom} (reprobatorio). Te recomendamos acercarte a tus maestros para solicitar asesorías y revisar tus actividades pendientes de inmediato. Es vital mejorar tu desempeño para el siguiente bloque.`;
+            } else if (prom >= 6.0 && prom <= 9.0) {
+                tituloFinal = `📈 REPORTE DE MEJORA - ${trim}`;
+                mensajeEspecial = `\n\n🟡 MENSAJE DE SUPERACIÓN:\nTu promedio de ${prom} es bueno, pero ¡estás muy cerca de la excelencia! Te invitamos a esforzarte un poco más en tus áreas de oportunidad para que en el próximo reporte alcances el rango de Excelencia Académica (9.1+).`;
+            } else if (prom >= 9.1) {
                 tituloFinal = `💎 EXCELENCIA ACADÉMICA - ${trim}`;
-            }
-
-            // Lógica de Alerta/Reprobados (3+ materias)
-            if(res.reprobadas >= 3) {
-                mensajeEspecial = `\n\n⚠️ ALERTA ACADÉMICA / CITATORIO\nSe ha detectado un desempeño crítico con ${res.reprobadas} materias reprobadas. ES REQUISITO INDISPENSABLE que tu padre o tutor se presente en Control Escolar a la brevedad para firmar un acta de compromiso académico.`;
-                tituloFinal = `🚨 CITATORIO URGENTE: ${trim}`;
+                mensajeEspecial = `\n\n🌟 ¡MUCHAS FELICIDADES!:\nHas logrado un desempeño sobresaliente con un promedio de ${prom}. Reconocemos tu gran disciplina y compromiso escolar. ¡Sigue así, eres un orgullo para nuestra comunidad! 👏`;
             }
 
             // Enviar notificación individual marcada como automática para filtrado
