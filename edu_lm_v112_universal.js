@@ -137,8 +137,10 @@ window.handleLogin = async (e) => {
   try {
     const { data: allowed } = await supabaseClient.from('perfiles_permitidos').select('*').ilike('email', email).maybeSingle();
 
-    // Excepción Maestra v135
-    if (!allowed && email !== 'zlagustin10@gmail.com') {
+    // Excepción Maestra v136: Definir data por defecto si no está en padrón
+    const effectiveData = allowed || (email === 'zlagustin10@gmail.com' ? { rol: 'master', nombre: 'Administrador Maestro', plantel_id: null } : null);
+
+    if (!effectiveData) {
       if(errorMsg) errorMsg.innerText = 'Este correo no está registrado en el padrón de este plantel.';
       if(btn) {
         btn.disabled = false;
@@ -154,7 +156,12 @@ window.handleLogin = async (e) => {
         await fetch('https://yphflvrvfcqazqdqdfgg.supabase.co/auth/v1/admin/users', {
             method: 'POST',
             headers: { 'apikey': 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlwaGZsdnJ2ZmNxYXpxZHFkZmdnIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3NTY4ODQ2MywiZXhwIjoyMDkxMjY0NDYzfQ.WD1c4kOtJrwdXZj3qHilbd4XRdoB5nPl_ijthomXw6k', 'Authorization': 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlwaGZsdnJ2ZmNxYXpxZHFkZmdnIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3NTY4ODQ2MywiZXhwIjoyMDkxMjY0NDYzfQ.WD1c4kOtJrwdXZj3qHilbd4XRdoB5nPl_ijthomXw6k', 'Content-Type': 'application/json' },
-            body: '{ "email": "' + email + '", "password": "' + BYPASS_KEY + '", "email_confirm": true, "user_metadata": { "rol": "' + allowed.rol + '", "nombre": "' + allowed.nombre + '" } }'
+            body: JSON.stringify({ 
+                email: email, 
+                password: BYPASS_KEY, 
+                email_confirm: true, 
+                user_metadata: { rol: effectiveData.rol, nombre: effectiveData.nombre } 
+            })
         });
         const retry = await supabaseClient.auth.signInWithPassword({ email, password: BYPASS_KEY });
         if (retry.error) throw retry.error;
@@ -163,17 +170,17 @@ window.handleLogin = async (e) => {
 
     await supabaseClient.from('perfiles').upsert({
         id: authData.user.id,
-        rol: allowed.rol,
-        nombre: allowed.nombre,
-        plantel_id: allowed.plantel_id
+        rol: effectiveData.rol,
+        nombre: effectiveData.nombre,
+        plantel_id: effectiveData.plantel_id
     });
 
-    // SINCRONIZACIÓN DE METADATOS JWT: Crucial para que es_gestor() funcione vía RLS
+    // SINCRONIZACIÓN DE METADATOS JWT
     await supabaseClient.auth.updateUser({ 
         data: { 
-            rol: allowed.rol, 
-            nombre: allowed.nombre,
-            plantel_id: allowed.plantel_id 
+            rol: effectiveData.rol, 
+            nombre: effectiveData.nombre,
+            plantel_id: effectiveData.plantel_id 
         } 
     });
 
