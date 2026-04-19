@@ -628,8 +628,8 @@ function renderSidebar() {
       { name: 'Avisos Oficiales', path: '/apoyo/comunicados', icon: 'fa-bullhorn' }
     ],
     alumno: [
-      { name: 'Boletas y Calificaciones', path: '/alumno/boletas', icon: 'fa-star-half-stroke' },
       { name: 'Credencial Digital', path: '/alumno/credencial', icon: 'fa-id-card' },
+      { name: 'Boletas y Calificaciones', path: '/alumno/boletas', icon: 'fa-star-half-stroke' },
       { name: 'Avisos y Timeline', path: '/alumno/timeline', icon: 'fa-bell' },
       { name: 'Trámites Escolares', path: '/alumno/tramites', icon: 'fa-file-pdf' },
     ]
@@ -3321,13 +3321,20 @@ function renderAlumnoTimeline() {
 }
 
 function renderAlumnoBoletas() {
+  setTimeout(() => { if(window.loadBoletasAlumno) window.loadBoletasAlumno(); }, 150);
   return `
-    <div class="mobile-app" style="background:var(--page-bg)">
-      <div class="mobile-header" style="background:var(--primary); color:white; padding:24px 16px;">
-        <h2 style="margin:0">Boletas y Desempeño</h2>
+    <div class="mobile-app" style="background:var(--page-bg); min-height: 100vh;">
+      <div class="mobile-header" style="background: linear-gradient(135deg, var(--primary) 0%, var(--primary-hover) 100%); color:white; padding: 40px 20px 30px 20px; border-radius: 0 0 30px 30px; box-shadow: 0 10px 30px -10px var(--primary);">
+        <h2 style="margin:0; font-size: 1.8rem; font-weight: 800; letter-spacing: -0.02em;">Mi Desempeño</h2>
+        <p style="margin: 5px 0 0 0; opacity: 0.9; font-size: 0.9rem;">Consulta tus boletas y avisos oficiales</p>
       </div>
-      <div class="mobile-content" style="padding:16px;">
-         <div id="boletasContainer"></div>
+      <div class="mobile-content" style="padding: 24px 16px;">
+         <div id="boletasContainer">
+            <div class="card" style="text-align:center; padding:60px 20px; border:none; background:none;">
+                <div class="spinner" style="margin: 0 auto 20px auto;"></div>
+                <p style="color:var(--text-muted); font-weight:500;">Sincronizando con el servidor...</p>
+            </div>
+         </div>
       </div>
     </div>
   `;
