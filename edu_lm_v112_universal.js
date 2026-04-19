@@ -7815,7 +7815,7 @@ window.cargarEncuadreActivo = async () => {
                 const { error } = await supabaseClient.from('encuadres').update(payloadEnc).eq('id', encExistente.id);
                 if(error) throw error;
             } else {
-                const { error } = await supabaseClient.from('encuadres').insert(payloadEnc.map(p => ({ ...p, plantel_id: state.plantelId })));
+                const { error } = await supabaseClient.from('encuadres').insert([payloadEnc]);
                 if(error) throw error;
             }
         } else {
