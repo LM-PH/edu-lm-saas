@@ -1358,9 +1358,9 @@ function renderAdminMaestros() {
   }, 100);
   
   return `
-    <div class="page-header" style="background: var(--primary); color: white; padding: 20px; border-radius: 12px; margin-bottom: 24px; box-shadow: 0 4px 15px rgba(37,99,235,0.2);">
-      <h2 class="page-title" style="color:white !important;"><i class="fa-solid fa-crown"></i> PANEL DE MAESTROS (Admin v123)</h2>
-      <p style="opacity:0.9; margin:0; font-size:1rem;">Sistema de alta y asignación manual desbloqueado.</p>
+    <div class="page-header">
+      <h2 class="page-title">Personal de la Escuela y Asignaciones</h2>
+      <p class="page-subtitle">Gestión de roles, maestros y carga académica institucional.</p>
     </div>
 
     <div style="display:flex; gap:24px; flex-wrap:wrap; margin-bottom: 24px;">
@@ -1451,11 +1451,11 @@ function renderAdminMaestros() {
             </div>
         </div>
 
-        <div id="tabsPersonalAdmin" style="display:flex; gap:8px; margin-bottom:16px;">
-            <button class="btn btn-sm btn-tab-personal" onclick="window.cambiarTabPersonal('admin', this)" style="background:white; border:1px solid var(--border); color:var(--text-main); font-weight:bold;">Administradores</button>
-            <button class="btn btn-sm btn-tab-personal" onclick="window.cambiarTabPersonal('maestro', this)" style="background:transparent; border:none; color:var(--text-muted);">Maestros</button>
-            <button class="btn btn-sm btn-tab-personal" onclick="window.cambiarTabPersonal('apoyo', this)" style="background:transparent; border:none; color:var(--text-muted);">Apoyo</button>
-            <button class="btn btn-sm btn-tab-personal" onclick="window.cambiarTabPersonal('directivo', this)" style="background:transparent; border:none; color:var(--text-muted);">Directivos</button>
+        <div id="tabsPersonalAdmin" style="display:flex; background:var(--page-bg); padding:4px; border-radius:10px; gap:4px; border:1px solid var(--border); margin-bottom: 20px; width: max-content; overflow-x: auto; max-width:100%;">
+            <button class="btn btn-sm btn-tab-personal active" onclick="window.cambiarTabPersonal('admin', this)" style="padding:6px 12px; font-size:0.8rem; font-weight:bold; border-radius:6px; background:white; border:1px solid var(--border); cursor:pointer;">Administradores</button>
+            <button class="btn btn-sm btn-tab-personal" onclick="window.cambiarTabPersonal('maestro', this)" style="padding:6px 12px; font-size:0.8rem; font-weight:bold; border-radius:6px; background:transparent; border:none; cursor:pointer; color:var(--text-muted);">Maestros</button>
+            <button class="btn btn-sm btn-tab-personal" onclick="window.cambiarTabPersonal('apoyo', this)" style="padding:6px 12px; font-size:0.8rem; font-weight:bold; border-radius:6px; background:transparent; border:none; cursor:pointer; color:var(--text-muted);">Apoyo</button>
+            <button class="btn btn-sm btn-tab-personal" onclick="window.cambiarTabPersonal('directivo', this)" style="padding:6px 12px; font-size:0.8rem; font-weight:bold; border-radius:6px; background:transparent; border:none; cursor:pointer; color:var(--text-muted);">Directivos</button>
         </div>
         
         <div style="overflow-x:auto;">
