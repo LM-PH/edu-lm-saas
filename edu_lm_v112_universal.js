@@ -17,7 +17,7 @@ const supaAdmin = window.supabase ? window.supabase.createClient(SUPABASE_URL, S
 }) : null;
 
 // Global State
-const ADMIN_ROLES = ['admin', 'administrativo', 'directivo', 'master'];
+const ADMIN_ROLES = ['admin', 'administrativo', 'master'];
 const esAdmin = (rol) => ADMIN_ROLES.includes(rol);
 
 let _state = {
@@ -500,7 +500,7 @@ window.checkSchoolSetup = async () => {
             
             // NORMALIZACIÓN DE ROL (Unificación Total de Sinónimos)
             let normRole = profile.rol;
-            if (esAdmin(normRole) && normRole !== 'master') normRole = 'admin';
+            if (['admin', 'administrativo'].includes(normRole)) normRole = 'admin';
             // Normalizar rol
 
             state.role = normRole; 
@@ -602,7 +602,7 @@ window.handleMagicLink = async () => {
 function renderSidebar() {
   // Mapeo seguro de roles (Sinonimia Total: admin/admin/administrativo -> admin)
   let userRole = state.role || 'alumno';
-  if (esAdmin(userRole) && userRole !== 'master') userRole = 'admin';
+  if (['admin', 'administrativo'].includes(userRole)) userRole = 'admin';
   if (userRole === 'maestro') userRole = 'maestro';
 
   const menus = {
@@ -9162,7 +9162,7 @@ const startApp = async () => {
                 let finalPlantel = profile?.plantel_id || allowed?.plantel_id;
 
                 // Normalización Crítica (Unificación de Sinónimos)
-                if ((esAdmin(rawRole) || rawRole === 'administrativo' || rawRole === 'admin') && rawRole !== 'master') rawRole = 'admin';
+                if ((rawRole === 'administrativo' || rawRole === 'admin')) rawRole = 'admin';
                 if (rawRole === 'maestro') rawRole = 'maestro';
 
                 // 4. LIMPIEZA PROFUNDA: Sincronizar Metadatos y Perfil si hay discrepancias
