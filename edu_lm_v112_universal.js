@@ -8619,7 +8619,7 @@ window.loadExpedienteDocs = async (aluId) => {
     try {
         const folder = aluId.toString();
         // Usar cliente administrativo para listar archivos y evitar bloqueos RLS
-        const { data: files, error } = await adminStorageClient.storage.from('expedientes').list(folder);
+        const { data: files, error } = await supaAdmin.storage.from('expedientes').list(folder);
         
         if(error) {
             console.error("Error cargando expedientes:", error);
@@ -8640,7 +8640,7 @@ window.loadExpedienteDocs = async (aluId) => {
                 badge.style.background = '#dcfce7'; 
                 badge.style.color = '#166534';
                 if(cont) cont.style.display = 'flex';
-                const { data: url } = adminStorageClient.storage.from('expedientes').getPublicUrl(`${folder}/${f}.pdf`);
+                const { data: url } = supaAdmin.storage.from('expedientes').getPublicUrl(`${folder}/${f}.pdf`);
                 if(btnVer) btnVer.href = url.publicUrl;
                 const btnDel = document.getElementById('btn-del-' + f);
                 if(btnDel) btnDel.onclick = () => window.eliminarExpedienteDoc(aluId, f + '.pdf');
@@ -8661,7 +8661,7 @@ window.loadExpedienteDocs = async (aluId) => {
             } else {
                 listBoletas.innerHTML = boletas.map(b => {
                     const displayName = b.name.replace('boleta_', '').replace('.pdf', '').replace(/_/g, ' ');
-                    const { data: url } = adminStorageClient.storage.from('expedientes').getPublicUrl(`${folder}/${b.name}`);
+                    const { data: url } = supaAdmin.storage.from('expedientes').getPublicUrl(`${folder}/${b.name}`);
                     return `
                         <div style="display:flex; justify-content:space-between; align-items:center; padding:6px; background:white; border-radius:6px; margin-bottom:4px; border:1px solid var(--border);">
                             <span style="font-size:0.75rem; font-weight:500; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:80px;" title="${displayName}">${displayName}</span>
@@ -8682,7 +8682,7 @@ window.eliminarExpedienteDoc = async (aluId, fileName) => {
     
     try {
         const folder = aluId.toString();
-        const { error } = await adminStorageClient.storage.from('expedientes').remove([`${folder}/${fileName}`]);
+        const { error } = await supaAdmin.storage.from('expedientes').remove([`${folder}/${fileName}`]);
         
         if(error) throw error;
         
@@ -8729,10 +8729,8 @@ window.uploadExpedienteDoc = async (input, type) => {
         }
 
         // CREACIÓN DINÁMICA DEL CLIENTE ADMIN PARA FORZAR BYPASS RLS
-        const adminClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE);
-        
         console.log(">>> INICIANDO SUBIDA ADMINISTRATIVA PARA:", finalFileName);
-        const { data, error } = await adminClient.storage.from('expedientes').upload(`${folder}/${finalFileName}`, file, { upsert: true });
+        const { data, error } = await supaAdmin.storage.from('expedientes').upload(`${folder}/${finalFileName}`, file, { upsert: true });
         
         if (error) throw error;
 
