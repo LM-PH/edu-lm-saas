@@ -3964,6 +3964,7 @@ async function renderPage(path) {
         if(state.role === 'alumno') return renderAlumnoCredencial();
         return renderLandingPage();
     case '/master/saas': return (state.user?.email === 'zlagustin10@gmail.com') ? await renderMasterSaaS() : '<h2>Acceso Denegado</h2>';
+    case '/master/gestion-perfiles': return (state.user?.email === 'zlagustin10@gmail.com') ? await renderMasterGestionPerfiles() : '<h2>Acceso Denegado</h2>';
     case '/admin/inscripcion': return renderAdminInscripcion();
     case '/admin/expediente': return renderAdminExpediente();
     case '/admin/grupos': return renderAdminGrupos();
@@ -4067,10 +4068,93 @@ window.eliminarPlantelSaaS = async (id, nombre) => {
 window.gestionarPlantelSaaS = (id, nombre) => {
     state.plantelId = id;
     CONFIG.schoolName = nombre;
-    state.path = '/admin/inscripcion';
+    state.path = '/master/gestion-perfiles';
     window.showToast(`Entrando a modo gestión: ${nombre}`, 'success');
     renderApp();
 };
+
+async function renderMasterGestionPerfiles() {
+    try {
+        const { data: users, error } = await supaAdmin.from('perfiles')
+            .select('*')
+            .eq('plantel_id', state.plantelId)
+            .order('nombre');
+        
+        if(error) throw error;
+
+        const categorized = {
+            alumno: users.filter(u => u.rol === 'alumno'),
+            maestro: users.filter(u => u.rol === 'maestro'),
+            apoyo: users.filter(u => u.rol === 'apoyo'),
+            admin: users.filter(u => ['admin', 'administrativo', 'directivo'].includes(u.rol))
+        };
+
+        const renderUserRow = (u) => `
+            <div class="card shadow-sm" style="display:flex; align-items:center; gap:12px; padding:12px; border:1px solid #edf2f7;">
+                <div style="width:40px; height:40px; border-radius:50%; background:#eff6ff; color:#3b82f6; display:flex; align-items:center; justify-content:center; font-weight:bold; font-size:1.1rem; border:1px solid #dbeafe;">
+                    ${u.nombre?.charAt(0) || '?'}
+                </div>
+                <div style="flex:1; overflow:hidden;">
+                    <div style="font-weight:600; font-size:0.9rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${u.nombre}</div>
+                    <div style="font-size:0.7rem; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.05em;">${u.rol}</div>
+                </div>
+                <div style="display:flex; gap:6px;">
+                    <button class="btn btn-outline btn-xs" style="padding:4px 8px;" onclick="window.navigate('/admin/expediente?id=${u.id}')" title="Ver Expediente"><i class="fa-solid fa-id-card"></i></button>
+                    ${u.rol === 'maestro' ? `<button class="btn btn-outline btn-xs" style="padding:4px 8px; border-color:#e2e8f0;" onclick="window.navigate('/admin/maestros')" title="Gestión Docente"><i class="fa-solid fa-chalkboard-user"></i></button>` : ''}
+                </div>
+            </div>
+        `;
+
+        const renderSection = (title, items, icon, color) => `
+            <div style="margin-bottom:40px;">
+                <div style="display:flex; align-items:center; gap:10px; margin-bottom:18px; border-bottom:2px solid ${color}22; padding-bottom:8px;">
+                    <div style="width:36px; height:36px; border-radius:10px; background:${color}; color:white; display:flex; align-items:center; justify-content:center; font-size:1.2rem;">
+                        <i class="fa-solid ${icon}"></i>
+                    </div>
+                    <h3 style="margin:0; font-weight:800; color:#1e293b;">${title} <span style="font-size:0.9rem; font-weight:400; color:var(--text-muted); margin-left:8px;">(${items.length})</span></h3>
+                </div>
+                <div style="display:grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap:16px;">
+                    ${items.length === 0 ? `<div style="grid-column: 1/-1; padding:20px; text-align:center; background:#f8fafc; border-radius:12px; color:var(--text-muted); border:1px dashed #cbd5e1;">Ningún registro en este apartado.</div>` : 
+                      items.map(u => renderUserRow(u)).join('')}
+                </div>
+            </div>
+        `;
+
+        return `
+            <div class="page-header" style="background: linear-gradient(135deg, #1e293b 0%, #334155 100%); color:white; padding:32px; border-radius:24px; margin-bottom:32px; box-shadow:0 10px 25px -5px rgba(0,0,0,0.1);">
+                <div style="display:flex; justify-content:space-between; align-items:center;">
+                    <div>
+                        <h2 class="page-title" style="color:white; margin:0 0 4px 0;">Modo Gestión: ${CONFIG.schoolName}</h2>
+                        <p style="margin:0; opacity:0.8; font-size:0.95rem;"><i class="fa-solid fa-fingerprint"></i> Has iniciado sesión como controlador global en esta sede.</p>
+                    </div>
+                    <button class="btn" style="background:rgba(255,255,255,0.1); border:1px solid rgba(255,255,255,0.2); color:white;" onclick="window.navigate('/master/saas')">
+                        <i class="fa-solid fa-rotate-left"></i> Panel SaaS
+                    </button>
+                </div>
+            </div>
+            
+            ${renderSection('Padrón de Alumnos', categorized.alumno, 'fa-user-graduate', '#3b82f6')}
+            ${renderSection('Cuerpo de Maestros', categorized.maestro, 'fa-chalkboard-user', '#8b5cf6')}
+            ${renderSection('Personal de Apoyo', categorized.apoyo, 'fa-hand-holding-medical', '#10b981')}
+            ${renderSection('Equipo Administrativo', categorized.admin, 'fa-user-tie', '#f59e0b')}
+            
+            <div style="margin-top:20px; padding:20px; background:#eff6ff; border-radius:16px; border:1px solid #dbeafe; display:flex; gap:16px; align-items:center;">
+                <div style="font-size:1.5rem; color:#3b82f6;"><i class="fa-solid fa-circle-info"></i></div>
+                <div style="font-size:0.85rem; color:#1e40af;">
+                    <strong>Nota para el Creador:</strong> Desde este panel puedes auditar el padrón completo. Utiliza los botones de acción en cada tarjeta para saltar a la sección de edición o expedientes de cada usuario.
+                </div>
+            </div>
+        `;
+    } catch(e) { 
+        console.error(e);
+        return `<div class="error-box" style="padding:40px; border-radius:20px;">
+            <i class="fa-solid fa-triangle-exclamation" style="font-size:3rem; margin-bottom:16px;"></i>
+            <h3>Error de Conexión</h3>
+            <p>${e.message}</p>
+            <button class="btn btn-primary" onclick="renderApp()">Reintentar</button>
+        </div>`; 
+    }
+}
 
 async function renderApp() {
   const app = document.getElementById('app');
