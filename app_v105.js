@@ -59,6 +59,7 @@ window.login = (realRole) => {
   console.log(`${CONFIG.appName} v21.25`);
 
   state.role = role;
+  state.schoolConfigured = true; // Asegurar que el estado de configuración se mantenga
   if(role === 'master') state.path = '/master/saas';
   if(role === 'admin') state.path = '/admin/inscripcion';
   if(role === 'directivo') state.path = '/directivo/autorizaciones';
@@ -190,6 +191,11 @@ window.handleLogin = async () => {
             state.user = signInData.user;
             state.role = allowed.rol;
             
+            console.log(">>> [LOGIN] Rol detectado:", state.role);
+            if (state.role === 'administrativo' || state.role === 'administrador') state.role = 'admin';
+
+            state.schoolConfigured = true;
+            
             // Determinar ruta según rol
             if(state.role === 'master') state.path = '/master/saas';
             else if(state.role === 'directivo') state.path = '/directivo/autorizaciones';
@@ -198,7 +204,7 @@ window.handleLogin = async () => {
             else if(state.role === 'apoyo') state.path = '/apoyo/dashboard';
             else if(state.role === 'alumno') state.path = '/alumno/credencial';
             
-            state.schoolConfigured = true;
+            console.log(">>> [LOGIN] Redirigiendo a:", state.path);
             renderApp();
             return;
         }
@@ -238,6 +244,7 @@ window.handleLogin = async () => {
                 
                 state.user = targetUser;
                 state.role = allowed.rol;
+                if (state.role === 'administrativo') state.role = 'admin'; // Normalizar
                 state.schoolConfigured = true;
                 state.plantelId = allowed.plantel_id;
                 
@@ -717,9 +724,9 @@ window.handleMagicLink = async () => {
 };
 
 function renderSidebar() {
-  // Mapeo seguro de roles (administrador -> admin, etc)
+  // Mapeo seguro de roles (administrador/administrativo -> admin, etc)
   let userRole = state.role || 'alumno';
-  if (userRole === 'administrador') userRole = 'admin';
+  if (userRole === 'administrador' || userRole === 'administrativo') userRole = 'admin';
 
   const menus = {
     master: [
@@ -3998,11 +4005,21 @@ function generateHTML(content) {
 }
 
 async function renderPage(path) {
-  // Manejar parámetros de URL
-  const [purePath] = path.split('?');
+  // Manejar parámetros de URL y normalizar barras
+  let [purePath] = path.split('?');
+  if (purePath.length > 1 && purePath.endsWith('/')) purePath = purePath.slice(0, -1);
+  
+  console.log(">>> [ROUTING] Cargando ruta:", purePath, "para rol:", state.role);
   
   // Routes Definition
   switch(purePath) {
+    case '/': 
+        if(state.role === 'admin') return renderAdminInscripcion();
+        if(state.role === 'directivo') return renderDirectivoAutorizaciones();
+        if(state.role === 'maestro') return renderMaestroAula();
+        if(state.role === 'apoyo') return renderApoyoDashboard();
+        if(state.role === 'alumno') return renderAlumnoCredencial();
+        return renderLandingPage();
     case '/master/saas': return (state.user?.email === 'zlagustin10@gmail.com') ? await renderMasterSaaS() : '<h2>Acceso Denegado</h2>';
     case '/admin/inscripcion': return renderAdminInscripcion();
     case '/admin/expediente': return renderAdminExpediente();
@@ -8686,8 +8703,8 @@ const startApp = async () => {
                 // 2. Obtener el Perfil actual (Lo que la UI muestra)
                 const { data: profile } = await client.from('perfiles').select('*').eq('id', session.user.id).maybeSingle();
                 
-                let realRole = profile?.rol || session.user.user_metadata?.rol || 'alumno';
-                let realName = profile?.nombre || session.user.user_metadata?.nombre || session.user.email;
+                let realRole = profile?.rol || session.user.user_metadata?.rol || allowed?.rol || 'alumno';
+                let realName = profile?.nombre || session.user.user_metadata?.nombre || allowed?.nombre || session.user.email;
 
                 // 3. SINCRONIZADOR AUTOMÁTICO: Si los datos de autorización son nuevos, actualizar perfil
                 if (allowed && (allowed.rol !== realRole || allowed.nombre !== realName)) {
@@ -8710,6 +8727,7 @@ const startApp = async () => {
                 }
 
                 state.userName = realName;
+                state.schoolConfigured = true; // MARCAR COMO CONFIGURADO PARA EVITAR PANTALLA 0
                 window.login(realRole);
             } else {
                 console.log(">>> AUTH: No hay sesión activa, cargando selector.");

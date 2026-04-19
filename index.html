@@ -33,15 +33,33 @@
     <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
     
-    <!-- Lógica Principal (Sincronización con DB Roles) -->
-    <script src="saas_master_core.js?v=DB_FIX_V1"></script>
+    <!-- Lógica Principal Sincronizada (v114 + Watchdog v1) -->
+    <script src="edu_lm_v112_universal.js?v=713"></script>
 
-    <!-- Service Worker Registration -->
+    <!-- Service Worker Registration REACTIVADO PARA ACTUALIZACIÓN FORZOSA -->
     <script>
+      // Purga de Service Workers antiguos para forzar v116
+      if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.getRegistrations().then(regs => {
+          for(let reg of regs) reg.unregister();
+        });
+      }
+
       if ('serviceWorker' in navigator) {
         window.addEventListener('load', () => {
-          navigator.serviceWorker.register('./sw.js')
-            .then(reg => console.log('Edu-LM PWA: Service Worker registrado.', reg))
+          navigator.serviceWorker.register('./sw.js?v=400')
+            .then(reg => {
+                console.log('Edu-LM PWA: Service Worker registrado.', reg);
+                // Si hay una actualización, forzar el salto de espera
+                reg.onupdatefound = () => {
+                    const installingWorker = reg.installing;
+                    installingWorker.onstatechange = () => {
+                        if (installingWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                            window.location.reload();
+                        }
+                    };
+                };
+            })
             .catch(err => console.log('Edu-LM PWA: Error al registrar SW.', err));
         });
       }

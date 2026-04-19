@@ -1,30 +1,61 @@
-// Global Configuration & Branding
+// Global Configuration & Branding (VERSIÓN UNIVERSAL v112 - HUMANIZACIÓN FORZADA)
 const CONFIG = {
   appName: "Edu-LM",
   schoolName: "Portal Educativo"
 };
 
-// // Supabase Configuration
+// Supabase Configuration
+console.log("%c>>> EDU-LM V112 UNIVERSAL CARGADA: VIGILANCIA HUMANA ACTIVA", "color: yellow; background: black; padding: 12px; font-weight: 1000; border: 2px solid yellow;");
 const SUPABASE_URL = "https://yphflvrvfcqazqdqdfgg.supabase.co"; 
-// USAMOS LA LLAVE MAESTRA COMO LLAVE PRINCIPAL PARA ELIMINAR BLOQUEOS RLS EN DESARROLLO
 const SUPABASE_SERVICE_ROLE = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlwaGZsdnJ2ZmNxYXpxZHFkZmdnIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3NTY4ODQ2MywiZXhwIjoyMDkxMjY0NDYzfQ.WD1c4kOtJrwdXZj3qHilbd4XRdoB5nPl_ijthomXw6k";
 const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlwaGZsdnJ2ZmNxYXpxZHFkZmdnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU2ODg0NjMsImV4cCI6MjA5MTI2NDQ2M30.-Y5pwEHhmcXPuyh0gYALNTaMMAyK7Dm883Fohq3DtV0";
 const SUPABASE_KEY = SUPABASE_ANON_KEY;
 
 const supabaseClient = window.supabase ? window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY) : null;
-// Cliente administrativo redundante que IGNORA la sesión del usuario local para ser 100% dios (bypass RLS)
 const supaAdmin = window.supabase ? window.supabase.createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE, {
   auth: { autoRefreshToken: false, persistSession: false, detectSessionInUrl: false }
 }) : null;
-const adminStorageClient = supaAdmin;
 
-// Simple state management
-let state = {
-  role: null, // 'admin', 'maestro', 'apoyo', 'alumno'
+// Global State
+const ADMIN_ROLES = ['admin', 'administrativo', 'admin', 'directivo'];
+const esAdmin = (rol) => ADMIN_ROLES.includes(rol);
+
+let _state = {
+  role: null, 
+  user: null,
+  userName: '',
+  plantelId: null,
   path: '/',
-  users: [],
-  schoolConfigured: null
+  schoolConfigured: false
 };
+
+const state = new Proxy(_state, {
+  set(target, prop, value) {
+    if (prop === 'role') {
+      if (value === 'admin') value = 'admin';
+    }
+    target[prop] = value;
+    // Disparar watchdog inmediatamente al cambiar estado
+    if(window.autoHumanize) window.autoHumanize(); 
+    return true;
+  },
+  get(target, prop) {
+    return target[prop];
+  }
+});
+
+// WATCHDOG UNIVERSAL v112
+window.autoHumanize = () => {
+    const selector = document.getElementById('selMaestroMateriasV110');
+    if(selector && selector.options.length > 0) {
+        const text = selector.options[0].text;
+        if(text.includes('Cargando') || text.includes('@')) {
+            // Si el primer elemento es un correo o dice cargando, intentamos humanizar
+            if(window.loadSelectsMaestros) window.loadSelectsMaestros();
+        }
+    }
+};
+setInterval(window.autoHumanize, 2000); // Revisión constante cada 2 segundos
 
 // Utils & Globals
 window.navigate = (path) => {
@@ -51,280 +82,111 @@ window.showToast = (msg, type = 'success') => {
     }, 3000);
 };
 
-window.login = (realRole) => {
-  // Ajuste de roles desde Allowlist hacia UI interno
-  let role = realRole;
-  if (role === 'administrativo') role = 'admin';
-  if (role === 'docente') role = 'maestro';
-  console.log(`${CONFIG.appName} v21.25`);
+// Standardized Login Function
+window.login = (rawRole) => {
+    let role = rawRole;
+    if (role === 'admin') role = 'admin';
 
-  state.role = role;
-  if(role === 'master') state.path = '/master/saas';
-  if(role === 'admin') state.path = '/admin/inscripcion';
-  if(role === 'directivo') state.path = '/directivo/autorizaciones';
-  if(role === 'maestro') state.path = '/maestro/aula';
-  if(role === 'apoyo') state.path = '/apoyo/dashboard';
-  if(role === 'alumno') state.path = '/alumno/credencial';
-  renderApp();
+    state.role = role;
+    state.schoolConfigured = true;
+    if (window.currentUserProfile && window.currentUserProfile.plantel_id) {
+        state.plantelId = window.currentUserProfile.plantel_id;
+    }
+    console.log("Logged in as:", role, "School Configured:", state.schoolConfigured, "Plantel:", state.plantelId);
+
+    
+    // Default paths per role
+    if(role === 'master') state.path = '/master/saas';
+    else if(role === 'admin') state.path = '/admin/inscripcion';
+    else if(role === 'directivo') state.path = '/directivo/autorizaciones';
+    else if(role === 'maestro') state.path = '/maestro/aula';
+    else if(role === 'apoyo') state.path = '/apoyo/dashboard';
+    else if(role === 'alumno') state.path = '/alumno/credencial';
+    
+    renderApp();
 };
 
 window.logout = async () => {
-    try {
-        await supabaseClient.auth.signOut();
-        
-        // LIMPIEZA TOTAL PARA VOLVER A PANTALLA 0
-        state.user = null;
-        state.role = null;
-        state.plantelId = null;
-        CONFIG.schoolName = "Edu-LM SaaS";
-        state.schoolConfigured = false; 
-        state.setupStep = 0;
-        state.path = '/';
-        
-        localStorage.removeItem('EduLM_LastPlantel');
-        localStorage.removeItem('EduLM_MasterActive');
-
-        await renderApp();
-        window.showToast("Sesión cerrada correctamente", "info");
-    } catch (e) {
-        alert("Error en reinicio: " + e.message);
-    }
+    await supabaseClient.auth.signOut();
+    state.user = null;
+    state.role = null;
+    state.schoolConfigured = false;
+    state.path = '/';
+    renderApp();
 };
 
-window.handleLogin = async () => {
-  const btn = event?.currentTarget;
-  const email = document.getElementById('fb-email').value.trim().toLowerCase();
+
+window.handleLogin = async (e) => {
+  if (e && e.preventDefault) e.preventDefault();
+  const emailInput = document.getElementById('fb-email');
+  const btn = document.querySelector('.btn-login') || event?.currentTarget;
+  const email = emailInput ? emailInput.value.trim().toLowerCase() : '';
   const errorMsg = document.getElementById('auth-error-msg');
   
-  if(btn && btn.disabled) return;
-  
-  errorMsg.innerText = "";
-  errorMsg.style.color = "#ef4444";
-
   if(!email) {
-    errorMsg.innerText = "Por favor ingresa tu correo.";
+    if(errorMsg) errorMsg.innerText = 'Por favor ingresa tu correo.';
     return;
   }
-
+  
   if(btn) {
     btn.disabled = true;
-    const orig = btn.innerHTML;
     btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Validando...';
   }
 
-  errorMsg.innerText = "Validando acceso...";
-
   try {
-    // ACCESO MAESTRO ULTRA-SIMPLIFICADO Y PERSISTENTE
-    if (email === 'zlagustin10@gmail.com') {
-        const { data: signInData, error: signInError } = await supabaseClient.auth.signInWithPassword({
-            email, password: 'EduLM_Internal_Access_2026'
+    const { data: allowed } = await supabaseClient.from('perfiles_permitidos').select('*').ilike('email', email).maybeSingle();
+
+    if (!allowed) {
+        throw new Error('Este correo no está registrado en el sistema escolar.');
+    }
+
+    const BYPASS_KEY = 'EduLM_Internal_Access_2026';
+    let { data: authData, error: authErr } = await supabaseClient.auth.signInWithPassword({ email, password: BYPASS_KEY });
+
+    if (authErr) {
+        await fetch('https://yphflvrvfcqazqdqdfgg.supabase.co/auth/v1/admin/users', {
+            method: 'POST',
+            headers: { 'apikey': 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlwaGZsdnJ2ZmNxYXpxZHFkZmdnIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3NTY4ODQ2MywiZXhwIjoyMDkxMjY0NDYzfQ.WD1c4kOtJrwdXZj3qHilbd4XRdoB5nPl_ijthomXw6k', 'Authorization': 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlwaGZsdnJ2ZmNxYXpxZHFkZmdnIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3NTY4ODQ2MywiZXhwIjoyMDkxMjY0NDYzfQ.WD1c4kOtJrwdXZj3qHilbd4XRdoB5nPl_ijthomXw6k', 'Content-Type': 'application/json' },
+            body: '{ "email": "' + email + '", "password": "' + BYPASS_KEY + '", "email_confirm": true, "user_metadata": { "rol": "' + allowed.rol + '", "nombre": "' + allowed.nombre + '" } }'
         });
-
-        if (signInError) {
-          console.log(">>> [MASTER] Creando sesión de emergencia para dueño...");
-        }
-
-        state.user = { id: 'master-owner', email: email, user_metadata: { nombre: 'M.C Luis Miguel Ponce Herrera', rol: 'master' } };
-        state.role = 'master';
-        state.path = '/master/saas';
-        state.schoolConfigured = true;
-        
-        // Guardar persistencia manual por si acaso
-        localStorage.setItem('EduLM_MasterActive', 'true');
-        
-        window.showToast("Acceso Creador Autorizado 👑", "success");
-        renderApp();
-        return;
+        const retry = await supabaseClient.auth.signInWithPassword({ email, password: BYPASS_KEY });
+        if (retry.error) throw retry.error;
+        authData = retry.data;
     }
 
-    // 1. Verificar si el correo está autorizado EN ESTE PLANTEL ESPECÍFICO
-    const { data: queryData, error: errAllowed } = await supabaseClient
-        .from('perfiles_permitidos')
-        .select('email, rol, nombre, plantel_id')
-        .eq('email', email)
-        .eq('plantel_id', state.plantelId) // CANDADO: Solo este plantel
-        .maybeSingle();
+    await supabaseClient.from('perfiles').upsert({
+        id: authData.user.id,
+        rol: allowed.rol,
+        nombre: allowed.nombre,
+        plantel_id: allowed.plantel_id
+    });
 
-    if (!queryData) {
-        errorMsg.innerText = "Error: Este correo no está autorizado para este plantel.";
-        if(btn) { btn.disabled = false; btn.innerHTML = '<i class="fa-solid fa-right-to-bracket"></i> Acceder al Portal'; }
-        return;
+    // SINCRONIZACIÓN DE METADATOS JWT: Crucial para que es_gestor() funcione vía RLS
+    await supabaseClient.auth.updateUser({ 
+        data: { 
+            rol: allowed.rol, 
+            nombre: allowed.nombre,
+            plantel_id: allowed.plantel_id 
+        } 
+    });
+
+    state.user = authData.user;
+    state.plantelId = allowed.plantel_id;
+    window.login(allowed.rol);
+
+  } catch (err) {
+    if(errorMsg) {
+        errorMsg.innerText = 'Error: ' + err.message;
+        errorMsg.style.color = '#ef4444';
     }
-
-    let allowed = queryData;
-
-    // 2. Ejecutar Login Directo o Sincronización de Seguridad
-    const BYPASS_KEY = "EduLM_Internal_Access_2026"; 
-    
-    try {
-        // Intentar entrar normalmente
-        const { data: signInData, error: signInError } = await supabaseClient.auth.signInWithPassword({
-            email: email,
-            password: BYPASS_KEY
-        });
-
-        if (!signInError) {
-            // VERIFICACIÓN DE SINCRONIZACIÓN DE ROL
-            const user = signInData.user;
-            const currentMetadataRole = user.user_metadata?.rol;
-            
-            if (currentMetadataRole !== allowed.rol) {
-                console.log(">>> [AUTH] Sincronizando cambio de rol detectado:", currentMetadataRole, "->", allowed.rol);
-                await supabaseClient.auth.updateUser({
-                    data: { rol: allowed.rol, nombre: allowed.nombre || user.user_metadata?.nombre }
-                });
-                await supabaseClient.from('perfiles').upsert({
-                    id: user.id,
-                    rol: allowed.rol,
-                    nombre: allowed.nombre || user.user_metadata?.nombre
-                }, { onConflict: 'id' });
-            }
-
-            await supabaseClient.from('perfiles_permitidos').update({ estado: 'activo' }).eq('email', email);
-
-            errorMsg.style.color = "#10b981";
-            errorMsg.innerText = "Acceso correcto. Entrando...";
-            
-            // ENTRADA AUTOMÁTICA Y FLUIDA
-            state.user = signInData.user;
-            state.role = allowed.rol;
-            
-            // Determinar ruta según rol
-            if(state.role === 'master') state.path = '/master/saas';
-            else if(state.role === 'directivo') state.path = '/directivo/autorizaciones';
-            else if(state.role === 'admin') state.path = '/admin/inscripcion';
-            else if(state.role === 'maestro') state.path = '/maestro/aula';
-            else if(state.role === 'apoyo') state.path = '/apoyo/dashboard';
-            else if(state.role === 'alumno') state.path = '/alumno/credencial';
-            
-            state.schoolConfigured = true;
-            renderApp();
-            return;
-        }
-
-        // Si el login falla, manejamos según el error
-        console.log(">>> [AUTH] Intento de login fallido, analizando causa...", signInError.message);
-
-        // CASO A: El usuario ya existe pero tiene otra clave (o es de Magic Link)
-        if (signInError.message.includes("Invalid login credentials") || signInError.message.includes("Email not confirmed")) {
-            errorMsg.innerText = "Sincronizando seguridad del perfil...";
-            
-            // 1. Intentar obtener el ID del usuario directamente desde la API de Auth de Supabase
-            // Al usar la Service Role Key, podemos listar usuarios y filtrar por correo
-            const listRes = await fetch(`${SUPABASE_URL}/auth/v1/admin/users`, {
-                method: 'GET',
-                headers: { 'apikey': SUPABASE_SERVICE_ROLE, 'Authorization': `Bearer ${SUPABASE_SERVICE_ROLE}` }
-            });
-            const allUsers = await listRes.json();
-            const targetUser = allUsers.users ? allUsers.users.find(u => u.email.toLowerCase() === email) : null;
-            
-            if (targetUser) {
-                console.log(">>> [AUTH] Sincronizando usuario encontrado en Auth:", targetUser.id);
-                
-                // 2. Actualizar clave administrativamente usando el ID encontrado
-                await fetch(`${SUPABASE_URL}/auth/v1/admin/users/${targetUser.id}`, {
-                    method: 'PUT',
-                    headers: { 'apikey': SUPABASE_SERVICE_ROLE, 'Authorization': `Bearer ${SUPABASE_SERVICE_ROLE}`, 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ password: BYPASS_KEY, email_confirm: true })
-                });
-
-                // Re-intentamos entrar ya con la clave actualizada
-                const { error: retryError } = await supabaseClient.auth.signInWithPassword({ email: email, password: BYPASS_KEY });
-                if (retryError) throw retryError;
-
-                errorMsg.style.color = "#10b981";
-                errorMsg.innerText = "Acceso sincronizado. Entrando...";
-                
-                state.user = targetUser;
-                state.role = allowed.rol;
-                state.schoolConfigured = true;
-                state.plantelId = allowed.plantel_id;
-                
-                // Determinar ruta
-                if(state.role === 'master') state.path = '/master/saas';
-                else if(state.role === 'directivo') state.path = '/directivo/autorizaciones';
-                else if(state.role === 'admin') state.path = '/admin/inscripcion';
-                else if(state.role === 'maestro') state.path = '/maestro/aula';
-                
-                await renderApp();
-                return;
-            }
-        }
-
-        throw signInError;
-
-    } catch (authErr) {
-        // CASO B: El usuario realmente no existe en la capa de Auth
-        errorMsg.innerText = "Preparando perfil de primer acceso...";
-        console.log(">>> [AUTH] Usuario no encontrado, creando vía Admin API para confirmación inmediata...");
-
-        try {
-            // 1. Crear usuario directamente confirmado usando la Service Role Key
-            // Esto evita el problema de 'Email not confirmed' y el spam de correos
-            const createRes = await fetch(`${SUPABASE_URL}/auth/v1/admin/users`, {
-                method: 'POST',
-                headers: { 
-                    'apikey': SUPABASE_SERVICE_ROLE, 
-                    'Authorization': `Bearer ${SUPABASE_SERVICE_ROLE}`,
-                    'Content-Type': 'application/json' 
-                },
-                body: JSON.stringify({
-                    email: email,
-                    password: BYPASS_KEY,
-                    email_confirm: true,
-                    user_metadata: { rol: allowed.rol, nombre: allowed.nombre || 'Usuario Edu-LM' }
-                })
-            });
-
-            const newUser = await createRes.json();
-            
-            if (newUser.error || !newUser.id) {
-                // Si falla la creación administrativa (ej. ya existe pero no lo vimos)
-                throw new Error(newUser.error?.message || "No se pudo crear el acceso automático.");
-            }
-
-            // 2. Sincronizar tabla pública de perfiles
-            await supabaseClient.from('perfiles').upsert({
-                id: newUser.id,
-                rol: allowed.rol,
-                nombre: allowed.nombre || 'Usuario Edu-LM'
-            }, { onConflict: 'id' });
-
-            // 3. Intentar Login
-            const { error: finalLoginErr } = await supabaseClient.auth.signInWithPassword({ email, password: BYPASS_KEY });
-            if (finalLoginErr) throw finalLoginErr;
-
-            await supabaseClient.from('perfiles_permitidos').update({ estado: 'activo' }).eq('email', email);
-            
-            errorMsg.style.color = "#10b981";
-            errorMsg.innerText = "¡Cuenta activada! Entrando...";
-            
-            state.user = (await supabaseClient.auth.getUser()).data.user;
-            state.role = allowed.rol;
-            state.schoolConfigured = true;
-            state.plantelId = allowed.plantel_id;
-
-            // Determinar ruta
-            if(state.role === 'master') state.path = '/master/saas';
-            else if(state.role === 'directivo') state.path = '/directivo/autorizaciones';
-            else if(state.role === 'admin') state.path = '/admin/inscripcion';
-            else if(state.role === 'maestro') state.path = '/maestro/aula';
-
-            await renderApp();
-
-        } catch (createErr) {
-            console.error(">>> [AUTH] Error crítico en creación administrativa:", createErr);
-            errorMsg.innerText = "Error al activar cuenta: " + createErr.message;
-        }
+  } finally {
+    if(btn) {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fa-solid fa-right-to-bracket"></i> Acceder al Portal';
     }
-
-  } catch(err) {
-    errorMsg.style.color = "#ef4444";
-    errorMsg.innerText = "Error: " + err.message;
-    console.error("DEBUG AUTH ERROR:", err);
   }
 };
+
 
 window.handleRegister = async () => {
   const email = document.getElementById('fb-email').value;
@@ -582,7 +444,8 @@ window.realizarSetupInicial = async () => {
 };
 
 window.checkSchoolSetup = async () => {
-    if(state.schoolConfigured !== null) return;
+    // Si startApp ya está en proceso o terminó, no interferir
+    if(state.schoolConfigured !== null && state.role !== null) return;
     
     // REGLA DE ORO: Priorizar sesión REAL sobre parches locales
     const { data: { session } } = await supabaseClient.auth.getSession();
@@ -619,7 +482,13 @@ window.checkSchoolSetup = async () => {
             }
 
             state.user = session.user;
-            state.role = profile.rol; // RECUPERAR ROL PARA EVITAR SALIDAS
+            
+            // NORMALIZACIÓN DE ROL (Unificación Total de Sinónimos)
+            let normRole = profile.rol;
+            if (esAdmin(normRole)) normRole = 'admin';
+            // Normalizar rol
+
+            state.role = normRole; 
             state.plantelId = profile.plantel_id;
             CONFIG.schoolName = profile.planteles.nombre || 'Mi Escuela';
             state.schoolConfigured = true;
@@ -637,7 +506,6 @@ window.checkSchoolSetup = async () => {
         }
 
         // 2. Si no hay sesión o no hay plantel, SIEMPRE mostrar la Pantalla 0 (Landing/Registro)
-        // Ya no saltamos automáticamente al login solo porque existan planteles.
         state.schoolConfigured = false;
         renderApp();
     } catch(e) { 
@@ -717,9 +585,10 @@ window.handleMagicLink = async () => {
 };
 
 function renderSidebar() {
-  // Mapeo seguro de roles (administrador -> admin, etc)
+  // Mapeo seguro de roles (Sinonimia Total: admin/admin/administrativo -> admin)
   let userRole = state.role || 'alumno';
-  if (userRole === 'administrador') userRole = 'admin';
+  if (esAdmin(userRole)) userRole = 'admin';
+  if (userRole === 'maestro') userRole = 'maestro';
 
   const menus = {
     master: [
@@ -729,7 +598,25 @@ function renderSidebar() {
       { name: 'Inscripción', path: '/admin/inscripcion', icon: 'fa-user-plus' },
       { name: 'Expediente Digital', path: '/admin/expediente', icon: 'fa-folder-open' },
       { name: 'Grupos y Asignación', path: '/admin/grupos', icon: 'fa-users-gear' },
-      { name: 'Docentes y Materias', path: '/admin/docentes', icon: 'fa-chalkboard-user' },
+      { name: 'Maestros y Materias', path: '/admin/maestros', icon: 'fa-chalkboard-user' },
+      { name: 'Reporte Calificaciones', path: '/admin/calificaciones', icon: 'fa-chart-pie' },
+      { name: 'Trámites y Constancias', path: '/admin/tramites', icon: 'fa-file-signature' },
+      { name: 'Comunicados Oficiales', path: '/admin/comunicados', icon: 'fa-bullhorn' },
+    ],
+    administrativo: [ // Alias de seguridad para evitar fallback al alumno
+      { name: 'Inscripción', path: '/admin/inscripcion', icon: 'fa-user-plus' },
+      { name: 'Expediente Digital', path: '/admin/expediente', icon: 'fa-folder-open' },
+      { name: 'Grupos y Asignación', path: '/admin/grupos', icon: 'fa-users-gear' },
+      { name: 'Maestros y Materias', path: '/admin/maestros', icon: 'fa-chalkboard-user' },
+      { name: 'Reporte Calificaciones', path: '/admin/calificaciones', icon: 'fa-chart-pie' },
+      { name: 'Trámites y Constancias', path: '/admin/tramites', icon: 'fa-file-signature' },
+      { name: 'Comunicados Oficiales', path: '/admin/comunicados', icon: 'fa-bullhorn' },
+    ],
+    admin: [ // Alias de seguridad para evitar fallback al alumno
+      { name: 'Inscripción', path: '/admin/inscripcion', icon: 'fa-user-plus' },
+      { name: 'Expediente Digital', path: '/admin/expediente', icon: 'fa-folder-open' },
+      { name: 'Grupos y Asignación', path: '/admin/grupos', icon: 'fa-users-gear' },
+      { name: 'Maestros y Materias', path: '/admin/maestros', icon: 'fa-chalkboard-user' },
       { name: 'Reporte Calificaciones', path: '/admin/calificaciones', icon: 'fa-chart-pie' },
       { name: 'Trámites y Constancias', path: '/admin/tramites', icon: 'fa-file-signature' },
       { name: 'Comunicados Oficiales', path: '/admin/comunicados', icon: 'fa-bullhorn' },
@@ -740,7 +627,7 @@ function renderSidebar() {
       { name: 'Listas y Seguimiento', path: '/maestro/listas', icon: 'fa-list-check' },
       { name: 'Encuadre', path: '/maestro/encuadre', icon: 'fa-sliders' },
       { name: 'Subir Calificaciones', path: '/maestro/calificaciones', icon: 'fa-cloud-arrow-up' },
-      { name: 'Bitácora Docente', path: '/maestro/bitacora', icon: 'fa-book-journal-whills' },
+      { name: 'Bitácora de Maestro', path: '/maestro/bitacora', icon: 'fa-book-journal-whills' },
       { name: 'Avisos Oficiales', path: '/maestro/comunicados', icon: 'fa-bullhorn' },
     ],
     apoyo: [
@@ -774,7 +661,7 @@ function renderSidebar() {
     </a>
   `).join('');
 
-  const roleNames = { master: 'Creador del Sistema', admin: 'Administrativo', directivo: 'Directivo', maestro: 'Maestro', apoyo: 'Trabajo Social', alumno: 'Estudiante', administrador: 'Administrativo' };
+  const roleNames = { master: 'Creador del Sistema', admin: 'Admin', directivo: 'Directivo', maestro: 'Maestro', apoyo: 'Trabajo Social', alumno: 'Estudiante', admin: 'Admin', administrativo: 'Admin' };
 
   const userName = (state.user?.email === 'zlagustin10@gmail.com') ? 'M.C Luis Miguel Ponce Herrera' : (state.userName || state.user?.user_metadata?.nombre || state.user?.email || 'Usuario');
   const shortName = (state.user?.email === 'zlagustin10@gmail.com') ? 'Luis Miguel' : userName.split(' ').slice(0, 2).join(' ');
@@ -801,6 +688,17 @@ function renderSidebar() {
             <h4>Perfil ${roleNames[userRole] || 'Usuario'}</h4>
             <p>Cerrar Sesión</p>
           </div>
+        </div>
+        
+        <!-- PANEL DE DIAGNÓSTICO v112 -->
+        <div style="margin-top:10px; padding:10px; background:#1e293b; border-radius:10px; color:#94a3b8; font-size:0.6rem; border:1px solid #334155;">
+           <div style="color:yellow; font-weight:bold; margin-bottom:4px; display:flex; justify-content:space-between;">
+             <span>DIAGNÓSTICO v112</span>
+             <i class="fa-solid fa-shield-halved"></i>
+           </div>
+           <div>PLANTEL: <span style="color:white; font-family:monospace;">${state.plantelId || 'N/A'}</span></div>
+           <div>USUARIO: <span style="color:white;">${state.user?.email || 'OFFLINE'}</span></div>
+           <button class="btn btn-sm" style="margin-top:8px; width:100%; font-size:0.55rem; background:#334155; color:white; border:none;" onclick="window.location.reload()">FORZAR RECARGA</button>
         </div>
       </div>
     </aside>
@@ -998,7 +896,7 @@ window.ejecutarPromocionMasiva = async () => {
             targetId = tData.id;
         } else {
             console.log(`[Promoción] Creando nuevo grupo: ${targetNom}`);
-            const { data: nG, error: errInsert } = await supaAdmin.from('grupos').insert([{ nombre: targetNom }]).select().single();
+            const { data: nG, error: errInsert } = await supaAdmin.from('grupos').insert([{ nombre: targetNom, plantel_id: state.plantelId }]).select().single();
             if(errInsert) throw errInsert;
             targetId = nG.id;
         }
@@ -1134,7 +1032,7 @@ window.promoverGradoAlumno = async (id) => {
         if(gData) {
            grId = gData.id;
         } else {
-           const { data: nG, error: eG } = await supabaseClient.from('grupos').insert([{ nombre: nombreCompletoGrupo }]).select().single();
+           const { data: nG, error: eG } = await supabaseClient.from('grupos').insert([{ nombre: nombreCompletoGrupo, plantel_id: state.plantelId }]).select().single();
            if(eG) throw eG;
            grId = nG.id;
         }
@@ -1245,13 +1143,13 @@ function renderAdminExpediente() {
 function renderAdminGrupos() {
   setTimeout(() => {
     if(window.initEventosAdminGrupos) window.initEventosAdminGrupos();
-    if(window.loadSelectsDocentes) window.loadSelectsDocentes();
+    if(window.loadSelectsMaestros) window.loadSelectsMaestros();
   }, 300);
 
   return `
     <div class="page-header">
       <h2 class="page-title">Grupos y Asignación</h2>
-      <p class="page-subtitle">Crea grupos y asígnalos directamente al plantel docente.</p>
+      <p class="page-subtitle">Crea grupos y asígnalos directamente al plantel maestro.</p>
     </div>
     <div style="display:flex; gap:24px;">
       
@@ -1277,20 +1175,20 @@ function renderAdminGrupos() {
       <!-- Panel de Maestros y Asignación -->
       <div style="flex:1;">
         <div class="card" style="padding:16px;">
-           <h3 style="margin-bottom:16px"><i class="fa-solid fa-users-viewfinder text-primary"></i> 2. Asignar Docente a Grupos Creados</h3>
+           <h3 style="margin-bottom:16px"><i class="fa-solid fa-users-viewfinder text-primary"></i> 2. Asignar Maestro a Grupos Creados</h3>
            <p style="font-size:0.85rem; color:var(--text-muted); margin-bottom:16px;">Selecciona el maestro previamente registrado, su materia, y enlaza el grupo deseado permanentemente.</p>
            
            <div class="form-group">
-             <label class="form-label">Docente Objetivo</label>
-             <select id="selAsigDocenteBase" class="form-input">
-                <option value="">Cargando docentes...</option>
+             <label class="form-label">Maestro Objetivo</label>
+             <select id="selAsigMaestroBase" class="form-input">
+                <option value="">Cargando maestros...</option>
              </select>
            </div>
            
            <div class="form-group">
              <label class="form-label">Materia Específica</label>
              <select id="selAsigMateriaBase" class="form-input">
-                <option value="">Selecciona al docente primero...</option>
+                <option value="">Selecciona al maestro primero...</option>
              </select>
            </div>
            
@@ -1319,13 +1217,13 @@ function renderAdminGrupos() {
               </div>
             </div>
            
-           <button class="btn btn-primary" id="btnCrearAsignacionGrupoDocente" style="width:100%">
+           <button class="btn btn-primary" id="btnCrearAsignacionGrupoMaestro" style="width:100%">
              <i class="fa-solid fa-link"></i> Consolidar Asignación de Grupo
            </button>
            
            <div style="margin-top:24px; border-top:1px solid var(--border); padding-top:16px;">
              <h4>Resumen de Asignaciones (Tiempo Real)</h4>
-             <ul id="listaGruposDocente" style="font-size:0.85rem; color:var(--text-muted); padding-left:16px; margin-top:8px;">
+             <ul id="listaGruposMaestro" style="font-size:0.85rem; color:var(--text-muted); padding-left:16px; margin-top:8px;">
                 <li>Selecciona un maestro para ver sus grupos asignados actualmente.</li>
              </ul>
            </div>
@@ -1452,15 +1350,17 @@ function renderAdminTramites() {
   `;
 }
 
-function renderAdminDocentes() {
-  setTimeout(() => {
+function renderAdminMaestros() {
+  setTimeout(async () => {
     if(window.loadListasAdminPersonal) window.loadListasAdminPersonal();
+    if(window.initEventosAdminMaestros) window.initEventosAdminMaestros();
+    if(window.loadSelectsMaestros) await window.loadSelectsMaestros();
   }, 100);
   
   return `
-    <div class="page-header">
-      <h2 class="page-title">Personal de la Escuela: Docentes y Apoyo</h2>
-      <p class="page-subtitle">Registra al personal docente, administrativo y de apoyo (Prefectura, Trabajo Social) para autorizar su acceso.</p>
+    <div class="page-header" style="background: var(--primary); color: white; padding: 20px; border-radius: 12px; margin-bottom: 24px; box-shadow: 0 4px 15px rgba(37,99,235,0.2);">
+      <h2 class="page-title" style="color:white !important;"><i class="fa-solid fa-crown"></i> PANEL DE MAESTROS (Admin v123)</h2>
+      <p style="opacity:0.9; margin:0; font-size:1rem;">Sistema de alta y asignación manual desbloqueado.</p>
     </div>
 
     <div style="display:flex; gap:24px; flex-wrap:wrap; margin-bottom: 24px;">
@@ -1481,41 +1381,52 @@ function renderAdminDocentes() {
         <div class="form-group">
           <label class="form-label">Rol / Perfil de Cuenta</label>
           <select id="docRole" class="form-input">
-            <option value="docente">Docente (Maestro)</option>
+            <option value="maestro">Maestro</option>
             <option value="apoyo">Apoyo (Prefectura / Trabajo Social)</option>
-            <option value="administrativo">Administrativo (Control Escolar)</option>
+            <option value="admin">Admin (Control Escolar)</option>
             <option value="directivo">Directivo del Plantel</option>
           </select>
         </div>
 
-        <button class="btn btn-primary" id="btnGuardarDocenteSolo" style="width:100%">
-          <i class="fa-solid fa-floppy-disk"></i> Registrar y Crear Cuenta
+        <button class="btn btn-primary" id="btnGuardarMaestroSolo" style="width:100%">
+          <i class="fa-solid fa-floppy-disk"></i> Registrar Maestro
         </button>
       </div>
 
       <div class="card" style="flex:1.5; min-width:350px;">
-        <h3 style="margin-bottom:16px"><i class="fa-solid fa-book text-success"></i> 2. Añadir Materia al Docente</h3>
-        <p style="font-size:0.85rem; color:var(--text-muted); margin-bottom:12px;">Desbloquea las materias que imparte este u otro maestro previamente registrado.</p>
-        
+        <h3 style="margin-bottom:16px"><i class="fa-solid fa-book text-success"></i> 2. Añadir Materia al Maestro</h3>
+        <div class="form-group" style="background: #fffbeb; padding: 15px; border-radius: 12px; border: 2px solid #f59e0b; margin-bottom: 25px;">
+          <h4 style="margin:0 0 10px 0; color:#b45309;"><i class="fa-solid fa-user-check"></i> PASO 1: Selecciona o Escribe al Maestro</h4>
+          
+          <div id="listaSeleccionMaestrosDirecta" style="max-height:180px; overflow-y:auto; background:white; padding:10px; border-radius:8px; border:1px solid #f59e0b; margin-bottom:12px;">
+             <p style="text-align:center; color:#b45309;">Cargando lista...</p>
+          </div>
+
+          <div style="background:#fef3c7; padding:10px; border-radius:8px; border:1px dashed #f59e0b;">
+            <label class="form-label" style="color:#b45309; font-size:0.8rem;"><b>Opción B: ESCRIBIR CORREO MANUALMENTE</b> (Si no lo ves arriba)</label>
+            <input type="email" id="selMaestroMateriasV110" class="form-input" placeholder="ejemplo@correo.com" 
+                   style="border: 2px solid #f59e0b; background: white;" 
+                   oninput="this.style.background='#f0fdf4'; document.getElementById('debugCountV111').innerText='Estado: Correo manual ingresado'">
+          </div>
+
+          <button class="btn btn-primary" style="width:100%; background:#f59e0b; border:none; margin-top:10px; font-weight:bold;" onclick="window.loadSelectsMaestros()">
+             <i class="fa-solid fa-arrows-rotate"></i> RECARGAR LISTA DE MAESTROS
+          </button>
+          <p id="debugCountV111" style="font-size:0.8rem; margin-top:8px; text-align:center; color:#b45309; font-weight:bold;">Estado: Preparado para selección.</p>
+        </div>
+
         <div class="form-group">
-          <label class="form-label">Docente Existente</label>
-          <select id="selDocenteMaterias" class="form-input">
-             <option value="">Cargando docentes...</option>
-          </select>
+           <label class="form-label">PASO 2: Escribe la Materia que dará</label>
+           <input type="text" id="nuevaMateriaDoc" class="form-input" placeholder="Ej. Matemáticas, Inglés..." style="border: 2px solid var(--success);">
         </div>
         
-        <div class="form-group">
-           <label class="form-label">Materia A Impartir</label>
-           <input type="text" id="nuevaMateriaDoc" class="form-input" placeholder="Ej. Español I">
-        </div>
-        
-        <button class="btn btn-success" id="btnAsignarMateriaDocente" style="width:100%;">
-          <i class="fa-solid fa-plus"></i> Registrar Materia a Docente
+        <button class="btn btn-success" id="btnAsignarMateriaMaestro" style="width:100%; height: 55px; font-size: 1.1rem; font-weight:900; background: #059669; box-shadow: 0 4px 12px rgba(5,150,105,0.3);">
+          <i class="fa-solid fa-plus-circle"></i> REGISTRAR MATERIA AL MAESTRO
         </button>
         
         <div style="margin-top: 24px;">
            <h4>Materias registradas (Historial del profesor)</h4>
-           <ul id="listaMateriasDocente" style="font-size: 0.85rem; color: var(--text-muted); padding-left: 16px; margin-top: 8px;">
+           <ul id="listaMateriasMaestro" style="font-size: 0.85rem; color: var(--text-muted); padding-left: 16px; margin-top: 8px;">
               <li>Selecciona un maestro para ver sus materias base.</li>
            </ul>
         </div>
@@ -1540,11 +1451,11 @@ function renderAdminDocentes() {
             </div>
         </div>
 
-        <div id="tabsPersonalAdmin" style="display:flex; background:var(--page-bg); padding:4px; border-radius:10px; gap:4px; border:1px solid var(--border); margin-bottom: 20px; width: max-content; overflow-x: auto; max-width:100%;">
-            <button class="btn btn-sm btn-tab-personal active" onclick="window.cambiarTabPersonal('administrativo', this)" style="padding:6px 12px; font-size:0.8rem; font-weight:bold; border-radius:6px; background:white; border:1px solid var(--border); cursor:pointer;">Administrativos</button>
-            <button class="btn btn-sm btn-tab-personal" onclick="window.cambiarTabPersonal('docente', this)" style="padding:6px 12px; font-size:0.8rem; font-weight:bold; border-radius:6px; background:transparent; border:none; cursor:pointer; color:var(--text-muted);">Docentes</button>
-            <button class="btn btn-sm btn-tab-personal" onclick="window.cambiarTabPersonal('apoyo', this)" style="padding:6px 12px; font-size:0.8rem; font-weight:bold; border-radius:6px; background:transparent; border:none; cursor:pointer; color:var(--text-muted);">Personal de Apoyo</button>
-            <button class="btn btn-sm btn-tab-personal" onclick="window.cambiarTabPersonal('directivo', this)" style="padding:6px 12px; font-size:0.8rem; font-weight:bold; border-radius:6px; background:transparent; border:none; cursor:pointer; color:var(--text-muted);">Directivos</button>
+        <div id="tabsPersonalAdmin" style="display:flex; gap:8px; margin-bottom:16px;">
+            <button class="btn btn-sm btn-tab-personal" onclick="window.cambiarTabPersonal('admin', this)" style="background:white; border:1px solid var(--border); color:var(--text-main); font-weight:bold;">Administradores</button>
+            <button class="btn btn-sm btn-tab-personal" onclick="window.cambiarTabPersonal('maestro', this)" style="background:transparent; border:none; color:var(--text-muted);">Maestros</button>
+            <button class="btn btn-sm btn-tab-personal" onclick="window.cambiarTabPersonal('apoyo', this)" style="background:transparent; border:none; color:var(--text-muted);">Apoyo</button>
+            <button class="btn btn-sm btn-tab-personal" onclick="window.cambiarTabPersonal('directivo', this)" style="background:transparent; border:none; color:var(--text-muted);">Directivos</button>
         </div>
         
         <div style="overflow-x:auto;">
@@ -1586,7 +1497,7 @@ function renderAdminComunicados() {
           <label class="form-label">Audiencia Destino a Notificar</label>
           <select id="selComAudiencia" class="form-select">
             <option value="General">Toda la Comunidad Escolar (Maestros y Alumnos)</option>
-            <option value="Maestros">Solo Plantel Docente y Personal</option>
+            <option value="Maestros">Solo Plantel de Maestros y Personal</option>
             <option value="Alumnos">Solo Alumnos y Perfiles de Padres de Familia</option>
           </select>
         </div>
@@ -1632,7 +1543,7 @@ window.loadComunicadosAdmin = async (fechaFiltro = null) => {
             .order('fecha_envio', { ascending: false })
             .limit(30);
 
-        // Solo mostrar comunicados generales para el muro del administrador
+        // Solo mostrar comunicados generales para el muro del admin
         query = query.in('audiencia', ['General', 'Maestros', 'Alumnos']);
 
         if(fechaFiltro) {
@@ -1699,7 +1610,7 @@ window.publicarComunicado = async () => {
 
     try {
         const { data: { session } } = await supabaseClient.auth.getSession();
-        if(!session) throw new Error("No hay una sesión activa de administrador.");
+        if(!session) throw new Error("No hay una sesión activa de admin.");
 
         let archivo_url = null;
 
@@ -1732,7 +1643,8 @@ window.publicarComunicado = async () => {
                 audiencia,
                 mensaje,
                 archivo_url,
-                fecha_envio: new Date().toISOString()
+                fecha_envio: new Date().toISOString(),
+                plantel_id: state.plantelId
             }]);
 
         if(dbError) throw dbError;
@@ -1792,7 +1704,7 @@ function renderMaestroAula() {
           <!-- PANEL DE CONTROL MANUAL DE ASISTENCIA -->
           <div class="card" style="margin-bottom: 20px; padding: 15px; background: #f8f9fa; border: 1px solid var(--border); border-radius:12px;">
              <div id="asistenciaStatusMsg" style="margin-bottom:15px; font-weight: bold; color: var(--text-muted); font-size: 1.1rem; text-align:center;">
-                <i class="fa-solid fa-circle-dot"></i> Esperando acción del docente...
+                <i class="fa-solid fa-circle-dot"></i> Esperando acción del maestro...
              </div>
              
              <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px;">
@@ -1828,7 +1740,7 @@ function renderMaestroAula() {
 }
 
 function renderMaestroActividades() {
-  setTimeout(() => { if(window.loadActividadesDocente) window.loadActividadesDocente(); }, 100);
+  setTimeout(() => { if(window.loadActividadesMaestro) window.loadActividadesMaestro(); }, 100);
   return `
     <div class="page-header">
       <h2 class="page-title">Actividades y Tareas</h2>
@@ -1877,7 +1789,7 @@ function renderMaestroActividades() {
          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
             <h3 style="margin:0;">Gestión de Actividades</h3>
             <div class="tabs" style="display:flex; background:var(--page-bg); padding:4px; border-radius:8px; gap:4px; align-items:center;">
-                <select id="filtroTrimestreAct" class="form-select" style="margin:0; padding:4px 8px; font-size:0.8rem; width:120px;" onchange="window.loadActividadesDocente()">
+                <select id="filtroTrimestreAct" class="form-select" style="margin:0; padding:4px 8px; font-size:0.8rem; width:120px;" onchange="window.loadActividadesMaestro()">
                     <option value="1">1° Trimestre</option>
                     <option value="2">2° Trimestre</option>
                     <option value="3">3° Trimestre</option>
@@ -1891,7 +1803,7 @@ function renderMaestroActividades() {
                 </button>
             </div>
          </div>
-         <div id="listaActividadesDocente" style="display:flex; flex-direction:column; gap:12px;">
+         <div id="listaActividadesMaestro" style="display:flex; flex-direction:column; gap:12px;">
             <div style="text-align:center; padding:20px; color:var(--text-muted)">Cargando actividades...</div>
          </div>
       </div>
@@ -1919,7 +1831,7 @@ function renderMaestroActividades() {
 }
 
 function renderMaestroListas() {
-  setTimeout(() => { if(window.loadListasDocente) window.loadListasDocente(); }, 100);
+  setTimeout(() => { if(window.loadListasMaestro) window.loadListasMaestro(); }, 100);
   return `
     <div class="page-header">
       <h2 class="page-title">Listas y Evaluación Formativa</h2>
@@ -1958,7 +1870,7 @@ function renderMaestroListas() {
        
        <div style="overflow-x:auto;">
          <table class="risk-table" style="width:100%">
-           <thead id="listaDocenteCabecera">
+           <thead id="listaMaestroCabecera">
              <tr>
                 <th style="padding:12px; text-align:left;">Alumno</th>
                 <th style="padding:12px; text-align:center;">Actividades Revisadas</th>
@@ -1966,7 +1878,7 @@ function renderMaestroListas() {
                 <th style="padding:12px; text-align:center;">Contacto</th>
              </tr>
            </thead>
-           <tbody id="listaDocenteAlumnos">
+           <tbody id="listaMaestroAlumnos">
               <tr><td colspan="4" style="text-align:center; padding: 20px; color:var(--text-muted)">Seleccione un grupo para ver a los alumnos...</td></tr>
            </tbody>
          </table>
@@ -2099,7 +2011,7 @@ function renderMaestroBitacora() {
   setTimeout(() => { if(window.cargarBitacora) window.cargarBitacora(tD); }, 100);
   return `
     <div class="page-header">
-      <h2 class="page-title">Bitácora Docente de Hechos</h2>
+      <h2 class="page-title">Bitácora de Maestros (Hechos)</h2>
       <p class="page-subtitle">Registro de incidencias, recados o reportes acontecidos dentro y fuera del salón durante la jornada. Compartible con Prefectura y Trabajo Social.</p>
     </div>
     
@@ -2450,7 +2362,7 @@ window.loadHistorialReportesApoyo = async (fechaSeleccionada) => {
                    <div style="display:flex; justify-content:space-between; margin-bottom:8px;">
                       <span style="font-size:0.8rem; color:var(--text-muted)">
                         <i class="fa-solid fa-clock"></i> <b>${hour}</b> | 
-                        <i class="fa-solid fa-user-tie"></i> <b>${r.perfiles?.nombre || 'Docente'}</b> 
+                        <i class="fa-solid fa-user-tie"></i> <b>${r.perfiles?.nombre || 'Maestro'}</b> 
                         <span style="text-transform:uppercase; font-size:0.7rem; background:#eee; padding:2px 6px; border-radius:4px; margin-left:4px;">${r.perfiles?.rol || 'Personal'}</span>
                       </span>
                       <span class="badge" style="background:${r.resuelto ? 'var(--success)' : sevColor}; color:white">${r.resuelto ? 'Resuelto' : r.gravedad}</span>
@@ -2462,7 +2374,7 @@ window.loadHistorialReportesApoyo = async (fechaSeleccionada) => {
             }).join('')}`;
     } catch(e) { 
         console.error("History Load Error:", e);
-        cont.innerHTML = '<div style="padding:40px; text-align:center; color:var(--danger)">Error al conectar con el servidor de reportes.</div>';
+        cont.innerHTML = '<div style="padding:40px; text-align:center; color:var(--danger)"><i class="fa-solid fa-triangle-exclamation"></i> Error al conectar con el servidor de reportes.</div>';
     }
 };
 
@@ -2553,7 +2465,8 @@ window.guardarReporteApoyo = async () => {
             autor_id: u.data.user.id,
             descripcion: finalDesc,
             gravedad: sev,
-            resuelto: false
+            resuelto: false,
+            plantel_id: state.plantelId
         }]);
 
         if(error) throw error;
@@ -2573,7 +2486,8 @@ window.guardarReporteApoyo = async () => {
                 titulo: `🚨 CITATORIO URGENTE: Seguimiento Conductual`,
                 mensaje: `Estimado alumno y padre de familia/tutor:\n\nSe ha detectado una acumulación crítica de ${gravesCount} reportes graves sin atender. ES REQUISITO INDISPENSABLE presentarse en el área de Trabajo Social para una junta de seguimiento y firma de compromisos.\n\nEl acceso al portal podría verse limitado si no se atiende este citatorio.`,
                 audiencia: `Alumno_${aid}`,
-                tipo: 'General'
+                tipo: 'General',
+                plantel_id: state.plantelId
             }]);
             window.showToast("Citatorio automático enviado por acumulación de reportes", "warning");
         } else if(sev === 'Grave' || cat === 'Conducta') {
@@ -2582,7 +2496,8 @@ window.guardarReporteApoyo = async () => {
                 titulo: `Aviso de Incidencia: ${cat}`,
                 mensaje: `Se ha registrado un reporte de tipo ${cat} (${sev}) para seguimiento de Trabajo Social.\n\nDescripción breve: ${desc.substring(0, 100)}...`,
                 audiencia: `Alumno_${aid}`,
-                tipo: 'General'
+                tipo: 'General',
+                plantel_id: state.plantelId
             }]);
         }
 
@@ -2634,7 +2549,8 @@ window.guardarAtencionFoco = async () => {
             alumno_id: aid,
             maestro_id: u.data.user.id,
             procedimiento: proc,
-            compromisos: comp
+            compromisos: comp,
+            plantel_id: state.plantelId
         }]);
         if(errInt) {
             console.error("Error INSERT:", errInt);
@@ -2653,7 +2569,8 @@ window.guardarAtencionFoco = async () => {
             autor_id: u.data.user.id,
             titulo: `✅ SITUACIÓN ATENDIDA Y RESUELTA`,
             mensaje: `Se ha concluido la junta de seguimiento conductual.\n\nPROCEDIMIENTO: ${proc.substring(0, 100)}...\nCOMPROMISOS: ${comp.substring(0, 100)}...\n\nTu expediente ha sido actualizado. ¡Gracias por tu compromiso!`,
-            audiencia: `Alumno_${aid}`
+            audiencia: `Alumno_${aid}`,
+            plantel_id: state.plantelId
         }]);
 
         window.showToast("Atención registrada y reportes resueltos", "success");
@@ -2715,7 +2632,7 @@ window.showAlumnoExpediente = async (idAlumno) => {
                             <div style="font-size:0.85rem; border:1px solid var(--border); border-radius:8px; padding:10px; border-left:4px solid ${r.gravedad === 'Grave' ? 'var(--danger)' : 'var(--warning)'}">
                                 <div style="display:flex; justify-content:space-between;"><b>${r.gravedad}</b> <small>${new Date(r.fecha).toLocaleDateString()}</small></div>
                                 <p style="margin:4px 0;">${r.descripcion}</p>
-                                <small style="color:var(--text-muted)">Por: ${r.perfiles?.nombre || 'Docente'}</small>
+                                <small style="color:var(--text-muted)">Por: ${r.perfiles?.nombre || 'Maestro'}</small>
                             </div>
                         `).join('') : '<p style="color:var(--text-muted); font-style:italic;">Sin reportes registrados.</p>'}
                     </div>
@@ -2939,7 +2856,7 @@ window.emitirJustificanteSalud = async (alumnoId, nombre) => {
         }]);
 
         if(error) throw error;
-        alert("Justificante enviado exitosamente a todos los docentes del grupo.");
+        alert("Justificante enviado exitosamente a todos los maestros del grupo.");
     } catch(e) { 
         console.error(e);
         alert("Error al enviar el justificante.");
@@ -3213,7 +3130,8 @@ window.generarInasistenciasMasivas = async () => {
                 alumno_id: f.id,
                 estado: 'Inasistencia',
                 fecha: hoy,
-                registrador_id: u.data.user?.id
+                registrador_id: u.data.user?.id,
+                plantel_id: state.plantelId
             }));
 
             const { error: insErr } = await supabaseClient.from('accesos_plantel').insert(inserts);
@@ -3227,7 +3145,8 @@ window.generarInasistenciasMasivas = async () => {
                 autor_id: u.data.user?.id,
                 titulo: "⚠️ Aviso de Inasistencia Institucional",
                 audiencia: `Alumno_${f.id}`,
-                mensaje: `Se ha registrado una INASISTENCIA en el portal de acceso escolar hoy (${new Date().toLocaleDateString()}). Es indispensable que acudas a Trabajo Social para realizar la justificación correspondiente.`
+                mensaje: `Se ha registrado una INASISTENCIA en el portal de acceso escolar hoy (${new Date().toLocaleDateString()}). Es indispensable que acudas a Trabajo Social para realizar la justificación correspondiente.`,
+                plantel_id: state.plantelId
             }));
 
             const { error: msgErr } = await supabaseClient.from('comunicados').insert(msgInserts);
@@ -3484,12 +3403,13 @@ window.solicitarTramiteAlumno = async () => {
             .eq('contacto_email', uRes.data.user.email)
             .maybeSingle();
 
-        if(errA || !alumno) return alert("No se encontró tu expediente de alumno. Contacta a tu administrador.");
+        if(errA || !alumno) return alert("No se encontró tu expediente de alumno. Contacta a tu admin.");
 
         const { error } = await supabaseClient.from('tramites').insert([{
             alumno_id: alumno.id,
             tipo: tipo,
-            estado: 'Pendiente'
+            estado: 'Pendiente',
+            plantel_id: state.plantelId
         }]);
 
         if(error) throw error;
@@ -3825,7 +3745,7 @@ window.resolverAutorizacion = async (id, dictamen, payloadStr = null) => {
                     const { data: tData } = await supabaseClient.from('grupos').select('id').eq('nombre', payload.targetNom).maybeSingle();
                     if(tData) targetId = tData.id;
                     else {
-                        const { data: nG } = await supabaseClient.from('grupos').insert([{ nombre: payload.targetNom }]).select().single();
+                        const { data: nG } = await supabaseClient.from('grupos').insert([{ nombre: payload.targetNom, plantel_id: state.plantelId }]).select().single();
                         targetId = nG.id;
                     }
                     const { error } = await supabaseClient.from('alumnos').update({ grupo_id: targetId, grado: payload.tGrado }).eq('grupo_id', sData.id);
@@ -3881,7 +3801,7 @@ function renderDirectivoPersonal() {
     return `
       <div class="page-header">
         <h2 class="page-title">Gestión de Personal Escolar</h2>
-        <p class="page-subtitle">Registra y administra los perfiles autorizados (Administrativos, Docentes, Apoyo).</p>
+        <p class="page-subtitle">Registra y administra los perfiles autorizados (Admin, Maestros, Apoyo).</p>
       </div>
 
       <div style="display:grid; grid-template-columns: 1.2fr 1.8fr; gap:24px;">
@@ -3899,10 +3819,10 @@ function renderDirectivoPersonal() {
            <div class="form-group">
               <label class="form-label">Rol en el Plantel</label>
               <select id="perRol" class="form-select">
-                 <option value="administrativo">Administrativo (Control Escolar)</option>
-                 <option value="docente">Docente (Docente de Aula)</option>
+                 <option value="maestro">Maestro</option>
                  <option value="apoyo">Apoyo (Prefectura / Trabajo Social)</option>
                  <option value="directivo">Directivo (Director / Subdirector)</option>
+                 <option value="admin">Admin (Control Escolar)</option>
               </select>
            </div>
            <button class="btn btn-primary" style="width:100%; margin-top:10px;" onclick="window.registrarNuevoPersonal()">
@@ -3929,19 +3849,41 @@ window.registrarNuevoPersonal = async () => {
 
     if(!nombre || !email || !rol) return alert("Por favor llena todos los campos.");
 
-    if(!confirm(`¿Deseas autorizar el acceso de ${nombre} como ${rol.toUpperCase()}?`)) return;
+    const roleDisplay = { admin: 'ADMIN', maestro: 'MAESTRO', apoyo: 'APOYO', directivo: 'DIRECTIVO', alumno: 'ESTUDIANTE' };
+    const niceRol = roleDisplay[rol] || rol.toUpperCase();
+
+    if(!confirm(`¿Deseas autorizar el acceso de ${nombre} como ${niceRol}?`)) return;
 
     try {
-        const { error } = await supabaseClient.from('perfiles_permitidos').upsert([{
-            nombre, email, rol, plantel_id: state.plantelId
-        }], { onConflict: 'email' });
+        // Normalización Blindada: admin/administrativo -> admin, maestro/maestro -> maestro
+        const finalRol = (['admin','administrativo','admin'].includes(rol)) ? 'admin' : (['maestro','maestro'].includes(rol) ? 'maestro' : rol);
+        
+        // Recuperar Plantel ID con máxima prioridad (State -> Metadata -> Fetch DB)
+        let finalPlantel = state.plantelId || state.user?.user_metadata?.plantel_id;
+        
+        if(!finalPlantel && state.user?.id) {
+            const { data: prof } = await supabaseClient.from('perfiles').select('plantel_id').eq('id', state.user.id).single();
+            finalPlantel = prof?.plantel_id;
+        }
 
-        if(error) throw error;
+        if(!finalPlantel) return alert("❌ Error: No se pudo identificar tu plantel. Por favor recarga la página.");
+
+        // LLAMADA SEGURA RPC (Hereda plantel automáticamente en el servidor)
+        const { error: rpcError } = await supabaseClient.rpc('registrar_personal_seguro', {
+            p_nombre: nombre,
+            p_email: email,
+            p_rol: finalRol
+        });
+
+        if(rpcError) throw rpcError;
 
         window.showToast("Personal registrado con éxito", "success");
-        document.getElementById('perNombre').value = '';
-        document.getElementById('perEmail').value = '';
-        window.loadPersonalDirectivo();
+        // Limpiado agresivo del formulario
+        if(document.getElementById('perNombre')) document.getElementById('perNombre').value = '';
+        if(document.getElementById('perEmail')) document.getElementById('perEmail').value = '';
+        
+        if(window.loadPersonalDirectivo) window.loadPersonalDirectivo();
+        if(window.loadListasAdminPersonal) window.loadListasAdminPersonal();
     } catch(e) { alert("Error: " + e.message); }
 };
 
@@ -3970,8 +3912,8 @@ window.loadPersonalDirectivo = async () => {
                   <div style="font-weight:600;">${p.nombre || 'Sin nombre'}</div>
                   <div style="font-size:0.75rem; color:var(--text-muted)">${p.email}</div>
                </div>
-               <span class="badge" style="background:${p.rol === 'directivo' ? '#fee2e2' : (p.rol === 'docente' ? '#dcfce7' : '#fef9c3')}; color:${p.rol === 'directivo' ? '#991b1b' : (p.rol === 'docente' ? '#166534' : '#854d0e')}; padding:4px 8px; font-size:0.7rem; font-weight:bold; border-radius:6px; text-transform:uppercase;">
-                  ${p.rol}
+               <span class="badge" style="background:${p.rol === 'directivo' ? '#fee2e2' : (p.rol === 'maestro' ? '#dcfce7' : '#fef9c3')}; color:${p.rol === 'directivo' ? '#991b1b' : (p.rol === 'maestro' ? '#166534' : '#854d0e')}; padding:4px 8px; font-size:0.7rem; font-weight:bold; border-radius:6px; text-transform:uppercase;">
+                   ${p.rol === 'maestro' ? 'MAESTRO' : p.rol.toUpperCase()}
                </span>
             </div>
         `).join('');
@@ -3998,16 +3940,26 @@ function generateHTML(content) {
 }
 
 async function renderPage(path) {
-  // Manejar parámetros de URL
-  const [purePath] = path.split('?');
+  // Manejar parámetros de URL y normalizar barras
+  let [purePath] = path.split('?');
+  if (purePath.length > 1 && purePath.endsWith('/')) purePath = purePath.slice(0, -1);
+  
+  console.log(">>> [ROUTING] Cargando ruta:", purePath, "para rol:", state.role);
   
   // Routes Definition
   switch(purePath) {
+    case '/': 
+        if(esAdmin(state.role)) return renderAdminInscripcion();
+        if(state.role === 'directivo') return renderDirectivoAutorizaciones();
+        if(state.role === 'maestro') return renderMaestroAula();
+        if(state.role === 'apoyo') return renderApoyoDashboard();
+        if(state.role === 'alumno') return renderAlumnoCredencial();
+        return renderLandingPage();
     case '/master/saas': return (state.user?.email === 'zlagustin10@gmail.com') ? await renderMasterSaaS() : '<h2>Acceso Denegado</h2>';
     case '/admin/inscripcion': return renderAdminInscripcion();
     case '/admin/expediente': return renderAdminExpediente();
     case '/admin/grupos': return renderAdminGrupos();
-    case '/admin/docentes': return renderAdminDocentes();
+    case '/admin/maestros': return renderAdminMaestros();
     case '/admin/calificaciones': return renderAdminCalificaciones();
     case '/admin/tramites': return renderAdminTramites();
     case '/admin/comunicados': return renderAdminComunicados();
@@ -4074,9 +4026,7 @@ async function renderMasterSaaS() {
                 </div>
 
                 <div style="display:flex; gap:12px;">
-                   <button class="btn btn-primary" style="flex:1; font-size:0.8rem;" onclick="window.gestionarPlantelSaaS('${p.id}', '${p.nombre}')">
-                      <i class="fa-solid fa-users-gear"></i> Gestionar
-                   </button>
+                   <button class="btn btn-primary" style="flex:1; font-size:0.8rem;" onclick="alert('Funciones PRO pronto')"><i class="fa-solid fa-eye"></i> Gestionar</button>
                    <button class="btn" style="flex:1; font-size:0.8rem; background:#fee2e2; color:#dc2626; border:1px solid #fecaca;" onclick="window.eliminarPlantelSaaS('${p.id}', '${p.nombre}')">
                       <i class="fa-solid fa-trash"></i> Eliminar
                    </button>
@@ -4087,217 +4037,6 @@ async function renderMasterSaaS() {
         `;
     } catch(e) { return `<div class="error-box">Error SaaS: ${e.message}</div>`; }
 }
-
-window.gestionarPlantelSaaS = async (id, nombre) => {
-    console.log("Gestionando plantel con pestañas:", nombre);
-    
-    let admin = window.supaAdmin;
-    if(!admin && typeof supabase !== 'undefined') {
-        admin = supabase.createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE, {
-            auth: { autoRefreshToken: false, persistSession: false, detectSessionInUrl: false }
-        });
-    }
-
-    const modalId = 'modal-tabs-saas';
-    let modal = document.getElementById(modalId);
-    if(!modal) {
-        modal = document.createElement('div');
-        modal.id = modalId;
-        modal.className = 'modal-overlay';
-        modal.style.zIndex = '10001';
-        document.body.appendChild(modal);
-    }
-
-    // Estructura Base con Pestañas
-    modal.innerHTML = `
-        <div class="modal-content" style="max-width: 900px; width: 95%; max-height: 90vh; overflow-y: auto; padding: 0; display:flex; flex-direction:column;">
-            <!-- Header Fijo -->
-            <div style="padding: 24px; border-bottom: 1px solid var(--border); background: #fff; position: sticky; top: 0; z-index: 10;">
-                <button class="modal-close" onclick="window.cerrarModalSaaS()" style="float:right;">&times;</button>
-                <h3 style="margin:0; color: var(--primary); font-weight: 800;"><i class="fa-solid fa-server"></i> Gestión de Plantel</h3>
-                <p style="margin:0; color: var(--text-muted); font-size: 0.9rem;">${nombre}</p>
-                
-                <div class="tabs" style="margin-top: 20px; gap: 4px;">
-                    <button class="tab-btn active" id="tab-activos" onclick="window.switchSaaSTab('activos')">
-                        <i class="fa-solid fa-user-check"></i> Usuarios Activos
-                    </button>
-                    <button class="tab-btn" id="tab-permitidos" onclick="window.switchSaaSTab('permitidos')">
-                        <i class="fa-solid fa-user-plus"></i> Autorizaciones
-                    </button>
-                </div>
-            </div>
-
-            <!-- Contenido Scrollable -->
-            <div style="padding: 24px; flex: 1;">
-                <div id="saas-tab-loading" style="text-align:center; padding: 40px;">
-                    <i class="fa-solid fa-sync fa-spin fa-2x" style="color: var(--primary);"></i>
-                    <p>Sincronizando con Supabase...</p>
-                </div>
-
-                <div id="saas-tab-content" style="display:none;">
-                    <!-- Tabla Activos -->
-                    <div id="view-activos" class="tab-view">
-                         <div style="display:flex; justify-content:space-between; margin-bottom:15px; align-items:center;">
-                            <h4 style="margin:0;">Personal Registrado</h4>
-                            <span class="badge bg-success" id="count-activos">0</span>
-                         </div>
-                         <div style="background:white; border:1px solid var(--border); border-radius:12px; overflow:hidden;">
-                            <table style="width:100%; border-collapse:collapse; font-size:0.85rem;">
-                                <thead style="background:#f8fafc; text-align:left;">
-                                    <tr>
-                                        <th style="padding:12px;">Usuario</th>
-                                        <th style="padding:12px;">Rol</th>
-                                        <th style="padding:12px; text-align:center;">Acciones</th>
-                                    </tr>
-                                </thead>
-                                <tbody id="list-activos"></tbody>
-                            </table>
-                         </div>
-                    </div>
-
-                    <!-- Tabla Permitidos CON FILTROS POR ROL -->
-                    <div id="view-permitidos" class="tab-view" style="display:none;">
-                         <div style="display:flex; justify-content:space-between; margin-bottom:15px; align-items:center;">
-                            <h4 style="margin:0;">Permisos & Invitaciones</h4>
-                            <span class="badge bg-warning" id="count-permitidos">0</span>
-                         </div>
-                         
-                         <!-- Sub-filtros de Rol (Actualizados según DB) -->
-                         <div style="display:flex; gap:8px; margin-bottom:20px; overflow-x:auto; padding-bottom:5px;">
-                            <button class="btn btn-xs btn-outline active-filter" onclick="window.filterSaaSRole('directivo')" id="filter-directivo">Directivos</button>
-                            <button class="btn btn-xs btn-outline" onclick="window.filterSaaSRole('maestro')" id="filter-maestro">Maestros</button>
-                            <button class="btn btn-xs btn-outline" onclick="window.filterSaaSRole('alumno')" id="filter-alumno">Alumnos</button>
-                            <button class="btn btn-xs btn-outline" onclick="window.filterSaaSRole('administrativo')" id="filter-administrativo">Administrativo</button>
-                         </div>
-
-                         <div style="background:white; border:1px solid var(--border); border-radius:12px; overflow:hidden;">
-                            <table style="width:100%; border-collapse:collapse; font-size:0.85rem;">
-                                <thead style="background:#f8fafc; text-align:left;">
-                                    <tr>
-                                        <th style="padding:12px;">Nombre / Email</th>
-                                        <th style="padding:12px;">Rol Asignado</th>
-                                        <th style="padding:12px;">Estado</th>
-                                    </tr>
-                                </thead>
-                                <tbody id="list-permitidos"></tbody>
-                            </table>
-                         </div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Footer Fijo -->
-            <div style="padding: 16px 24px; border-top: 1px solid var(--border); background: #f8fafc; display: flex; justify-content: space-between; align-items: center; border-bottom-left-radius: var(--radius-lg); border-bottom-right-radius: var(--radius-lg);">
-                 <code style="font-size:0.65rem; color:var(--text-muted);">REF: ${id}</code>
-                 <button class="btn btn-primary btn-sm" onclick="alert('Funcionalidad para agregar autorizaciones próximamente')">
-                    <i class="fa-solid fa-plus"></i> Nueva Autorización
-                 </button>
-            </div>
-            
-            <style>
-                .active-filter { background: var(--primary) !important; color: white !important; border-color: var(--primary) !important; font-weight: 700; }
-            </style>
-        </div>
-    `;
-
-    let dataPermitidos = [];
-
-    // Lógica de cambio de Pestañas Principales
-    window.switchSaaSTab = (tab) => {
-        document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-        document.querySelectorAll('.tab-view').forEach(v => v.style.display = 'none');
-        document.getElementById(`tab-${tab}`).classList.add('active');
-        document.getElementById(`view-${tab}`).style.display = 'block';
-    };
-
-    // Lógica de Filtrado por Rol en Autorizaciones (AJUSTADO A DB)
-    window.filterSaaSRole = (rol) => {
-        console.log("Filtrando por rol DB:", rol);
-        document.querySelectorAll('#view-permitidos .btn-outline').forEach(b => b.classList.remove('active-filter'));
-        const btn = document.getElementById(`filter-${rol}`);
-        if(btn) btn.classList.add('active-filter');
-
-        const filtered = dataPermitidos.filter(u => {
-            const roleDb = (u.rol || '').toLowerCase().trim();
-            // Soporte para variaciones comunes
-            if (rol === 'directivo' && (roleDb === 'admin' || roleDb === 'director')) return true;
-            if (rol === 'administrativo' && (roleDb === 'apoyo' || roleDb === 'personal')) return true;
-            return roleDb === rol.toLowerCase().trim();
-        });
-
-        const listPermitidos = document.getElementById('list-permitidos');
-        
-        if(filtered.length === 0) {
-            listPermitidos.innerHTML = `<tr><td colspan="3" style="padding:40px; text-align:center; color:var(--text-muted);">
-                <i class="fa-solid fa-folder-open fa-2x" style="display:block; margin-bottom:10px; opacity:0.2;"></i>
-                No hay perfiles de "${rol}" registrados aquí.
-            </td></tr>`;
-        } else {
-            listPermitidos.innerHTML = filtered.map(u => `
-                <tr style="border-bottom: 1px solid var(--border);" class="risk-row">
-                    <td style="padding:12px;">
-                        <div style="font-weight:700; color:var(--text-main);">${u.nombre || 'Invitado'}</div>
-                        <div style="font-size:0.7rem; color:var(--text-muted);">${u.email}</div>
-                    </td>
-                    <td style="padding:12px;"><span class="badge" style="background:#fef3c7; color:#92400e; text-transform:uppercase;">${u.rol}</span></td>
-                    <td style="padding:12px;">
-                        <span class="badge ${u.estado === 'activo' ? 'bg-success' : 'bg-warning'}" style="font-size:0.6rem;">${u.estado}</span>
-                    </td>
-                </tr>
-            `).join('');
-        }
-    };
-
-    window.cerrarModalSaaS = () => { if(modal) modal.remove(); };
-
-    try {
-        const [resActivos, resPermitidos] = await Promise.all([
-            admin.from('perfiles').select('*').eq('plantel_id', id).order('nombre'),
-            admin.from('perfiles_permitidos').select('*').eq('plantel_id', id).order('nombre')
-        ]);
-
-        if(resActivos.error) throw resActivos.error;
-        if(resPermitidos.error) throw resPermitidos.error;
-
-        dataPermitidos = resPermitidos.data;
-
-        document.getElementById('saas-tab-loading').style.display = 'none';
-        document.getElementById('saas-tab-content').style.display = 'block';
-
-        // Render Activos
-        const listActivos = document.getElementById('list-activos');
-        document.getElementById('count-activos').innerText = `${resActivos.data.length}`;
-        
-        if(resActivos.data.length === 0) {
-            listActivos.innerHTML = `<tr><td colspan="3" style="padding:20px; text-align:center; color:var(--text-muted);">Sin usuarios registrados.</td></tr>`;
-        } else {
-            listActivos.innerHTML = resActivos.data.map(u => `
-                <tr style="border-bottom: 1px solid var(--border);">
-                    <td style="padding:12px;">
-                        <div style="font-weight:700;">${u.nombre || 'Anon'}</div>
-                        <div style="font-size:0.7rem; color:var(--text-muted);">${u.email || '-'}</div>
-                    </td>
-                    <td style="padding:12px;"><span class="badge" style="background:#e0f2fe; color:#0369a1;">${u.rol === 'directivo' ? 'Directivo' : u.rol}</span></td>
-                    <td style="padding:12px; text-align:center;">
-                        <button class="btn btn-xs btn-outline" onclick="console.log('${u.id}')"><i class="fa-solid fa-eye"></i></button>
-                    </td>
-                </tr>
-            `).join('');
-        }
-
-        // Selección por defecto: Directivos
-        document.getElementById('count-permitidos').innerText = `${dataPermitidos.length}`;
-        window.filterSaaSRole('directivo');
-
-    } catch(err) {
-        document.getElementById('saas-tab-loading').innerHTML = `<div style="color:var(--danger);">Error: ${err.message}</div>`;
-    }
-};
-
-window.cerrarModalSaaS = () => {
-    const modal = document.getElementById('modal-gestion-saas');
-    if(modal) modal.remove();
-};
 
 window.eliminarPlantelSaaS = async (id, nombre) => {
     if(!confirm(`⚠️ ¿ELIMINAR ${nombre.toUpperCase()}?\nEsta acción es irreversible y borrará TODO el plantel.`)) return;
@@ -4364,9 +4103,9 @@ window.loadMisGruposMaestro = async () => {
 
         // 2. Consultar asignaciones
         const { data: asigs, error } = await supabaseClient
-            .from('asignaciones_docentes')
+            .from('asignaciones_maestros')
             .select('grupo_id, target_grado, materia, grupos(*)')
-            .eq('docente_email', email);
+            .eq('maestro_email', email);
 
         if(error) throw error;
         
@@ -4446,11 +4185,12 @@ window.saveApoyoBitacora = async () => {
         const nombre = state.user?.nombre || email;
         const rol = state.user?.rol === 'apoyo' ? 'Prefectura/TS' : (state.user?.rol || 'Personal');
 
-        const { error } = await supabaseClient.from('bitacora_docente').insert({
+        const { error } = await supabaseClient.from('bitacora_maestro').insert({
             texto: texto,
             perfil_id: state.user.id,
             firma_autor: `${nombre} [${rol}]`,
-            fecha_referencia: fechaRef
+            fecha_referencia: fechaRef,
+            plantel_id: state.plantelId
         });
         if(error) throw error;
         document.getElementById('textoBitacoraApoyo').value = '';
@@ -4467,7 +4207,7 @@ window.loadApoyoBitacora = async (fechaSeleccionada) => {
     
     try {
         const { data, error } = await supabaseClient
-            .from('bitacora_docente')
+            .from('bitacora_maestro')
             .select('*')
             .eq('fecha_referencia', fecha)
             .order('creado_en', {ascending: false});
@@ -4552,7 +4292,8 @@ window.registrarSaludAlumno = async () => {
             alumno_id: aid, 
             tipo_alergia: motivo, 
             observaciones_medicas: obs,
-            perfil_id: state.user.id
+            perfil_id: state.user.id,
+            plantel_id: state.plantelId
         });
         if(error) throw error;
         window.showToast('Registro de salud guardado.', 'success');
@@ -4583,7 +4324,8 @@ window.registrarJustificanteMedico = async () => {
             autor_id: state.user.id,
             motivo: motivo,
             fecha_inicio: inicio,
-            fecha_fin: fin
+            fecha_fin: fin,
+            plantel_id: state.plantelId
         }).select().single();
         
         if(error) {
@@ -4592,7 +4334,7 @@ window.registrarJustificanteMedico = async () => {
         }
 
         // 2. Notificar a Maestros
-        await window.notificarDocentesJustificante(aid, motivo, inicio, fin);
+        await window.notificarMaestrosJustificante(aid, motivo, inicio, fin);
 
         window.showToast('Justificante generado y enviado a maestros.', 'success');
         
@@ -4611,7 +4353,7 @@ window.registrarJustificanteMedico = async () => {
     }
 };
 
-window.notificarDocentesJustificante = async (alumnoId, motivo, inicio, fin) => {
+window.notificarMaestrosJustificante = async (alumnoId, motivo, inicio, fin) => {
     try {
         // Obtener grupo y nombre del alumno
         const { data: al, error: alErr } = await supabaseClient.from('alumnos').select('nombre, grupo_id').eq('id', alumnoId).single();
@@ -4696,7 +4438,7 @@ window.loadHistorialSalud = async () => {
                 <div style="font-size:0.75rem; color:var(--text-main); background:#fff3cd; padding:4px 8px; border-radius:4px; display:inline-block; margin:4px 0;">
                     Válido: ${new Date(s.fecha_inicio).toLocaleDateString()} al ${new Date(s.fecha_fin).toLocaleDateString()}
                 </div>
-                <p style="margin:0; font-size:0.8rem; color:var(--text-muted)">Justificante oficial enviado a docentes.</p>
+                <p style="margin:0; font-size:0.8rem; color:var(--text-muted)">Justificante oficial enviado a maestros.</p>
               </div>`;
           }
         }).join('');
@@ -4959,7 +4701,7 @@ window.loadFirmasPendientes = async () => {
                  <div class="card" style="border:1px solid var(--warning); margin-bottom:12px;">
                     <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid #fef3c7; padding-bottom:12px; margin-bottom:12px;">
                        <span style="font-weight:bold; color:var(--warning)"><i class="fa-solid fa-file-signature"></i> Encuadre Pendiente</span>
-                       <span style="font-size:0.8rem; color:var(--text-muted)">Docente: ${enc.perfiles ? enc.perfiles.nombre : 'Maestro'}</span>
+                       <span style="font-size:0.8rem; color:var(--text-muted)">Maestro: ${enc.perfiles ? enc.perfiles.nombre : 'Maestro'}</span>
                     </div>
                     <h4 style="margin:0 0 8px 0;">Materia: ${enc.materia}</h4>
                     <p style="font-size:0.85rem; color:var(--text-main); margin-bottom:8px;">Por favor, revise con su hij@ los rubros de evaluación para este ciclo y firme de enterado:</p>
@@ -4988,7 +4730,12 @@ window.firmarEncuadre = async (encuadre_id, alumno_id) => {
     if(!firma) return;
     
     try {
-        const { error } = await supabaseClient.from('firmas_encuadre').insert([{ encuadre_id: encuadre_id, alumno_id: alumno_id, firma: firma }]);
+        const { error } = await supabaseClient.from('firmas_encuadre').insert([{ 
+            encuadre_id: encuadre_id, 
+            alumno_id: alumno_id, 
+            firma: firma,
+            plantel_id: state.plantelId
+        }]);
         if(error) throw error;
         alert("Firma de enterado registrada exitosamente. Muchas gracias.");
         window.loadFirmasPendientes();
@@ -5423,7 +5170,7 @@ window.loadTimelinePersonal = async (selectedDate) => {
             audArr.push('Maestro_' + userId);
             
             // Cargar asignaciones (grupos específicos y grados completos)
-            const { data: asig } = await supabaseClient.from('asignaciones_docentes').select('grupo_id, target_grado').eq('docente_email', email);
+            const { data: asig } = await supabaseClient.from('asignaciones_maestros').select('grupo_id, target_grado').eq('maestro_email', email);
             
             if(asig) {
                 for (const a of asig) {
@@ -5532,12 +5279,12 @@ window.cambiarTabActividades = (tab) => {
         btnV.style.color = 'var(--text-muted)';
     }
     
-    window.loadActividadesDocente();
+    window.loadActividadesMaestro();
 };
 
-window.loadActividadesDocente = async () => {
+window.loadActividadesMaestro = async () => {
     const selGrupo = document.getElementById('actMateriaGrupo');
-    const constLista = document.getElementById('listaActividadesDocente');
+    const constLista = document.getElementById('listaActividadesMaestro');
     if(!constLista) return;
     
     const currentTab = state.actividadesTab || 'vigentes';
@@ -5549,9 +5296,9 @@ window.loadActividadesDocente = async () => {
 
         // Cargar seleccionables (solo si existe el select y está vacío/default)
         if (selGrupo && (selGrupo.innerHTML.includes("Cargando") || selGrupo.options.length <= 1)) {
-            const { data: asigs, error: errAsigs } = await supabaseClient.from('asignaciones_docentes')
+            const { data: asigs, error: errAsigs } = await supabaseClient.from('asignaciones_maestros')
                .select('materia, grupo_id, target_grado, grupos(id, nombre)')
-               .eq('docente_email', email)
+               .eq('maestro_email', email)
                .or('grupo_id.not.is.null,target_grado.not.is.null');
                
             if(!errAsigs && asigs) {
@@ -5564,11 +5311,11 @@ window.loadActividadesDocente = async () => {
             }
         }
 
-        // Fetch actividades del docente filtradas por pestaña y trimestre
+        // Fetch actividades del maestro filtradas por pestaña y trimestre
         const isFinalizada = currentTab === 'archivo';
         const trimSelected = document.getElementById('filtroTrimestreAct')?.value || 1;
         
-        const { data: misActividades, error: errAct } = await supabaseClient.from('actividades_docente')
+        const { data: misActividades, error: errAct } = await supabaseClient.from('actividades_maestro')
            .select('*, grupos(nombre), evaluaciones_actividades(id)')
            .eq('finalizada', isFinalizada)
            .eq('trimestre', trimSelected)
@@ -5595,7 +5342,7 @@ window.loadActividadesDocente = async () => {
                     <button class="btn btn-outline" style="border-color:var(--primary); color:var(--primary); font-size:0.8rem; padding:6px 12px;" onclick="window.reabrirActividad('${act.id}')">
                         <i class="fa-solid fa-rotate-left"></i> Reabrir
                     </button>
-                    <button class="btn btn-outline" style="border-color:var(--danger); color:var(--danger); font-size:0.8rem; padding:6px 12px;" onclick="window.eliminarActividadDocente('${act.id}')">
+                    <button class="btn btn-outline" style="border-color:var(--danger); color:var(--danger); font-size:0.8rem; padding:6px 12px;" onclick="window.eliminarActividadMaestro('${act.id}')">
                         <i class="fa-solid fa-trash-can"></i>
                     </button>
                 </div>` :
@@ -5633,19 +5380,19 @@ window.loadActividadesDocente = async () => {
 
     } catch (err) {
         console.error(err);
-        constLista.innerHTML = '<div style="color:var(--danger); padding:20px;text-align:center;">Error al cargar actividades del docente.</div>';
+        constLista.innerHTML = '<div style="color:var(--danger); padding:20px;text-align:center;">Error al cargar actividades del maestro.</div>';
     }
 };
 
 window.finalizarActividad = async (id) => {
     if(!confirm("¿Deseas cerrar esta actividad? Se moverá al archivo pero podrás reabrirla si necesitas evaluar más alumnos.")) return;
     try {
-        const { error } = await supabaseClient.from('actividades_docente')
+        const { error } = await supabaseClient.from('actividades_maestro')
             .update({ finalizada: true, fecha_finalizacion: new Date().toISOString() })
             .eq('id', id);
         if(error) throw error;
         window.showToast("Actividad archivada exitosamente", "success");
-        window.loadActividadesDocente();
+        window.loadActividadesMaestro();
     } catch(err) {
         console.error(err);
         alert("Error al cerrar actividad.");
@@ -5654,19 +5401,19 @@ window.finalizarActividad = async (id) => {
 
 window.reabrirActividad = async (id) => {
     try {
-        const { error } = await supabaseClient.from('actividades_docente')
+        const { error } = await supabaseClient.from('actividades_maestro')
             .update({ finalizada: false, fecha_finalizacion: null })
             .eq('id', id);
         if(error) throw error;
         window.showToast("Actividad reabierta para evaluación", "success");
-        window.loadActividadesDocente();
+        window.loadActividadesMaestro();
     } catch(err) {
         console.error(err);
         alert("Error al reabrir actividad.");
     }
 };
 
-window.eliminarActividadDocente = async (id) => {
+window.eliminarActividadMaestro = async (id) => {
     if(!confirm("⚠️ ¿Estás seguro de ELIMINAR esta actividad definitivamente?\n\nEsta acción borrará también todas las calificaciones asentadas en ella y no se puede deshacer.")) return;
 
     try {
@@ -5674,12 +5421,12 @@ window.eliminarActividadDocente = async (id) => {
         await supabaseClient.from('evaluaciones_actividades').delete().eq('actividad_id', id);
         
         // 2. Borrar la actividad
-        const { error } = await supabaseClient.from('actividades_docente').delete().eq('id', id);
+        const { error } = await supabaseClient.from('actividades_maestro').delete().eq('id', id);
         
         if(error) throw error;
         
         window.showToast("Actividad eliminada correctamente", "success");
-        window.loadActividadesDocente();
+        window.loadActividadesMaestro();
     } catch(e) { alert("Error: " + e.message); }
 };
 
@@ -5708,7 +5455,7 @@ window.agregarActividad = async () => {
        
        const trimVal = document.getElementById('actTrimestre').value || 1;
        
-       const { error: errInsert } = await supabaseClient.from('actividades_docente').insert([{
+       const { error: errInsert } = await supabaseClient.from('actividades_maestro').insert([{
            maestro_id: user.id,
            titulo: titulo,
            descripcion: desc,
@@ -5717,7 +5464,8 @@ window.agregarActividad = async () => {
            target_grado: target_grado,
            rubro_name: rubroName,
            rubro_peso: rubroPeso,
-           trimestre: parseInt(trimVal)
+           trimestre: parseInt(trimVal),
+           plantel_id: state.plantelId
        }]);
        
        if (errInsert) {
@@ -5727,7 +5475,7 @@ window.agregarActividad = async () => {
        alert("Actividad agregada exitosamente");
        document.getElementById('actTitulo').value = '';
        document.getElementById('actDesc').value = '';
-       window.loadActividadesDocente();
+       window.loadActividadesMaestro();
     } catch(err) {
        console.error("Error en agregarActividad: ", err);
        alert("Error al guardar la actividad: " + (err.message || "Revisa permisos o datos."));
@@ -5818,26 +5566,26 @@ window.guardarEvaluacionQR = async () => {
     
     try {
         const { error } = await supabaseClient.from('evaluaciones_actividades')
-          .upsert({ actividad_id: currentActividadId, alumno_id: targetStudentId, calificacion: nota }, { onConflict: 'actividad_id, alumno_id' });
+          .upsert({ actividad_id: currentActividadId, alumno_id: targetStudentId, calificacion: nota, plantel_id: state.plantelId }, { onConflict: 'actividad_id, alumno_id' });
         
         if(error) throw error;
         alert("Evaluación registrada exitosamente!");
         window.cerrarQREvaluacion();
-        window.loadActividadesDocente(); // Actualiza la lista para mostrar al alumno
+        window.loadActividadesMaestro(); // Actualiza la lista para mostrar al alumno
     } catch(err) {
         console.error(err);
         alert("Error crítico al guardar: " + (err.message || 'Error desconocido') + ". \nRevisa permisos RLS o la conexión.");
     }
 };
 
-window.loadListasDocente = async () => {
+window.loadListasMaestro = async () => {
     const selGrupo = document.getElementById('listaMaestroGrupo');
     if(!selGrupo) return;
     try {
         const email = (await supabaseClient.auth.getUser()).data.user.email;
-        const { data: asigs } = await supabaseClient.from('asignaciones_docentes')
+        const { data: asigs } = await supabaseClient.from('asignaciones_maestros')
            .select('materia, grupo_id, target_grado, grupos(id, nombre)')
-           .eq('docente_email', email)
+           .eq('maestro_email', email)
            .or('grupo_id.not.is.null,target_grado.not.is.null');
            
         if(asigs && asigs.length > 0) {
@@ -5893,16 +5641,16 @@ window.cambiarTrimestreLista = (trim, btn) => {
 };
 
 window.cargarAlumnosLista = async () => {
-    const tbody = document.getElementById('listaDocenteAlumnos');
-    const cabecera = document.getElementById('listaDocenteCabecera');
+    const tbody = document.getElementById('listaMaestroAlumnos');
+    const cabecera = document.getElementById('listaMaestroCabecera');
     const rawVal = document.getElementById('listaMaestroGrupo').value;
     const tipo = document.getElementById('listaMaestroTipo') ? document.getElementById('listaMaestroTipo').value : 'evaluaciones';
     
     // Contenedor para estadísticas (Lo buscamos o creamos arriba del de la tabla)
-    let statsCont = document.getElementById('statsListaDocente');
+    let statsCont = document.getElementById('statsListaMaestro');
     if(!statsCont && tbody) {
         statsCont = document.createElement('div');
-        statsCont.id = 'statsListaDocente';
+        statsCont.id = 'statsListaMaestro';
         statsCont.style.marginBottom = '20px';
         tbody.closest('.card').prepend(statsCont);
     }
@@ -5960,7 +5708,7 @@ window.cargarAlumnosLista = async () => {
             const currentTrim = state.selectedMaestroTrimestre || 1;
             const isModoFinal = currentTrim === 'final';
 
-            let actsQuery = supabaseClient.from('actividades_docente').select('id, titulo, rubro_name, rubro_peso, trimestre');
+            let actsQuery = supabaseClient.from('actividades_maestro').select('id, titulo, rubro_name, rubro_peso, trimestre');
             if(isTec) {
                 actsQuery = actsQuery.eq('target_grado', targetGrado).eq('materia', materia);
             } else {
@@ -6252,7 +6000,8 @@ window.justificarFaltaManual = async (alumnoId, fecha, rawVal) => {
             estado: 'Justificada',
             materia: (window.currentAulaMateria || '').trim(),
             creado_en: `${fecha}T10:00:00Z`, 
-            tipo: 'Maestro (Manual)'
+            tipo: 'Maestro (Manual)',
+            plantel_id: state.plantelId
         }]);
 
         if(error) throw error;
@@ -6270,9 +6019,9 @@ window.loadGruposCalificacionesCarga = async () => {
     if(!selGrupo) return;
     try {
         const email = (await supabaseClient.auth.getUser()).data.user.email;
-        const { data: asigs } = await supabaseClient.from('asignaciones_docentes')
+        const { data: asigs } = await supabaseClient.from('asignaciones_maestros')
            .select('materia, grupo_id, target_grado, grupos(id, nombre)')
-           .eq('docente_email', email)
+           .eq('maestro_email', email)
            .or('grupo_id.not.is.null,target_grado.not.is.null');
            
         if(asigs && asigs.length > 0) {
@@ -6368,7 +6117,7 @@ window.cargarBoletasGrupo = async () => {
         let acts = [];
         let hasActs = false;
         if(!isModoFinal) {
-            let actsQuery = supabaseClient.from('actividades_docente')
+            let actsQuery = supabaseClient.from('actividades_maestro')
                 .select('id, titulo, rubro_name, rubro_peso')
                 .eq('trimestre', currentTrim) 
                 .eq('materia', materiaText);
@@ -6522,7 +6271,8 @@ window.sellarYEnviarCalificaciones = async () => {
                 materia_nombre: materiaClean,
                 maestro_id: actUserId,
                 trimestre: parseInt(trim),
-                calificacion: calif
+                calificacion: calif,
+                plantel_id: state.plantelId
             });
 
             if(trim === '4' && calif < 6.0) {
@@ -6542,7 +6292,8 @@ window.sellarYEnviarCalificaciones = async () => {
                 titulo: `⚠️ AVISO DE REPROBACIÓN: ${materiaText}`,
                 mensaje: `Se le informa que el alumno ha REPROBADO la asignatura de ${materiaText} en su promedio final anual. Es necesario acudir urgentemente a la dirección escolar para solicitar el proceso de Examen Extraordinario.`,
                 audiencia: `Alumno_${alId}`,
-                fecha_envio: new Date().toISOString()
+                fecha_envio: new Date().toISOString(),
+                plantel_id: state.plantelId
             }));
 
             const { error: errorComs } = await supabaseClient.from('comunicados').insert(coms);
@@ -6561,7 +6312,7 @@ window.sellarYEnviarCalificaciones = async () => {
 };
 
 window.exportarRejillaBlancoCSV = () => {
-    const tbody = document.getElementById('listaDocenteAlumnos');
+    const tbody = document.getElementById('listaMaestroAlumnos');
 
     if(!tbody || tbody.innerText.includes("Seleccione") || tbody.innerText.includes("Error") || tbody.innerText.includes("Cargando")) {
         return alert("Por favor, selecciona o carga un grupo/materia válido primero para obtener su lista de alumnos.");
@@ -6607,8 +6358,8 @@ window.exportarRejillaBlancoCSV = () => {
 
 window.exportarListasCSV = () => {
     const tabla = document.querySelector(".risk-table");
-    const tbody = document.getElementById('listaDocenteAlumnos');
-    const statsCont = document.getElementById('statsListaDocente');
+    const tbody = document.getElementById('listaMaestroAlumnos');
+    const statsCont = document.getElementById('statsListaMaestro');
 
     if(!tabla || !tbody || tbody.innerText.includes("Seleccione") || tbody.innerText.includes("Error") || tbody.innerText.includes("Cargando")) {
         return alert("No hay datos cargados para exportar.");
@@ -6657,8 +6408,8 @@ window.exportarListasCSV = () => {
 
 window.imprimirLista = () => {
     const tabla = document.querySelector(".risk-table");
-    const tbody = document.getElementById('listaDocenteAlumnos');
-    const statsCont = document.getElementById('statsListaDocente');
+    const tbody = document.getElementById('listaMaestroAlumnos');
+    const statsCont = document.getElementById('statsListaMaestro');
     
     if(!tabla || !tbody || tbody.innerText.includes("Seleccione") || tbody.innerText.includes("Error") || tbody.innerText.includes("Cargando")) {
         return alert("No hay datos cargados para imprimir.");
@@ -6730,7 +6481,7 @@ window.imprimirLista = () => {
                 </div>
                 <div class="meta-info">
                     <div>
-                        <strong>Docente:</strong> ${state.userName || 'Docente Titular'}<br>
+                        <strong>Maestro:</strong> ${state.userName || 'Maestro Titular'}<br>
                         <strong>Grupo/Materia:</strong> ${grupoName}
                     </div>
                     <div style="text-align: right;">
@@ -6749,7 +6500,7 @@ window.imprimirLista = () => {
                     <div class="signature-box">
                         <div class="signature-line"></div>
                         <div style="font-size: 12px; font-weight: bold;">Profr(a). ${state.userName || ''}</div>
-                        <div style="font-size: 10px;">Firma del Docente</div>
+                        <div style="font-size: 10px;">Firma del Maestro</div>
                     </div>
                     <div class="signature-box">
                         <div class="signature-line"></div>
@@ -6805,16 +6556,16 @@ window.toggleModoTecnologiaManual = (isActive) => {
 window.initEventosAdminGrupos = () => {
     console.log(">>> Inicializando Eventos de Grupos...");
     try {
-        const selAsigDocente = document.getElementById('selAsigDocenteBase');
-        if(selAsigDocente) {
-            selAsigDocente.onchange = (e) => {
+        const selAsigMaestro = document.getElementById('selAsigMaestroBase');
+        if(selAsigMaestro) {
+            selAsigMaestro.onchange = (e) => {
                 const email = e.target.value;
                 if(!email) {
-                    if(window.loadGruposDeDocente) window.loadGruposDeDocente(null);
+                    if(window.loadGruposDeMaestro) window.loadGruposDeMaestro(null);
                     return;
                 }
-                if(window.loadMateriasDeDocente) window.loadMateriasDeDocente(email);
-                if(window.loadGruposDeDocente) window.loadGruposDeDocente(email);
+                if(window.loadMateriasDeMaestro) window.loadMateriasDeMaestro(email);
+                if(window.loadGruposDeMaestro) window.loadGruposDeMaestro(email);
             };
         }
 
@@ -6841,11 +6592,52 @@ window.initEventosAdminGrupos = () => {
             };
         }
 
-        const btnAsigGrp = document.getElementById('btnCrearAsignacionGrupoDocente');
+        const btnAsigGrp = document.getElementById('btnCrearAsignacionGrupoMaestro');
         if(btnAsigGrp) {
-            btnAsigGrp.onclick = () => { if(window.crearAsignacionGrupoDocente) window.crearAsignacionGrupoDocente(); };
+            btnAsigGrp.onclick = () => { if(window.crearAsignacionGrupoMaestro) window.crearAsignacionGrupoMaestro(); };
         }
     } catch(e) { console.error("Error initEventosAdminGrupos:", e); }
+};
+
+window.initEventosAdminMaestros = () => {
+    try {
+        // 2. Gestión de Maestros y Materias
+        const btnGuardarDoc = document.getElementById('btnGuardarMaestroSolo');
+        if(btnGuardarDoc) {
+            btnGuardarDoc.onclick = async () => {
+                const emailValue = document.getElementById('docEmail').value;
+                const nombreValue = document.getElementById('docName').value;
+                const rolRaw = document.getElementById('docRole') ? document.getElementById('docRole').value : 'maestro';
+                const rolValue = (['admin','administrativo','admin'].includes(rolRaw)) ? 'admin' : (['maestro','maestro'].includes(rolRaw) ? 'maestro' : rolRaw);
+                
+                if(!emailValue || !nombreValue) return showToast("Por favor llena los campos.", "error");
+                
+                try {
+                    const { error } = await supabaseClient.from('perfiles_permitidos').upsert([{ 
+                        email: emailValue, 
+                        rol: rolValue, 
+                        nombre: nombreValue,
+                        plantel_id: finalPlantel
+                    }], { onConflict: 'email' });
+
+                    if(error) throw error;
+                    showToast("Personal registrado y vinculado al plantel.", "success");
+                    if(window.loadSelectsMaestros) window.loadSelectsMaestros();
+                    if(window.loadListasAdminPersonal) window.loadListasAdminPersonal();
+                } catch(e) { showToast("Error: " + e.message, "error"); }
+            };
+        }
+
+        const btnAsigMat = document.getElementById('btnAsignarMateriaMaestro');
+        if(btnAsigMat) {
+            btnAsigMat.onclick = () => { if(window.crearMateriaMaestro) window.crearMateriaMaestro(); };
+        }
+
+        const selDocMat = document.getElementById('selMaestroMateriasV110');
+        if(selDocMat) {
+            selDocMat.onchange = (e) => { if(window.loadMateriasDeMaestro) window.loadMateriasDeMaestro(e.target.value); };
+        }
+    } catch(e) { console.error("Error initEventosAdminMaestros:", e); }
 };
 
 function attachDOMEvents() {
@@ -6856,7 +6648,7 @@ function attachDOMEvents() {
           // Forzar carga de selectores si están vacíos
           const selG = document.getElementById('selAsigGrupoBase');
           if(selG && selG.options.length <= 1) {
-              if(window.loadSelectsDocentes) window.loadSelectsDocentes();
+              if(window.loadSelectsMaestros) window.loadSelectsMaestros();
           }
       }
 
@@ -6894,44 +6686,22 @@ function attachDOMEvents() {
           });
       }
 
-      // 2. Gestión de Docentes y Materias
-      const btnGuardarDoc = document.getElementById('btnGuardarDocenteSolo');
-      if(btnGuardarDoc) {
-          btnGuardarDoc.addEventListener('click', async () => {
-              const emailValue = document.getElementById('docEmail').value;
-              const nombreValue = document.getElementById('docName').value;
-              const rolValue = document.getElementById('docRole') ? document.getElementById('docRole').value : 'docente';
-              if(!emailValue || !nombreValue) return alert("Por favor llena los campos.");
-              try {
-                  const { error } = await supabaseClient.from('perfiles_permitidos').upsert([{ email: emailValue, rol: rolValue, nombre: nombreValue }], { onConflict: 'email' });
-                  if(error) throw error;
-                  alert("Personal registrado exitosamente.");
-                  if(window.loadSelectsDocentes) window.loadSelectsDocentes();
-              } catch(e) { alert("Error: " + e.message); }
-          });
-      }
-
-      const btnAsigMat = document.getElementById('btnAsignarMateriaDocente');
-      if(btnAsigMat) {
-          btnAsigMat.addEventListener('click', () => { if(window.crearMateriaDocente) window.crearMateriaDocente(); });
-      }
-
-      const selDocMat = document.getElementById('selDocenteMaterias');
-      if(selDocMat) {
-          selDocMat.addEventListener('change', (e) => { if(window.loadMateriasDeDocente) window.loadMateriasDeDocente(e.target.value); });
+      // 2. Gestión de Maestros y Materias (Mapeado ahora en initEventosAdminMaestros)
+      if(document.getElementById('selMaestroMateriasV110')) {
+          window.initEventosAdminMaestros();
       }
 
       // 3. Gestión de Grupos y Asignaciones (Filtro Tecnología)
-      const selAsigDocente = document.getElementById('selAsigDocenteBase');
-      if(selAsigDocente) {
-          selAsigDocente.addEventListener('change', (e) => {
+      const selAsigMaestro = document.getElementById('selAsigMaestroBase');
+      if(selAsigMaestro) {
+          selAsigMaestro.addEventListener('change', (e) => {
               const email = e.target.value;
               if(!email) {
-                  if(window.loadGruposDeDocente) window.loadGruposDeDocente(null);
+                  if(window.loadGruposDeMaestro) window.loadGruposDeMaestro(null);
                   return;
               }
-              if(window.loadMateriasDeDocente) window.loadMateriasDeDocente(email);
-              if(window.loadGruposDeDocente) window.loadGruposDeDocente(email);
+              if(window.loadMateriasDeMaestro) window.loadMateriasDeMaestro(email);
+              if(window.loadGruposDeMaestro) window.loadGruposDeMaestro(email);
           });
       }
 
@@ -6963,12 +6733,12 @@ function attachDOMEvents() {
           });
       }
 
-      const btnAsigGrp = document.getElementById('btnCrearAsignacionGrupoDocente');
+      const btnAsigGrp = document.getElementById('btnCrearAsignacionGrupoMaestro');
       if(btnAsigGrp) {
-          btnAsigGrp.addEventListener('click', () => { if(window.crearAsignacionGrupoDocente) window.crearAsignacionGrupoDocente(); });
+          btnAsigGrp.addEventListener('click', () => { if(window.crearAsignacionGrupoMaestro) window.crearAsignacionGrupoMaestro(); });
       }
 
-      // 4. Inscripción de Alumnos: Carga Dinámica desde Carga Docente
+      // 4. Inscripción de Alumnos: Carga Dinámica desde Carga Maestro
       const grInput = document.getElementById('gradoInput');
       const tlInput = document.getElementById('tallerInput');
       
@@ -6980,8 +6750,8 @@ function attachDOMEvents() {
           
           try {
               tlInput.innerHTML = '<option value="">Consultando tecnologías para ' + selectedGrado + '...</option>';
-              // Buscamos materias que sean Tecnologías o Talleres en la CARGA DOCENTE
-              const { data: talData, error: talError } = await supabaseClient.from('asignaciones_docentes')
+              // Buscamos materias que sean Tecnologías o Talleres en la CARGA MAESTRO
+              const { data: talData, error: talError } = await supabaseClient.from('asignaciones_maestros')
                   .select('materia')
                   .eq('target_grado', selectedGrado);
               
@@ -6997,7 +6767,7 @@ function attachDOMEvents() {
               }
           } catch(e) { 
               console.error(">>> ERROR CARGA TECNOLOGÍA:", e); 
-              tlInput.innerHTML = '<option value="">Error al cargar (Verifica carga docente)</option>'; 
+              tlInput.innerHTML = '<option value="">Error al cargar (Verifica carga maestro)</option>'; 
           }
       };
 
@@ -7026,10 +6796,24 @@ function attachDOMEvents() {
           btnGuardarIns.disabled = true;
           try {
             // 1. Autorizar acceso vinculando el nombre para la lista administrativa
+            // Robustez de Plantel para Alumnos
+            let finalPlantel = state.plantelId || state.user?.user_metadata?.plantel_id;
+            if(!finalPlantel && state.user?.id) {
+                const { data: prof } = await supabaseClient.from('perfiles').select('plantel_id').eq('id', state.user.id).single();
+                finalPlantel = prof?.plantel_id;
+            }
+
+            if(!finalPlantel) {
+                btnGuardarIns.innerText = btnText;
+                btnGuardarIns.disabled = false;
+                return alert("❌ Error: No se pudo identificar tu plantel. Por favor recarga la página.");
+            }
+
             await supabaseClient.from('perfiles_permitidos').upsert([{ 
                 email, 
                 rol: 'alumno', 
-                nombre: nombre 
+                nombre: nombre,
+                plantel_id: finalPlantel
             }], { onConflict: 'email' });
             // Normalización: Asegurar formato X°Y (ej: 2°A)
             let gradoLimpio = grado.replace('°', '');
@@ -7038,13 +6822,14 @@ function attachDOMEvents() {
             const { data: gData } = await supabaseClient.from('grupos').select('id').eq('nombre', grupoCompleto).maybeSingle();
             if(gData) grId = gData.id;
             else {
-               const { data: nG } = await supabaseClient.from('grupos').insert([{ nombre: grupoCompleto }]).select().single();
+               const { data: nG } = await supabaseClient.from('grupos').insert([{ nombre: grupoCompleto, plantel_id: state.plantelId }]).select().single();
                grId = nG.id;
             }
             const matricula = 'AL-' + Math.floor(Math.random() * 90000 + 10000);
             const { error: errAlumno } = await supabaseClient.from('alumnos').insert([{ 
                curp, nombre, edad: parseInt(edad, 10),
-               matricula, grupo_id: grId, grado: grado, contacto_email: email, taller: tallerValue
+               matricula, grupo_id: grId, grado: grado, contacto_email: email, taller: tallerValue,
+               plantel_id: finalPlantel
             }]);
             if(errAlumno) throw errAlumno;
             alert("Alumno inscrito exitosamente. Matrícula: " + matricula);
@@ -7082,7 +6867,7 @@ function attachDOMEvents() {
       }
 
       // Cargar auto al montar DOM:
-      if(window.loadSelectsDocentes) window.loadSelectsDocentes();
+      if(window.loadSelectsMaestros) window.loadSelectsMaestros();
 
   } catch(err) { console.error("Error en attachDOMEvents:", err); }
 }
@@ -7132,12 +6917,12 @@ window.crearGrupoDrag = async () => {
     const txt = `${grado.replace('°', '')}°${letra}`;
     
     try {
-        const { error } = await supabaseClient.from('grupos').insert([{ nombre: txt }]);
+        const { error } = await supabaseClient.from('grupos').insert([{ nombre: txt, plantel_id: state.plantelId }]);
         if(error) throw error;
         alert(`Grupo ${txt} creado con éxito en Base de Datos.`);
         
         // Actualizar la lista en UI (El div de grupos y el select de asignaciones)
-        window.loadSelectsDocentes(); 
+        window.loadSelectsMaestros(); 
         
         const list = document.getElementById('gruposCreados');
         const color = ['var(--primary)', 'var(--warning)', 'var(--danger)'][Math.floor(Math.random()*3)];
@@ -7208,7 +6993,12 @@ window.toggleAsistenciaModo = async (modo) => {
         const dbEstado = modo === 'asistencia' ? 'abierto' : 'retardo';
         
         await supabaseClient.from('asistencia_sesiones').upsert({
-            grupo_id: String(window.currentAulaGrupoId), materia: window.currentAulaMateria || 'N/A', fecha: hoy, maestro_id: u.data.user.id, estado: dbEstado
+            grupo_id: String(window.currentAulaGrupoId), 
+            materia: window.currentAulaMateria || 'N/A', 
+            fecha: hoy, 
+            maestro_id: u.data.user.id, 
+            estado: dbEstado,
+            plantel_id: state.plantelId
         }, { onConflict: 'grupo_id, materia, fecha' });
 
         window.startMaestroQR();
@@ -7272,7 +7062,8 @@ window.guardarAsistenciaQR = async (matricula, grupoId) => {
             registrador_id: u.data.user.id, 
             estado: estFinal,
             materia: (window.currentAulaMateria || 'N/A').trim(),
-            grupo_id: String(grupoId).startsWith('grado:') ? null : String(grupoId)
+            grupo_id: String(grupoId).startsWith('grado:') ? null : String(grupoId),
+            plantel_id: state.plantelId
         }]);
         if(error) throw error;
         window.showToast(`✅ ${estFinal}: ${alumno.nombre}`, estFinal === 'Retardo' ? 'warning' : 'success');
@@ -7322,7 +7113,11 @@ window.finalizarSesionAsistencia = async () => {
         
         if(faltantes.length > 0) {
             await supabaseClient.from('asistencias').insert(faltantes.map(al => ({
-                alumno_id: al.id, registrador_id: u.data.user.id, estado: 'Falta', grupo_id: grupoId.startsWith('grado:') ? null : grupoId
+                alumno_id: al.id, 
+                registrador_id: u.data.user.id, 
+                estado: 'Falta', 
+                grupo_id: grupoId.startsWith('grado:') ? null : grupoId,
+                plantel_id: state.plantelId
             })));
         }
 
@@ -7332,7 +7127,8 @@ window.finalizarSesionAsistencia = async () => {
                 autor_id: u.data.user.id, 
                 titulo: '⚠️ AVISO DE RETARDO', 
                 audiencia: 'Alumno_' + r.alumno_id,
-                mensaje: `Hola. Se ha registrado un RETARDO en la materia: "${materia}" el día de hoy (${hoy}). \n\nRecuerda que la puntualidad es parte de tu evaluación formativa.`
+                mensaje: `Hola. Se ha registrado un RETARDO en la materia: "${materia}" el día de hoy (${hoy}). \n\nRecuerda que la puntualidad es parte de tu evaluación formativa.`,
+                plantel_id: state.plantelId
             })));
         }
 
@@ -7464,7 +7260,8 @@ window.registrarAsistenciaEntrada = async (qrText) => {
             estado: estadoPortal,
             registrador_id: uRes.data.user?.id,
             fecha: new Date().toLocaleDateString('en-CA'),
-            hora: new Date().toLocaleTimeString('en-GB')
+            hora: new Date().toLocaleTimeString('en-GB'),
+            plantel_id: state.plantelId
         }]);
 
         if(error) {
@@ -7504,7 +7301,7 @@ window.showQRScannerModal = async (title = 'Grupo Seleccionado', grupoId = null,
    const titleEl = document.getElementById('classDetailTitle');
    if(titleEl) titleEl.innerText = title;
 
-   // No auto-iniciar modo, dejamos al docente elegir el botón
+   // No auto-iniciar modo, dejamos al maestro elegir el botón
    window.updateSessionUI();
 
    // Auto-iniciar cámara
@@ -7685,7 +7482,8 @@ window.enviarReporteRapido = async () => {
            autor_id: autor_id,
            descripcion: finalDesc,
            gravedad: sev,
-           resuelto: false
+           resuelto: false,
+           plantel_id: state.plantelId
         }]);
         if(error) {
             console.error("Supabase insert error:", error);
@@ -7829,9 +7627,9 @@ window.loadGruposEncuadre = async () => {
         const u = await supabaseClient.auth.getUser();
         if(!u.data.user) return;
         
-        const { data: asigs } = await supabaseClient.from('asignaciones_docentes')
+        const { data: asigs } = await supabaseClient.from('asignaciones_maestros')
            .select('materia, grupo_id, target_grado, grupos(id, nombre)')
-           .eq('docente_email', u.data.user.email)
+           .eq('maestro_email', u.data.user.email)
            .or('grupo_id.not.is.null,target_grado.not.is.null');
            
         if(asigs && asigs.length > 0) {
@@ -8014,7 +7812,8 @@ window.cargarEncuadreActivo = async () => {
             target_grado: targetGrado,
             materia: mat,
             rubros: window.rubros,
-            trimestre: window.currentTrimestre || 1
+            trimestre: window.currentTrimestre || 1,
+            plantel_id: state.plantelId
         };
 
         if(isTec) {
@@ -8022,7 +7821,7 @@ window.cargarEncuadreActivo = async () => {
                 const { error } = await supabaseClient.from('encuadres').update(payloadEnc).eq('id', encExistente.id);
                 if(error) throw error;
             } else {
-                const { error } = await supabaseClient.from('encuadres').insert(payloadEnc);
+                const { error } = await supabaseClient.from('encuadres').insert(payloadEnc.map(p => ({ ...p, plantel_id: state.plantelId })));
                 if(error) throw error;
             }
         } else {
@@ -8066,7 +7865,8 @@ window.cargarEncuadreActivo = async () => {
                 autor_id: u.data.user.id,
                 titulo: `📋 Encuadre: ${mat} (${labelGrupo}) - ${labelTri}`,
                 mensaje: `El profesor/a ${nombreMaestro} ha publicado los criterios de evaluación para el ${labelTri} en la materia "${mat}".\n\n📊 Estructura de Calificación:\n${rubrosTexto}\n\n✍️ Por favor, FIRMA DE ENTERADO.\n\n[REF_ID: ${encObj?.id || 'none'}]`, // Etiqueta invisible
-                audiencia: `Alumno_${alum.id}`
+                audiencia: `Alumno_${alum.id}`,
+                plantel_id: state.plantelId
             }));
             const { error: errIns } = await supabaseClient.from('comunicados').insert(notificaciones);
             if(errIns) throw errIns;
@@ -8141,10 +7941,10 @@ window.cargarBitacora = async (fecha) => {
     }
     
     try {
-        const { data: bitacoras, error } = await supabaseClient.from('bitacora_docente').select('*').eq('fecha_referencia', fecha).order('creado_en', { ascending: false });
+        const { data: bitacoras, error } = await supabaseClient.from('bitacora_maestro').select('*').eq('fecha_referencia', fecha).order('creado_en', { ascending: false });
         if(error) {
             console.error(error);
-            tl.innerHTML = '<div style="color:var(--danger); font-size:0.9rem"><i class="fa-solid fa-circle-exclamation"></i> Error: Asegúrate de correr en SQL: CREATE TABLE bitacora_docente... Revisa las instrucciones.</div>';
+            tl.innerHTML = '<div style="color:var(--danger); font-size:0.9rem"><i class="fa-solid fa-circle-exclamation"></i> Error: Asegúrate de correr en SQL: CREATE TABLE bitacora_maestro... Revisa las instrucciones.</div>';
             return;
         }
         
@@ -8184,12 +7984,13 @@ window.agregarBitacora = async () => {
     try {
         const uid = (await supabaseClient.auth.getUser()).data.user.id;
         
-        const { error } = await supabaseClient.from('bitacora_docente').insert([{
+        const { error } = await supabaseClient.from('bitacora_maestro').insert([{
            id: crypto.randomUUID(),
            perfil_id: uid,
            firma_autor: firma,
            texto: texto,
-           fecha_referencia: fecha
+           fecha_referencia: fecha,
+           plantel_id: state.plantelId
         }]);
         
         if(error) {
@@ -8203,7 +8004,7 @@ window.agregarBitacora = async () => {
         
     } catch(e) {
         console.error(e);
-        alert("Fallo al insertar a bitácora docente.");
+        alert("Fallo al insertar a bitácora maestro.");
     }
 };
 
@@ -8269,7 +8070,7 @@ window.cargarSabanaGrupo = async () => {
         const materiasObj = Array.from(matSet);
         
         if (materiasObj.length === 0) {
-            hold.innerHTML = '<div style="color:var(--text-muted); font-size:0.9rem;">Los docentes de este grupo aún no han enviado sus actas de calificación para este trimestre.</div>';
+            hold.innerHTML = '<div style="color:var(--text-muted); font-size:0.9rem;">Los maestros de este grupo aún no han enviado sus actas de calificación para este trimestre.</div>';
             return;
         }
 
@@ -8492,46 +8293,163 @@ window.crearGrupoDrag = async () => {
     const letra = document.getElementById('selLetra').value;
     const nombre = `${grado}${letra}`;
     try {
-        const { error } = await supabaseClient.from('grupos').insert([{ nombre }]);
+        const { error } = await supabaseClient.from('grupos').insert([{ nombre, plantel_id: state.plantelId }]);
         if(error) throw error;
         alert(`Grupo ${nombre} generado.`);
-        window.loadSelectsDocentes();
+        window.loadSelectsMaestros();
     } catch(err) { alert(err.message); }
 };
 
-window.crearMateriaDocente = async () => {
-    const email = document.getElementById('selDocenteMaterias').value;
+window.crearMateriaMaestro = async () => {
+    const selector = document.getElementById('selMaestroMateriasV110');
+    if(!selector) return;
+    
+    const email = selector.value;
+    
+    // Identificación Robusta (v115): Buscamos el nombre real en la caché de maestros
+    const teacherMatch = window.__teachersData?.find(t => t.email === email);
+    const profName = teacherMatch ? (teacherMatch.nombre || teacherMatch.display) : "Maestro";
+    
     const matInput = document.getElementById('nuevaMateriaDoc');
     const materia = matInput ? matInput.value : '';
-    if(!email || !materia) return alert("Selecciona un docente y escribe una materia.");
+    
+    const currentPlantel = state.plantelId;
+
+    if(!email || !materia) return showToast("Selecciona un maestro y escribe una materia.", "error");
+
     try {
-        const { error } = await supabaseClient.from('asignaciones_docentes').insert([{ docente_email: email, materia: materia, grupo_id: null }]);
+        console.log(">>> [v114] REGISTRANDO MATERIA:", { email, profName, materia });
+        
+        const { error } = await supabaseClient.from('asignaciones_maestros').insert([{ 
+            maestro_email: email, 
+            maestro_nombre: profName,
+            materia: materia, 
+            grupo_id: null,
+            plantel_id: currentPlantel
+        }]);
+
         if(error) throw error;
-        alert("¡Materia registrada exitosamente!");
+
+        showToast("¡Materia registrada exitosamente!", "success");
         if(matInput) matInput.value = '';
-        window.loadMateriasDeDocente(email); // Recargar lista
-    } catch(err) { alert("Error: " + err.message); }
+        window.loadMateriasDeMaestro(email); 
+    } catch(err) { 
+        console.error("Error en asignación:", err);
+        showToast("Error al guardar: " + err.message, "error"); 
+    }
 };
 
-window.loadSelectsDocentes = async () => {
+window.seleccionarMaestroDirecto = (email, element) => {
+    // 1. Quitar resaltado de otros
+    document.querySelectorAll('.card-maestro-selector').forEach(el => {
+        el.style.background = 'white';
+        el.style.border = '1px solid #ddd';
+    });
+    
+    // 2. Resaltar el actual
+    element.style.background = '#fde68a';
+    element.style.border = '2px solid #f59e0b';
+    
+    // 3. Guardar el email en el campo oculto
+    const hiddenInput = document.getElementById('selMaestroMateriasV110');
+    if(hiddenInput) {
+        hiddenInput.value = email;
+    }
+    
+    // 4. Cargar materias de ese maestro automáticamente
+    if(window.loadMateriasDeMaestro) window.loadMateriasDeMaestro(email);
+    
+    // 5. Feedback visual
+    const debug = document.getElementById('debugCountV111');
+    if(debug) debug.innerText = `Estado: Seleccionado ${email}`;
+};
+
+window.loadSelectsMaestros = async () => {
     try {
-        const { data: profes } = await supabaseClient.from('perfiles_permitidos').select('email').eq('rol', 'docente').order('email');
-        const sM = document.getElementById('selDocenteMaterias');
-        const sG = document.getElementById('selAsigDocenteBase');
-        if(sM) sM.innerHTML = '<option value="">Elige...</option>' + profes.map(p => `<option value="${p.email}">${p.email}</option>`).join('');
-        if(sG) sG.innerHTML = '<option value="">Elige...</option>' + profes.map(p => `<option value="${p.email}">${p.email}</option>`).join('');
+        console.log(">>> [v117] Sincronización Global Iniciada...");
+        
+        // 1. RECUPERACIÓN SEGURA DEL PLANTEL
+        let currentP = state.plantelId || state.user?.user_metadata?.plantel_id;
+        if(!currentP && state.user?.id) {
+            const { data: pData } = await supabaseClient.from('perfiles').select('plantel_id').eq('id', state.user.id).single();
+            currentP = pData?.plantel_id;
+        }
 
-        const { data: grupos } = await supabaseClient.from('grupos').select('id, nombre').order('nombre');
+        if(!currentP) {
+            console.warn(">>> [v117] No se pudo determinar el plantel para filtrar.");
+            return;
+        }
+
+        // DIAGNÓSTICO v122
+        console.log(">>> [v122] Cargando maestros para plantel:", currentP);
+
+        // 2. OBTENCIÓN DE PERSONAL (V122: Maestros y Admins)
+        let { data: staff, error: errProf } = await supabaseClient.from('perfiles_permitidos')
+            .select('email, nombre, rol')
+            .neq('rol', 'alumno')
+            .eq('plantel_id', currentP)
+            .order('nombre');
+
+        if (!staff || staff.length === 0) {
+            console.warn(">>> [v122] Sin personal local, buscando global...");
+            const { data: globalStaff } = await supabaseClient.from('perfiles_permitidos').select('email, nombre, rol').neq('rol', 'alumno');
+            staff = globalStaff;
+        }
+
+        if (errProf) throw errProf;
+        
+        // ALERTA DE DIAGNÓSTICO (Solo si hay pocos o ninguno)
+        if (!staff || staff.length === 0) {
+            alert("⚠️ ALERTA: No se encontró ningún personal registrado en la base de datos.");
+        }
+
+        // 3. MAPEO A CACHÉ INTERNA (Nombres limpios)
+        window.__teachersData = (staff || []).map(p => ({
+            email: p.email,
+            nombre: p.nombre || '',
+            display: (p.nombre && p.nombre !== 'Nuevo Usuario') ? `${p.nombre.toUpperCase()} (${p.email})` : p.email
+        }));
+
+        // 4. ACTUALIZACIÓN DE SELECTORES
+        ['selMaestroMateriasV110', 'selAsigMaestroBase'].forEach(id => {
+            const el = document.getElementById(id);
+            if(el) el.innerHTML = optionsHtml;
+        });
+
+        // 5. CARGAR GRUPOS DEL PLANTEL
+        const { data: grupos } = await supabaseClient.from('grupos').select('id, nombre').eq('plantel_id', currentP).order('nombre');
         const sGr = document.getElementById('selAsigGrupoBase');
-        if(sGr) sGr.innerHTML = '<option value="">Elige Grupo...</option>' + grupos.map(g => `<option value="${g.id}">${g.nombre}</option>`).join('');
+        if(sGr) sGr.innerHTML = '<option value="">Elige Grupo...</option>' + (grupos || []).map(g => `<option value="${g.id}">${g.nombre}</option>`).join('');
 
-        // Carga de tecnología eliminada de aquí, ahora es dinámica por grado en la inscripción.
-    } catch(e) { console.error(e); }
+        // 6. AUTO-WATCHDOG v117: Monitor de Integridad del DOM
+        if(!window._v117WatchdogRunning) {
+            console.log(">>> [v117] Watchdog Activado.");
+            setInterval(() => {
+                const targetSelectors = ['selMaestroMateriasV110', 'selAsigMaestroBase'];
+                targetSelectors.forEach(id => {
+                    const el = document.getElementById(id);
+                    if (el && el.options.length > 1 && window.__teachersData) {
+                        const firstRealOption = el.options[1].text;
+                        if (firstRealOption.includes('@') && !firstRealOption.includes('(')) {
+                            console.warn(">>> [v117 Watchdog] Corrigiendo nombres...");
+                            const val = el.value;
+                            el.innerHTML = '<option value="">Elige personal...</option>' + 
+                               window.__teachersData.map(t => `<option value="${t.email}">${t.display}</option>`).join('');
+                            el.value = val;
+                        }
+                    }
+                });
+            }, 3000); 
+            window._v117WatchdogRunning = true;
+        }
+    } catch(e) { 
+        console.error(">>> [v117 ERROR] Error de carga:", e);
+    }
 };
 
-window.loadMateriasDeDocente = async (email) => {
+window.loadMateriasDeMaestro = async (email) => {
     const sb = document.getElementById('selAsigMateriaBase');
-    const list = document.getElementById('listaMateriasDocente');
+    const list = document.getElementById('listaMateriasMaestro');
     
     if(!email) {
         if(sb) sb.innerHTML = '<option value="">Elige...</option>';
@@ -8540,41 +8458,56 @@ window.loadMateriasDeDocente = async (email) => {
     }
 
     try {
-        const { data, error } = await supabaseClient.from('asignaciones_docentes').select('materia').eq('docente_email', email);
+        const currentPlantelID = state.plantelId || 'general';
+        // Obtener nombre del maestro con soporte de plantel (v115)
+        const { data: profData } = await supabaseClient.from('perfiles_permitidos')
+            .select('nombre')
+            .eq('email', email)
+            .eq('plantel_id', currentPlantelID)
+            .maybeSingle();
+
+        const displayLabel = profData?.nombre ? profData.nombre : email;
+
+        const { data, error } = await supabaseClient.from('asignaciones_maestros')
+            .select('materia')
+            .eq('maestro_email', email)
+            .eq('plantel_id', currentPlantelID);
+            
         if(error) throw error;
         
-        const unq = [...new Set(data.map(d=>d.materia))];
+        const unq = [...new Set((data || []).map(d=>d.materia))];
 
         // Actualizar Selector de Asignación
         if(sb) {
             if(unq.length === 0) {
                 sb.innerHTML = '<option value="">Este maestro no tiene materias base</option>';
             } else {
-                sb.innerHTML = '<option value="">Elige Materia</option>' + unq.map(m => `<option value="${m}">${m}</option>`).join('');
+                sb.innerHTML = `<option value="">Elige Materia de ${profData?.nombre || 'Maestro'}</option>` + unq.map(m => `<option value="${m}">${m}</option>`).join('');
             }
         }
 
-        // Actualizar Lista en gestión de docentes
+        // Actualizar Lista en gestión de maestros
         if(list) {
             if(unq.length === 0) {
-                list.innerHTML = '<li>El docente no tiene materias registradas.</li>';
+                list.innerHTML = `<li style="font-weight:bold; color:var(--primary)">${displayLabel}</li><li>El maestro no tiene materias registradas.</li>`;
             } else {
-                list.innerHTML = unq.map(m => `<li><i class="fa-solid fa-book-open text-primary"></i> ${m}</li>`).join('');
+                list.innerHTML = `<li style="font-weight:bold; color:var(--primary); margin-bottom:8px; border-bottom:1px solid var(--border); padding-bottom:4px;"><i class="fa-solid fa-user-tie"></i> ${displayLabel}</li>` + 
+                                unq.map(m => `<li><i class="fa-solid fa-book-open text-primary"></i> ${m}</li>`).join('');
             }
         }
 
     } catch(e) { 
         console.error(e);
-        if(sb) sb.innerHTML = '<option value="">Error al cargar</option>';
+        if(list) list.innerHTML = '<li>Error al cargar materias.</li>';
     }
 };
 
-window.loadGruposDeDocente = async (email) => {
-    const list = document.getElementById('listaGruposDocente');
+window.loadGruposDeMaestro = async (email) => {
+    const list = document.getElementById('listaGruposMaestro');
     if(!list) return;
     if(!email) { list.innerHTML = '<li>Sin selección</li>'; return; }
     try {
-        const { data } = await supabaseClient.from('asignaciones_docentes').select('id, materia, target_grado, grupo_id, grupos(nombre)').eq('docente_email', email);
+        const { data } = await supabaseClient.from('asignaciones_maestros').select('id, materia, target_grado, grupo_id, grupos(nombre)').eq('maestro_email', email);
         
         // Filtramos para que solo se vean las que TIENEN un grupo o un grado asignado
         const asignacionesReales = (data || []).filter(d => d.grupo_id !== null || d.target_grado !== null);
@@ -8583,7 +8516,7 @@ window.loadGruposDeDocente = async (email) => {
             const grpName = d.grupos ? d.grupos.nombre : (d.target_grado ? `Grado ${d.target_grado}` : 'Sin Grupo');
             return `<li style="display:flex; justify-content:space-between; align-items:center; padding: 4px 0; border-bottom: 1px dashed var(--border);">
                 <span><i class="fa-solid fa-check text-success" style="margin-right: 8px;"></i> ${d.materia} - <strong>${grpName}</strong></span>
-                <button class="btn btn-ghost btn-xs" style="color:var(--danger); padding:0px 4px; border:1px solid #fee2e2;" onclick="window.eliminarAsignacionDocente('${d.id}', '${email}')" title="Eliminar asignación">
+                <button class="btn btn-ghost btn-xs" style="color:var(--danger); padding:0px 4px; border:1px solid #fee2e2;" onclick="window.eliminarAsignacionMaestro('${d.id}', '${email}')" title="Eliminar asignación">
                     <i class="fa-solid fa-trash"></i>
                 </button>
             </li>`;
@@ -8591,24 +8524,24 @@ window.loadGruposDeDocente = async (email) => {
     } catch(e) { list.innerHTML = '<li>Error al cargar grupos</li>'; }
 };
 
-window.eliminarAsignacionDocente = async (idAsignacion, email) => {
-    if(!confirm('¿Estás seguro de que deseas eliminar esta materia/grupo asignado a este docente?')) return;
+window.eliminarAsignacionMaestro = async (idAsignacion, email) => {
+    if(!confirm('¿Estás seguro de que deseas eliminar esta materia/grupo asignado a este maestro?')) return;
     try {
-        const { error } = await supabaseClient.from('asignaciones_docentes').delete().eq('id', idAsignacion);
+        const { error } = await supabaseClient.from('asignaciones_maestros').delete().eq('id', idAsignacion);
         if(error) throw error;
         window.showToast("Asignación eliminada correctamente.", "success");
-        window.loadGruposDeDocente(email);
-        window.loadMateriasDeDocente(email); // Refrescar el resumen de materias simples arriba
+        window.loadGruposDeMaestro(email);
+        window.loadMateriasDeMaestro(email); // Refrescar el resumen de materias simples arriba
     } catch(err) {
         alert("Error al eliminar la asignación: " + err.message);
     }
 };
 
-window.crearAsignacionGrupoDocente = async () => {
-    const btn = document.getElementById('btnCrearAsignacionGrupoDocente');
+window.crearAsignacionGrupoMaestro = async () => {
+    const btn = document.getElementById('btnCrearAsignacionGrupoMaestro');
     if(!btn || btn.disabled) return; 
 
-    const email = document.getElementById('selAsigDocenteBase').value;
+    const email = document.getElementById('selAsigMaestroBase').value;
     const mat = document.getElementById('selAsigMateriaBase').value;
     const grSelect = document.getElementById('selAsigGrupoBase');
     const grp = grSelect.value;
@@ -8625,15 +8558,15 @@ window.crearAsignacionGrupoDocente = async () => {
         if(!grp) return alert("Por favor selecciona un grupo.");
     }
 
-    if(!email || !mat) return alert("Por favor selecciona docente y materia.");
+    if(!email || !mat) return alert("Por favor selecciona maestro y materia.");
 
     const orig = btn.innerHTML;
     btn.disabled = true;
     btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Vinculando...';
     try {
         // Verificar existencia previa
-        let checkExist = supabaseClient.from('asignaciones_docentes').select('id')
-            .eq('docente_email', email).eq('materia', mat);
+        let checkExist = supabaseClient.from('asignaciones_maestros').select('id')
+            .eq('maestro_email', email).eq('materia', mat);
         
         if(finalGrupoId) checkExist = checkExist.eq('grupo_id', finalGrupoId);
         else checkExist = checkExist.eq('target_grado', targetGrado);
@@ -8641,17 +8574,19 @@ window.crearAsignacionGrupoDocente = async () => {
         const { data: exist } = await checkExist;
         if(exist && exist.length > 0) throw new Error("Ya existe esta vinculación.");
 
-        const { error: insErr } = await supabaseClient.from('asignaciones_docentes').insert([{ 
-            docente_email: email, 
+        const { error: insErr } = await supabaseClient.from('asignaciones_maestros').insert([{ 
+            maestro_email: email, 
+            maestro_nombre: document.getElementById('selAsigMaestroBase').options[document.getElementById('selAsigMaestroBase').selectedIndex]?.text.split(' (')[0],
             materia: mat, 
             grupo_id: finalGrupoId,
-            target_grado: targetGrado
+            target_grado: targetGrado,
+            plantel_id: state.plantelId
         }]);
         
         if(insErr) throw insErr;
 
         window.showToast("¡Éxito! Asignación consolidada" + (isTec ? " para todo el grado " + targetGrado : ""), "success");
-        window.loadGruposDeDocente(email);
+        window.loadGruposDeMaestro(email);
 
     } catch(e) { 
         console.error("Error en vinculación:", e);
@@ -8880,62 +8815,103 @@ renderApp = () => {
 // Bootstrap Application
 // Bootstrap Application (Safe Mode)
 const startApp = async () => {
-    console.log(">>> BOOTSTRAP: Iniciando motor de edu-lm (Safe Mode)...");
+    console.log(">>> BOOTSTRAP: Iniciando motor de edu-lm (v106)...");
     const app = document.getElementById('app');
     
     try {
         const client = window.supabaseInstance || (window.supabase ? window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY) : null);
         
         if (client) {
-            console.log(">>> SUPABASE: Cliente inicializado.");
             const { data: { session } } = await client.auth.getSession();
             
             if (session && session.user) {
-                console.log(">>> AUTH: Sesión recuperada para:", session.user.email);
+                console.group(">>> AUTH: Sesión Activa");
+                console.log("Usuario:", session.user.email);
                 state.user = session.user;
-                // 1. Obtener la "Autorización Oficial" (La fuente de la verdad para el acceso)
-                const { data: allowed } = await client.from('perfiles_permitidos').select('*').eq('email', session.user.email).maybeSingle();
+
+                // 1. Obtener Autorización Oficial (Fuente de Verdad)
+                const { data: allowed } = await client.from('perfiles_permitidos')
+                    .select('*')
+                    .ilike('email', session.user.email)
+                    .maybeSingle();
                 
-                // 2. Obtener el Perfil actual (Lo que la UI muestra)
-                const { data: profile } = await client.from('perfiles').select('*').eq('id', session.user.id).maybeSingle();
+                // 2. Obtener Perfil de la Aplicación
+                const { data: profile } = await client.from('perfiles')
+                    .select('*')
+                    .eq('id', session.user.id)
+                    .maybeSingle();
                 
-                let realRole = profile?.rol || session.user.user_metadata?.rol || 'alumno';
-                let realName = profile?.nombre || session.user.user_metadata?.nombre || session.user.email;
+                // 3. Resolución de Rol y Datos (Jerarquía Estricta)
+                let rawRole = allowed?.rol || profile?.rol || session.user.user_metadata?.rol || 'alumno';
+                let finalName = profile?.nombre || allowed?.nombre || session.user.user_metadata?.nombre || session.user.email;
+                let finalPlantel = profile?.plantel_id || allowed?.plantel_id;
 
-                // 3. SINCRONIZADOR AUTOMÁTICO: Si los datos de autorización son nuevos, actualizar perfil
-                if (allowed && (allowed.rol !== realRole || allowed.nombre !== realName)) {
-                    console.log(">>> [SYNC] Actualizando perfil a nueva identidad autorizada:", allowed.rol);
-                    
-                    // Actualizar tabla perfiles
-                    await client.from('perfiles').upsert({
-                        id: session.user.id,
-                        rol: allowed.rol,
-                        nombre: allowed.nombre
-                    });
+                // Normalización Crítica (Unificación de Sinónimos)
+                if (esAdmin(rawRole) || rawRole === 'administrativo' || rawRole === 'admin') rawRole = 'admin';
+                if (rawRole === 'maestro' || rawRole === 'maestro') rawRole = 'maestro';
 
-                    // Intentar actualizar metadata de Auth (vía cliente)
-                    await client.auth.updateUser({
-                        data: { rol: allowed.rol, nombre: allowed.nombre }
-                    });
+                // 4. LIMPIEZA PROFUNDA: Sincronizar Metadatos y Perfil si hay discrepancias
+                if (allowed) {
+                    const needsMetadataSync = (session.user.user_metadata?.rol !== allowed.rol);
+                    const needsProfileSync = (!profile || profile.rol !== allowed.rol || profile.plantel_id !== allowed.plantel_id);
 
-                    realRole = allowed.rol;
-                    realName = allowed.nombre;
+                    if (needsMetadataSync || needsProfileSync) {
+                        console.warn(">>> SEGURIDAD: Detectada desincronía de identidad. Corrigiendo...");
+                        
+                        let syncRole = allowed.rol;
+                        if(syncRole === 'maestro') syncRole = 'maestro';
+                        if(syncRole === 'administrativo' || syncRole === 'admin') syncRole = 'admin';
+
+                        // Sincronizar Perfil DB
+                        await client.from('perfiles').upsert([{
+                            id: session.user.id,
+                            rol: syncRole,
+                            nombre: allowed.nombre,
+                            plantel_id: allowed.plantel_id
+                        }]);
+
+                        // Sincronizar Metadatos JWT
+                        await client.auth.updateUser({
+                            data: {
+                                rol: syncRole,
+                                nombre: allowed.nombre,
+                                plantel_id: allowed.plantel_id
+                            }
+                        });
+                        
+                        // Forzar el rol correcto en el estado actual
+                        rawRole = syncRole;
+                    }
                 }
 
-                state.userName = realName;
-                window.login(realRole);
+                state.role = rawRole;
+                state.userName = finalName;
+                state.plantelId = finalPlantel;
+                state.schoolConfigured = true;
+
+                console.log("Rol Final:", state.role, "| Plantel:", state.plantelId);
+                console.groupEnd();
+                
+                window.renderApp(); 
             } else {
-                console.log(">>> AUTH: No hay sesión activa, cargando selector.");
-                renderApp();
+                console.log(">>> AUTH: No hay sesión, mostrando Landing.");
+                state.schoolConfigured = false;
+                window.renderApp();
             }
-        } else {
-            console.warn(">>> WARN: Supabase no disponible.");
-            renderApp();
         }
     } catch (err) {
-        console.error(">>> BOOT ERROR:", err);
-        renderApp();
+        console.error(">>> BOOTSTRAP ERROR:", err);
+        app.innerHTML = `<h2>Error al iniciar sistema</h2><p>${err.message}</p>`;
     }
+};
+
+// Reemplazar window.login para que use la misma lógica de normalización
+window.login = (role) => {
+    let normRole = role;
+    if (normRole === 'admin') normRole = 'admin';
+    state.role = normRole;
+    state.schoolConfigured = true;
+    window.renderApp();
 };
 
 window.cambiarTabPersonal = (tab, btnEl) => {
@@ -8960,10 +8936,14 @@ window.loadListasAdminPersonal = async (searchTerm = '') => {
     const totalCont = document.getElementById('totalPersonalCounter');
     if(!tbody) return;
 
-    if (!window._activePersonalTab) window._activePersonalTab = 'administrativo';
+    if (!window._activePersonalTab) window._activePersonalTab = 'admin';
 
     try {
-        let query = supabaseClient.from('perfiles_permitidos').select('*').neq('rol', 'alumno'); // Excluir explícitamente a los alumnos
+        const currentPlantelID = state.plantelId || 'general';
+        let query = supabaseClient.from('perfiles_permitidos')
+            .select('*')
+            .neq('rol', 'alumno')
+            .eq('plantel_id', currentPlantelID);
         
         if (searchTerm) {
             query = query.or(`nombre.ilike.%${searchTerm}%,email.ilike.%${searchTerm}%`);
@@ -8977,14 +8957,14 @@ window.loadListasAdminPersonal = async (searchTerm = '') => {
         
         // Filtro local de las pestañas
         let tabRoles = [];
-        if(window._activePersonalTab === 'administrativo') {
-            tabRoles = ['administrativo'];
-        } else if(window._activePersonalTab === 'docente') {
-            tabRoles = ['maestro', 'docente'];
+        if(window._activePersonalTab === 'admin') {
+            tabRoles = ['admin'];
+        } else if(window._activePersonalTab === 'maestro') {
+            tabRoles = ['maestro'];
         } else if(window._activePersonalTab === 'apoyo') {
             tabRoles = ['apoyo'];
         } else if(window._activePersonalTab === 'directivo') {
-            tabRoles = ['admin', 'administrador', 'directivo'];
+            tabRoles = ['directivo'];
         }
 
         const filteredStaff = allStaff.filter(p => tabRoles.includes(p.rol));
@@ -8996,17 +8976,17 @@ window.loadListasAdminPersonal = async (searchTerm = '') => {
 
         let html = '';
         filteredStaff.forEach(p => {
-            const roleLabels = { 'admin': 'Admin', 'maestro': 'Docente', 'docente': 'Docente', 'apoyo': 'Apoyo', 'administrativo': 'Admin', 'alumno': 'Alumno' };
-            const roleClass = (p.rol === 'admin' || p.rol === 'administrativo') ? 'badge-primary' : 
-                              (p.rol === 'maestro' || p.rol === 'docente' ? 'badge-success' : 
+            const roleLabels = { 'admin': 'Administrador', 'maestro': 'Maestro', 'apoyo': 'Apoyo', 'directivo': 'Directivo', 'alumno': 'Alumno' };
+            const roleClass = (p.rol === 'admin' || p.rol === 'directivo') ? 'badge-primary' : 
+                              (p.rol === 'maestro' ? 'badge-success' : 
                               (p.rol === 'alumno' ? 'badge-warning' : 'badge-outline'));
             const statusLabel = p.estado === 'activo' ? '<span style="color:var(--success)">● Activo</span>' : '<span style="color:var(--warning)">○ Pendiente</span>';
             
             html += `
                 <tr style="border-bottom:1px solid var(--border)">
                     <td style="padding:12px;">
-                        <div style="font-weight:600; color:var(--text-main)">${p.nombre || 'Sin nombre'}</div>
-                        <div style="font-size:0.75rem; color:var(--text-muted)">${p.email}</div>
+                        <div style="font-weight:700; color:var(--primary); font-size:1rem;">${p.nombre || 'Sin nombre registrado'}</div>
+                        <div style="font-size:0.8rem; color:var(--text-muted); font-family:monospace;">${p.email}</div>
                     </td>
                     <td style="padding:12px; font-size:0.85rem; color:var(--text-muted)">
                         ${statusLabel}
@@ -9132,7 +9112,8 @@ window.crearCitatorioPrueba = async (studentId) => {
             autor_id: u.data.user.id,
             titulo: "CITATORIO DE PRUEBA (SOPORTE)",
             mensaje: "Este es un aviso de prueba generado para verificar el funcionamiento de la pestaña de firmas y citatorios. Si estás viendo esto, el sistema de visualización está operando correctamente.",
-            audiencia: "Alumno_" + studentId
+            audiencia: "Alumno_" + studentId,
+            plantel_id: state.plantelId
         }]);
         
         if(error) throw error;

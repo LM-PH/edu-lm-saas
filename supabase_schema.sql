@@ -378,7 +378,7 @@ CREATE TABLE IF NOT EXISTS public.perfiles_permitidos (
     id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
     email text UNIQUE NOT NULL,
     nombre text,
-    rol text CHECK (rol IN ('administrativo', 'docente', 'apoyo', 'alumno', 'maestro', 'admin', 'directivo')),
+    rol text CHECK (rol IN ('apoyo', 'alumno', 'maestro', 'admin', 'directivo')),
     estado text DEFAULT 'pendiente',
     created_at timestamp with time zone DEFAULT now()
 );
