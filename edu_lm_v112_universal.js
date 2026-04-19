@@ -5376,7 +5376,8 @@ window.loadActividadesMaestro = async () => {
 };
 
 window.finalizarActividad = async (id) => {
-    if(!confirm("¿Deseas cerrar esta actividad? Se moverá al archivo pero podrás reabrirla si necesitas evaluar más alumnos.")) return;
+    if(!confirm("¿Deseas cerrar esta actividad? Se moverá al archivo pero podrás reabrirla si necesitas evaluar más alumnos. Además, se enviará un aviso automático a los alumnos que no cumplieron con la actividad.")) return;
+
     try {
         // v117: Notificar automáticamente a quienes no cumplieron
         // 1. Obtener detalles de la actividad
