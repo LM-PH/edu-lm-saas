@@ -641,7 +641,6 @@ function renderSidebar() {
       { name: 'Avisos Oficiales', path: '/apoyo/comunicados', icon: 'fa-bullhorn' },
     ],
     directivo: [
-      { name: 'Boletas y Calificaciones', path: '/admin/calificaciones', icon: 'fa-star-half-stroke' },
       { name: 'Autorizaciones', path: '/directivo/autorizaciones', icon: 'fa-stamp' },
       { name: 'Gestión de Personal', path: '/directivo/gestion-personal', icon: 'fa-id-card-clip' },
       { name: 'Avisos Oficiales', path: '/apoyo/comunicados', icon: 'fa-bullhorn' }
