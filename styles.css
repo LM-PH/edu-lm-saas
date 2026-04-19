@@ -872,6 +872,20 @@ body {
   background-size: cover;
 }
 
+/* Mobile App Container Layout (v130) */
+.mobile-app {
+  display: flex;
+  flex-direction: column;
+  height: calc(100vh - 60px); 
+  width: 100%;
+  overflow: hidden;
+}
+.mobile-content {
+  flex: 1;
+  overflow-y: auto;
+  padding-bottom: 80px; 
+}
+
 /* Timeline */
 .timeline {
   position: relative;

@@ -4509,18 +4509,27 @@ window.loadBoletasAlumno = async () => {
 
         let reportHtml = '';
         if(reportes && reportes.length > 0) {
-            const rep = reportes[0];
-            const isAlert = rep.titulo.includes('CITATORIO') || rep.titulo.includes('URGENTE');
-            const isExcelence = rep.titulo.includes('EXCELENCIA');
-            
-            reportHtml = `
-                <div class="card" style="border-left: 6px solid ${isAlert ? 'var(--danger)' : (isExcelence ? 'var(--warning)' : 'var(--success)')}; margin-bottom:20px; background:white; position:relative; overflow:hidden;">
-                    ${isExcelence ? '<div style="position:absolute; top:-10px; right:-10px; opacity:0.1; font-size:5rem;"><i class="fa-solid fa-trophy"></i></div>' : ''}
-                    <div style="font-size:0.75rem; color:var(--text-muted); margin-bottom:5px;">AVISO OFICIAL RECIENTE</div>
-                    <h4 style="margin:0 0 10px 0; color:var(--text-main); font-size:1.1rem;">${rep.titulo}</h4>
-                    <p style="font-size:0.9rem; white-space:pre-wrap; margin:0; line-height:1.5;">${rep.mensaje}</p>
-                </div>
-            `;
+            reportHtml = reportes.map(rep => {
+                const isAlert = rep.titulo.includes('ADVERTENCIA') || rep.titulo.includes('CITATORIO') || rep.titulo.includes('URGENTE');
+                const isExcelence = rep.titulo.includes('EXCELENCIA') || rep.titulo.includes('FELICIDADES');
+                const isMejora = rep.titulo.includes('MEJORA') || rep.titulo.includes('SUPERACIÓN');
+
+                const accentColor = isAlert ? 'var(--danger)' : (isExcelence ? '#10b981' : (isMejora ? '#f59e0b' : 'var(--primary)'));
+                const icon = isAlert ? 'fa-triangle-exclamation' : (isExcelence ? 'fa-trophy' : (isMejora ? 'fa-chart-line' : 'fa-clipboard-check'));
+                
+                return `
+                    <div class="card" style="border-left: 8px solid ${accentColor}; margin-bottom:20px; background:white; box-shadow: 0 4px 15px rgba(0,0,0,0.05); padding: 24px; border-radius: 18px;">
+                        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+                            <span style="font-size:0.7rem; color:var(--text-muted); font-weight:800; text-transform:uppercase; letter-spacing:1px; background:#f1f5f9; padding:4px 10px; border-radius:20px;">
+                                <i class="fa-solid ${icon}"></i> Reporte Académico
+                            </span>
+                            <span style="font-size:0.7rem; color:var(--text-muted);">${new Date(rep.fecha_envio).toLocaleDateString()}</span>
+                        </div>
+                        <h4 style="margin:0 0 12px 0; color:var(--text-main); font-size:1.2rem; font-weight:900;">${rep.titulo}</h4>
+                        <div style="font-size:0.95rem; white-space:pre-wrap; margin:0; line-height:1.6; color:#334155; font-weight:500;">${rep.mensaje}</div>
+                    </div>
+                `;
+            }).join('');
         }
 
         // Agrupar por periodo
