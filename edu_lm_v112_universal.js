@@ -1453,6 +1453,7 @@ function renderAdminMaestros() {
     if(window.loadListasAdminPersonal) window.loadListasAdminPersonal();
     if(window.initEventosAdminMaestros) window.initEventosAdminMaestros();
     if(window.loadSelectsMaestros) await window.loadSelectsMaestros();
+    if(window.loadFiltrosAlumnosDinamicos) await window.loadFiltrosAlumnosDinamicos();
   }, 100);
   
   return `
@@ -1554,17 +1555,10 @@ function renderAdminMaestros() {
             <div style="font-size:0.8rem; font-weight:700; color:var(--text-muted);">Grado:</div>
             <select id="selGradoAlumnoTab" class="form-input" style="width:105px; font-size:0.8rem; padding:4px 8px; margin:0;" onchange="window.loadListasAdminPersonal()">
                 <option value="">Todos</option>
-                <option value="1">1° Grado</option>
-                <option value="2">2° Grado</option>
-                <option value="3">3° Grado</option>
             </select>
             <div style="font-size:0.8rem; font-weight:700; color:var(--text-muted); margin-left:10px;">Grupo:</div>
             <select id="selGrupoAlumnoTab" class="form-input" style="width:105px; font-size:0.8rem; padding:4px 8px; margin:0;" onchange="window.loadListasAdminPersonal()">
                 <option value="">Todos</option>
-                <option value="A">A</option>
-                <option value="B">B</option>
-                <option value="C">C</option>
-                <option value="D">D</option>
             </select>
         </div>
         
@@ -9416,6 +9410,41 @@ window.cambiarTabPersonal = (tab, btnEl) => {
     window.loadListasAdminPersonal(searchValue);
 };
 
+window.loadFiltrosAlumnosDinamicos = async () => {
+    const sGrado = document.getElementById('selGradoAlumnoTab');
+    const sGrupo = document.getElementById('selGrupoAlumnoTab');
+    if(!sGrado || !sGrupo) return;
+    
+    try {
+        const { data: grupos, error } = await supabaseClient.from('grupos')
+            .select('nombre')
+            .eq('plantel_id', state.plantelId);
+        
+        if(error) throw error;
+        
+        const gradosSet = new Set();
+        const gruposSet = new Set();
+        
+        grupos.forEach(g => {
+            const nom = g.nombre || ''; // Ej: "1°A"
+            const matchGrado = nom.match(/^\d+°?/);
+            if(matchGrado) gradosSet.add(matchGrado[0]);
+            
+            const soloGrupo = nom.replace(/^\d+°?/, '').trim();
+            if(soloGrupo) gruposSet.add(soloGrupo);
+        });
+        
+        const valGrado = sGrado.value;
+        const valGrupo = sGrupo.value;
+        
+        sGrado.innerHTML = '<option value="">Grados</option>' + [...gradosSet].sort().map(g => `<option value="${g}">${g}${g.includes('°') ? '' : '°'}</option>`).join('');
+        sGrupo.innerHTML = '<option value="">Grupos</option>' + [...gruposSet].sort().map(g => `<option value="${g}">${g}</option>`).join('');
+        
+        sGrado.value = valGrado;
+        sGrupo.value = valGrupo;
+    } catch(e) { console.error("Error cargando filtros dinámicos:", e); }
+};
+
 window.loadListasAdminPersonal = async (searchTerm = '') => {
     const tbody = document.getElementById('tbodyPersonalAdmin');
     const totalCont = document.getElementById('totalPersonalCounter');
@@ -9442,10 +9471,10 @@ window.loadListasAdminPersonal = async (searchTerm = '') => {
             
             // Filtro por grado/grupo
             itemsToRender = students.filter(s => {
-                const gName = s.grupos?.nombre || '';
+                const gName = (s.grupos?.nombre || '').toUpperCase();
                 let ok = true;
-                if(grado && !gName.startsWith(grado)) ok = false;
-                if(grupo && !gName.endsWith(grupo)) ok = false;
+                if(grado && !gName.startsWith(grado.toUpperCase())) ok = false;
+                if(grupo && !gName.endsWith(grupo.toUpperCase())) ok = false;
                 return ok;
             }).map(s => ({
                 id: s.id,
