@@ -1533,7 +1533,7 @@ function renderAdminMaestros() {
         </div>
 
         <button class="btn btn-primary" id="btnGuardarMaestroSolo" style="width:100%">
-          <i class="fa-solid fa-floppy-disk"></i> Registrar Maestro
+          <i class="fa-solid fa-floppy-disk"></i> Registrar Personal
         </button>
       </div>
 
