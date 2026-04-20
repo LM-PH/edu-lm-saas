@@ -9589,28 +9589,41 @@ window.loadListasAdminPersonal = async (searchTerm = '') => {
 };
 
 window.eliminarPersona = async (idPermitido, email, nombre) => {
-    if(!confirm(`⚠️ ¿Deseas ELIMINAR AHORA a "${nombre}" (${email})? Esta acción revocará todos sus accesos inmediatamente.`)) return;
+    const isDirectivo = state.role === 'directivo';
+    const confirmMsg = isDirectivo 
+        ? `⚠️ ¿Deseas ELIMINAR AHORA a "${nombre}" (${email})? Esta acción es inmediata.`
+        : `⚠️ ¿Deseas SOLICITAR LA BAJA de "${nombre}" (${email})? El Directivo deberá autorizar este movimiento.`;
+
+    if(!confirm(confirmMsg)) return;
 
     try {
-        // Borrar de perfiles permitidos
-        const { error: errPerm } = await supabaseClient.from('perfiles_permitidos').delete().eq('id', idPermitido);
-        if(errPerm) throw errPerm;
-
-        // Borrar el perfil si ya existe (usamos email o nombre?)
-        // Es mejor buscar por email en perfiles_permitidos si lo tuviéramos relacionado, 
-        // pero aquí buscaremos en perfiles por nombre como aproximación o email si existiera.
-        // Dado el esquema, buscaremos perfiles que tengan ese correo (si el campo existiera) 
-        // o por el ID en auth que el trigger debería haber manejado.
-        
-        // Pero lo más seguro es que si borramos de perfiles_permitidos, 
-        // ya no podrá entrar. Para limpiar el perfil actual:
-        const { data: pExist } = await supabaseClient.from('perfiles').select('id').eq('nombre', nombre).maybeSingle();
-        if(pExist) {
-            await supabaseClient.from('perfiles').delete().eq('id', pExist.id);
+        if (isDirectivo) {
+            // Acción Directa para Directivos
+            const { error: errPerm } = await supabaseClient.from('perfiles_permitidos').delete().eq('id', idPermitido);
+            if(errPerm) throw errPerm;
+            const { data: pExist } = await supabaseClient.from('perfiles').select('id').eq('nombre', nombre).maybeSingle();
+            if(pExist) await supabaseClient.from('perfiles').delete().eq('id', pExist.id);
+            window.showToast("Personal eliminado y acceso revocado.", "success");
+        } else {
+            // Solicitud para Admins
+            const { error: errReq } = await supabaseClient.from('autorizaciones_movimientos').insert([{
+                plantel_id: state.plantelId,
+                tipo_accion: 'BAJA DE PERSONAL',
+                detalles: `Eliminar acceso a: ${nombre} (${email})`,
+                estado: 'pendiente',
+                payload_json: {
+                    action: 'delete_personal',
+                    id_permitido: idPermitido,
+                    email: email,
+                    nombre: nombre
+                }
+            }]);
+            if(errReq) throw errReq;
+            window.showToast("Solicitud de baja enviada al Directivo.", "info");
         }
-
-        window.showToast("Personal eliminado y acceso revocado.", "success");
+        
         if(window.loadListasAdminPersonal) window.loadListasAdminPersonal();
+        if(window.loadPersonalDirectivo) window.loadPersonalDirectivo();
     } catch(err) {
         console.error(err);
         alert("Fallo al eliminar: " + err.message);
