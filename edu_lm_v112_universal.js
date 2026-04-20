@@ -4140,7 +4140,7 @@ async function renderPage(path) {
     case '/': 
         // PRIORIDAD MAESTRA v138
         if(state.role === 'master') return renderMasterSaaS();
-        if(esAdmin(state.role)) return renderAdminInscripcion();
+        if(esAdmin(state.role)) return renderAdminMaestros();
         if(state.role === 'directivo') return renderDirectivoAutorizaciones();
         if(state.role === 'maestro') return renderMaestroAula();
         if(state.role === 'apoyo') return renderApoyoDashboard();
