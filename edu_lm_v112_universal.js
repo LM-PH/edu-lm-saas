@@ -6972,24 +6972,37 @@ window.initEventosAdminMaestros = () => {
 
                     if(error) throw error;
 
-                    // MANDAR INVITACIÓN (EduLM v112)
-                    // 1. Asegurar que existe en Auth con el Admin SDK
-                    const adminKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlwaGZsdnJ2ZmNxYXpxZHFkZmdnIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3NTY4ODQ2MywiZXhwIjoyMDkxMjY0NDYzfQ.WD1c4kOtJrwdXZj3qHilbd4XRdoB5nPl_ijthomXw6k';
-                    await fetch('https://yphflvrvfcqazqdqdfgg.supabase.co/auth/v1/admin/users', {
-                        method: 'POST',
-                        headers: { 'apikey': adminKey, 'Authorization': `Bearer ${adminKey}`, 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ 
-                            email: emailValue, 
-                            password: Math.random().toString(36).slice(-12), 
-                            email_confirm: true, 
-                            user_metadata: { rol: rolValue, nombre: nombreValue, plantel_id: currentPlantelID } 
-                        })
-                    });
+                    // LÓGICA DE INVITACIÓN MEJORADA (EduLM v112)
+                    (async () => {
+                        try {
+                            const adminKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlwaGZsdnJ2ZmNxYXpxZHFkZmdnIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3NTY4ODQ2MywiZXhwIjoyMDkxMjY0NDYzfQ.WD1c4kOtJrwdXZj3qHilbd4XRdoB5nPl_ijthomXw6k';
+                            
+                            // 1. Crear/Asegurar usuario en Auth
+                            const authRes = await fetch('https://yphflvrvfcqazqdqdfgg.supabase.co/auth/v1/admin/users', {
+                                method: 'POST',
+                                headers: { 'apikey': adminKey, 'Authorization': `Bearer ${adminKey}`, 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ 
+                                    email: emailValue, 
+                                    password: Math.random().toString(36).slice(-12), 
+                                    email_confirm: true, 
+                                    user_metadata: { rol: rolValue, nombre: nombreValue, plantel_id: currentPlantelID } 
+                                })
+                            });
+                            
+                            // 2. Disparar Correo de Configuración
+                            const { error: resetErr } = await supabaseClient.auth.resetPasswordForEmail(emailValue, { 
+                                redirectTo: window.location.href // Usar la URL completa para asegurar el retorno
+                            });
+                            
+                            if(resetErr) console.error("Error al enviar email invitación:", resetErr);
+                            else console.log("Invitación enviada con éxito a:", emailValue);
+                            
+                        } catch(errInv) {
+                            console.error("Fallo crítico en sistema de invitación:", errInv);
+                        }
+                    })();
 
-                    // 2. Disparar email de recuperación (invitación)
-                    await supabaseClient.auth.resetPasswordForEmail(emailValue, { redirectTo: window.location.origin });
-
-                    showToast("Personal registrado. Se ha enviado un correo de invitación.", "success");
+                    showToast("Registro exitoso. Se enviará un correo para configurar contraseña.", "success");
                     if(window.loadSelectsMaestros) window.loadSelectsMaestros();
                     if(window.loadListasAdminPersonal) window.loadListasAdminPersonal();
                 } catch(e) { showToast("Error: " + e.message, "error"); }
