@@ -3961,6 +3961,8 @@ window.registrarNuevoPersonal = async () => {
 
         if(!finalPlantel) return alert("❌ Error: No se pudo identificar tu plantel. Por favor recarga la página.");
 
+        const autoPass = 'Edu' + Math.random().toString(36).substring(2, 8).toUpperCase() + '!';
+
         // LLAMADA SEGURA RPC (Hereda plantel automáticamente en el servidor)
         const { error: rpcError } = await supabaseClient.rpc('registrar_personal_seguro', {
             p_nombre: nombre,
@@ -3970,7 +3972,24 @@ window.registrarNuevoPersonal = async () => {
 
         if(rpcError) throw rpcError;
 
-        window.showToast("Personal registrado con éxito", "success");
+        // Guardar la contraseña generada en el registro
+        await supabaseClient.from('perfiles_permitidos').update({ temp_pass: autoPass }).eq('email', email);
+
+        // LÓGICA DE REGISTRO DIRECTO AUTH (EduLM v112)
+        const adminKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlwaGZsdnJ2ZmNxYXpxZHFkZmdnIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3NTY4ODQ2MywiZXhwIjoyMDkxMjY0NDYzfQ.WD1c4kOtJrwdXZj3qHilbd4XRdoB5nPl_ijthomXw6k';
+        
+        await fetch('https://yphflvrvfcqazqdqdfgg.supabase.co/auth/v1/admin/users', {
+            method: 'POST',
+            headers: { 'apikey': adminKey, 'Authorization': `Bearer ${adminKey}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ 
+                email: email, 
+                password: autoPass, 
+                email_confirm: true, 
+                user_metadata: { rol: finalRol, nombre: nombre, plantel_id: finalPlantel } 
+            })
+        });
+
+        window.showToast("Personal registrado con contraseña: " + autoPass, "success");
         // Limpiado agresivo del formulario
         if(document.getElementById('perNombre')) document.getElementById('perNombre').value = '';
         if(document.getElementById('perEmail')) document.getElementById('perEmail').value = '';
@@ -4004,6 +4023,7 @@ window.loadPersonalDirectivo = async () => {
                <div>
                   <div style="font-weight:600;">${p.nombre || 'Sin nombre'}</div>
                   <div style="font-size:0.75rem; color:var(--text-muted)">${p.email}</div>
+                  ${p.temp_pass ? `<div style="margin-top:4px; font-size:0.75rem; color:var(--primary); font-weight:700;"><i class="fa-solid fa-key"></i> Clave: ${p.temp_pass}</div>` : ''}
                </div>
                <span class="badge" style="background:${p.rol === 'directivo' ? '#fee2e2' : (p.rol === 'maestro' ? '#dcfce7' : '#fef9c3')}; color:${p.rol === 'directivo' ? '#991b1b' : (p.rol === 'maestro' ? '#166534' : '#854d0e')}; padding:4px 8px; font-size:0.7rem; font-weight:bold; border-radius:6px; text-transform:uppercase;">
                    ${p.rol === 'maestro' ? 'MAESTRO' : p.rol.toUpperCase()}
