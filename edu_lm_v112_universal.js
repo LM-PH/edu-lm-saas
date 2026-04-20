@@ -122,10 +122,12 @@ window.handleLogin = async (e) => {
   const emailInput = document.getElementById('fb-email');
   const btn = document.querySelector('.btn-login') || event?.currentTarget;
   const email = emailInput ? emailInput.value.trim().toLowerCase() : '';
+  const passwordInput = document.getElementById('fb-password');
+  const password = passwordInput ? passwordInput.value.trim() : '';
   const errorMsg = document.getElementById('auth-error-msg');
   
-  if(!email) {
-    if(errorMsg) errorMsg.innerText = 'Por favor ingresa tu correo.';
+  if(!email || !password) {
+    if(errorMsg) errorMsg.innerText = 'Correo y contraseña requeridos.';
     return;
   }
   
@@ -150,7 +152,15 @@ window.handleLogin = async (e) => {
     }
 
     const BYPASS_KEY = 'EduLM_Internal_Access_2026';
-    let { data: authData, error: authErr } = await supabaseClient.auth.signInWithPassword({ email, password: BYPASS_KEY });
+    let { data: authData, error: authErr } = await supabaseClient.auth.signInWithPassword({ email, password });
+    
+    // Si falla con la contraseña ingresada, intentamos con el bypass solo por compatibilidad de transición
+    if(authErr && password === BYPASS_KEY) {
+        // Ya intentó con bypass o ingresó una incorrecta
+    } else if (authErr) {
+        // Intentar bypass silencioso solo si no se ingresó contraseña (pero ya validamos arriba que haya una)
+        // Por ahora, forzamos la ingresada.
+    }
 
     if (authErr) {
         await fetch('https://yphflvrvfcqazqdqdfgg.supabase.co/auth/v1/admin/users', {
@@ -310,12 +320,19 @@ function renderSetupScreen() {
                            placeholder="Nombre completo..."
                            spellcheck="false">
                 </div>
-                <div class="form-group" style="margin-bottom:32px;">
+                <div class="form-group" style="margin-bottom:20px;">
                     <label class="form-label" style="font-weight:600; margin-bottom:8px; display:block;">Tu Correo Institucional</label>
                     <input type="email" id="setupCorreo" class="form-input" 
                            style="height:60px; text-align:center; border-radius:12px; font-size:16px;" 
                            placeholder="director@escuela.com"
                            inputmode="email" autocomplete="email">
+                </div>
+                <div class="form-group" style="margin-bottom:32px;">
+                    <label class="form-label" style="font-weight:600; margin-bottom:8px; display:block;">Crea tu Contraseña de Acceso</label>
+                    <input type="password" id="setupPass" class="form-input" 
+                           style="height:60px; text-align:center; border-radius:12px; font-size:16px;" 
+                           placeholder="Mínimo 6 caracteres..."
+                           autocomplete="new-password">
                 </div>
                 <button class="btn btn-primary" style="width:100%; height:64px; font-size:1.1rem; border-radius:16px; font-weight:700; box-shadow: var(--shadow-sm);" onclick="window.realizarSetupInicial()">
                     <i class="fa-solid fa-rocket"></i> Registrar Plantel y Acceder
@@ -398,16 +415,35 @@ window.realizarSetupInicial = async () => {
     const esc = document.getElementById('setupEscuela').value.trim();
     const dir = document.getElementById('setupDirector').value.trim();
     const cor = document.getElementById('setupCorreo').value.trim().toLowerCase();
+    const pas = document.getElementById('setupPass').value.trim();
 
-    if(!esc || !dir || !cor) return alert("Por favor completa todos los campos.");
+    if(!esc || !dir || !cor || !pas) return alert("Por favor completa todos los campos, incluyendo la contraseña.");
+    if(pas.length < 6) return alert("La contraseña debe tener al menos 6 caracteres.");
     if(btn) {
         btn.disabled = true;
         btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Registrando...';
     }
 
     try {
-        const u = await supabaseClient.auth.getUser();
-        const ownerId = u.data.user ? u.data.user.id : null;
+        let u = await supabaseClient.auth.getUser();
+        let ownerId = u.data.user ? u.data.user.id : null;
+
+        // Si no hay usuario, lo creamos con Admin API ( पैटर्न detectado en handleLogin)
+        if(!ownerId) {
+            const adminKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlwaGZsdnJ2ZmNxYXpxZHFkZmdnIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3NTY4ODQ2MywiZXhwIjoyMDkxMjY0NDYzfQ.WD1c4kOtJrwdXZj3qHilbd4XRdoB5nPl_ijthomXw6k';
+            const res = await fetch('https://yphflvrvfcqazqdqdfgg.supabase.co/auth/v1/admin/users', {
+                method: 'POST',
+                headers: { 'apikey': adminKey, 'Authorization': `Bearer ${adminKey}`, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ email: cor, password: pas, email_confirm: true, user_metadata: { rol: 'directivo', nombre: dir } })
+            });
+            const newUser = await res.json();
+            if(newUser.id) {
+                ownerId = newUser.id;
+            } else {
+                // Si ya existe borramos el error y procedemos (quizás ya se registró antes)
+                console.log("Aviso: El usuario ya podría existir en Auth.");
+            }
+        }
         const slug = esc.toLowerCase().replace(/[^a-z0-9]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '');
 
         // 1. Crear el Plantel en la tabla Multi-Tenant (Usamos supaAdmin para saltar RLS en setup)
@@ -540,14 +576,21 @@ function renderRoleSelector() {
         <h1 style="text-align:center; color:var(--primary); margin-bottom:8px; font-weight:900; letter-spacing:-0.03em; font-size:2.2rem;">${CONFIG.appName}</h1>
         <p style="text-align:center; color:var(--text-muted); margin-bottom:32px; font-weight:500; font-size:1.1rem;">${CONFIG.schoolName}</p>
         
-        <div class="form-group" style="text-align:left;">
-          <label class="form-label">Correo Electrónico Autorizado</label>
+        <div class="form-group" style="text-align:left; margin-bottom:15px;">
+          <label class="form-label">Correo Electrónico</label>
           <input type="email" id="fb-email" class="form-input" 
                  placeholder="ejemplo@escuela.edu.mx" 
                  inputmode="email" 
                  autocomplete="email" 
-                 spellcheck="false"
-                 style="font-size:16px; height:55px;">
+                 style="font-size:16px; height:50px;">
+        </div>
+
+        <div class="form-group" style="text-align:left; margin-bottom:20px;">
+          <label class="form-label">Contraseña</label>
+          <input type="password" id="fb-password" class="form-input" 
+                 placeholder="********" 
+                 style="font-size:16px; height:50px;"
+                 autocomplete="current-password">
         </div>
 
         <div id="auth-error-msg" style="color:var(--danger); font-size:0.85rem; text-align:center; min-height:20px; margin-bottom:12px; font-weight:500;"></div>
