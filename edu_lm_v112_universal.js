@@ -2048,7 +2048,7 @@ function renderApoyoDashboard() {
   setTimeout(() => { if(window.loadFocosRojos) window.loadFocosRojos(); }, 100);
   return `
     <div class="page-header">
-      <h2 class="page-title" style="color: var(--danger)">Dashboard de Trabajo Social</h2>
+      <h2 class="page-title" style="color: var(--danger)">Pantalla de Trabajo Social</h2>
       <p class="page-subtitle">Gestión de alumnos críticos y consulta de expedientes integrales.</p>
     </div>
 
