@@ -1542,11 +1542,30 @@ function renderAdminMaestros() {
             </div>
         </div>
 
-        <div id="tabsPersonalAdmin" style="display:flex; background:var(--page-bg); padding:4px; border-radius:10px; gap:4px; border:1px solid var(--border); margin-bottom: 20px; width: max-content; overflow-x: auto; max-width:100%;">
+        <div id="tabsPersonalAdmin" style="display:flex; background:var(--page-bg); padding:4px; border-radius:10px; gap:4px; border:1px solid var(--border); margin-bottom: 12px; width: max-content; overflow-x: auto; max-width:100%;">
             <button class="btn btn-sm btn-tab-personal active" onclick="window.cambiarTabPersonal('admin', this)" style="padding:6px 12px; font-size:0.8rem; font-weight:bold; border-radius:6px; background:white; border:1px solid var(--border); cursor:pointer;">Administradores</button>
             <button class="btn btn-sm btn-tab-personal" onclick="window.cambiarTabPersonal('maestro', this)" style="padding:6px 12px; font-size:0.8rem; font-weight:bold; border-radius:6px; background:transparent; border:none; cursor:pointer; color:var(--text-muted);">Maestros</button>
             <button class="btn btn-sm btn-tab-personal" onclick="window.cambiarTabPersonal('apoyo', this)" style="padding:6px 12px; font-size:0.8rem; font-weight:bold; border-radius:6px; background:transparent; border:none; cursor:pointer; color:var(--text-muted);">Apoyo</button>
             <button class="btn btn-sm btn-tab-personal" onclick="window.cambiarTabPersonal('directivo', this)" style="padding:6px 12px; font-size:0.8rem; font-weight:bold; border-radius:6px; background:transparent; border:none; cursor:pointer; color:var(--text-muted);">Directivos</button>
+            <button class="btn btn-sm btn-tab-personal" onclick="window.cambiarTabPersonal('alumno', this)" style="padding:6px 12px; font-size:0.8rem; font-weight:bold; border-radius:6px; background:transparent; border:none; cursor:pointer; color:var(--text-muted);">Alumnos</button>
+        </div>
+
+        <div id="subTabsAlumnos" style="display:none; gap:12px; align-items:center; margin-bottom:20px; background:var(--page-bg); padding:10px; border-radius:10px; border:1px solid var(--border);">
+            <div style="font-size:0.8rem; font-weight:700; color:var(--text-muted);">Grado:</div>
+            <select id="selGradoAlumnoTab" class="form-input" style="width:105px; font-size:0.8rem; padding:4px 8px; margin:0;" onchange="window.loadListasAdminPersonal()">
+                <option value="">Todos</option>
+                <option value="1">1° Grado</option>
+                <option value="2">2° Grado</option>
+                <option value="3">3° Grado</option>
+            </select>
+            <div style="font-size:0.8rem; font-weight:700; color:var(--text-muted); margin-left:10px;">Grupo:</div>
+            <select id="selGrupoAlumnoTab" class="form-input" style="width:105px; font-size:0.8rem; padding:4px 8px; margin:0;" onchange="window.loadListasAdminPersonal()">
+                <option value="">Todos</option>
+                <option value="A">A</option>
+                <option value="B">B</option>
+                <option value="C">C</option>
+                <option value="D">D</option>
+            </select>
         </div>
         
         <div style="overflow-x:auto;">
@@ -9385,6 +9404,12 @@ window.cambiarTabPersonal = (tab, btnEl) => {
     btnEl.style.border = '1px solid var(--border)';
     btnEl.style.color = 'var(--text-main)';
     
+    // Mostrar/Ocultar Sub-tabs de Alumnos
+    const subTabs = document.getElementById('subTabsAlumnos');
+    if(subTabs) {
+        subTabs.style.display = (tab === 'alumno') ? 'flex' : 'none';
+    }
+
     // Recuperar búsqueda actual
     const searchInput = document.getElementById('busquedaPersonalAutorizado');
     const searchValue = searchInput ? searchInput.value : '';
@@ -9400,42 +9425,67 @@ window.loadListasAdminPersonal = async (searchTerm = '') => {
 
     try {
         const currentPlantelID = state.plantelId || 'general';
-        let query = supabaseClient.from('perfiles_permitidos')
-            .select('*')
-            .neq('rol', 'alumno')
-            .eq('plantel_id', currentPlantelID);
+        let itemsToRender = [];
         
-        if (searchTerm) {
-            query = query.or(`nombre.ilike.%${searchTerm}%,email.ilike.%${searchTerm}%`);
+        if (window._activePersonalTab === 'alumno') {
+            const grado = document.getElementById('selGradoAlumnoTab')?.value || '';
+            const grupo = document.getElementById('selGrupoAlumnoTab')?.value || '';
+            
+            let q = supabaseClient.from('alumnos')
+                .select('*, grupos(nombre)')
+                .eq('plantel_id', currentPlantelID);
+            
+            if (searchTerm) q = q.or(`nombre.ilike.%${searchTerm}%,contacto_email.ilike.%${searchTerm}%`);
+            
+            const { data: students, error: sErr } = await q.order('nombre');
+            if(sErr) throw sErr;
+            
+            // Filtro por grado/grupo
+            itemsToRender = students.filter(s => {
+                const gName = s.grupos?.nombre || '';
+                let ok = true;
+                if(grado && !gName.startsWith(grado)) ok = false;
+                if(grupo && !gName.endsWith(grupo)) ok = false;
+                return ok;
+            }).map(s => ({
+                id: s.id,
+                nombre: s.nombre,
+                email: s.contacto_email || 'Sin correo',
+                rol: 'alumno',
+                created_at: s.created_at,
+                estado: 'activo', // Los alumnos en esta tabla se asumen activos
+                grupo_nom: s.grupos?.nombre
+            }));
+            
+        } else {
+            let query = supabaseClient.from('perfiles_permitidos')
+                .select('*')
+                .neq('rol', 'alumno')
+                .eq('plantel_id', currentPlantelID);
+            
+            if (searchTerm) query = query.or(`nombre.ilike.%${searchTerm}%,email.ilike.%${searchTerm}%`);
+            
+            const { data: allStaff, error } = await query.order('nombre');
+            if(error) throw error;
+            
+            let tabRoles = [];
+            if(window._activePersonalTab === 'admin') tabRoles = ['admin'];
+            else if(window._activePersonalTab === 'maestro') tabRoles = ['maestro'];
+            else if(window._activePersonalTab === 'apoyo') tabRoles = ['apoyo'];
+            else if(window._activePersonalTab === 'directivo') tabRoles = ['directivo'];
+            
+            itemsToRender = allStaff.filter(p => tabRoles.includes(p.rol));
         }
-        
-        const { data: allStaff, error } = await query.order('nombre');
 
-        if(error) throw error;
+        totalCont.innerText = itemsToRender.length;
 
-        totalCont.innerText = allStaff.length;
-        
-        // Filtro local de las pestañas
-        let tabRoles = [];
-        if(window._activePersonalTab === 'admin') {
-            tabRoles = ['admin'];
-        } else if(window._activePersonalTab === 'maestro') {
-            tabRoles = ['maestro'];
-        } else if(window._activePersonalTab === 'apoyo') {
-            tabRoles = ['apoyo'];
-        } else if(window._activePersonalTab === 'directivo') {
-            tabRoles = ['directivo'];
-        }
-
-        const filteredStaff = allStaff.filter(p => tabRoles.includes(p.rol));
-
-        if(filteredStaff.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="4" style="text-align:center; padding:20px; color:var(--text-muted)">No hay personal registrado en esta categoría.</td></tr>';
+        if(itemsToRender.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="4" style="text-align:center; padding:20px; color:var(--text-muted)">No se encontraron registros en esta categoría.</td></tr>';
             return;
         }
 
         let html = '';
-        filteredStaff.forEach(p => {
+        itemsToRender.forEach(p => {
             const roleLabels = { 'admin': 'Administrador', 'maestro': 'Maestro', 'apoyo': 'Apoyo', 'directivo': 'Directivo', 'alumno': 'Alumno' };
             const roleClass = (p.rol === 'admin' || p.rol === 'directivo') ? 'badge-primary' : 
                               (p.rol === 'maestro' ? 'badge-success' : 
@@ -9454,7 +9504,7 @@ window.loadListasAdminPersonal = async (searchTerm = '') => {
                         <div style="font-size:0.7rem;">Desde: ${new Date(p.created_at).toLocaleDateString()}</div>
                     </td>
                     <td style="padding:12px; text-align:center;">
-                        <span class="badge ${roleClass}">${roleLabels[p.rol] || p.rol}</span>
+                        <span class="badge ${roleClass}">${p.grupo_nom ? `Grupo ${p.grupo_nom}` : (roleLabels[p.rol] || p.rol)}</span>
                     </td>
                     <td style="padding:12px; text-align:center;">
                         <button class="btn btn-outline btn-xs" 
