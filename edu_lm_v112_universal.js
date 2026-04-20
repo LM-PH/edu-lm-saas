@@ -185,6 +185,9 @@ window.handleLogin = async (e) => {
         plantel_id: effectiveData.plantel_id
     });
 
+    // Activar el perfil en el padrón si no lo está
+    await supabaseClient.from('perfiles_permitidos').update({ estado: 'activo' }).ilike('email', email);
+
     // SINCRONIZACIÓN DE METADATOS JWT
     await supabaseClient.auth.updateUser({ 
         data: { 
@@ -474,7 +477,8 @@ window.realizarSetupInicial = async () => {
             email: cor, 
             nombre: dir, 
             rol: 'directivo',
-            plantel_id: newPlantel.id
+            plantel_id: newPlantel.id,
+            estado: 'activo'
         }], { onConflict: 'email' });
         
         if(err2) throw err2;
