@@ -1450,6 +1450,7 @@ function renderAdminTramites() {
 
 function renderAdminMaestros() {
   setTimeout(async () => {
+    if(!window._activePersonalTab) window._activePersonalTab = 'directivo';
     if(window.loadListasAdminPersonal) window.loadListasAdminPersonal();
     if(window.initEventosAdminMaestros) window.initEventosAdminMaestros();
     if(window.loadSelectsMaestros) await window.loadSelectsMaestros();
@@ -1544,11 +1545,11 @@ function renderAdminMaestros() {
         </div>
 
         <div id="tabsPersonalAdmin" style="display:flex; background:var(--page-bg); padding:4px; border-radius:10px; gap:4px; border:1px solid var(--border); margin-bottom: 12px; width: max-content; overflow-x: auto; max-width:100%;">
-            <button class="btn btn-sm btn-tab-personal active" onclick="window.cambiarTabPersonal('admin', this)" style="padding:6px 12px; font-size:0.8rem; font-weight:bold; border-radius:6px; background:white; border:1px solid var(--border); cursor:pointer;">Administradores</button>
-            <button class="btn btn-sm btn-tab-personal" onclick="window.cambiarTabPersonal('maestro', this)" style="padding:6px 12px; font-size:0.8rem; font-weight:bold; border-radius:6px; background:transparent; border:none; cursor:pointer; color:var(--text-muted);">Maestros</button>
-            <button class="btn btn-sm btn-tab-personal" onclick="window.cambiarTabPersonal('apoyo', this)" style="padding:6px 12px; font-size:0.8rem; font-weight:bold; border-radius:6px; background:transparent; border:none; cursor:pointer; color:var(--text-muted);">Apoyo</button>
-            <button class="btn btn-sm btn-tab-personal" onclick="window.cambiarTabPersonal('directivo', this)" style="padding:6px 12px; font-size:0.8rem; font-weight:bold; border-radius:6px; background:transparent; border:none; cursor:pointer; color:var(--text-muted);">Directivos</button>
-            <button class="btn btn-sm btn-tab-personal" onclick="window.cambiarTabPersonal('alumno', this)" style="padding:6px 12px; font-size:0.8rem; font-weight:bold; border-radius:6px; background:transparent; border:none; cursor:pointer; color:var(--text-muted);">Alumnos</button>
+            <button class="btn btn-sm btn-tab-personal ${window._activePersonalTab === 'directivo' || !window._activePersonalTab ? 'active' : ''}" onclick="window.cambiarTabPersonal('directivo', this)" style="padding:6px 12px; font-size:0.8rem; font-weight:bold; border-radius:6px; background:${window._activePersonalTab === 'directivo' || !window._activePersonalTab ? 'white' : 'transparent'}; border:${window._activePersonalTab === 'directivo' || !window._activePersonalTab ? '1px solid var(--border)' : 'none'}; cursor:pointer; color:${window._activePersonalTab === 'directivo' || !window._activePersonalTab ? 'var(--text-main)' : 'var(--text-muted)'}">Directivos</button>
+            <button class="btn btn-sm btn-tab-personal ${window._activePersonalTab === 'maestro' ? 'active' : ''}" onclick="window.cambiarTabPersonal('maestro', this)" style="padding:6px 12px; font-size:0.8rem; font-weight:bold; border-radius:6px; background:${window._activePersonalTab === 'maestro' ? 'white' : 'transparent'}; border:${window._activePersonalTab === 'maestro' ? '1px solid var(--border)' : 'none'}; cursor:pointer; color:${window._activePersonalTab === 'maestro' ? 'var(--text-main)' : 'var(--text-muted)'}">Maestros</button>
+            <button class="btn btn-sm btn-tab-personal ${window._activePersonalTab === 'admin' ? 'active' : ''}" onclick="window.cambiarTabPersonal('admin', this)" style="padding:6px 12px; font-size:0.8rem; font-weight:bold; border-radius:6px; background:${window._activePersonalTab === 'admin' ? 'white' : 'transparent'}; border:${window._activePersonalTab === 'admin' ? '1px solid var(--border)' : 'none'}; cursor:pointer; color:${window._activePersonalTab === 'admin' ? 'var(--text-main)' : 'var(--text-muted)'}">Administrativos</button>
+            <button class="btn btn-sm btn-tab-personal ${window._activePersonalTab === 'apoyo' ? 'active' : ''}" onclick="window.cambiarTabPersonal('apoyo', this)" style="padding:6px 12px; font-size:0.8rem; font-weight:bold; border-radius:6px; background:${window._activePersonalTab === 'apoyo' ? 'white' : 'transparent'}; border:${window._activePersonalTab === 'apoyo' ? '1px solid var(--border)' : 'none'}; cursor:pointer; color:${window._activePersonalTab === 'apoyo' ? 'var(--text-main)' : 'var(--text-muted)'}">Personal de Apoyo</button>
+            <button class="btn btn-sm btn-tab-personal ${window._activePersonalTab === 'alumno' ? 'active' : ''}" onclick="window.cambiarTabPersonal('alumno', this)" style="padding:6px 12px; font-size:0.8rem; font-weight:bold; border-radius:6px; background:${window._activePersonalTab === 'alumno' ? 'white' : 'transparent'}; border:${window._activePersonalTab === 'alumno' ? '1px solid var(--border)' : 'none'}; cursor:pointer; color:${window._activePersonalTab === 'alumno' ? 'var(--text-main)' : 'var(--text-muted)'}">Alumnos</button>
         </div>
 
         <div id="subTabsAlumnos" style="display:none; gap:12px; align-items:center; margin-bottom:20px; background:var(--page-bg); padding:10px; border-radius:10px; border:1px solid var(--border);">
@@ -9450,7 +9451,7 @@ window.loadListasAdminPersonal = async (searchTerm = '') => {
     const totalCont = document.getElementById('totalPersonalCounter');
     if(!tbody) return;
 
-    if (!window._activePersonalTab) window._activePersonalTab = 'admin';
+    if (!window._activePersonalTab) window._activePersonalTab = 'directivo';
 
     try {
         const currentPlantelID = state.plantelId || 'general';
