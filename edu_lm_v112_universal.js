@@ -6963,41 +6963,34 @@ window.initEventosAdminMaestros = () => {
                 if(!emailValue || !nombreValue) return showToast("Por favor llena los campos.", "error");
                 
                 try {
+                    const autoPass = 'Edu' + Math.random().toString(36).substring(2, 8).toUpperCase() + '!';
+
                     const { error } = await supabaseClient.from('perfiles_permitidos').upsert([{ 
                         email: emailValue, 
                         rol: rolValue, 
                         nombre: nombreValue,
-                        plantel_id: currentPlantelID
+                        plantel_id: currentPlantelID,
+                        temp_pass: autoPass
                     }], { onConflict: 'email' });
 
                     if(error) throw error;
 
-                    // LÓGICA DE INVITACIÓN SINCRONIZADA (EduLM v112)
+                    // LÓGICA DE REGISTRO DIRECTO (EduLM v112)
                     const adminKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlwaGZsdnJ2ZmNxYXpxZHFkZmdnIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3NTY4ODQ2MywiZXhwIjoyMDkxMjY0NDYzfQ.WD1c4kOtJrwdXZj3qHilbd4XRdoB5nPl_ijthomXw6k';
                     
-                    // 1. Crear/Asegurar usuario en Auth
-                    await fetch('https://yphflvrvfcqazqdqdfgg.supabase.co/auth/v1/admin/users', {
+                    // 1. Crear/Asegurar usuario en Auth con la clave generada
+                    const authRes = await fetch('https://yphflvrvfcqazqdqdfgg.supabase.co/auth/v1/admin/users', {
                         method: 'POST',
                         headers: { 'apikey': adminKey, 'Authorization': `Bearer ${adminKey}`, 'Content-Type': 'application/json' },
                         body: JSON.stringify({ 
                             email: emailValue, 
-                            password: Math.random().toString(36).slice(-12), 
+                            password: autoPass, 
                             email_confirm: true, 
                             user_metadata: { rol: rolValue, nombre: nombreValue, plantel_id: currentPlantelID } 
                         })
                     });
                     
-                    // 2. Disparar Correo de Configuración
-                    const { error: resetErr } = await supabaseClient.auth.resetPasswordForEmail(emailValue, { 
-                        redirectTo: window.location.origin
-                    });
-                    
-                    if(resetErr) {
-                        console.error("Error SMTP/Supabase:", resetErr);
-                        showToast("Usuario registrado pero falló el envío de correo: " + resetErr.message, "warning");
-                    } else {
-                        showToast("Personal registrado e invitación enviada a " + emailValue, "success");
-                    }
+                    showToast("Personal registrado con éxito. Contraseña: " + autoPass, "success");
 
                     if(window.loadSelectsMaestros) window.loadSelectsMaestros();
                     if(window.loadListasAdminPersonal) window.loadListasAdminPersonal();
@@ -9434,6 +9427,7 @@ window.loadListasAdminPersonal = async (searchTerm = '') => {
                     <td style="padding:12px;">
                         <div style="font-weight:700; color:var(--primary); font-size:1rem;">${p.nombre || 'Sin nombre registrado'}</div>
                         <div style="font-size:0.8rem; color:var(--text-muted); font-family:monospace;">${p.email}</div>
+                        ${p.temp_pass ? `<div style="margin-top:6px; font-size:0.8rem; background:var(--primary); color:#fff; padding:3px 10px; border-radius:8px; display:inline-block; font-weight:700;"><i class="fa-solid fa-key"></i> Pass: ${p.temp_pass}</div>` : ''}
                     </td>
                     <td style="padding:12px; font-size:0.85rem; color:var(--text-muted)">
                         ${statusLabel}
