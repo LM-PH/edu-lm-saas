@@ -98,7 +98,7 @@ window.login = (rawRole) => {
     
     // Default paths per role
     if(role === 'master') state.path = '/master/saas';
-    else if(role === 'admin') state.path = '/admin/inscripcion';
+    else if(role === 'admin') state.path = '/admin/maestros';
     else if(role === 'directivo') state.path = '/directivo/autorizaciones';
     else if(role === 'maestro') state.path = '/maestro/aula';
     else if(role === 'apoyo') state.path = '/apoyo/dashboard';
@@ -551,7 +551,7 @@ window.checkSchoolSetup = async () => {
             // DETERMINAR RUTA SEGÚN ROL RECUPERADO
             if(state.role === 'master') state.path = '/master/saas';
             else if(state.role === 'directivo') state.path = '/directivo/autorizaciones';
-            else if(state.role === 'admin') state.path = '/admin/inscripcion';
+            else if(state.role === 'admin') state.path = '/admin/maestros';
             else if(state.role === 'maestro') state.path = '/maestro/aula';
             else if(state.role === 'apoyo') state.path = '/apoyo/dashboard';
             else if(state.role === 'alumno') state.path = '/alumno/credencial';
