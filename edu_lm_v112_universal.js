@@ -7230,12 +7230,17 @@ function attachDOMEvents() {
                 return alert("❌ Error: No se pudo identificar tu plantel. Por favor recarga la página.");
             }
 
+            const autoPass = 'st' + Math.floor(Math.random() * 9000 + 1000);
+
             await supabaseClient.from('perfiles_permitidos').upsert([{ 
                 email, 
                 rol: 'alumno', 
                 nombre: nombre,
-                plantel_id: finalPlantel
+                plantel_id: finalPlantel,
+                temp_pass: autoPass,
+                estado: 'activo'
             }], { onConflict: 'email' });
+
             // Normalización: Asegurar formato X°Y (ej: 2°A)
             let gradoLimpio = grado.replace('°', '');
             const grupoCompleto = `${gradoLimpio}°${grupoNom.toUpperCase()}`;
@@ -7254,7 +7259,7 @@ function attachDOMEvents() {
                plantel_id: finalPlantel
             }]);
             if(errAlumno) throw errAlumno;
-            alert("Alumno inscrito exitosamente. Matrícula: " + matricula);
+            alert(`✅ Alumno inscrito exitosamente.\n\nMatrícula: ${matricula}\nContraseña Temporal: ${autoPass}`);
           } catch (err) { alert("Error: " + err.message); }
           finally { btnGuardarIns.innerText = btnText; btnGuardarIns.disabled = false; }
         });
@@ -9472,6 +9477,12 @@ window.loadListasAdminPersonal = async (searchTerm = '') => {
             const grado = document.getElementById('selGradoAlumnoTab')?.value || '';
             const grupo = document.getElementById('selGrupoAlumnoTab')?.value || '';
             
+            if (!grado || !grupo) {
+                tbody.innerHTML = '<tr><td colspan="4" style="text-align:center; padding:40px; color:var(--text-muted)"><i class="fa-solid fa-filter" style="font-size:2rem; display:block; margin-bottom:10px; opacity:0.3;"></i> Por favor selecciona un Grado y Grupo para ver la lista de alumnos.</td></tr>';
+                totalCont.innerText = "0";
+                return;
+            }
+
             let q = supabaseClient.from('alumnos')
                 .select('*, grupos(nombre)')
                 .eq('plantel_id', currentPlantelID);
