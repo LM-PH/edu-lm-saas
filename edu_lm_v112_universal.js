@@ -613,6 +613,58 @@ function renderRoleSelector() {
     </div>
         `;
 }
+574: 
+575: function renderSetPasswordScreen() {
+576:   return `
+577:     <div class="role-selector-view">
+578:       <div class="card shadow-lg" style="width:100%; max-width:420px; padding:40px; border-radius:30px; text-align:center;">
+579:         <h2 style="color:var(--primary); margin-bottom:15px; font-weight:900;">Configura tu Acceso</h2>
+580:         <p style="color:var(--text-muted); margin-bottom:25px; font-size:0.95rem;">Hola, por favor establece tu nueva contraseña para poder entrar al portal.</p>
+581:         
+582:         <div class="form-group" style="text-align:left;">
+583:           <label class="form-label">Nueva Contraseña</label>
+584:           <input type="password" id="new-p1" class="form-input" placeholder="Mínimo 6 caracteres" style="height:50px;">
+585:         </div>
+586: 
+587:         <div class="form-group" style="text-align:left; margin-bottom:25px;">
+588:           <label class="form-label">Confirmar Contraseña</label>
+589:           <input type="password" id="new-p2" class="form-input" placeholder="Repite la contraseña" style="height:50px;">
+590:         </div>
+591: 
+592:         <button class="btn btn-primary" style="width:100%; height:55px; border-radius:12px; font-weight:700;" onclick="window.saveNewPassword()">
+593:           <i class="fa-solid fa-lock"></i> Guardar y Continuar
+594:         </button>
+595:       </div>
+596:     </div>
+597:   `;
+598: }
+599: 
+600: window.saveNewPassword = async () => {
+601:     const p1 = document.getElementById('new-p1').value.trim();
+602:     const p2 = document.getElementById('new-p2').value.trim();
+603:     if(!p1 || p1.length < 6) return alert("La contraseña debe tener al menos 6 caracteres.");
+604:     if(p1 !== p2) return alert("Las contraseñas no coinciden.");
+605: 
+606:     const btn = event.currentTarget;
+607:     const originalHtml = btn.innerHTML;
+608:     btn.disabled = true;
+609:     btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Guardando...';
+610: 
+611:     try {
+612:         const { error } = await supabaseClient.auth.updateUser({ password: p1 });
+613:         if(error) throw error;
+614:         
+615:         alert("¡Contraseña configurada con éxito! Ya puedes iniciar sesión.");
+616:         window.location.hash = "";
+617:         state.isUpdatingPassword = false;
+618:         state.role = null; 
+619:         renderApp();
+620:     } catch(e) {
+621:         alert("Error al actualizar: " + e.message);
+622:         btn.disabled = false;
+623:         btn.innerHTML = originalHtml;
+624:     }
+625: }
 
 window.handleMagicLink = async () => {
     const email = document.getElementById('fb-email').value.trim();
@@ -4209,7 +4261,9 @@ async function renderApp() {
   console.log(">>> RENDERING APP - Path:", state.path, "Role:", state.role);
 
   try {
-    if (!state.role) {
+    if(state.isUpdatingPassword) {
+      app.innerHTML = renderSetPasswordScreen();
+    } else if (!state.role) {
       app.innerHTML = renderRoleSelector();
     } else {
       const pageContent = await renderPage(state.path);
@@ -6917,7 +6971,25 @@ window.initEventosAdminMaestros = () => {
                     }], { onConflict: 'email' });
 
                     if(error) throw error;
-                    showToast("Personal registrado y vinculado al plantel.", "success");
+
+                    // MANDAR INVITACIÓN (EduLM v112)
+                    // 1. Asegurar que existe en Auth con el Admin SDK
+                    const adminKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlwaGZsdnJ2ZmNxYXpxZHFkZmdnIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3NTY4ODQ2MywiZXhwIjoyMDkxMjY0NDYzfQ.WD1c4kOtJrwdXZj3qHilbd4XRdoB5nPl_ijthomXw6k';
+                    await fetch('https://yphflvrvfcqazqdqdfgg.supabase.co/auth/v1/admin/users', {
+                        method: 'POST',
+                        headers: { 'apikey': adminKey, 'Authorization': `Bearer ${adminKey}`, 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ 
+                            email: emailValue, 
+                            password: Math.random().toString(36).slice(-12), 
+                            email_confirm: true, 
+                            user_metadata: { rol: rolValue, nombre: nombreValue, plantel_id: currentPlantelID } 
+                        })
+                    });
+
+                    // 2. Disparar email de recuperación (invitación)
+                    await supabaseClient.auth.resetPasswordForEmail(emailValue, { redirectTo: window.location.origin });
+
+                    showToast("Personal registrado. Se ha enviado un correo de invitación.", "success");
                     if(window.loadSelectsMaestros) window.loadSelectsMaestros();
                     if(window.loadListasAdminPersonal) window.loadListasAdminPersonal();
                 } catch(e) { showToast("Error: " + e.message, "error"); }
@@ -9179,6 +9251,12 @@ const startApp = async () => {
         const client = window.supabaseInstance || (window.supabase ? window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY) : null);
         
         if (client) {
+            // DETECTAR INVITACIÓN / RECUPERACIÓN V112
+            const hash = window.location.hash;
+            if (hash && (hash.includes('type=recovery') || hash.includes('access_token'))) {
+                state.isUpdatingPassword = true;
+            }
+
             const { data: { session } } = await client.auth.getSession();
             
             if (session && session.user) {
