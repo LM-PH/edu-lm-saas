@@ -713,13 +713,13 @@ function renderSidebar() {
       ] : [])
     ],
     admin: [
-      { name: 'Inscripción', path: '/admin/inscripcion', icon: 'fa-user-plus' },
-      { name: 'Boletas y Calificaciones', path: '/admin/calificaciones', icon: 'fa-star-half-stroke' },
-      { name: 'Expediente Digital', path: '/admin/expediente', icon: 'fa-folder-open' },
-      { name: 'Grupos y Asignación', path: '/admin/grupos', icon: 'fa-users-gear' },
       { name: 'Maestros y Materias', path: '/admin/maestros', icon: 'fa-chalkboard-user' },
-      { name: 'Trámites y Constancias', path: '/admin/tramites', icon: 'fa-file-signature' },
+      { name: 'Grupos y Asignación', path: '/admin/grupos', icon: 'fa-users-gear' },
+      { name: 'Inscripción', path: '/admin/inscripcion', icon: 'fa-user-plus' },
+      { name: 'Expediente Digital', path: '/admin/expediente', icon: 'fa-folder-open' },
       { name: 'Horarios de Clase', path: '/admin/horarios', icon: 'fa-calendar-days' },
+      { name: 'Boletas y Calificaciones', path: '/admin/calificaciones', icon: 'fa-star-half-stroke' },
+      { name: 'Trámites y Constancias', path: '/admin/tramites', icon: 'fa-file-signature' },
       { name: 'Comunicados Oficiales', path: '/admin/comunicados', icon: 'fa-bullhorn' },
     ],
     maestro: [
