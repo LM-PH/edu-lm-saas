@@ -4037,7 +4037,14 @@ window.loadPersonalDirectivo = async () => {
                <div>
                   <div style="font-weight:600;">${p.nombre || 'Sin nombre'}</div>
                   <div style="font-size:0.75rem; color:var(--text-muted)">${p.email}</div>
-                  ${p.temp_pass ? `<div style="margin-top:4px; font-size:0.75rem; color:var(--primary); font-weight:700;"><i class="fa-solid fa-key"></i> Clave: ${p.temp_pass}</div>` : ''}
+                  ${p.temp_pass ? `
+                     <div style="margin-top:4px; display:flex; align-items:center; gap:8px;">
+                        <div id="dir-pass-${p.email.replace(/@|\./g,'')}" style="display:none; font-size:0.75rem; color:var(--primary); font-weight:700;">
+                           <i class="fa-solid fa-key"></i> ${p.temp_pass}
+                        </div>
+                        <a href="#" style="font-size:0.7rem; color:var(--primary); font-weight:bold; text-decoration:none;" onclick="event.preventDefault(); const e=document.getElementById('dir-pass-${p.email.replace(/@|\./g,'')}'); e.style.display=(e.style.display==='none'?'block':'none'); this.innerText=(e.style.display==='none'?'Ver Clave':'Ocultar')">Ver Clave</a>
+                     </div>
+                  ` : ''}
                </div>
                <span class="badge" style="background:${p.rol === 'directivo' ? '#fee2e2' : (p.rol === 'maestro' ? '#dcfce7' : '#fef9c3')}; color:${p.rol === 'directivo' ? '#991b1b' : (p.rol === 'maestro' ? '#166534' : '#854d0e')}; padding:4px 8px; font-size:0.7rem; font-weight:bold; border-radius:6px; text-transform:uppercase;">
                    ${p.rol === 'maestro' ? 'MAESTRO' : p.rol.toUpperCase()}
@@ -9527,7 +9534,16 @@ window.loadListasAdminPersonal = async (searchTerm = '') => {
                     <td style="padding:12px;">
                         <div style="font-weight:700; color:var(--primary); font-size:1rem;">${p.nombre || 'Sin nombre registrado'}</div>
                         <div style="font-size:0.8rem; color:var(--text-muted); font-family:monospace;">${p.email}</div>
-                        ${p.temp_pass ? `<div style="margin-top:6px; font-size:0.8rem; background:var(--primary); color:#fff; padding:3px 10px; border-radius:8px; display:inline-block; font-weight:700;"><i class="fa-solid fa-key"></i> Pass: ${p.temp_pass}</div>` : ''}
+                        ${p.temp_pass ? `
+                            <div style="margin-top:6px; display:flex; align-items:center; gap:8px;">
+                                <div id="pass-${p.id || p.email.replace(/@|\./g,'')}" style="display:none; font-size:0.8rem; background:var(--primary); color:#fff; padding:3px 10px; border-radius:8px; font-weight:700;">
+                                    <i class="fa-solid fa-key"></i> ${p.temp_pass}
+                                </div>
+                                <button class="btn btn-xs" style="padding:2px 8px; font-size:0.7rem; background:#f3f4f6; border:1px solid #d1d5db; height:22px;" onclick="const e=document.getElementById('pass-${p.id || p.email.replace(/@|\./g,'')}'); const isHid=e.style.display==='none'; e.style.display=isHid?'block':'none'; this.innerText=isHid?'Ocultar':'Ver Clave'">
+                                    Ver Clave
+                                </button>
+                            </div>
+                        ` : ''}
                     </td>
                     <td style="padding:12px; font-size:0.85rem; color:var(--text-muted)">
                         ${statusLabel}
