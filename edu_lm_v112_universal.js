@@ -955,7 +955,6 @@ function renderAdminInscripcion() {
 }
 
 window.ejecutarPromocionMasiva = async () => {
-    console.log("Iniciando promoción masiva...");
     let sGrado = document.getElementById('promSourceGrado').value.trim();
     let sGrupo = document.getElementById('promSourceGrupo').value.trim();
     let tGrado = document.getElementById('promTargetGrado').value.trim();
@@ -963,120 +962,122 @@ window.ejecutarPromocionMasiva = async () => {
 
     if(!sGrado || !sGrupo || !tGrado || !tGrupo) return alert('Por favor completa todos los campos de origen y destino.');
 
-    // Búsqueda flexible reconstruyendo el nombre oficial en cualquier caso
     const formatearGrupo = (grado, grupo) => {
-        let g = grado.replace(/[^0-9]/g, ''); // Extraer solo el número
-        let l = grupo.replace(/[^a-zA-Z]/g, '').toUpperCase(); // Extraer solo la letra
-        return `${g}°${l}`; // Forzar el formato oficial: "1°A"
+        let g = grado.replace(/[^0-9]/g, ''); 
+        let l = grupo.replace(/[^a-zA-Z]/g, '').toUpperCase();
+        return `${g}°${l}`;
     };
 
     const sourceNom = formatearGrupo(sGrado, sGrupo);
     const targetNom = formatearGrupo(tGrado, tGrupo);
-    
-    // Forzar el formato del nuevo grado para la BDD (solo el número + el símbolo)
     tGrado = tGrado.replace(/[^0-9]/g, '') + '°';
 
-    if(!confirm(`¿Deseas ejecutar AHORA la promoción de TODOS los alumnos de ${sourceNom} a ${targetNom}?`)) return;
+    const isDirectivo = state.role === 'directivo';
+    const confirmMsg = isDirectivo 
+        ? `⚠️ ¿Deseas ejecutar AHORA la promoción de TODOS los alumnos de ${sourceNom} a ${targetNom}?`
+        : `⚠️ ¿Deseas SOLICITAR LA PROMOCIÓN de todos los alumnos de ${sourceNom} a ${targetNom}? El Directivo deberá autorizar este cambio.`;
+
+    if(!confirm(confirmMsg)) return;
 
     try {
-        console.log(`[Promoción] Buscando grupo origen oficial: ${sourceNom}`);
-        
-        // Búsqueda más permisiva: ilike
-        const { data: sData, error: sError } = await supaAdmin.from('grupos').select('id').ilike('nombre', sourceNom).maybeSingle();
-        if(sError) throw sError;
-        
-        if(!sData) {
-            return alert(`Atención: NO se encontró ningún grupo llamado "${sourceNom}" en el catálogo del sistema. Verifica la escritura.`);
-        }
+        if (isDirectivo) {
+            // Acción directa para Directivos
+            const { data: sData, error: sError } = await supaAdmin.from('grupos').select('id').ilike('nombre', sourceNom).maybeSingle();
+            if(sError) throw sError;
+            if(!sData) return alert(`No se encontró el grupo "${sourceNom}"`);
 
-        console.log(`[Promoción] Buscando/Creando grupo destino: ${targetNom}`);
-        let targetId;
-        const { data: tData, error: tError } = await supaAdmin.from('grupos').select('id').ilike('nombre', targetNom).maybeSingle();
-        if(tError) throw tError;
-        
-        if(tData) {
-            targetId = tData.id;
+            let targetId;
+            const { data: tData } = await supaAdmin.from('grupos').select('id').ilike('nombre', targetNom).maybeSingle();
+            if(tData) targetId = tData.id;
+            else {
+                const { data: nG, error: eG } = await supaAdmin.from('grupos').insert([{ nombre: targetNom, plantel_id: state.plantelId }]).select().single();
+                if(eG) throw eG;
+                targetId = nG.id;
+            }
+
+            const { error: errUpdate } = await supaAdmin.from('alumnos').update({ grupo_id: targetId, grado: tGrado }).eq('grupo_id', sData.id);
+            if(errUpdate) throw errUpdate;
+
+            alert(`✅ ¡Éxito! Alumnos de ${sourceNom} promovidos a ${targetNom}.`);
         } else {
-            console.log(`[Promoción] Creando nuevo grupo: ${targetNom}`);
-            const { data: nG, error: errInsert } = await supaAdmin.from('grupos').insert([{ nombre: targetNom, plantel_id: state.plantelId }]).select().single();
-            if(errInsert) throw errInsert;
-            targetId = nG.id;
+            // Solicitud para Admins
+            const { error: errReq } = await supabaseClient.from('autorizaciones_movimientos').insert([{
+                plantel_id: state.plantelId,
+                tipo_accion: 'PROMOCIÓN MASIVA',
+                detalles: `Mover grupo ${sourceNom} a ${targetNom}`,
+                estado: 'pendiente',
+                payload_json: {
+                    action: 'promover_grupo',
+                    sourceNom: sourceNom,
+                    targetNom: targetNom,
+                    tGrado: tGrado
+                }
+            }]);
+            if(errReq) throw errReq;
+            window.showToast("Solicitud de promoción masiva enviada al Directivo.", "info");
         }
 
-        console.log(`[Promoción] Verificando padrón del ID Origen ${sData.id}`);
-        // 1. Contar cuántos alumnos hay REALMENTE en ese momento en la base de datos
-        const { data: qAlumnos, error: errExist } = await supaAdmin.from('alumnos').select('id, nombre').eq('grupo_id', sData.id);
-        if(errExist) throw errExist;
-        
-        const numUpdated = qAlumnos ? qAlumnos.length : 0;
-
-        if(numUpdated === 0) {
-            alert(`[VERSIÓN V105] ⚠️ Aviso: Se encontraron 0 alumnos en el grupo ${sourceNom}.\n\n(Info técnica: ID Origen = ${sData.id}).\nSi usted está seguro de que hay alumnos en este grupo, significa que los alumnos guardados en su pantalla tienen un ID de grupo dañado o no están guardados en la tabla oficial.`);
-            return;
-        }
-
-        console.log(`[Promoción] Actualizando alumnos de ID Origen ${sData.id} al ID Destino ${targetId}`);
-        
-        // 2. Ejecutar la actualización masiva
-        const { error: errUpdate } = await supaAdmin.from('alumnos')
-            .update({ grupo_id: targetId, grado: tGrado })
-            .eq('grupo_id', sData.id);
-            
-        if(errUpdate) throw errUpdate;
-        
-        alert(`✅ ¡Éxito! Se han promovido ${numUpdated} alumnos de ${sourceNom} a ${targetNom}.\n\nListado promovido:\n${qAlumnos.map(a => '• ' + a.nombre).join('\\n')}`);
-        
-        // Limpiar campos solo si hubo éxito
+        // Limpiar campos
         document.getElementById('promSourceGrado').value = '';
         document.getElementById('promSourceGrupo').value = '';
         document.getElementById('promTargetGrado').value = '';
         document.getElementById('promTargetGrupo').value = '';
-        
-        // Refrescar vistas si están activas
-        if(typeof window.liveSearchGestion === 'function') {
-            const currentSearch = document.getElementById('inBuscarGestionGral')?.value;
-            if(currentSearch && currentSearch.length >= 2) window.liveSearchGestion(currentSearch);
-        }
-        if(typeof window.loadAlumnosInscritos === 'function') window.loadAlumnosInscritos();
 
     } catch(e) { 
-        console.error("Error crítico en promoción masiva:", e); 
-        alert('Error técnico en el proceso: ' + e.message); 
+        console.error(e); 
+        alert('Error: ' + e.message); 
     }
 };
 
 window.graduarGeneracion = async () => {
-    console.log("Iniciando graduación...");
     const grado = document.getElementById('gradoGraduacion').value.trim();
     if(!grado) return alert('Por favor indica el grado que se va a graduar.');
 
-    if(!confirm(`⚠️ ¿Deseas ELIMINAR AHORA a todos los alumnos de ${grado}°? Esta acción es irreversible.`)) return;
+    const isDirectivo = state.role === 'directivo';
+    const confirmMsg = isDirectivo 
+        ? `🚨 ATENCIÓN: Esta acción eliminará permanentemente a TODOS los alumnos de ${grado}° y revocará sus accesos. ¿Estas seguro?`
+        : `⚠️ ¿Deseas SOLICITAR LA GRADUACIÓN MASIVA de ${grado}°? Esta acción requiere autorización del Directivo.`;
+
+    if(!confirm(confirmMsg)) return;
     
-    const confirmacionExtra = prompt(`Escribe "GRADUAR" para confirmar la baja masiva:`);
-    if(confirmacionExtra !== 'GRADUAR') return;
+    if (isDirectivo) {
+        const confirmacionExtra = prompt(`Escribe "GRADUAR" para confirmar la baja masiva:`);
+        if(confirmacionExtra !== 'GRADUAR') return;
+    }
 
     try {
-        const { data: grps } = await supabaseClient.from('grupos').select('id').ilike('nombre', `${grado}%`);
-        if(!grps || grps.length === 0) throw new Error("No se encontraron grupos para ese grado.");
-        
-        const ids = grps.map(g => g.id);
-        
-        // Obtener correos para limpiar perfiles permitidos (opcional pero recomendado)
-        const { data: grads } = await supabaseClient.from('alumnos').select('contacto_email').in('grupo_id', ids);
-        
-        const { error: errDel } = await supabaseClient.from('alumnos').delete().in('grupo_id', ids);
-        if(errDel) throw errDel;
-        
-        if(grads && grads.length > 0) {
-            const emails = grads.map(g => g.contacto_email).filter(Boolean);
-            if(emails.length > 0) {
-                await supabaseClient.from('perfiles_permitidos').delete().in('email', emails);
+        if (isDirectivo) {
+            // Acción directa
+            const { data: grps } = await supabaseClient.from('grupos').select('id').ilike('nombre', `${grado}%`);
+            if(!grps || grps.length === 0) throw new Error("No se encontraron grupos para ese grado.");
+            const ids = grps.map(g => g.id);
+            const { data: grads } = await supabaseClient.from('alumnos').select('contacto_email').in('grupo_id', ids);
+            const { error: errDel } = await supabaseClient.from('alumnos').delete().in('grupo_id', ids);
+            if(errDel) throw errDel;
+            if(grads && grads.length > 0) {
+                const emails = grads.map(g => g.contacto_email).filter(Boolean);
+                if(emails.length > 0) {
+                    await supabaseClient.from('perfiles_permitidos').delete().in('email', emails);
+                }
             }
+            alert(`¡Generación Graduada! Se han eliminado los registros de ${grado}°.`);
+        } else {
+            // Solicitud para Admins
+            const { error: errReq } = await supabaseClient.from('autorizaciones_movimientos').insert([{
+                plantel_id: state.plantelId,
+                tipo_accion: 'GRADUACIÓN MASIVA',
+                detalles: `Baja permanente de todos los grupos de ${grado}°`,
+                estado: 'pendiente',
+                payload_json: {
+                    action: 'graduar_generacion',
+                    grado: grado
+                }
+            }]);
+            if(errReq) throw errReq;
+            window.showToast("Solicitud de graduación enviada al Directivo.", "info");
         }
-
-        alert(`¡Generación Graduada! Se han eliminado los registros de ${grado}°.`);
         document.getElementById('gradoGraduacion').value = '';
-    } catch(e) { console.error(e); alert('Error en graduación: ' + e.message); }
+    } catch(e) { console.error(e); alert('Error: ' + e.message); }
 };
 
 window.liveSearchGestion = async (q) => {
@@ -1103,23 +1104,44 @@ window.liveSearchGestion = async (q) => {
 }
 
 window.darDeBajaAlumno = async (id, nombre) => {
-    if(!confirm(`¿Deseas dar de BAJA DEFINITIVA a ${nombre}?`)) return;
-    try {
-        const { data: alu } = await supabaseClient.from('alumnos').select('contacto_email').eq('id', id).single();
-        const { error } = await supabaseClient.from('alumnos').delete().eq('id', id);
-        if(error) throw error;
-        
-        if(alu && alu.contacto_email) {
-            await supabaseClient.from('perfiles_permitidos').delete().eq('email', alu.contacto_email);
-        }
+    const isDirectivo = state.role === 'directivo';
+    const confirmMsg = isDirectivo 
+        ? `⚠️ ¿Deseas dar de BAJA DEFINITIVA a ${nombre}?`
+        : `⚠️ ¿Deseas SOLICITAR LA BAJA DEFINITIVA de ${nombre}? El Directivo deberá autorizar este movimiento.`;
 
-        alert('Alumno dado de baja exitosamente.');
-        document.getElementById('resGestionGral').style.display='none';
+    if(!confirm(confirmMsg)) return;
+
+    try {
+        if (isDirectivo) {
+            const { data: alu } = await supabaseClient.from('alumnos').select('contacto_email').eq('id', id).single();
+            const { error } = await supabaseClient.from('alumnos').delete().eq('id', id);
+            if(error) throw error;
+            if(alu && alu.contacto_email) {
+                await supabaseClient.from('perfiles_permitidos').delete().eq('email', alu.contacto_email);
+            }
+            alert('Alumno dado de baja exitosamente.');
+        } else {
+            const { error: errReq } = await supabaseClient.from('autorizaciones_movimientos').insert([{
+                plantel_id: state.plantelId,
+                tipo_accion: 'BAJA DE ALUMNO',
+                detalles: `Baja definitiva de student: ${nombre}`,
+                estado: 'pendiente',
+                payload_json: {
+                    action: 'delete_alumno',
+                    target_id: id,
+                    nombre: nombre
+                }
+            }]);
+            if(errReq) throw errReq;
+            window.showToast("Solicitud de baja enviada al Directivo.", "info");
+        }
+        document.getElementById('resGestionGral').style.display = 'none';
         document.getElementById('inBuscarGestionGral').value = '';
-    } catch(e) { console.error(e); alert('Error al borrar: ' + e.message); }
+    } catch(e) { console.error(e); alert('Error: ' + e.message); }
 }
 
 window.promoverGradoAlumno = async (id) => {
+    const isDirectivo = state.role === 'directivo';
     const nuevoGrado = prompt('Ingresa el nuevo GRADO (ej. 2°, 3°):');
     if(!nuevoGrado) return;
     const nuevoGrupo = prompt('Ingresa el nuevo GRUPO (ej. A, B, C):');
@@ -1128,23 +1150,41 @@ window.promoverGradoAlumno = async (id) => {
     const nombreCompletoGrupo = `${nuevoGrado}${nuevoGrupo}`;
 
     try {
-        // 1. Buscar o crear el grupo
-        let grId;
-        const { data: gData } = await supabaseClient.from('grupos').select('id').eq('nombre', nombreCompletoGrupo).maybeSingle();
-        if(gData) {
-           grId = gData.id;
+        if (isDirectivo) {
+            // 1. Buscar o crear el grupo
+            let grId;
+            const { data: gData } = await supabaseClient.from('grupos').select('id').eq('nombre', nombreCompletoGrupo).maybeSingle();
+            if(gData) {
+               grId = gData.id;
+            } else {
+               const { data: nG, error: eG } = await supabaseClient.from('grupos').insert([{ nombre: nombreCompletoGrupo, plantel_id: state.plantelId }]).select().single();
+               if(eG) throw eG;
+               grId = nG.id;
+            }
+
+            // 2. Actualizar el grupo_id del alumno
+            const { error } = await supabaseClient.from('alumnos').update({ grupo_id: grId, grado: nuevoGrado }).eq('id', id);
+            if(error) throw error;
+
+            alert(`Alumno promovido exitosamente a ${nombreCompletoGrupo}.`);
         } else {
-           const { data: nG, error: eG } = await supabaseClient.from('grupos').insert([{ nombre: nombreCompletoGrupo, plantel_id: state.plantelId }]).select().single();
-           if(eG) throw eG;
-           grId = nG.id;
+            // Solicitud para Admins
+            const { error: errReq } = await supabaseClient.from('autorizaciones_movimientos').insert([{
+                plantel_id: state.plantelId,
+                tipo_accion: 'PROMOCIÓN INDIVIDUAL',
+                detalles: `Promover alumno a: ${nombreCompletoGrupo}`,
+                estado: 'pendiente',
+                payload_json: {
+                    action: 'promover_alumno',
+                    target_id: id,
+                    targetNom: nombreCompletoGrupo,
+                    tGrado: nuevoGrado
+                }
+            }]);
+            if(errReq) throw errReq;
+            window.showToast("Solicitud de promoción enviada al Directivo.", "info");
         }
-
-        // 2. Actualizar el grupo_id del alumno (La credencial se actualiza sola al recargar por el JOIN)
-        const { error } = await supabaseClient.from('alumnos').update({ grupo_id: grId }).eq('id', id);
-        if(error) throw error;
-
-        alert(`Alumno promovido exitosamente a ${nombreCompletoGrupo}. La credencial digital ya refleja este cambio.`);
-        document.getElementById('resGestionGral').style.display='none';
+        document.getElementById('resGestionGral').style.display = 'none';
         document.getElementById('inBuscarGestionGral').value = '';
     } catch(e) { console.error(e); alert('Error: ' + e.message); }
 }
@@ -3862,6 +3902,17 @@ window.resolverAutorizacion = async (id, dictamen, payloadStr = null) => {
                     const { error } = await supabaseClient.from('alumnos').update({ grupo_id: targetId, grado: payload.tGrado }).eq('grupo_id', sData.id);
                     if(error) throw error;
                  }
+            }
+            else if(payload.action === 'promover_alumno') {
+                 let grId;
+                 const { data: gData } = await supabaseClient.from('grupos').select('id').eq('nombre', payload.targetNom).maybeSingle();
+                 if(gData) grId = gData.id;
+                 else {
+                    const { data: nG } = await supabaseClient.from('grupos').insert([{ nombre: payload.targetNom, plantel_id: state.plantelId }]).select().single();
+                    grId = nG.id;
+                 }
+                 const { error } = await supabaseClient.from('alumnos').update({ grupo_id: grId, grado: payload.tGrado }).eq('id', payload.target_id);
+                 if(error) throw error;
             }
             else if(payload.action === 'delete_personal') {
                  const { error: errPerm } = await supabaseClient.from('perfiles_permitidos').delete().eq('id', payload.id_permitido);
