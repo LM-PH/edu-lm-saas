@@ -9529,6 +9529,9 @@ window.loadListasAdminPersonal = async (searchTerm = '') => {
             itemsToRender = allStaff.filter(p => tabRoles.includes(p.rol));
         }
 
+        // Ordenar por nombre (asumiendo Apellido Paterno al inicio)
+        itemsToRender.sort((a, b) => (a.nombre || '').localeCompare((b.nombre || ''), 'es', { sensitivity: 'base' }));
+
         totalCont.innerText = itemsToRender.length;
 
         if(itemsToRender.length === 0) {
