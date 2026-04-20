@@ -613,58 +613,58 @@ function renderRoleSelector() {
     </div>
         `;
 }
-574: 
-575: function renderSetPasswordScreen() {
-576:   return `
-577:     <div class="role-selector-view">
-578:       <div class="card shadow-lg" style="width:100%; max-width:420px; padding:40px; border-radius:30px; text-align:center;">
-579:         <h2 style="color:var(--primary); margin-bottom:15px; font-weight:900;">Configura tu Acceso</h2>
-580:         <p style="color:var(--text-muted); margin-bottom:25px; font-size:0.95rem;">Hola, por favor establece tu nueva contraseña para poder entrar al portal.</p>
-581:         
-582:         <div class="form-group" style="text-align:left;">
-583:           <label class="form-label">Nueva Contraseña</label>
-584:           <input type="password" id="new-p1" class="form-input" placeholder="Mínimo 6 caracteres" style="height:50px;">
-585:         </div>
-586: 
-587:         <div class="form-group" style="text-align:left; margin-bottom:25px;">
-588:           <label class="form-label">Confirmar Contraseña</label>
-589:           <input type="password" id="new-p2" class="form-input" placeholder="Repite la contraseña" style="height:50px;">
-590:         </div>
-591: 
-592:         <button class="btn btn-primary" style="width:100%; height:55px; border-radius:12px; font-weight:700;" onclick="window.saveNewPassword()">
-593:           <i class="fa-solid fa-lock"></i> Guardar y Continuar
-594:         </button>
-595:       </div>
-596:     </div>
-597:   `;
-598: }
-599: 
-600: window.saveNewPassword = async () => {
-601:     const p1 = document.getElementById('new-p1').value.trim();
-602:     const p2 = document.getElementById('new-p2').value.trim();
-603:     if(!p1 || p1.length < 6) return alert("La contraseña debe tener al menos 6 caracteres.");
-604:     if(p1 !== p2) return alert("Las contraseñas no coinciden.");
-605: 
-606:     const btn = event.currentTarget;
-607:     const originalHtml = btn.innerHTML;
-608:     btn.disabled = true;
-609:     btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Guardando...';
-610: 
-611:     try {
-612:         const { error } = await supabaseClient.auth.updateUser({ password: p1 });
-613:         if(error) throw error;
-614:         
-615:         alert("¡Contraseña configurada con éxito! Ya puedes iniciar sesión.");
-616:         window.location.hash = "";
-617:         state.isUpdatingPassword = false;
-618:         state.role = null; 
-619:         renderApp();
-620:     } catch(e) {
-621:         alert("Error al actualizar: " + e.message);
-622:         btn.disabled = false;
-623:         btn.innerHTML = originalHtml;
-624:     }
-625: }
+
+function renderSetPasswordScreen() {
+  return `
+    <div class="role-selector-view">
+      <div class="card shadow-lg" style="width:100%; max-width:420px; padding:40px; border-radius:30px; text-align:center;">
+        <h2 style="color:var(--primary); margin-bottom:15px; font-weight:900;">Configura tu Acceso</h2>
+        <p style="color:var(--text-muted); margin-bottom:25px; font-size:0.95rem;">Hola, por favor establece tu nueva contraseña para poder entrar al portal.</p>
+        
+        <div class="form-group" style="text-align:left;">
+          <label class="form-label">Nueva Contraseña</label>
+          <input type="password" id="new-p1" class="form-input" placeholder="Mínimo 6 caracteres" style="height:50px;">
+        </div>
+
+        <div class="form-group" style="text-align:left; margin-bottom:25px;">
+          <label class="form-label">Confirmar Contraseña</label>
+          <input type="password" id="new-p2" class="form-input" placeholder="Repite la contraseña" style="height:50px;">
+        </div>
+
+        <button class="btn btn-primary" style="width:100%; height:55px; border-radius:12px; font-weight:700;" onclick="window.saveNewPassword()">
+          <i class="fa-solid fa-lock"></i> Guardar y Continuar
+        </button>
+      </div>
+    </div>
+  `;
+}
+
+window.saveNewPassword = async () => {
+    const p1 = document.getElementById('new-p1').value.trim();
+    const p2 = document.getElementById('new-p2').value.trim();
+    if(!p1 || p1.length < 6) return alert("La contraseña debe tener al menos 6 caracteres.");
+    if(p1 !== p2) return alert("Las contraseñas no coinciden.");
+
+    const btn = event.currentTarget;
+    const originalHtml = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Guardando...';
+
+    try {
+        const { error } = await supabaseClient.auth.updateUser({ password: p1 });
+        if(error) throw error;
+        
+        alert("¡Contraseña configurada con éxito! Ya puedes iniciar sesión.");
+        window.location.hash = "";
+        state.isUpdatingPassword = false;
+        state.role = null; 
+        renderApp();
+    } catch(e) {
+        alert("Error al actualizar: " + e.message);
+        btn.disabled = false;
+        btn.innerHTML = originalHtml;
+    }
+}
 
 window.handleMagicLink = async () => {
     const email = document.getElementById('fb-email').value.trim();
