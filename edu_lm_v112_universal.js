@@ -2308,7 +2308,6 @@ window.abrirExpedienteDirecto = (id) => {
 function renderApoyoReportes() {
   const today = new Date().toLocaleDateString('en-CA');
   setTimeout(() => { 
-      if(window.loadFocosRojos) window.loadFocosRojos();
       if(window.loadHistorialReportesApoyo) window.loadHistorialReportesApoyo(today); 
       if(window.loadCitatoriosApoyo) window.loadCitatoriosApoyo();
   }, 100);
@@ -2331,40 +2330,15 @@ function renderApoyoReportes() {
 
     <!-- Navegación de Pestañas Triage Conducta -->
     <div style="display:flex; gap:10px; background:var(--surface); padding:8px; border-radius:15px; border:1px solid var(--border); width:fit-content; margin: 0 auto 30px auto; overflow-x:auto;">
-        <button id="btnTabFiltroFocos" class="btn btn-primary" onclick="window.switchTabApoyoConducta('focos')" style="border-radius:10px; padding:8px 20px; white-space:nowrap;">
-           <i class="fa-solid fa-triangle-exclamation"></i> Focos Rojos
-        </button>
-        <button id="btnTabFiltroHistorial" class="btn btn-outline" onclick="window.switchTabApoyoConducta('historial')" style="border-radius:10px; padding:8px 20px; white-space:nowrap;">
-           <i class="fa-solid fa-clock-rotate-left"></i> Historial Diario
+        <button id="btnTabFiltroHistorial" class="btn btn-primary" onclick="window.switchTabApoyoConducta('historial')" style="border-radius:10px; padding:8px 20px; white-space:nowrap;">
+           <i class="fa-solid fa-clock-rotate-left"></i> Historial de Reportes
         </button>
         <button id="btnTabFiltroCitatorios" class="btn btn-outline" onclick="window.switchTabApoyoConducta('citatorios')" style="border-radius:10px; padding:8px 20px; white-space:nowrap;">
-           <i class="fa-solid fa-envelope-open-text"></i> Citatorios
+           <i class="fa-solid fa-envelope-open-text"></i> Citatorios de Padres
         </button>
     </div>
 
-    <div id="seccionFiltroFocos" class="tab-apoyo-conducta">
-         <div class="card" style="width:100%; border-top:4px solid var(--danger);">
-            <h3 style="margin-bottom:12px;"><i class="fa-solid fa-triangle-exclamation text-danger"></i> Monitor de Casos Críticos (Focos Rojos)</h3>
-            <p style="font-size:0.85rem; color:var(--text-muted); margin-bottom:20px;">Alumnos con reportes activos que requieren intervención inmediata de Trabajo Social.</p>
-            <div class="table-container">
-               <table style="width:100%; border-collapse:collapse;">
-                 <thead>
-                   <tr style="background:var(--page-bg); text-align:left;">
-                     <th style="padding:15px;">Alumno</th>
-                     <th style="padding:15px; text-align:center;">Incidencias</th>
-                     <th style="padding:15px; text-align:center;">Estado</th>
-                     <th style="padding:15px; text-align:right;">Acciones</th>
-                   </tr>
-                 </thead>
-                 <tbody id="focosRojosContenedor">
-                    <tr><td colspan="4" style="text-align:center; padding:30px; color:var(--text-muted)"><i class="fa-solid fa-spinner fa-spin"></i> Cargando monitor de focos rojos...</td></tr>
-                 </tbody>
-               </table>
-            </div>
-         </div>
-    </div>
-
-    <div id="seccionFiltroHistorial" class="tab-apoyo-conducta" style="display:none;">
+    <div id="seccionFiltroHistorial" class="tab-apoyo-conducta" style="display:block;">
          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
             <h3 style="margin:0;"><i class="fa-solid fa-clock-rotate-left text-primary"></i> Reportes del Día</h3>
             <div style="display:flex; gap:8px; align-items:center; background:white; padding:5px 12px; border-radius:10px; border:1px solid var(--border)">
@@ -2834,12 +2808,7 @@ window.switchTabApoyoConducta = (tab) => {
     });
 
     // Mostrar sección
-    if(tab === 'focos') {
-        document.getElementById('seccionFiltroFocos').style.display = 'block';
-        document.getElementById('btnTabFiltroFocos').classList.add('btn-primary');
-        document.getElementById('btnTabFiltroFocos').classList.remove('btn-outline');
-        if(window.loadFocosRojos) window.loadFocosRojos();
-    } else if(tab === 'historial') {
+    if(tab === 'historial') {
         document.getElementById('seccionFiltroHistorial').style.display = 'block';
         document.getElementById('btnTabFiltroHistorial').classList.add('btn-primary');
         document.getElementById('btnTabFiltroHistorial').classList.remove('btn-outline');
@@ -2877,8 +2846,8 @@ window.loadCitatoriosApoyo = async () => {
             return `
                 <div class="card" style="padding:15px; border:1px solid ${isEnterado ? '#bbf7d0' : '#fed7aa'}; background:white; position:relative; box-shadow:var(--shadow-sm);">
                     <div style="display:flex; justify-content:space-between; margin-bottom:10px;">
-                        <span class="badge" style="background:${isEnterado ? '#22c55e' : '#f97316'}; color:white; font-size:0.7rem;">
-                            ${isEnterado ? '<i class="fa-solid fa-check-double"></i> ENTERADO' : '<i class="fa-solid fa-clock"></i> PENDIENTE'}
+                        <span class="badge" style="background:${isEnterado ? '#22c55e' : (c.visto_por_alumno ? '#3b82f6' : '#f97316')}; color:white; font-size:0.75rem; padding:4px 10px; border-radius:8px;">
+                            ${isEnterado ? '<i class="fa-solid fa-file-signature"></i> FIRMADO POR PADRE' : (c.visto_por_alumno ? '<i class="fa-solid fa-eye"></i> VISTO POR ALUMNO' : '<i class="fa-solid fa-clock"></i> PENDIENTE DE VISTA')}
                         </span>
                         <small style="color:var(--text-muted); font-size:0.75rem;">${new Date(c.creado_en).toLocaleDateString()}</small>
                     </div>
