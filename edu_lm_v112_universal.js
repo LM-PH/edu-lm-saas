@@ -3592,15 +3592,20 @@ window.actualizarUIPortal = () => {
         txt.style.color = "var(--success)";
         desc.innerText = "Asistencias puntuales.";
         indicator.style.background = "var(--success)";
+        
+        // El botón rojo en modo normal ahora solo cambia a Retardo, no marca inasistencias masivas
         btnFin.style.display = "inline-flex";
+        btnFin.innerHTML = '<i class="fa-solid fa-clock"></i> Cerrar Normal e Ir a Retardos';
+        btnFin.onclick = () => window.cambiarEstadoAsistencia('retardo');
+
         btnRet.style.display = "none";
         btnNorm.style.display = "none";
         const psc = document.getElementById('pref-inicio-scan');
         if(psc) { psc.style.opacity = "1"; psc.style.pointerEvents = "auto"; }
     } else if(window._estadoPaseLista === 'finalizado') {
-        txt.innerText = "CERRADO";
+        txt.innerText = "CERRADO DEFINITIVAMENTE";
         txt.style.color = "var(--danger)";
-        desc.innerText = "Re-activa para registrar retrasos.";
+        desc.innerText = "Reporte de inasistencias generado.";
         indicator.style.background = "var(--danger)";
         btnFin.style.display = "none";
         btnRet.style.display = "inline-flex";
@@ -3612,7 +3617,12 @@ window.actualizarUIPortal = () => {
         txt.style.color = "var(--warning)";
         desc.innerText = "Registros marcados como RETARDO.";
         indicator.style.background = "var(--warning)";
+        
+        // Solo en modo retardo el botón rojo dispara las inasistencias masivas
         btnFin.style.display = "inline-flex";
+        btnFin.innerHTML = '<i class="fa-solid fa-lock"></i> Finalizar Pase (Enviar Faltas)';
+        btnFin.onclick = () => window.generarInasistenciasMasivas();
+
         btnRet.style.display = "none";
         btnNorm.style.display = "inline-flex";
         const psc = document.getElementById('pref-inicio-scan');
