@@ -537,6 +537,7 @@ window.checkSchoolSetup = async () => {
             }
 
             state.user = session.user;
+            state.userName = profile.nombre || session.user.email;
             
             // NORMALIZACIÓN DE ROL (Unificación Total de Sinónimos)
             let normRole = profile.rol;
@@ -4687,8 +4688,8 @@ window.saveApoyoBitacora = async () => {
     try {
         const u = await supabaseClient.auth.getUser();
         const email = u.data.user?.email || 'S/C';
-        const nombre = state.user?.nombre || email;
-        const rol = state.user?.rol === 'apoyo' ? 'Prefectura/TS' : (state.user?.rol || 'Personal');
+        const nombre = state.userName || email;
+        const rol = state.role === 'apoyo' ? 'Prefectura/TS' : (state.role || 'Personal');
 
         const { error } = await supabaseClient.from('bitacora_maestro').insert({
             texto: texto,
@@ -4726,7 +4727,7 @@ window.loadApoyoBitacora = async (fechaSeleccionada) => {
                 <div style="font-size:0.75rem; color:var(--text-muted)"><b>${hora}</b> | ${new Date(b.creado_en).toLocaleDateString()}</div>
                 <p style="margin:5px 0 0 0; font-size:0.95rem; color:var(--text-main); line-height:1.4;">${b.texto}</p>
                 <div style="font-size:0.75rem; color:var(--primary); margin-top:6px; background:var(--primary-light); padding:2px 8px; border-radius:6px; width:fit-content; font-weight:600;">
-                    <i class="fa-solid fa-user-pen"></i> Autenticado por: ${b.firma_autor || 'S/D'}
+                    <i class="fa-solid fa-user-pen"></i> Autenticado por: ${b.firma_autor ? b.firma_autor.replace(state.user?.email || '---', state.userName || (state.user?.email || 'S/D')) : 'S/D'}
                 </div>
             </div>`;
         }).join('') || `<div style="text-align:center; padding:30px; color:var(--text-muted)">
