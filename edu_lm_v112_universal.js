@@ -2308,7 +2308,6 @@ window.abrirExpedienteDirecto = (id) => {
 function renderApoyoReportes() {
   const today = new Date().toLocaleDateString('en-CA');
   setTimeout(() => { 
-      if(window.loadHistorialReportesApoyo) window.loadHistorialReportesApoyo(today); 
       if(window.loadCitatoriosApoyo) window.loadCitatoriosApoyo();
   }, 100);
   
@@ -2328,30 +2327,9 @@ function renderApoyoReportes() {
       </div>
     </div>
 
-    <!-- Navegación de Pestañas Triage Conducta -->
-    <div style="display:flex; gap:10px; background:var(--surface); padding:8px; border-radius:15px; border:1px solid var(--border); width:fit-content; margin: 0 auto 30px auto; overflow-x:auto;">
-        <button id="btnTabFiltroHistorial" class="btn btn-primary" onclick="window.switchTabApoyoConducta('historial')" style="border-radius:10px; padding:8px 20px; white-space:nowrap;">
-           <i class="fa-solid fa-clock-rotate-left"></i> Historial de Reportes
-        </button>
-        <button id="btnTabFiltroCitatorios" class="btn btn-outline" onclick="window.switchTabApoyoConducta('citatorios')" style="border-radius:10px; padding:8px 20px; white-space:nowrap;">
-           <i class="fa-solid fa-envelope-open-text"></i> Citatorios de Padres
-        </button>
-    </div>
+    <!-- El apartado de historial de reportes ha sido removido a petición del usuario. Solo se mantiene Citatorios y creación. -->
 
-    <div id="seccionFiltroHistorial" class="tab-apoyo-conducta" style="display:block;">
-         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
-            <h3 style="margin:0;"><i class="fa-solid fa-clock-rotate-left text-primary"></i> Reportes del Día</h3>
-            <div style="display:flex; gap:8px; align-items:center; background:white; padding:5px 12px; border-radius:10px; border:1px solid var(--border)">
-               <i class="fa-solid fa-calendar-day" style="color:var(--primary)"></i>
-               <input type="date" id="fechaFiltroHistorialApoyo" class="form-input" style="border:none; padding:0; font-size:0.9rem;" value="${today}" onchange="window.loadHistorialReportesApoyo(this.value)">
-            </div>
-         </div>
-         <div id="historialReportesApoyo" style="display:flex; flex-direction:column; gap:16px;">
-            <div style="text-align:center; padding:40px; color:var(--text-muted)"><i class="fa-solid fa-spinner fa-spin fa-2x"></i><br><p style="margin-top:10px;">Cargando historial de reportes...</p></div>
-         </div>
-    </div>
-
-    <div id="seccionFiltroCitatorios" class="tab-apoyo-conducta" style="display:none;">
+    <div id="seccionFiltroCitatorios" class="tab-apoyo-conducta" style="display:block;">
          <div class="card" style="width:100%; border-top:4px solid var(--warning);">
             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
                 <div>
