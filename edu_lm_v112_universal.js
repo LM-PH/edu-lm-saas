@@ -2356,7 +2356,9 @@ function renderApoyoReportes() {
                      <th style="padding:15px; text-align:right;">Acciones</th>
                    </tr>
                  </thead>
-                 <tbody id="focosRojosContenedor"></tbody>
+                 <tbody id="focosRojosContenedor">
+                    <tr><td colspan="4" style="text-align:center; padding:30px; color:var(--text-muted)"><i class="fa-solid fa-spinner fa-spin"></i> Cargando monitor de focos rojos...</td></tr>
+                 </tbody>
                </table>
             </div>
          </div>
@@ -2370,7 +2372,9 @@ function renderApoyoReportes() {
                <input type="date" id="fechaFiltroHistorialApoyo" class="form-input" style="border:none; padding:0; font-size:0.9rem;" value="${today}" onchange="window.loadHistorialReportesApoyo(this.value)">
             </div>
          </div>
-         <div id="historialReportesApoyo" style="display:flex; flex-direction:column; gap:16px;"></div>
+         <div id="historialReportesApoyo" style="display:flex; flex-direction:column; gap:16px;">
+            <div style="text-align:center; padding:40px; color:var(--text-muted)"><i class="fa-solid fa-spinner fa-spin fa-2x"></i><br><p style="margin-top:10px;">Cargando historial de reportes...</p></div>
+         </div>
     </div>
 
     <div id="seccionFiltroCitatorios" class="tab-apoyo-conducta" style="display:none;">
@@ -2562,9 +2566,13 @@ window.loadHistorialReportesApoyo = async (fechaSeleccionada) => {
     const endOfDay = `${fecha}T23:59:59.999Z`;
 
     try {
-        const { data, error } = await supabaseClient
+        const query = supabaseClient
             .from('reportes_conducta')
-            .select('*, alumnos(nombre, matricula), perfiles(nombre, rol)')
+            .select('*, alumnos(nombre, matricula), perfiles:autor_id(nombre, rol)')
+            .eq('plantel_id', state.plantelId);
+
+        // Si la columna es timestamptz, el filtro ISO funciona mejor
+        const { data, error } = await query
             .gte('fecha', startOfDay)
             .lte('fecha', endOfDay)
             .order('fecha', { ascending: false });
