@@ -26,7 +26,22 @@ let _state = {
   userName: '',
   plantelId: null,
   path: '/',
-  schoolConfigured: false
+  schoolConfigured: false,
+  cameraMode: 'environment'
+};
+
+window.toggleCameraMode = () => {
+  state.cameraMode = (state.cameraMode === 'environment') ? 'user' : 'environment';
+  window.showToast(`Cámara cambiada a: ${state.cameraMode === 'environment' ? 'Trasera' : 'Frontal'}`, "info");
+  
+  // Reiniciar escáner activo si existe
+  if(window._mScanner) { window.startMaestroQR(); }
+  if(window._prefScanner) { window.startPrefScanner(window.prefScanMode || 'metralleta'); }
+  
+  const evalModal = document.getElementById('modalQREvaluacion');
+  if(evalModal && evalModal.style.display === 'flex' && window._lastEvalParams) {
+      window.abrirQREvaluacion(...window._lastEvalParams);
+  }
 };
 
 const state = new Proxy(_state, {
@@ -1877,6 +1892,9 @@ function renderMaestroAula() {
              <button id="btnCerrarSesionDefinitivo" class="btn btn-danger btn-sm" style="display:none; border-radius:20px; padding:8px 20px; font-weight:bold;" onclick="window.confirmarCierreSesion()">
                 <i class="fa-solid fa-lock"></i> FINALIZAR SESIÓN Y PONER FALTAS
              </button>
+             <button class="btn btn-info btn-xs" onclick="window.toggleCameraMode()" style="border-radius:20px; margin-left:10px;">
+                <i class="fa-solid fa-camera-rotate"></i> Girar Cámara
+             </button>
           </div>
 
           <button class="btn btn-outline btn-lg" style="width: 100%; border-color: var(--danger); color: var(--danger)" onclick="window.openReporteModal()">
@@ -1964,6 +1982,9 @@ function renderMaestroActividades() {
           <button class="btn-close" style="position:absolute; top:12px; right:12px; border:none; background:none; font-size:1.5rem; cursor:pointer;" onclick="window.cerrarQREvaluacion()">&times;</button>
           <h3 style="margin-top:0;">Evaluación QR Rápida</h3>
           <p id="qrActividadInfo" style="color:var(--text-muted); font-size:0.9rem; margin-bottom:16px;">Escaneando para: Actividad</p>
+          <div style="text-align:right; margin-bottom:10px;">
+             <button class="btn btn-xs btn-info" onclick="window.toggleCameraMode()"><i class="fa-solid fa-camera-rotate"></i> Girar</button>
+          </div>
           <div id="qr-reader-eval" style="width:100%; max-width:350px; margin: 0 auto;"></div>
           
           <div id="panelCalificacionQR" style="display:none; margin-top:20px;">
@@ -3333,6 +3354,9 @@ function renderApoyoPrefectura() {
             </button>
             <button id="btn-resume-pref" class="btn btn-primary" onclick="window.startPrefScanner('metralleta')" style="display:none; border-radius:30px; padding:10px 25px;">
                 <i class="fa-solid fa-play"></i> Reanudar Cámara
+            </button>
+            <button class="btn btn-info" onclick="window.toggleCameraMode()" style="border-radius:30px; padding:10px 25px;">
+                <i class="fa-solid fa-camera-rotate"></i> Girar Cámara
             </button>
         </div>
     </div>
@@ -6225,6 +6249,7 @@ let currentActividadId = null;
 let targetStudentId = null;
 
 window.abrirQREvaluacion = (actId, actTitulo, actGrupoId, actTargetGrado, actMateria) => {
+    window._lastEvalParams = [actId, actTitulo, actGrupoId, actTargetGrado, actMateria];
     currentActividadId = actId;
     // Limpiar espacios que puedan venir del template literal
     actGrupoId = (actGrupoId || '').trim();
@@ -6243,7 +6268,7 @@ window.abrirQREvaluacion = (actId, actTitulo, actGrupoId, actTargetGrado, actMat
     document.getElementById('qr-reader-eval').innerHTML = '';
     qrEvalScanner = new Html5Qrcode("qr-reader-eval");
     
-    qrEvalScanner.start({ facingMode: "environment" }, { fps: 10, qrbox: {width: 250, height: 250} }, async (decodedText) => {
+    qrEvalScanner.start({ facingMode: state.cameraMode }, { fps: 10, qrbox: {width: 250, height: 250} }, async (decodedText) => {
         try { await qrEvalScanner.stop(); } catch(e){}
         document.getElementById('qr-reader-eval').innerHTML = '<div style="color:var(--success); text-align:center; padding:20px;"><i class="fa-solid fa-check-circle fa-3x"></i><p>QR Detectado</p></div>';
         
@@ -7797,7 +7822,7 @@ window.startMaestroQR = async () => {
     if(window._mScanner) { await window._mScanner.stop().catch(()=>{}); window._mScanner = null; }
     window._mScanner = new Html5Qrcode("reader-maestro");
     window._isProcessingQR = false;
-    await window._mScanner.start({ facingMode: "environment" }, { fps: 10, qrbox: { width: 250, height: 250 } }, 
+    await window._mScanner.start({ facingMode: state.cameraMode }, { fps: 10, qrbox: { width: 250, height: 250 } }, 
         async (decodedText) => {
             if(window._isProcessingQR) return;
             window._isProcessingQR = true;
@@ -7947,7 +7972,7 @@ window.startPrefScanner = async (mode = 'metralleta') => {
             
             window._prefScanner = new Html5Qrcode("reader-prefectura");
             await window._prefScanner.start(
-                { facingMode: "environment" },
+                { facingMode: state.cameraMode },
                 { fps: 15, qrbox: { width: 250, height: 250 } },
                 (decodedText) => { 
                     // Ya no truncamos a 36, enviamos el texto completo para buscar matrícula
