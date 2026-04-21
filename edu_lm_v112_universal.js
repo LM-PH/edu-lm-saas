@@ -2308,27 +2308,84 @@ window.abrirExpedienteDirecto = (id) => {
 function renderApoyoReportes() {
   const today = new Date().toLocaleDateString('en-CA');
   setTimeout(() => { 
+      if(window.loadFocosRojos) window.loadFocosRojos();
       if(window.loadHistorialReportesApoyo) window.loadHistorialReportesApoyo(today); 
+      if(window.loadCitatoriosApoyo) window.loadCitatoriosApoyo();
   }, 100);
   
   return `
     <div class="page-header" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:16px;">
       <div>
         <h2 class="page-title">Incidencias y Conducta</h2>
-        <p class="page-subtitle">Gestión y registro de reportes escolares.</p>
+        <p class="page-subtitle">Personal de Apoyo | Triage y Mediación Escolar</p>
       </div>
       <div style="display:flex; gap:12px; align-items:center;">
+        <button class="btn btn-outline" onclick="window.abrirModalCitatorio()" style="padding:10px 20px; border-radius:12px; font-weight:600; display:flex; align-items:center; gap:8px; border:1.5px solid var(--primary); color:var(--primary);">
+            <i class="fa-solid fa-envelope-open-text"></i> Crear Citatorio
+        </button>
         <button class="btn btn-primary" onclick="window.abrirModalReporteApoyo()" style="padding:10px 20px; border-radius:12px; font-weight:600; display:flex; align-items:center; gap:8px;">
             <i class="fa-solid fa-plus-circle"></i> Nuevo Reporte
         </button>
-        <div class="card" style="padding:8px 16px; display:flex; align-items:center; gap:12px; border:1px solid var(--border); margin:0; background:rgba(255,255,255,0.7); backdrop-filter:blur(5px);">
-           <i class="fa-solid fa-calendar-day" style="color:var(--primary)"></i>
-           <input type="date" id="fechaFiltroApoyo" class="form-input" value="${today}" 
-                  style="width:auto; padding:5px; border:none; background:transparent; font-size:0.9rem; font-weight:600;"
-                  onchange="window.loadHistorialReportesApoyo(this.value)">
-           <button class="btn btn-outline btn-xs" onclick="document.getElementById('fechaFiltroApoyo').value='${today}'; window.loadHistorialReportesApoyo('${today}')" style="border-radius:8px;">Hoy</button>
-        </div>
       </div>
+    </div>
+
+    <!-- Navegación de Pestañas Triage Conducta -->
+    <div style="display:flex; gap:10px; background:var(--surface); padding:8px; border-radius:15px; border:1px solid var(--border); width:fit-content; margin: 0 auto 30px auto; overflow-x:auto;">
+        <button id="btnTabFiltroFocos" class="btn btn-primary" onclick="window.switchTabApoyoConducta('focos')" style="border-radius:10px; padding:8px 20px; white-space:nowrap;">
+           <i class="fa-solid fa-triangle-exclamation"></i> Focos Rojos
+        </button>
+        <button id="btnTabFiltroHistorial" class="btn btn-outline" onclick="window.switchTabApoyoConducta('historial')" style="border-radius:10px; padding:8px 20px; white-space:nowrap;">
+           <i class="fa-solid fa-clock-rotate-left"></i> Historial Diario
+        </button>
+        <button id="btnTabFiltroCitatorios" class="btn btn-outline" onclick="window.switchTabApoyoConducta('citatorios')" style="border-radius:10px; padding:8px 20px; white-space:nowrap;">
+           <i class="fa-solid fa-envelope-open-text"></i> Citatorios
+        </button>
+    </div>
+
+    <div id="seccionFiltroFocos" class="tab-apoyo-conducta">
+         <div class="card" style="width:100%; border-top:4px solid var(--danger);">
+            <h3 style="margin-bottom:12px;"><i class="fa-solid fa-triangle-exclamation text-danger"></i> Monitor de Casos Críticos (Focos Rojos)</h3>
+            <p style="font-size:0.85rem; color:var(--text-muted); margin-bottom:20px;">Alumnos con reportes activos que requieren intervención inmediata de Trabajo Social.</p>
+            <div class="table-container">
+               <table style="width:100%; border-collapse:collapse;">
+                 <thead>
+                   <tr style="background:var(--page-bg); text-align:left;">
+                     <th style="padding:15px;">Alumno</th>
+                     <th style="padding:15px; text-align:center;">Incidencias</th>
+                     <th style="padding:15px; text-align:center;">Estado</th>
+                     <th style="padding:15px; text-align:right;">Acciones</th>
+                   </tr>
+                 </thead>
+                 <tbody id="focosRojosContenedor"></tbody>
+               </table>
+            </div>
+         </div>
+    </div>
+
+    <div id="seccionFiltroHistorial" class="tab-apoyo-conducta" style="display:none;">
+         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+            <h3 style="margin:0;"><i class="fa-solid fa-clock-rotate-left text-primary"></i> Reportes del Día</h3>
+            <div style="display:flex; gap:8px; align-items:center; background:white; padding:5px 12px; border-radius:10px; border:1px solid var(--border)">
+               <i class="fa-solid fa-calendar-day" style="color:var(--primary)"></i>
+               <input type="date" id="fechaFiltroHistorialApoyo" class="form-input" style="border:none; padding:0; font-size:0.9rem;" value="${today}" onchange="window.loadHistorialReportesApoyo(this.value)">
+            </div>
+         </div>
+         <div id="historialReportesApoyo" style="display:flex; flex-direction:column; gap:16px;"></div>
+    </div>
+
+    <div id="seccionFiltroCitatorios" class="tab-apoyo-conducta" style="display:none;">
+         <div class="card" style="width:100%; border-top:4px solid var(--warning);">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
+                <div>
+                    <h3 style="margin-bottom:4px;"><i class="fa-solid fa-envelope-open-text text-warning"></i> Control de Citatorios</h3>
+                    <p style="font-size:0.85rem; color:var(--text-muted);">Estatus de las notificaciones enviadas a padres de familia.</p>
+                </div>
+                <button class="btn btn-primary" onclick="window.abrirModalCitatorio()" style="background:var(--warning); color:#1a1a1a; border:none;">
+                    <i class="fa-solid fa-plus"></i> Nuevo Citatorio Manual
+                </button>
+            </div>
+            <div id="contenedorCitatoriosApoyo" style="display:grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap:20px;"></div>
+         </div>
     </div>
 
     <!-- Modal de Creación de Reporte (Oculto por defecto) -->
@@ -2339,7 +2396,7 @@ function renderApoyoReportes() {
             
             <div style="margin-top:20px;">
                 <label style="display:block; font-size:0.85rem; margin-bottom:5px; font-weight:600;">Buscar Alumno:</label>
-                <input type="text" id="busquedaAlumnoApoyo" class="form-input" placeholder="Nombre o Matrícula..." onkeyup="window.buscarAlumnosReporteApoyo(this.value)" style="border-radius:10px;">
+                <input type="text" id="busquedaAlumnoApoyo" class="form-input" placeholder="Nombre o Matrícula..." onkeyup="window.buscarAlumnosReporteApoyo(this.value, 'reporte')" style="border-radius:10px;">
                 <div id="resultadosBusquedaApoyo" style="max-height:150px; overflow-y:auto; border:1px solid var(--border); border-top:none; display:none; border-radius:0 0 10px 10px; background:white;"></div>
                 <input type="hidden" id="alumnoIdSeleccionado">
                 <div id="alumnoSeleccionadoLabel" style="margin-top:10px; display:none; padding:10px; background:var(--page-bg); border-radius:10px; font-size:0.9rem; border-left:4px solid var(--primary);"></div>
@@ -2377,7 +2434,38 @@ function renderApoyoReportes() {
         </div>
     </div>
 
-    <!-- Modal de Atención a Foco Rojo / Citatorio -->
+    <!-- Modal Nuevo Citatorio -->
+    <div id="modalNuevoCitatorio" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); z-index:9999; backdrop-filter:blur(4px);">
+        <div class="card" style="max-width:500px; margin:50px auto; padding:25px; position:relative; box-shadow:var(--shadow-lg);">
+            <button onclick="document.getElementById('modalNuevoCitatorio').style.display='none'" style="position:absolute; top:15px; right:15px; border:none; background:none; font-size:1.5rem; cursor:pointer; color:var(--text-muted)">&times;</button>
+            <h3 style="margin-top:0; color:#856404;"><i class="fa-solid fa-envelope-circle-check"></i> Redactar Nuevo Citatorio</h3>
+            
+            <div style="margin-top:20px;">
+                <label style="display:block; font-size:0.85rem; margin-bottom:5px; font-weight:600;">Buscar Alumno:</label>
+                <input type="text" id="busquedaAlumnoCitatorio" class="form-input" placeholder="Nombre o Matrícula..." onkeyup="window.buscarAlumnosReporteApoyo(this.value, 'citatorio')" style="border-radius:10px;">
+                <div id="resultadosBusquedaCitatorio" style="max-height:150px; overflow-y:auto; border:1px solid var(--border); border-top:none; display:none; border-radius:0 0 10px 10px; background:white;"></div>
+                <input type="hidden" id="alumnoIdCitatorio">
+                <div id="alumnoSeleccionadoLabelCitatorio" style="margin-top:10px; display:none; padding:10px; background:#fffbeb; border-radius:10px; font-size:0.9rem; border-left:4px solid #f6e05e;"></div>
+            </div>
+
+            <div style="margin-top:15px;">
+                <label style="display:block; font-size:0.85rem; margin-bottom:5px; font-weight:600;">Fecha y Hora Sugerida (Opcional):</label>
+                <input type="datetime-local" id="fechaCitaCitatorio" class="form-input" style="border-radius:10px;">
+            </div>
+
+            <div style="margin-top:15px;">
+                <label style="display:block; font-size:0.85rem; margin-bottom:5px; font-weight:600;">Motivo del Citatorio:</label>
+                <textarea id="motivoCitatorio" class="form-input" placeholder="Ej: Junta para seguimiento académico o conductual..." style="height:120px; border-radius:10px; resize:none;"></textarea>
+            </div>
+
+            <div style="margin-top:25px; display:flex; gap:10px;">
+                <button class="btn btn-outline" style="flex:1" onclick="document.getElementById('modalNuevoCitatorio').style.display='none'">Cancelar</button>
+                <button class="btn" id="btnGuardarCitatorio" style="flex:1; background:#f97316; color:white; border:none;" onclick="window.guardarCitatorio()">Enviar Citatorio</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal de Atención a Foco Rojo / RESOLUCIÓN FINAL -->
     <div id="modalAtencionFoco" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); z-index:10000; backdrop-filter:blur(4px);">
         <div class="card" style="max-width:600px; margin:40px auto; padding:25px; position:relative; box-shadow:var(--shadow-lg);">
             <button onclick="document.getElementById('modalAtencionFoco').style.display='none'" style="position:absolute; top:15px; right:15px; border:none; background:none; font-size:1.5rem; cursor:pointer; color:var(--text-muted)">&times;</button>
@@ -2385,6 +2473,7 @@ function renderApoyoReportes() {
             <p style="font-size:0.85rem; color:var(--text-muted); margin-bottom:20px;">Documenta la junta con el padre de familia y los compromisos acordados para cerrar el expediente temporal.</p>
             
             <input type="hidden" id="atencionAlumnoId">
+            <input type="hidden" id="atencionCitatorioId">
             <div id="atencionAlumnoNombre" style="padding:12px; background:var(--page-bg); border-radius:12px; font-weight:600; margin-bottom:20px; border-left:4px solid var(--success);"></div>
 
             <div style="margin-bottom:15px;">
@@ -2400,7 +2489,7 @@ function renderApoyoReportes() {
             <div style="display:flex; gap:10px;">
                 <button class="btn btn-outline" style="flex:1" onclick="document.getElementById('modalAtencionFoco').style.display='none'">Cancelar</button>
                 <button class="btn btn-primary" id="btnConfirmarResolucion" style="flex:1; background:var(--success); border-color:var(--success)" onclick="window.guardarAtencionFoco()">
-                    <i class="fa-solid fa-check-double"></i> Guardar y Resolver Todo
+                    <i class="fa-solid fa-check-double"></i> Guardar y Archivar Todo
                 </button>
             </div>
         </div>
@@ -2541,8 +2630,9 @@ window.abrirModalReporteApoyo = () => {
     document.getElementById('resultadosBusquedaApoyo').style.display = 'none';
 };
 
-window.buscarAlumnosReporteApoyo = async (val) => {
-    const resDiv = document.getElementById('resultadosBusquedaApoyo');
+window.buscarAlumnosReporteApoyo = async (val, mode = 'reporte') => {
+    const resId = mode === 'reporte' ? 'resultadosBusquedaApoyo' : 'resultadosBusquedaCitatorio';
+    const resDiv = document.getElementById(resId);
     if(!val || val.length < 2) {
         resDiv.style.display = 'none';
         return;
@@ -2560,7 +2650,7 @@ window.buscarAlumnosReporteApoyo = async (val) => {
                 <div style="padding:10px; border-bottom:1px solid var(--border); cursor:pointer; font-size:0.85rem;" 
                      onmouseover="this.style.background='#f0f0f0'" 
                      onmouseout="this.style.background='white'"
-                     onclick="window.seleccionarAlumnoReporteApoyo('${a.id}', '${a.nombre}', '${a.grupos?.nombre || 'S/G'}')">
+                     onclick="window.seleccionarAlumnoReporteApoyo('${a.id}', '${a.nombre}', '${a.grupos?.nombre || 'S/G'}', '${mode}')">
                     <b>${a.nombre}</b><br><small style="color:var(--text-muted)">${a.matricula} - ${a.grupos?.nombre || 'S/G'}</small>
                 </div>
             `).join('');
@@ -2572,13 +2662,22 @@ window.buscarAlumnosReporteApoyo = async (val) => {
     } catch(e) { console.error(e); }
 };
 
-window.seleccionarAlumnoReporteApoyo = (id, nombre, grupo) => {
-    document.getElementById('alumnoIdSeleccionado').value = id;
-    const label = document.getElementById('alumnoSeleccionadoLabel');
-    label.innerHTML = `<i class="fa-solid fa-user-check"></i> Seleccionado: <b>${nombre}</b> (${grupo})`;
-    label.style.display = 'block';
-    document.getElementById('busquedaAlumnoApoyo').value = '';
-    document.getElementById('resultadosBusquedaApoyo').style.display = 'none';
+window.seleccionarAlumnoReporteApoyo = (id, nombre, grupo, mode = 'reporte') => {
+    if(mode === 'reporte') {
+        document.getElementById('alumnoIdSeleccionado').value = id;
+        const label = document.getElementById('alumnoSeleccionadoLabel');
+        label.innerHTML = `<i class="fa-solid fa-user-check"></i> Seleccionado: <b>${nombre}</b> (${grupo})`;
+        label.style.display = 'block';
+        document.getElementById('busquedaAlumnoApoyo').value = '';
+        document.getElementById('resultadosBusquedaApoyo').style.display = 'none';
+    } else {
+        document.getElementById('alumnoIdCitatorio').value = id;
+        const label = document.getElementById('alumnoSeleccionadoLabelCitatorio');
+        label.innerHTML = `<i class="fa-solid fa-envelope-open"></i> Citando a: <b>${nombre}</b> (${grupo})`;
+        label.style.display = 'block';
+        document.getElementById('busquedaAlumnoCitatorio').value = '';
+        document.getElementById('resultadosBusquedaCitatorio').style.display = 'none';
+    }
 };
 
 window.guardarReporteApoyo = async () => {
@@ -2658,16 +2757,161 @@ window.guardarReporteApoyo = async () => {
     }
 };
 
-window.abrirModalAtencionFoco = (id, nombre) => {
+window.abrirModalCitatorio = () => {
+    document.getElementById('modalNuevoCitatorio').style.display = 'block';
+    document.getElementById('alumnoIdCitatorio').value = '';
+    document.getElementById('busquedaAlumnoCitatorio').value = '';
+    document.getElementById('motivoCitatorio').value = '';
+    document.getElementById('fechaCitaCitatorio').value = '';
+    document.getElementById('alumnoSeleccionadoLabelCitatorio').style.display = 'none';
+    document.getElementById('resultadosBusquedaCitatorio').style.display = 'none';
+};
+
+window.guardarCitatorio = async () => {
+    const aid = document.getElementById('alumnoIdCitatorio').value;
+    const motivo = document.getElementById('motivoCitatorio').value;
+    const fecha = document.getElementById('fechaCitaCitatorio').value;
+    
+    if(!aid) return alert("Por favor, selecciona un alumno de la lista.");
+    if(!motivo.trim()) return alert("Por favor, describe el motivo del citatorio.");
+
+    const btn = document.getElementById('btnGuardarCitatorio');
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Enviando...';
+
+    try {
+        const u = await supabaseClient.auth.getUser();
+        if(!u.data.user) throw new Error("Sin sesión activa.");
+
+        const { error } = await supabaseClient.from('citatorios').insert([{
+            id: crypto.randomUUID(),
+            alumno_id: aid,
+            emisor_id: u.data.user.id,
+            motivo: motivo.trim(),
+            fecha_cita: fecha || null,
+            plantel_id: state.plantelId
+        }]);
+
+        if(error) throw error;
+
+        // Notificar al alumno
+        await supabaseClient.from('comunicados').insert([{
+            autor_id: u.data.user.id,
+            titulo: '📩 Tienes un Citatorio Pendiente de Firma',
+            mensaje: `El área de Trabajo Social solicita tu presencia y la de tu padre/tutor.\nMotivo: ${motivo.substring(0, 50)}...\n\nPor favor, entra a tu perfil para firmar de enterado.`,
+            audiencia: `Alumno_${aid}`,
+            tipo: 'General',
+            plantel_id: state.plantelId
+        }]);
+
+        window.showToast("Citatorio enviado y notificado", "success");
+        document.getElementById('modalNuevoCitatorio').style.display = 'none';
+        if(window.loadCitatoriosApoyo) window.loadCitatoriosApoyo();
+    } catch(e) {
+        console.error(e);
+        window.showToast("Error al enviar citatorio", "error");
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = 'Enviar Citatorio';
+    }
+};
+
+window.switchTabApoyoConducta = (tab) => {
+    // Esconder todas las secciones
+    document.querySelectorAll('.tab-apoyo-conducta').forEach(s => s.style.display = 'none');
+    // Resetear botones
+    document.querySelectorAll('[id^="btnTabFiltro"]').forEach(b => {
+        b.classList.remove('btn-primary');
+        b.classList.add('btn-outline');
+    });
+
+    // Mostrar sección
+    if(tab === 'focos') {
+        document.getElementById('seccionFiltroFocos').style.display = 'block';
+        document.getElementById('btnTabFiltroFocos').classList.add('btn-primary');
+        document.getElementById('btnTabFiltroFocos').classList.remove('btn-outline');
+        if(window.loadFocosRojos) window.loadFocosRojos();
+    } else if(tab === 'historial') {
+        document.getElementById('seccionFiltroHistorial').style.display = 'block';
+        document.getElementById('btnTabFiltroHistorial').classList.add('btn-primary');
+        document.getElementById('btnTabFiltroHistorial').classList.remove('btn-outline');
+        const hoy = new Date().toLocaleDateString('en-CA');
+        if(window.loadHistorialReportesApoyo) window.loadHistorialReportesApoyo(hoy);
+    } else if(tab === 'citatorios') {
+        document.getElementById('seccionFiltroCitatorios').style.display = 'block';
+        document.getElementById('btnTabFiltroCitatorios').classList.add('btn-primary');
+        document.getElementById('btnTabFiltroCitatorios').classList.remove('btn-outline');
+        if(window.loadCitatoriosApoyo) window.loadCitatoriosApoyo();
+    }
+};
+
+window.loadCitatoriosApoyo = async () => {
+    const cont = document.getElementById('contenedorCitatoriosApoyo');
+    if(!cont) return;
+    try {
+        const { data, error } = await supabaseClient
+            .from('citatorios')
+            .select('*, alumnos(nombre, matricula)')
+            .eq('plantel_id', state.plantelId)
+            .neq('estado', 'atendido')
+            .order('creado_en', { ascending: false });
+
+        if(error) throw error;
+
+        if(!data || data.length === 0) {
+            cont.innerHTML = '<div style="text-align:center; padding:30px; color:var(--text-muted); grid-column:1/-1;">No hay citatorios vigentes en este momento.</div>';
+            return;
+        }
+
+        cont.innerHTML = data.map(c => {
+            const isEnterado = c.estado === 'enterado';
+            const dateCita = c.fecha_cita ? new Date(c.fecha_cita).toLocaleString() : 'Pendiente acordar';
+            return `
+                <div class="card" style="padding:15px; border:1px solid ${isEnterado ? '#bbf7d0' : '#fed7aa'}; background:white; position:relative; box-shadow:var(--shadow-sm);">
+                    <div style="display:flex; justify-content:space-between; margin-bottom:10px;">
+                        <span class="badge" style="background:${isEnterado ? '#22c55e' : '#f97316'}; color:white; font-size:0.7rem;">
+                            ${isEnterado ? '<i class="fa-solid fa-check-double"></i> ENTERADO' : '<i class="fa-solid fa-clock"></i> PENDIENTE'}
+                        </span>
+                        <small style="color:var(--text-muted); font-size:0.75rem;">${new Date(c.creado_en).toLocaleDateString()}</small>
+                    </div>
+                    <h4 style="margin:0 0 5px 0; font-size:1rem; color:var(--primary);">${c.alumnos?.nombre || '---'}</h4>
+                    <p style="font-size:0.8rem; color:var(--text-muted); margin-bottom:10px;"><b>Matrícula:</b> ${c.alumnos?.matricula || '---'}</p>
+                    
+                    <div style="background:var(--page-bg); padding:10px; border-radius:8px; margin-bottom:12px; font-size:0.85rem;">
+                        <div style="margin-bottom:5px;"><b>Motivo:</b> ${c.motivo}</div>
+                        <div><b>Cita sugerida:</b> ${dateCita}</div>
+                    </div>
+
+                    ${c.firma_enterado ? `
+                        <div style="font-size:0.8rem; padding:8px; background:#f0fdf4; border-radius:8px; margin-bottom:12px; color:#166534; border:1px solid #bbf7d0;">
+                            <i class="fa-solid fa-signature"></i> Firmado por: <b>${c.firma_enterado}</b><br>
+                            <small>${new Date(c.fecha_enterado).toLocaleString()}</small>
+                        </div>
+                    ` : ''}
+
+                    <button class="btn btn-primary btn-sm" style="width:100%; height:36px; ${!isEnterado ? 'opacity:0.6;' : ''}" 
+                            onclick="window.abrirModalAtencionFoco('${c.alumno_id}', '${c.alumnos?.nombre}', '${c.id}')">
+                        <i class="fa-solid fa-handshake"></i> Atender y Archivar
+                    </button>
+                    ${!isEnterado ? `<p style="margin:5px 0 0 0; font-size:0.65rem; text-align:center; color:var(--danger)">* Recomienda al alumno firmar en su portal</p>` : ''}
+                </div>
+            `;
+        }).join('');
+    } catch(e) { console.error("Error load citatorios:", e); }
+};
+
+window.abrirModalAtencionFoco = (id, nombre, citatorioId = null) => {
     document.getElementById('modalAtencionFoco').style.display = 'block';
     document.getElementById('atencionAlumnoId').value = id;
-    document.getElementById('atencionAlumnoNombre').innerHTML = `<i class="fa-solid fa-user"></i> Alumno: ${nombre}`;
+    document.getElementById('atencionCitatorioId').value = citatorioId || '';
+    document.getElementById('atencionAlumnoNombre').innerHTML = `<i class="fa-solid fa-user"></i> Resolviendo para: <b>${nombre}</b>`;
     document.getElementById('atencionProcedimiento').value = '';
     document.getElementById('atencionCompromisos').value = '';
 };
 
 window.guardarAtencionFoco = async () => {
     const aid = document.getElementById('atencionAlumnoId').value;
+    const cid = document.getElementById('atencionCitatorioId').value;
     const proc = document.getElementById('atencionProcedimiento').value;
     const comp = document.getElementById('atencionCompromisos').value;
 
@@ -2682,48 +2926,61 @@ window.guardarAtencionFoco = async () => {
         const u = await supabaseClient.auth.getUser();
         if(!u.data.user) throw new Error("Sin sesión activa");
 
-        // DEBUG: Verificar ID antes de guardar
-        console.log("GUARDANDO INTERVENCION PARA ALUMNO ID:", aid);
+        // 1. Guardar en Seguimientos Sociales (TS)
+        const { error: errSeg } = await supabaseClient.from('seguimientos_sociales').insert([{
+            alumno_id: aid,
+            perfil_id: u.data.user.id,
+            asunto: 'Resolución de Citatorio / Incidencia',
+            detalle: `PROCEDIMIENTO: ${proc}\n\nCOMPROMISOS: ${comp}`,
+            estado: 'finalizado',
+            plantel_id: state.plantelId
+        }]);
+        if(errSeg) throw errSeg;
         
-        // 1. Guardar el acta de intervención
-        const { error: errInt } = await supabaseClient.from('intervenciones_conducta').insert([{
+        // 2. Guardar en Intervenciones Conducta (Para el expediente unificado)
+        await supabaseClient.from('intervenciones_conducta').insert([{
             alumno_id: aid,
             maestro_id: u.data.user.id,
             procedimiento: proc,
             compromisos: comp,
             plantel_id: state.plantelId
         }]);
-        if(errInt) {
-            console.error("Error INSERT:", errInt);
-            throw new Error("No se pudo guardar en la base de datos: " + errInt.message);
-        }
 
-        // 2. Resolver TODOS los reportes pendientes del alumno
-        const { error: errUpd } = await supabaseClient
+        // 3. Resolver TODOS los reportes pendientes del alumno
+        await supabaseClient
             .from('reportes_conducta')
             .update({ resuelto: true })
             .eq('alumno_id', aid);
-        if(errUpd) throw errUpd;
 
-        // 3. Notificar al alumno del cierre
+        // 4. Si viene de un citatorio, actualizar estado y borrarlo
+        if(cid) {
+            // Primero lo marcamos como atendido en citatorios
+            await supabaseClient.from('citatorios').update({ estado: 'atendido' }).eq('id', cid);
+            // El usuario pidió borrarlo una vez atendido (o podemos dejarlo como 'atendido')
+            // Sin embargo, si el usuario explícitamente dijo "cuando se atienda se borre", lo borramos:
+            await supabaseClient.from('citatorios').delete().eq('id', cid);
+        }
+
+        // 5. Notificar al alumno del cierre
         await supabaseClient.from('comunicados').insert([{
             autor_id: u.data.user.id,
             titulo: `✅ SITUACIÓN ATENDIDA Y RESUELTA`,
-            mensaje: `Se ha concluido la junta de seguimiento conductual.\n\nPROCEDIMIENTO: ${proc.substring(0, 100)}...\nCOMPROMISOS: ${comp.substring(0, 100)}...\n\nTu expediente ha sido actualizado. ¡Gracias por tu compromiso!`,
+            mensaje: `Se ha concluido la junta de seguimiento en Trabajo Social.\n\nPROCEDIMIENTO: ${proc.substring(0, 80)}...\nCOMPROMISOS: ${comp.substring(0, 80)}...\n\nTu expediente ha sido actualizado. ¡Gracias por tu compromiso!`,
             audiencia: `Alumno_${aid}`,
             plantel_id: state.plantelId
         }]);
 
-        window.showToast("Atención registrada y reportes resueltos", "success");
+        window.showToast("Atención registrada, citatorio archivado y reportes resueltos", "success");
         document.getElementById('modalAtencionFoco').style.display = 'none';
 
         // Refrescar vistas
+        if(window.loadCitatoriosApoyo) window.loadCitatoriosApoyo();
         if(window.loadFocosRojos) window.loadFocosRojos();
         if(window.loadHistorialReportesApoyo) window.loadHistorialReportesApoyo();
 
     } catch(e) {
         console.error(e);
-        alert("Error al procesar: " + e.message);
+        alert("Error al procesar resolución: " + e.message);
     } finally {
         btn.disabled = false;
         btn.innerHTML = old;
@@ -3023,9 +3280,13 @@ function renderApoyoBitacora() {
     </div>
     
     <div class="card" style="max-width: 800px; margin: 0 auto;">
-       <h3 style="margin-bottom: 16px;">Añadir Entrada a la Bitácora</h3>
+       <h3 style="margin-bottom: 8px;">Añadir Entrada a la Bitácora</h3>
+       <p style="font-size:0.8rem; color:var(--text-muted); margin-bottom:15px; display:flex; align-items:center; gap:6px;">
+          <i class="fa-solid fa-user-check text-primary"></i> 
+          Firmando como: <b style="color:var(--text-main)">${state.user?.nombre || 'Personal Autorizado'}</b>
+       </p>
        <div class="form-group">
-          <textarea class="form-input" id="textoBitacoraApoyo" rows="2" placeholder="Describe algún hecho relevante..."></textarea>
+          <textarea class="form-input" id="textoBitacoraApoyo" rows="3" placeholder="Describe algún hecho relevante..." style="border-radius:12px; border:1.5px solid var(--border); padding:15px;"></textarea>
        </div>
        <div style="display:flex; justify-content:flex-end;">
           <button class="btn btn-primary" onclick="window.saveApoyoBitacora()">
@@ -3483,6 +3744,7 @@ function renderAlumnoTimeline() {
       </div>
 
       <div class="mobile-content" style="padding:16px;">
+        <div id="citatoriosPendientesAlumno" style="display:none; margin-bottom:20px;"></div>
         <div id="timelineAlumnoContenedor"></div>
       </div>
     </div>
@@ -4501,8 +4763,8 @@ window.loadApoyoBitacora = async (fechaSeleccionada) => {
                 <div style="position:absolute; left:-9px; top:0; width:16px; height:16px; background:var(--primary); border-radius:50%; border:3px solid white;"></div>
                 <div style="font-size:0.75rem; color:var(--text-muted)"><b>${hora}</b> | ${new Date(b.creado_en).toLocaleDateString()}</div>
                 <p style="margin:5px 0 0 0; font-size:0.95rem; color:var(--text-main); line-height:1.4;">${b.texto}</p>
-                <div style="font-size:0.7rem; color:var(--text-muted); margin-top:4px;">
-                    <i class="fa-solid fa-user-pen"></i> Registrado por: <b>${b.firma_autor || 'S/D'}</b>
+                <div style="font-size:0.75rem; color:var(--primary); margin-top:6px; background:var(--primary-light); padding:2px 8px; border-radius:6px; width:fit-content; font-weight:600;">
+                    <i class="fa-solid fa-user-pen"></i> Autenticado por: ${b.firma_autor || 'S/D'}
                 </div>
             </div>`;
         }).join('') || `<div style="text-align:center; padding:30px; color:var(--text-muted)">
@@ -5115,7 +5377,6 @@ window.loadTimelineAlumno = async (mostrarHistorial = false) => {
         
         let audArr = ['General', 'Alumnos'];
         
-        // Buscar alumno por email O por perfil_id (más seguro)
         const { data: al } = await supabaseClient
             .from('alumnos')
             .select('id, creado_en')
@@ -5125,6 +5386,7 @@ window.loadTimelineAlumno = async (mostrarHistorial = false) => {
         if(al) {
             console.log(">>> [TIMELINE] Alumno detectado:", al.id, "| Inscrito en:", al.creado_en);
             audArr.push('Alumno_' + al.id);
+            if(window.loadCitatoriosAlumno) window.loadCitatoriosAlumno(al.id);
         } else {
             console.warn(">>> [TIMELINE] No se encontró vínculo de Alumno para el usuario logueado.");
         }
@@ -5135,11 +5397,6 @@ window.loadTimelineAlumno = async (mostrarHistorial = false) => {
 
         console.log(">>> [TIMELINE] Buscando comunicados para audiencia:", audArr);
         let query = supabaseClient.from('comunicados')
-           .select('*, perfiles(nombre)')
-           .in('audiencia', audArr)
-           .order('fecha_envio', { ascending: false });
-
-        // FILTRO DE SEGURIDAD: Solo avisos desde la inscripción
         if(al && al.creado_en) {
             query = query.gte('fecha_envio', al.creado_en);
         }
@@ -5238,6 +5495,89 @@ window.marcarAvisoEnterado = async (id) => {
             setTimeout(() => card.remove(), 500);
         }
     } catch(e) { console.error(e); }
+};
+
+window.loadCitatoriosAlumno = async (alumnoId) => {
+    const cont = document.getElementById('citatoriosPendientesAlumno');
+    if(!cont) return;
+    try {
+        const { data, error } = await supabaseClient
+            .from('citatorios')
+            .select('*')
+            .eq('alumno_id', alumnoId)
+            .neq('estado', 'atendido')
+            .order('creado_en', { ascending: false });
+
+        if(error) throw error;
+        if(!data || data.length === 0) {
+            cont.style.display = 'none';
+            return;
+        }
+
+        cont.style.display = 'block';
+        cont.innerHTML = `
+            <div style="background:#fff7ed; border:1px solid #ffedd5; border-radius:16px; padding:16px; box-shadow:var(--shadow-md); margin-bottom:24px;">
+                <h3 style="color:#9a3412; margin-top:0; font-size:1.1rem; display:flex; align-items:center; gap:8px;">
+                    <i class="fa-solid fa-envelope-open-text"></i> Citatorios de Padres
+                </h3>
+                <div style="display:flex; flex-direction:column; gap:12px;">
+                    ${data.map(c => {
+                        const isEnterado = c.estado === 'enterado';
+                        return `
+                            <div style="background:white; border:1px solid #fed7aa; padding:14px; border-radius:12px; box-shadow:var(--shadow-sm);">
+                                <div style="display:flex; justify-content:space-between; margin-bottom:8px; align-items:center;">
+                                    <span class="badge" style="background:${isEnterado ? '#22c55e' : '#f97316'}; color:white; font-size:0.6rem; padding:2px 8px;">
+                                        ${isEnterado ? '<i class="fa-solid fa-check"></i> ENTERADO' : '<i class="fa-solid fa-clock"></i> POR FIRMAR'}
+                                    </span>
+                                    <small style="color:var(--text-muted); font-size:0.7rem;">${new Date(c.creado_en).toLocaleDateString()}</small>
+                                </div>
+                                <p style="font-size:0.85rem; margin:0 0 10px 0; color:var(--text-main); line-height:1.4;"><b>Motivo:</b> ${c.motivo}</p>
+                                ${c.fecha_cita ? `<p style="font-size:0.8rem; color:var(--primary); margin:0 0 10px 0;"><b>Cita programada:</b> ${new Date(c.fecha_cita).toLocaleString()}</p>` : ''}
+                                
+                                ${!isEnterado ? `
+                                    <div style="border-top:1px dashed #fed7aa; padding-top:10px; margin-top:5px;">
+                                        <p style="font-size:0.7rem; color:var(--danger); margin-bottom:8px;">* Se requiere que su padre o tutor firme de enterado ingresando su nombre:</p>
+                                        <div style="display:flex; gap:8px;">
+                                            <input type="text" id="firmaTutor-${c.id}" class="form-input" placeholder="Nombre completo..." style="height:38px; font-size:0.8rem; flex:1; border-color:#fed7aa;">
+                                            <button class="btn btn-primary" style="height:38px; padding:0 20px; font-size:0.8rem; background:#9a3412; border:none;" onclick="window.firmarCitatorio('${c.id}')">Firmar</button>
+                                        </div>
+                                    </div>
+                                ` : `
+                                    <div style="background:#f0fdf4; padding:8px; border-radius:8px; border:1px solid #bbf7d0; font-size:0.75rem; color:#166534;">
+                                        <i class="fa-solid fa-check-double"></i> <b>Acuse de Recibo:</b> ${c.firma_enterado}
+                                    </div>
+                                `}
+                            </div>
+                        `;
+                    }).join('')}
+                </div>
+            </div>
+        `;
+    } catch(e) { console.error("Error load citatorios alumno:", e); }
+};
+
+window.firmarCitatorio = async (id) => {
+    const inp = document.getElementById(`firmaTutor-${id}`);
+    const firma = inp ? inp.value : '';
+    if(!firma.trim()) return alert("Por favor, ingresa el nombre del padre o tutor para firmar.");
+    
+    try {
+        const { error } = await supabaseClient
+            .from('citatorios')
+            .update({
+                estado: 'enterado',
+                firma_enterado: firma.trim(),
+                fecha_enterado: new Date().toISOString()
+            })
+            .eq('id', id);
+
+        if(error) throw error;
+        window.showToast("Citatorio firmado por el tutor", "success");
+        window.loadTimelineAlumno();
+    } catch(e) { 
+        console.error(e); 
+        window.showToast("Error al firmar", "error"); 
+    }
 };
 
 window.firmarEncuadreDesdeTimeline = async (comunicadoId, btn) => {
