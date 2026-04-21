@@ -2534,61 +2534,81 @@ window.loadHistorialReportesApoyo = async (fechaSeleccionada) => {
     const cont = document.getElementById('historialReportesApoyo');
     if(!cont) return;
     
-    // Si no hay fecha, usamos hoy
     const fecha = fechaSeleccionada || new Date().toLocaleDateString('en-CA');
     const startOfDay = `${fecha}T00:00:00.000Z`;
     const endOfDay = `${fecha}T23:59:59.999Z`;
 
     try {
-        const query = supabaseClient
-            .from('reportes_conducta')
-            .select('*, alumnos(nombre, matricula), perfiles:autor_id(nombre, rol)')
-            .eq('plantel_id', state.plantelId);
+        // Ponemos el contenedor en carga por si acaso
+        cont.innerHTML = '<div style="text-align:center; padding:40px; color:var(--text-muted)"><i class="fa-solid fa-spinner fa-spin fa-2x"></i><br><p style="margin-top:10px;">Cargando reportes...</p></div>';
 
-        // Si la columna es timestamptz, el filtro ISO funciona mejor
-        const { data, error } = await query
+        const { data, error } = await supabaseClient
+            .from('reportes_conducta')
+            .select('*, alumnos!alumno_id(nombre, matricula), autor:perfiles!autor_id(nombre, rol)')
+            .eq('plantel_id', state.plantelId)
             .gte('fecha', startOfDay)
             .lte('fecha', endOfDay)
             .order('fecha', { ascending: false });
 
-        if(error) throw error;
-        
-        if(!data || data.length === 0) {
-            cont.innerHTML = `
-                <div style="padding:60px; text-align:center; color:var(--text-muted)">
-                    <i class="fa-solid fa-calendar-xmark fa-3x" style="opacity:0.3; margin-bottom:15px;"></i>
-                    <p>No se encontraron reportes para el día <b>${new Date(fecha).toLocaleDateString()}</b>.</p>
-                </div>`;
-            return;
+        if(error) {
+            // Fallback simple si falla el join complejo
+            const { data: fallback, error: e2 } = await supabaseClient
+                .from('reportes_conducta')
+                .select('*, alumnos!alumno_id(nombre, matricula)')
+                .eq('plantel_id', state.plantelId)
+                .gte('fecha', startOfDay)
+                .lte('fecha', endOfDay)
+                .order('fecha', { ascending: false });
+            
+            if(e2) throw e2;
+            renderReportesListaApoyo(fallback || [], cont, fecha);
+        } else {
+            renderReportesListaApoyo(data || [], cont, fecha);
         }
-
-        cont.innerHTML = `
-            <div style="margin-bottom:10px; font-size:0.85rem; color:var(--text-muted);">
-                Mostrando los últimos <b>${data.length}</b> reportes del día.
-            </div>
-            ${data.map(r => {
-                const hour = new Date(r.fecha).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' });
-                const sevColor = r.gravedad === 'Grave' ? 'var(--danger)' : (r.gravedad === 'Moderado' ? 'var(--warning)' : 'var(--success)');
-                return `
-                <div class="card" style="border-left: 5px solid ${sevColor}; padding:16px; background:white; position:relative; box-shadow:var(--shadow-sm);">
-                   <div style="display:flex; justify-content:space-between; margin-bottom:8px;">
-                      <span style="font-size:0.8rem; color:var(--text-muted)">
-                        <i class="fa-solid fa-clock"></i> <b>${hour}</b> | 
-                        <i class="fa-solid fa-user-tie"></i> <b>${r.perfiles?.nombre || 'Maestro'}</b> 
-                        <span style="text-transform:uppercase; font-size:0.7rem; background:#eee; padding:2px 6px; border-radius:4px; margin-left:4px;">${r.perfiles?.rol || 'Personal'}</span>
-                      </span>
-                      <span class="badge" style="background:${r.resuelto ? 'var(--success)' : sevColor}; color:white">${r.resuelto ? 'Resuelto' : r.gravedad}</span>
-                   </div>
-                   <h4 style="margin:0 0 8px 0; color:var(--primary)">Alumno: ${r.alumnos?.nombre || '---'}</h4>
-                   <p style="margin:0; font-size:0.95rem; color:var(--text-main); white-space:pre-wrap;">${r.descripcion}</p>
-                   ${!r.resuelto ? `<button class="btn btn-outline btn-xs" style="margin-top:12px; border-color:var(--success); color:var(--success)" onclick="window.resolverReporte('${r.id}')"><i class="fa-solid fa-check"></i> Marcar como Resuelto</button>` : ''}
-                </div>`;
-            }).join('')}`;
     } catch(e) { 
-        console.error("History Load Error:", e);
-        cont.innerHTML = '<div style="padding:40px; text-align:center; color:var(--danger)"><i class="fa-solid fa-triangle-exclamation"></i> Error al conectar con el servidor de reportes.</div>';
+        console.error("Critical Load Error:", e);
+        cont.innerHTML = `<div style="padding:40px; text-align:center; color:var(--danger)">
+            <i class="fa-solid fa-triangle-exclamation fa-2x"></i><br>
+            <p style="margin-top:10px;">Error: ${e.message}</p>
+        </div>`;
     }
 };
+
+function renderReportesListaApoyo(data, cont, fecha) {
+    if(!data || data.length === 0) {
+        cont.innerHTML = `
+            <div style="padding:60px; text-align:center; color:var(--text-muted)">
+                <i class="fa-solid fa-calendar-xmark fa-3x" style="opacity:0.3; margin-bottom:15px;"></i>
+                <p>No se encontraron reportes para el día <b>${new Date(fecha).toLocaleDateString()}</b>.</p>
+            </div>`;
+        return;
+    }
+
+    cont.innerHTML = `
+        <div style="margin-bottom:10px; font-size:0.85rem; color:var(--text-muted);">
+            Se encontraron <b>${data.length}</b> reportes en este día.
+        </div>
+        ${data.map(r => {
+            const dateObj = r.fecha ? new Date(r.fecha) : new Date(r.creado_en);
+            const hour = isNaN(dateObj.getTime()) ? '--:--' : dateObj.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' });
+            const sevColor = r.gravedad === 'Grave' ? 'var(--danger)' : (r.gravedad === 'Moderado' ? 'var(--warning)' : 'var(--success)');
+            const autorNombre = r.autor?.nombre || r.perfiles?.nombre || 'Personal';
+            
+            return `
+            <div class="card" style="border-left: 5px solid ${sevColor}; padding:18px; background:white; position:relative; box-shadow:var(--shadow-sm); margin-bottom:12px;">
+               <div style="display:flex; justify-content:space-between; margin-bottom:8px;">
+                  <span style="font-size:0.8rem; color:var(--text-muted)">
+                    <i class="fa-solid fa-clock"></i> <b>${hour}</b> | 
+                    <i class="fa-solid fa-user-tie"></i> <b>${autorNombre}</b> 
+                  </span>
+                  <span class="badge" style="background:${r.resuelto ? 'var(--success)' : sevColor}; color:white">${r.resuelto ? 'Resuelto' : r.gravedad}</span>
+               </div>
+               <h4 style="margin:0 0 8px 0; color:var(--primary)">Alumno: ${r.alumnos?.nombre || '---'}</h4>
+               <p style="margin:0; font-size:0.95rem; color:var(--text-main); white-space:pre-wrap;">${r.descripcion}</p>
+               ${!r.resuelto ? `<button class="btn btn-outline btn-xs" style="margin-top:12px; border-color:var(--success); color:var(--success)" onclick="window.resolverReporte('${r.id}')"><i class="fa-solid fa-check"></i> Marcar como Resuelto</button>` : ''}
+            </div>`;
+        }).join('')}`;
+}
 
 window.resolverReporte = async (id) => {
     if(!confirm("¿Deseas marcar este reporte como resuelto?")) return;
