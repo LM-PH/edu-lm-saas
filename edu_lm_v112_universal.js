@@ -2308,8 +2308,8 @@ window.abrirExpedienteDirecto = (id) => {
 function renderApoyoReportes() {
   const today = new Date().toLocaleDateString('en-CA');
   setTimeout(() => { 
-      if(window.loadHistorialReportesApoyo) window.loadHistorialReportesApoyo(today); 
       if(window.loadCitatoriosApoyo) window.loadCitatoriosApoyo();
+      if(window.loadReportesRecientesApoyo) window.loadReportesRecientesApoyo();
   }, 100);
   
   return `
@@ -2328,42 +2328,38 @@ function renderApoyoReportes() {
       </div>
     </div>
 
-    <!-- Navegación de Pestañas Triage Conducta -->
-    <div style="display:flex; gap:10px; background:var(--surface); padding:8px; border-radius:15px; border:1px solid var(--border); width:fit-content; margin: 0 auto 30px auto; overflow-x:auto;">
-        <button id="btnTabFiltroHistorial" class="btn btn-primary" onclick="window.switchTabApoyoConducta('historial')" style="border-radius:10px; padding:8px 20px; white-space:nowrap;">
-           <i class="fa-solid fa-clock-rotate-left"></i> Historial de Reportes
-        </button>
-        <button id="btnTabFiltroCitatorios" class="btn btn-outline" onclick="window.switchTabApoyoConducta('citatorios')" style="border-radius:10px; padding:8px 20px; white-space:nowrap;">
-           <i class="fa-solid fa-envelope-open-text"></i> Citatorios de Padres
-        </button>
-    </div>
-
-    <div id="seccionFiltroHistorial" class="tab-apoyo-conducta" style="display:block;">
-         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
-            <h3 style="margin:0;"><i class="fa-solid fa-clock-rotate-left text-primary"></i> Reportes del Día</h3>
-            <div style="display:flex; gap:8px; align-items:center; background:white; padding:5px 12px; border-radius:10px; border:1px solid var(--border)">
-               <i class="fa-solid fa-calendar-day" style="color:var(--primary)"></i>
-               <input type="date" id="fechaFiltroHistorialApoyo" class="form-input" style="border:none; padding:0; font-size:0.9rem;" value="${today}" onchange="window.loadHistorialReportesApoyo(this.value)">
-            </div>
-         </div>
-         <div id="historialReportesApoyo" style="display:flex; flex-direction:column; gap:16px;">
-            <div style="text-align:center; padding:40px; color:var(--text-muted)"><i class="fa-solid fa-spinner fa-spin fa-2x"></i><br><p style="margin-top:10px;">Cargando historial de reportes...</p></div>
-         </div>
-    </div>
-
-    <div id="seccionFiltroCitatorios" class="tab-apoyo-conducta" style="display:none;">
-         <div class="card" style="width:100%; border-top:4px solid var(--warning);">
-            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
+    <div style="display:grid; grid-template-columns: 1fr; gap:30px; margin-top:20px;">
+        <!-- SECCIÓN 1: CITATORIOS VIGENTES -->
+        <div class="card" style="width:100%; border-top:4px solid var(--warning);">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px; flex-wrap:wrap; gap:10px;">
                 <div>
-                    <h3 style="margin-bottom:4px;"><i class="fa-solid fa-envelope-open-text text-warning"></i> Control de Citatorios</h3>
-                    <p style="font-size:0.85rem; color:var(--text-muted);">Estatus de las notificaciones enviadas a padres de familia.</p>
+                    <h3 style="margin-bottom:4px;"><i class="fa-solid fa-envelope-open-text text-warning"></i> Citatorios de Padres</h3>
+                    <p style="font-size:0.85rem; color:var(--text-muted);">Seguimiento de firmas y atención a tutores.</p>
                 </div>
-                <button class="btn btn-primary" onclick="window.abrirModalCitatorio()" style="background:var(--warning); color:#1a1a1a; border:none;">
-                    <i class="fa-solid fa-plus"></i> Nuevo Citatorio Manual
+                <button class="btn btn-outline btn-sm" onclick="window.loadCitatoriosApoyo()">
+                    <i class="fa-solid fa-sync"></i> Actualizar
                 </button>
             </div>
-            <div id="contenedorCitatoriosApoyo" style="display:grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap:20px;"></div>
-         </div>
+            <div id="contenedorCitatoriosApoyo" style="display:grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap:20px;">
+                <div style="text-align:center; padding:30px; color:var(--text-muted); grid-column:1/-1;"><i class="fa-solid fa-spinner fa-spin"></i> Cargando citatorios...</div>
+            </div>
+        </div>
+
+        <!-- SECCIÓN 2: ÚLTIMAS INCIDENCIAS (BITÁCORA) -->
+        <div class="card" style="width:100%; border-top:4px solid var(--primary);">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px; flex-wrap:wrap; gap:10px;">
+                <div>
+                    <h3 style="margin-bottom:4px;"><i class="fa-solid fa-clock-rotate-left text-primary"></i> Últimos Reportes Generados</h3>
+                    <p style="font-size:0.85rem; color:var(--text-muted);">Bitácora global de conducta reciente.</p>
+                </div>
+                <button class="btn btn-outline btn-sm" onclick="window.loadReportesRecientesApoyo()">
+                    <i class="fa-solid fa-sync"></i> Actualizar
+                </button>
+            </div>
+            <div id="contenedorReportesRecientesApoyo" style="display:flex; flex-direction:column; gap:15px;">
+                <div style="text-align:center; padding:30px; color:var(--text-muted)"><i class="fa-solid fa-spinner fa-spin"></i> Cargando bitácora...</div>
+            </div>
+        </div>
     </div>
 
     <!-- Modal de Creación de Reporte (Oculto por defecto) -->
@@ -2530,94 +2526,84 @@ window.loadFocosRojos = async () => {
     } catch(e) { console.error("Focos Rojos Error:", e); }
 };
 
-window.loadHistorialReportesApoyo = async (fechaSeleccionada) => {
-    const cont = document.getElementById('historialReportesApoyo');
+window.loadReportesRecientesApoyo = async () => {
+    const cont = document.getElementById('contenedorReportesRecientesApoyo');
     if(!cont) return;
-    
-    const fecha = fechaSeleccionada || new Date().toLocaleDateString('en-CA');
-    const startOfDay = `${fecha}T00:00:00.000Z`;
-    const endOfDay = `${fecha}T23:59:59.999Z`;
 
     try {
-        // Ponemos el contenedor en carga por si acaso
-        cont.innerHTML = '<div style="text-align:center; padding:40px; color:var(--text-muted)"><i class="fa-solid fa-spinner fa-spin fa-2x"></i><br><p style="margin-top:10px;">Cargando reportes...</p></div>';
-
         const { data, error } = await supabaseClient
             .from('reportes_conducta')
             .select('*, alumnos!alumno_id(nombre, matricula), autor:perfiles!autor_id(nombre, rol)')
             .eq('plantel_id', state.plantelId)
-            .gte('fecha', startOfDay)
-            .lte('fecha', endOfDay)
-            .order('fecha', { ascending: false });
+            .order('creado_en', { ascending: false })
+            .limit(15);
 
         if(error) {
-            // Fallback simple si falla el join complejo
+            console.error("Error loading recent reports:", error);
+            // Fallback sin joins
             const { data: fallback, error: e2 } = await supabaseClient
                 .from('reportes_conducta')
                 .select('*, alumnos!alumno_id(nombre, matricula)')
                 .eq('plantel_id', state.plantelId)
-                .gte('fecha', startOfDay)
-                .lte('fecha', endOfDay)
-                .order('fecha', { ascending: false });
+                .order('creado_en', { ascending: false })
+                .limit(15);
             
             if(e2) throw e2;
-            renderReportesListaApoyo(fallback || [], cont, fecha);
+            renderListaReciente(fallback || [], cont);
         } else {
-            renderReportesListaApoyo(data || [], cont, fecha);
+            renderListaReciente(data || [], cont);
         }
     } catch(e) { 
-        console.error("Critical Load Error:", e);
-        cont.innerHTML = `<div style="padding:40px; text-align:center; color:var(--danger)">
-            <i class="fa-solid fa-triangle-exclamation fa-2x"></i><br>
-            <p style="margin-top:10px;">Error: ${e.message}</p>
-        </div>`;
+        console.error("Failed to load reports:", e);
+        cont.innerHTML = `<div style="padding:20px; text-align:center; color:var(--danger)">No se pudo cargar la bitácora: ${e.message}</div>`;
     }
 };
 
-function renderReportesListaApoyo(data, cont, fecha) {
+const renderListaReciente = (data, cont) => {
     if(!data || data.length === 0) {
-        cont.innerHTML = `
-            <div style="padding:60px; text-align:center; color:var(--text-muted)">
-                <i class="fa-solid fa-calendar-xmark fa-3x" style="opacity:0.3; margin-bottom:15px;"></i>
-                <p>No se encontraron reportes para el día <b>${new Date(fecha).toLocaleDateString()}</b>.</p>
-            </div>`;
+        cont.innerHTML = '<div style="text-align:center; padding:30px; color:var(--text-muted)">No hay registros recientes.</div>';
         return;
     }
 
-    cont.innerHTML = `
-        <div style="margin-bottom:10px; font-size:0.85rem; color:var(--text-muted);">
-            Se encontraron <b>${data.length}</b> reportes en este día.
-        </div>
-        ${data.map(r => {
-            const dateObj = r.fecha ? new Date(r.fecha) : new Date(r.creado_en);
-            const hour = isNaN(dateObj.getTime()) ? '--:--' : dateObj.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' });
-            const sevColor = r.gravedad === 'Grave' ? 'var(--danger)' : (r.gravedad === 'Moderado' ? 'var(--warning)' : 'var(--success)');
-            const autorNombre = r.autor?.nombre || r.perfiles?.nombre || 'Personal';
-            
-            return `
-            <div class="card" style="border-left: 5px solid ${sevColor}; padding:18px; background:white; position:relative; box-shadow:var(--shadow-sm); margin-bottom:12px;">
-               <div style="display:flex; justify-content:space-between; margin-bottom:8px;">
-                  <span style="font-size:0.8rem; color:var(--text-muted)">
-                    <i class="fa-solid fa-clock"></i> <b>${hour}</b> | 
-                    <i class="fa-solid fa-user-tie"></i> <b>${autorNombre}</b> 
-                  </span>
-                  <span class="badge" style="background:${r.resuelto ? 'var(--success)' : sevColor}; color:white">${r.resuelto ? 'Resuelto' : r.gravedad}</span>
-               </div>
-               <h4 style="margin:0 0 8px 0; color:var(--primary)">Alumno: ${r.alumnos?.nombre || '---'}</h4>
-               <p style="margin:0; font-size:0.95rem; color:var(--text-main); white-space:pre-wrap;">${r.descripcion}</p>
-               ${!r.resuelto ? `<button class="btn btn-outline btn-xs" style="margin-top:12px; border-color:var(--success); color:var(--success)" onclick="window.resolverReporte('${r.id}')"><i class="fa-solid fa-check"></i> Marcar como Resuelto</button>` : ''}
-            </div>`;
-        }).join('')}`;
-}
+    cont.innerHTML = data.map(r => {
+        const dateObj = new Date(r.creado_en);
+        const fechaStr = dateObj.toLocaleDateString();
+        const hour = dateObj.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' });
+        const sevColor = r.gravedad === 'Grave' ? 'var(--danger)' : (r.gravedad === 'Moderado' ? 'var(--warning)' : 'var(--success)');
+        const autor = r.autor?.nombre || r.perfiles?.nombre || 'Personal';
 
-window.resolverReporte = async (id) => {
-    if(!confirm("¿Deseas marcar este reporte como resuelto?")) return;
+        return `
+        <div style="padding:15px; border:1px solid var(--border); border-radius:12px; background:white; display:flex; flex-direction:column; gap:8px;">
+            <div style="display:flex; justify-content:space-between; align-items:center;">
+                <span style="font-size:0.75rem; color:var(--text-muted)">
+                    <i class="fa-solid fa-calendar-day"></i> ${fechaStr} ${hour} | <i class="fa-solid fa-user-tie"></i> <b>${autor}</b>
+                </span>
+                <span class="badge" style="background:${r.resuelto ? 'var(--success)' : sevColor}; color:white; font-size:0.65rem;">${r.resuelto ? 'ATENDIDO' : r.gravedad.toUpperCase()}</span>
+            </div>
+            <div style="font-size:0.9rem;">
+                <b>Alumno:</b> ${r.alumnos?.nombre || '---'} <span style="color:var(--text-muted); font-size:0.8rem;">(${r.alumnos?.matricula || 'N/A'})</span>
+            </div>
+            <p style="margin:0; font-size:0.85rem; color:var(--text-main); white-space:pre-wrap;">${r.descripcion}</p>
+            ${!r.resuelto ? `
+                <div style="display:flex; justify-content:flex-end;">
+                    <button class="btn btn-outline btn-xs" onclick="window.resolverReporte('${r.id}', true)">
+                        <i class="fa-solid fa-check"></i> Marcar Atendido
+                    </button>
+                </div>
+            ` : ''}
+        </div>
+        `;
+    }).join('');
+};
+
+window.resolverReporte = async (id, reloadRecent = false) => {
+    if(!confirm("¿Marcar caso como atendido?")) return;
     try {
         const { error } = await supabaseClient.from('reportes_conducta').update({ resuelto: true }).eq('id', id);
         if(error) throw error;
-        window.showToast("Reporte resuelto correctamente", "success");
-        if(window.loadHistorialReportesApoyo) window.loadHistorialReportesApoyo();
-        if(window.loadFocosRojos) window.loadFocosRojos();
+        window.showToast("Reporte actualizado", "success");
+        if(reloadRecent) window.loadReportesRecientesApoyo();
+        else if(window.loadHistorialReportesApoyo) window.loadHistorialReportesApoyo();
     } catch(e) { console.error(e); }
 };
 
