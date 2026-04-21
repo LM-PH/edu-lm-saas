@@ -5359,7 +5359,7 @@ window.loadTimelineAlumno = async (mostrarHistorial = false) => {
         const vistosIds = vistos ? vistos.map(v => v.comunicado_id) : [];
 
         console.log(">>> [TIMELINE] Buscando comunicados para audiencia:", audArr);
-        let query = supabaseClient.from('comunicados')
+        let query = supabaseClient.from('comunicados').select('*').in('audiencia', audArr);
         if(al && al.creado_en) {
             query = query.gte('fecha_envio', al.creado_en);
         }
