@@ -61,7 +61,14 @@ setInterval(window.autoHumanize, 3000); // Revisión constante cada 3 segundos (
 // Utils & Globals
 window.navigate = (path) => {
   state.path = path;
+  if(document.body.classList.contains('sidebar-open')) {
+      document.body.classList.remove('sidebar-open');
+  }
   renderApp();
+};
+
+window.toggleSidebar = () => {
+    document.body.classList.toggle('sidebar-open');
 };
 
 window.showToast = (msg, type = 'success') => {
@@ -4337,6 +4344,10 @@ function generateHTML(content) {
   // Dashboard layout wrapper
   return `
     <div class="dashboard-layout">
+      <button class="mobile-nav-toggle" onclick="window.toggleSidebar()">
+        <i class="fa-solid fa-bars"></i>
+      </button>
+      <div class="sidebar-overlay" onclick="window.toggleSidebar()"></div>
       ${renderSidebar()}
       <main class="main-content">
         ${content}
