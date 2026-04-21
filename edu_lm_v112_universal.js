@@ -3512,16 +3512,17 @@ window.generarInasistenciasMasivas = async () => {
         
         // 2. Obtener quienes ya tienen acceso hoy
         const { data: registrados } = await supabaseClient.from('accesos_plantel')
-            .select('alumno_id')
+            .select('alumno_id, estado')
             .eq('fecha', hoy);
         
         const idsRegistrados = new Set((registrados || []).map(r => r.alumno_id));
         const faltantes = (alumnos || []).filter(a => !idsRegistrados.has(a.id));
+        const retardos = (registrados || []).filter(r => r.estado === 'Retardo');
 
+        const u = await supabaseClient.auth.getUser();
+
+        // ACCIÓN A: Registrar y avisar INASISTENCIAS
         if(faltantes.length > 0) {
-            const u = await supabaseClient.auth.getUser();
-            
-            // 1. Registrar Inasistencias en la tabla de accesos
             const inserts = faltantes.map(f => ({
                 alumno_id: f.id,
                 estado: 'Inasistencia',
@@ -3531,12 +3532,8 @@ window.generarInasistenciasMasivas = async () => {
             }));
 
             const { error: insErr } = await supabaseClient.from('accesos_plantel').insert(inserts);
-            if(insErr) {
-                console.error(">>> ERROR REGISTRO INASISTENCIAS:", insErr);
-                throw insErr;
-            }
+            if(insErr) throw insErr;
 
-            // 2. Enviar Comunicados Automáticos a Alumnos
             const msgInserts = faltantes.map(f => ({
                 autor_id: u.data.user?.id,
                 titulo: "⚠️ Aviso de Inasistencia Institucional",
@@ -3544,16 +3541,22 @@ window.generarInasistenciasMasivas = async () => {
                 mensaje: `Se ha registrado una INASISTENCIA en el portal de acceso escolar hoy (${new Date().toLocaleDateString()}). Es indispensable que acudas a Trabajo Social para realizar la justificación correspondiente.`,
                 plantel_id: state.plantelId
             }));
-
-            const { error: msgErr } = await supabaseClient.from('comunicados').insert(msgInserts);
-            if(msgErr) {
-                console.warn(">>> ADVERTENCIA: Las inasistencias se guardaron pero no se pudieron enviar los mensajes:", msgErr);
-            }
-            
-            window.showToast(`${faltantes.length} inasistencias registradas y avisos enviados.`, "success");
-        } else {
-            window.showToast("Asistencia al plantel completa.", "info");
+            await supabaseClient.from('comunicados').insert(msgInserts);
         }
+
+        // ACCIÓN B: Avisar RETARDOS (aquellos que ya se registraron como tal hoy)
+        if(retardos.length > 0) {
+            const msgRetardoInserts = retardos.map(r => ({
+                autor_id: u.data.user?.id,
+                titulo: "⚠️ Aviso de Retardo Institucional",
+                audiencia: `Alumno_${r.alumno_id}`,
+                mensaje: `Se ha registrado un RETARDO en tu ingreso al plantel hoy (${new Date().toLocaleDateString()}). Se recomienda llegar con anticipación para evitar afectaciones en tu historial escolar.`,
+                plantel_id: state.plantelId
+            }));
+            await supabaseClient.from('comunicados').insert(msgRetardoInserts);
+        }
+
+        window.showToast(`${faltantes.length} inasistencias y ${retardos.length} retardos notificados.`, "success");
 
         window.cambiarEstadoAsistencia('finalizado');
         window.loadResumenEntrada();
