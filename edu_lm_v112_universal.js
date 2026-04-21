@@ -7921,11 +7921,22 @@ window.finalizarSesionAsistencia = async () => {
         const faltantes = (todos || []).filter(al => !yaIds.includes(al.id));
         
         if(faltantes.length > 0) {
+            // 1. Registrar las faltas en la tabla de asistencias
             await supabaseClient.from('asistencias').insert(faltantes.map(al => ({
                 alumno_id: al.id, 
                 registrador_id: u.data.user.id, 
                 estado: 'Falta', 
+                materia: materia, // Importante registrar la materia
                 grupo_id: grupoId.startsWith('grado:') ? null : grupoId,
+                plantel_id: state.plantelId
+            })));
+
+            // 2. Enviar comunicados de inasistencia (Aviso a los alumnos/padres)
+            await supabaseClient.from('comunicados').insert(faltantes.map(al => ({
+                autor_id: u.data.user.id, 
+                titulo: '⚠️ AVISO DE INASISTENCIA', 
+                audiencia: 'Alumno_' + al.id,
+                mensaje: `Se ha registrado una FALTA en la materia: "${materia}" el día de hoy (${hoy}). \n\nRecuerda que las inasistencias acumuladas afectan tu porcentaje de aprobación.`,
                 plantel_id: state.plantelId
             })));
         }
