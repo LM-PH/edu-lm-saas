@@ -873,15 +873,7 @@ function renderAdminInscripcion() {
           </div>
           <div class="form-group">
             <label class="form-label">Grupo</label>
-            <select id="grupoInput" class="form-select">
-               <option value="A">A</option>
-               <option value="B">B</option>
-               <option value="C">C</option>
-               <option value="D">D</option>
-               <option value="E">E</option>
-               <option value="F">F</option>
-               <option value="G">G</option>
-            </select>
+            <input type="text" id="grupoInput" class="form-input" placeholder="Ej. A o 101" maxlength="10">
           </div>
         </div>
         <div class="form-group" style="margin-top: 16px;">
@@ -918,7 +910,7 @@ function renderAdminInscripcion() {
           </div>
           <div class="form-group" style="margin:0">
              <label style="font-size:0.7rem; color:var(--text-muted);">Grupo Actual</label>
-             <input type="text" id="promSourceGrupo" class="form-input" placeholder="A" style="padding:6px">
+             <input type="text" id="promSourceGrupo" class="form-input" placeholder="Ej. A o 101" style="padding:6px">
           </div>
           <div style="padding-bottom:10px; color:var(--text-muted);"><i class="fa-solid fa-arrow-right"></i></div>
           <div class="form-group" style="margin:0">
@@ -927,7 +919,7 @@ function renderAdminInscripcion() {
           </div>
           <div class="form-group" style="margin:0">
              <label style="font-size:0.7rem; color:var(--text-muted);">Nuevo Grupo</label>
-             <input type="text" id="promTargetGrupo" class="form-input" placeholder="A" style="padding:6px">
+             <input type="text" id="promTargetGrupo" class="form-input" placeholder="Ej. A o 101" style="padding:6px">
           </div>
        </div>
        <datalist id="gradoList"><option value="1°"></option><option value="2°"></option><option value="3°"></option><option value="4°"></option><option value="5°"></option><option value="6°"></option></datalist>
@@ -964,7 +956,7 @@ window.ejecutarPromocionMasiva = async () => {
 
     const formatearGrupo = (grado, grupo) => {
         let g = grado.replace(/[^0-9]/g, ''); 
-        let l = grupo.replace(/[^a-zA-Z]/g, '').toUpperCase();
+        let l = grupo.trim().toUpperCase();
         return `${g}°${l}`;
     };
 
@@ -1144,7 +1136,7 @@ window.promoverGradoAlumno = async (id) => {
     const isDirectivo = state.role === 'directivo';
     const nuevoGrado = prompt('Ingresa el nuevo GRADO (ej. 2°, 3°):');
     if(!nuevoGrado) return;
-    const nuevoGrupo = prompt('Ingresa el nuevo GRUPO (ej. A, B, C):');
+    const nuevoGrupo = prompt('Ingresa el nuevo GRUPO (ej. A, B o 101):');
     if(!nuevoGrupo) return;
     
     const nombreCompletoGrupo = `${nuevoGrado}${nuevoGrupo}`;
