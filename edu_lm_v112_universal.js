@@ -2309,7 +2309,6 @@ function renderApoyoReportes() {
   const today = new Date().toLocaleDateString('en-CA');
   setTimeout(() => { 
       if(window.loadCitatoriosApoyo) window.loadCitatoriosApoyo();
-      if(window.loadReportesRecientesApoyo) window.loadReportesRecientesApoyo();
   }, 100);
   
   return `
@@ -2345,24 +2344,10 @@ function renderApoyoReportes() {
             </div>
         </div>
 
-        <!-- SECCIÓN 2: ÚLTIMAS INCIDENCIAS (BITÁCORA) -->
-        <div class="card" style="width:100%; border-top:4px solid var(--primary);">
-            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px; flex-wrap:wrap; gap:10px;">
-                <div>
-                    <h3 style="margin-bottom:4px;"><i class="fa-solid fa-clock-rotate-left text-primary"></i> Últimos Reportes Generados</h3>
-                    <p style="font-size:0.85rem; color:var(--text-muted);">Bitácora global de conducta reciente.</p>
-                </div>
-                <button class="btn btn-outline btn-sm" onclick="window.loadReportesRecientesApoyo()">
-                    <i class="fa-solid fa-sync"></i> Actualizar
-                </button>
-            </div>
-            <div id="contenedorReportesRecientesApoyo" style="display:flex; flex-direction:column; gap:15px;">
-                <div style="text-align:center; padding:30px; color:var(--text-muted)"><i class="fa-solid fa-spinner fa-spin"></i> Cargando bitácora...</div>
-            </div>
         </div>
     </div>
 
-    <!-- Modal de Creación de Reporte (Oculto por defecto) -->
+    <!-- Modal de Creación de Reporte -->
     <div id="modalNuevoReporteApoyo" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); z-index:9999; backdrop-filter:blur(4px);">
         <div class="card" style="max-width:500px; margin:50px auto; padding:25px; position:relative; box-shadow:var(--shadow-lg);">
             <button onclick="document.getElementById('modalNuevoReporteApoyo').style.display='none'" style="position:absolute; top:15px; right:15px; border:none; background:none; font-size:1.5rem; cursor:pointer; color:var(--text-muted)">&times;</button>
@@ -2439,12 +2424,12 @@ function renderApoyoReportes() {
         </div>
     </div>
 
-    <!-- Modal de Atención a Foco Rojo / RESOLUCIÓN FINAL -->
+    <!-- Modal de Atención a Citatorio / RESOLUCIÓN -->
     <div id="modalAtencionFoco" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); z-index:10000; backdrop-filter:blur(4px);">
         <div class="card" style="max-width:600px; margin:40px auto; padding:25px; position:relative; box-shadow:var(--shadow-lg);">
             <button onclick="document.getElementById('modalAtencionFoco').style.display='none'" style="position:absolute; top:15px; right:15px; border:none; background:none; font-size:1.5rem; cursor:pointer; color:var(--text-muted)">&times;</button>
             <h3 style="margin-top:0; color:var(--success)"><i class="fa-solid fa-handshake"></i> Atención y Resolución de Incidencias</h3>
-            <p style="font-size:0.85rem; color:var(--text-muted); margin-bottom:20px;">Documenta la junta con el padre de familia y los compromisos acordados para cerrar el expediente temporal.</p>
+            <p style="font-size:0.85rem; color:var(--text-muted); margin-bottom:20px;">Documenta la junta con el padre de familia y los compromisos acordados.</p>
             
             <input type="hidden" id="atencionAlumnoId">
             <input type="hidden" id="atencionCitatorioId">
@@ -2452,27 +2437,21 @@ function renderApoyoReportes() {
 
             <div style="margin-bottom:15px;">
                 <label style="display:block; font-size:0.85rem; margin-bottom:5px; font-weight:600;">Procedimiento de Atención:</label>
-                <textarea id="atencionProcedimiento" class="form-input" placeholder="Detalla cómo se atendió al alumno y tutor..." style="height:100px; border-radius:10px; resize:none;"></textarea>
+                <textarea id="atencionProcedimiento" class="form-input" placeholder="Detalla cómo se atendió al alumno..." style="height:100px; border-radius:10px; resize:none;"></textarea>
             </div>
 
             <div style="margin-bottom:20px;">
                 <label style="display:block; font-size:0.85rem; margin-bottom:5px; font-weight:600;">Compromisos Acordados:</label>
-                <textarea id="atencionCompromisos" class="form-input" placeholder="Escribe los puntos a los que se comprometieron..." style="height:100px; border-radius:10px; resize:none;"></textarea>
+                <textarea id="atencionCompromisos" class="form-input" placeholder="Escribe los puntos acordados..." style="height:100px; border-radius:10px; resize:none;"></textarea>
             </div>
 
             <div style="display:flex; gap:10px;">
                 <button class="btn btn-outline" style="flex:1" onclick="document.getElementById('modalAtencionFoco').style.display='none'">Cancelar</button>
                 <button class="btn btn-primary" id="btnConfirmarResolucion" style="flex:1; background:var(--success); border-color:var(--success)" onclick="window.guardarAtencionFoco()">
-                    <i class="fa-solid fa-check-double"></i> Guardar y Archivar Todo
+                    <i class="fa-solid fa-check-double"></i> Guardar y Finalizar
                 </button>
             </div>
         </div>
-    </div>
-
-    <div class="card" style="max-width:900px; margin-top:20px;">
-       <div id="historialReportesApoyo" style="display:flex; flex-direction:column; gap:16px;">
-          <div style="text-align:center; padding:40px; color:var(--text-muted)"><i class="fa-solid fa-spinner fa-spin fa-2x"></i><p style="margin-top:10px;">Cargando reportes del día...</p></div>
-       </div>
     </div>
   `;
 }
