@@ -2756,7 +2756,7 @@ window.guardarCitatorio = async () => {
             alumno_id: aid,
             emisor_id: u.data.user.id,
             motivo: motivo.trim(),
-            fecha_cita: fecha || null,
+            fecha_cita: fecha ? new Date(fecha).toISOString() : null,
             plantel_id: state.plantelId
         }]);
 
@@ -2828,7 +2828,7 @@ window.loadCitatoriosApoyo = async () => {
 
         cont.innerHTML = data.map(c => {
             const isEnterado = c.estado === 'enterado';
-            const dateCita = c.fecha_cita ? new Date(c.fecha_cita).toLocaleString() : 'Pendiente acordar';
+            const dateCita = c.fecha_cita ? new Date(c.fecha_cita).toLocaleString('es-MX', { dateStyle: 'medium', timeStyle: 'short' }) : 'Pendiente acordar';
             return `
                 <div class="card" style="padding:15px; border:1px solid ${isEnterado ? '#bbf7d0' : '#fed7aa'}; background:white; position:relative; box-shadow:var(--shadow-sm);">
                     <div style="display:flex; justify-content:space-between; margin-bottom:10px;">
@@ -5495,7 +5495,7 @@ window.loadCitatoriosAlumno = async (alumnoId) => {
                                     <small style="color:var(--text-muted); font-size:0.7rem;">${new Date(c.creado_en).toLocaleDateString()}</small>
                                 </div>
                                 <p style="font-size:0.85rem; margin:0 0 10px 0; color:var(--text-main); line-height:1.4;"><b>Motivo:</b> ${c.motivo}</p>
-                                ${c.fecha_cita ? `<p style="font-size:0.8rem; color:var(--primary); margin:0 0 10px 0;"><b>Cita programada:</b> ${new Date(c.fecha_cita).toLocaleString()}</p>` : ''}
+                                ${c.fecha_cita ? `<p style="font-size:0.8rem; color:var(--primary); margin:0 0 10px 0;"><b>Cita programada:</b> ${new Date(c.fecha_cita).toLocaleString('es-MX', { dateStyle: 'medium', timeStyle: 'short' })}</p>` : ''}
                                 
                                 ${!isEnterado ? `
                                     <div style="border-top:1px dashed #fed7aa; padding-top:10px; margin-top:5px;">
