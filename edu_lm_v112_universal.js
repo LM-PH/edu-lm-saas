@@ -736,7 +736,7 @@ function renderSidebar() {
     directivo: [
       { name: 'Autorizaciones', path: '/directivo/autorizaciones', icon: 'fa-stamp' },
       { name: 'Gestión de Personal', path: '/directivo/gestion-personal', icon: 'fa-id-card-clip' },
-      { name: 'Avisos Oficiales', path: '/apoyo/comunicados', icon: 'fa-bullhorn' }
+      { name: 'Comunicados Oficiales', path: '/directivo/comunicados', icon: 'fa-bullhorn' }
     ],
     alumno: [
       { name: 'Credencial Digital', path: '/alumno/credencial', icon: 'fa-id-card' },
@@ -3611,6 +3611,63 @@ window.actualizarUIPortal = () => {
     }
 };
 
+function renderDirectivoComunicados() {
+  setTimeout(() => {
+    if(window.loadComunicadosAdmin) window.loadComunicadosAdmin();
+  }, 100);
+  return `
+    <div class="page-header">
+      <h2 class="page-title">Comunicados y Anuncios Oficiales</h2>
+      <p class="page-subtitle">Redacta y publica avisos para toda la comunidad escolar.</p>
+    </div>
+
+    <div style="display:grid; grid-template-columns:1fr 1.5fr; gap:24px; align-items:start;">
+      <!-- Creador de Comunicado -->
+      <div class="card">
+        <h3 style="margin-bottom:16px"><i class="fa-solid fa-pen-to-square text-primary"></i> Nuevo Comunicado</h3>
+        <div class="form-group">
+          <label class="form-label">Asunto o Título del Aviso</label>
+          <input type="text" id="inComTitulo" class="form-input" placeholder="Ej. Junta de padres de familia...">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Dirigido a</label>
+          <select id="selComAudiencia" class="form-input">
+            <option value="Todos">Todos (Maestros, Apoyo y Alumnos)</option>
+            <option value="Maestros">Solo Maestros</option>
+            <option value="Apoyo">Solo Personal de Apoyo</option>
+            <option value="Alumnos">Solo Alumnos</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Mensaje del Comunicado</label>
+          <textarea id="inComMensaje" class="form-input" style="height:140px; resize:vertical; font-family:inherit;" placeholder="Escribe el contenido del comunicado aquí..."></textarea>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Adjuntar Archivo (Opcional)</label>
+          <input type="file" id="inComArchivo" class="form-input" accept=".pdf,.jpg,.png,.docx">
+        </div>
+        <button id="btnPublicarComunicado" class="btn btn-primary btn-lg" style="width:100%" onclick="window.publicarComunicado()">
+          <i class="fa-solid fa-paper-plane"></i> Publicar Comunicado
+        </button>
+      </div>
+
+      <!-- Historial de Comunicados -->
+      <div class="card">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+          <h3 style="margin:0"><i class="fa-solid fa-clock-rotate-left text-success"></i> Historial Enviados</h3>
+          <div style="display:flex; gap:8px; align-items:center;">
+            <button class="btn btn-outline" style="padding:4px 8px; font-size:0.7rem;" onclick="window.loadComunicadosAdmin(new Date().toLocaleDateString('en-CA'))">Hoy</button>
+            <input type="date" id="filtroFechaComAdmin" class="form-input" style="padding:6px; font-size:0.85rem;" onchange="window.loadComunicadosAdmin(this.value)">
+          </div>
+        </div>
+        <div id="listaComunicadosAdmin" style="max-height:500px; overflow-y:auto; display:flex; flex-direction:column; gap:12px;">
+          <div style="text-align:center; padding:30px; color:var(--text-muted);"><i class="fa-solid fa-spinner fa-spin"></i></div>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
 function renderPersonalComunicados(rolVisita) {
   const hoyStr = new Date().toLocaleDateString('en-CA');
   setTimeout(() => { if(window.loadTimelinePersonal) window.loadTimelinePersonal(hoyStr); }, 100);
@@ -4425,6 +4482,7 @@ async function renderPage(path) {
     case '/alumno/tramites': return renderAlumnoTramites();
     case '/directivo/autorizaciones': return renderDirectivoAutorizaciones();
     case '/directivo/gestion-personal': return renderDirectivoPersonal();
+    case '/directivo/comunicados': return renderDirectivoComunicados();
     case '/maestro/evaluacion': return renderMaestroListas(); // Alias para evaluación rápida
     default: return '<h2>Pantalla en construcción</h2>';
   }
