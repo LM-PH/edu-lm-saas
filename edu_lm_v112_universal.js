@@ -440,78 +440,38 @@ window.realizarSetupInicial = async () => {
 
     if(!esc || !dir || !cor || !pas) return alert("Por favor completa todos los campos, incluyendo la contraseña.");
     if(pas.length < 6) return alert("La contraseña debe tener al menos 6 caracteres.");
+    
     if(btn) {
         btn.disabled = true;
         btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Registrando...';
     }
 
     try {
-        let u = await supabaseClient.auth.getUser();
-        let ownerId = u.data.user ? u.data.user.id : null;
+        // LLAMADA AL RPC SEGURO (Blindaje Nivel 4)
+        const { data, error } = await supabaseClient.rpc('registrar_plantel_y_director', {
+            p_nombre_escuela: esc,
+            p_nombre_director: dir,
+            p_email: cor,
+            p_password: pas
+        });
 
-        // Si no hay usuario, lo creamos con Admin API ( पैटर्न detectado en handleLogin)
-        if(!ownerId) {
-            const adminKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlwaGZsdnJ2ZmNxYXpxZHFkZmdnIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3NTY4ODQ2MywiZXhwIjoyMDkxMjY0NDYzfQ.WD1c4kOtJrwdXZj3qHilbd4XRdoB5nPl_ijthomXw6k';
-            const res = await fetch('https://yphflvrvfcqazqdqdfgg.supabase.co/auth/v1/admin/users', {
-                method: 'POST',
-                headers: { 'apikey': adminKey, 'Authorization': `Bearer ${adminKey}`, 'Content-Type': 'application/json' },
-                body: JSON.stringify({ email: cor, password: pas, email_confirm: true, user_metadata: { rol: 'directivo', nombre: dir } })
-            });
-            const newUser = await res.json();
-            if(newUser.id) {
-                ownerId = newUser.id;
-            } else {
-                // Si ya existe borramos el error y procedemos (quizás ya se registró antes)
-                console.log("Aviso: El usuario ya podría existir en Auth.");
-            }
-        }
-        const slug = esc.toLowerCase().replace(/[^a-z0-9]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '');
+        if (error) throw error;
+        if (data && data.success === false) throw new Error(data.error);
 
-        // 1. Crear el Plantel en la tabla Multi-Tenant (Usamos supabaseClient para saltar RLS en setup)
-        const { data: newPlantel, error: err1 } = await supabaseClient.from('planteles').insert([{
-            nombre: esc, 
-            slug: slug,
-            owner_id: ownerId,
-            primary_color: '#2563eb' // Default Blue
-        }]).select().single();
-
-        if(err1) {
-            if(err1.message.includes("unique constraint")) throw new Error("Este nombre de escuela ya está en uso. Prueba con uno más específico.");
-            throw err1;
-        }
-
-        // 2. Vincular al Director con el Plantel
-        if(ownerId) {
-            await supabaseClient.from('perfiles').upsert({
-                id: ownerId,
-                nombre: dir,
-                rol: 'directivo', // El creador es Directivo por defecto
-                plantel_id: newPlantel.id
-            });
-        }
-
-        // 3. Registrar en padrón autorizado vinculado al plantel
-        const { error: err2 } = await supabaseClient.from('perfiles_permitidos').upsert([{
-            email: cor, 
-            nombre: dir, 
-            rol: 'directivo',
-            plantel_id: newPlantel.id,
-            estado: 'activo'
-        }], { onConflict: 'email' });
-        
-        if(err2) throw err2;
-
-        CONFIG.schoolName = esc;
-        state.schoolConfigured = true;
-        state.plantelId = newPlantel.id;
         window.showToast("¡Plantel registrado con éxito!", "success");
         
-        // Regresar a pantalla 0 para que el usuario elija "Ya tengo mi plantel" o entrar directo
-        state.setupStep = 0;
-        state.schoolConfigured = false;
-        renderApp();
+        // Login automático (usamos los campos que ya tenemos)
+        document.getElementById('fb-email').value = cor;
+        document.getElementById('fb-password').value = pas;
+        await window.handleLogin();
+
     } catch(e) { 
+        console.error("Setup Error:", e);
         alert("Error en Setup: " + e.message); 
+        if(btn) {
+            btn.disabled = false;
+            btn.innerHTML = 'Finalizar Registro';
+        }
     }
 };
 
