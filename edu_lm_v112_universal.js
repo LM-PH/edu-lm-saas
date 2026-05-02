@@ -8790,6 +8790,8 @@ window.cargarEncuadreActivo = async () => {
         const { data: encExistente } = await supabaseClient
             .from('encuadres')
             .select('id, notificacion_enviada, fecha_envio_notif')
+            .eq('plantel_id', state.plantelId)
+            .eq('maestro_id', u.data.user.id)
             .eq('materia', mat)
             .eq('trimestre', window.currentTrimestre || 1)
             .match(isTec ? { target_grado: targetGrado } : { grupo_id: gid })
@@ -8850,6 +8852,7 @@ window.cargarEncuadreActivo = async () => {
         if(alumnos && alumnos.length > 0) {
             // Obtener el ID del encuadre para la referencia invisible
             let qEncId = supabaseClient.from('encuadres').select('id')
+                .eq('plantel_id', state.plantelId)
                 .eq('maestro_id', u.data.user.id)
                 .eq('materia', mat)
                 .eq('trimestre', window.currentTrimestre || 1);
@@ -8876,7 +8879,7 @@ window.cargarEncuadreActivo = async () => {
             let qUpdate = supabaseClient.from('encuadres').update({ 
                 notificacion_enviada: true, 
                 fecha_envio_notif: new Date().toISOString() 
-            }).eq('materia', mat).eq('trimestre', window.currentTrimestre || 1);
+            }).eq('plantel_id', state.plantelId).eq('maestro_id', u.data.user.id).eq('materia', mat).eq('trimestre', window.currentTrimestre || 1);
 
             if(isTec) qUpdate = qUpdate.is('grupo_id', null).eq('target_grado', targetGrado);
             else qUpdate = qUpdate.eq('grupo_id', gid);
@@ -10217,10 +10220,12 @@ window.resetEstadoEncuadre = async () => {
     const targetGrado = isTec ? idPart.replace('grado:', '') : null;
 
     try {
+        const u = await supabaseClient.auth.getUser();
         // 1. Obtener ID del encuadre específico para el trimestre actual
         let qEnc = supabaseClient.from('encuadres')
             .select('id, maestro_id')
             .eq('plantel_id', state.plantelId)
+            .eq('maestro_id', u.data?.user?.id)
             .eq('materia', mat)
             .eq('trimestre', window.currentTrimestre || 1);
 
