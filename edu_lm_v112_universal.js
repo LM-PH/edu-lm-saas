@@ -7726,7 +7726,19 @@ function attachDOMEvents() {
                plantel_id: finalPlantel
             }]);
             if(errAlumno) throw errAlumno;
-            alert(`✅ Alumno inscrito exitosamente.\n\nMatrícula: ${matricula}\nContraseña Temporal: ${autoPass}`);
+
+            // CREAR CUENTA DE ACCESO EN AUTH (sin esto el alumno no puede iniciar sesión)
+            const { data: rpcData, error: rpcError } = await supabaseClient.rpc('crear_usuario_admin', {
+                p_email: email,
+                p_password: autoPass,
+                p_nombre: nombre,
+                p_rol: 'alumno',
+                p_plantel_id: finalPlantel
+            });
+            if(rpcError) throw rpcError;
+            if(rpcData && rpcData.success === false) throw new Error(rpcData.error || 'Error al crear cuenta de acceso');
+
+            alert(`✅ Alumno inscrito exitosamente.\n\nMatrícula: ${matricula}\nCorreo: ${email}\nContraseña Temporal: ${autoPass}`);
           } catch (err) { alert("Error: " + err.message); }
           finally { btnGuardarIns.innerText = btnText; btnGuardarIns.disabled = false; }
         });
