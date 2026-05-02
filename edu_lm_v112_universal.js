@@ -1422,6 +1422,13 @@ function renderAdminCalificaciones() {
                <option value="">Cargando grupos...</option>
             </select>
          </div>
+         <div style="margin-top:20px; padding-top:20px; border-top:1px dashed var(--border); position:relative;">
+            <h4 style="margin-bottom:10px; font-size:0.9rem;"><i class="fa-solid fa-file-csv"></i> Descarga Directa por Alumno</h4>
+            <div class="form-group">
+                <input type="text" id="adminSearchAlumnoDownload" class="form-input" placeholder="Nombre del alumno..." onkeyup="window.liveSearchAlumnoCalificaciones(this.value)">
+                <div id="resSearchAlumnoDownload" style="display:none; background:white; border:1px solid var(--border); border-radius:8px; margin-top:5px; max-height:200px; overflow-y:auto; position:absolute; width: 100%; z-index: 100; box-shadow: var(--shadow-lg);"></div>
+            </div>
+         </div>
       </div>
       
       <!-- Nuevo Bloque: Revisión Detallada por Grupo -->
@@ -10533,3 +10540,58 @@ window.updateMaestroDeadlineStatus = async () => {
     } catch(e) { console.error(e); }
 };
 
+
+window.liveSearchAlumnoCalificaciones = async (q) => {
+    const res = document.getElementById('resSearchAlumnoDownload');
+    if(!res) return;
+    if(q.length < 2) { res.style.display='none'; return; }
+    try {
+        const { data } = await supabaseClient.from('alumnos').select('id, nombre, matricula, grupos(nombre)').or(`nombre.ilike.%${q}%,matricula.ilike.%${q}%`).limit(10);
+        if(!data || data.length === 0) { res.innerHTML='<p style="padding:10px; color:var(--text-muted)">Sin resultados</p>'; res.style.display='block'; return; }
+        res.style.display='block';
+        res.innerHTML = data.map(a => `
+            <div style="padding:10px; border-bottom:1px solid var(--border); cursor:pointer; display:flex; justify-content:space-between; align-items:center;" onclick="window.descargarCSVAlumno('${a.id}', '${a.nombre}')">
+               <div>
+                  <div style="font-weight:600; font-size:0.85rem;">${a.nombre}</div>
+                  <div style="font-size:0.75rem; color:var(--text-muted)">${a.grupos ? a.grupos.nombre : 'Sin Grupo'}</div>
+               </div>
+               <i class="fa-solid fa-download" style="color:var(--primary)"></i>
+            </div>
+        `).join('');
+    } catch(e) { console.error(e); }
+};
+
+window.descargarCSVAlumno = async (alumnoId, nombre) => {
+    try {
+        const trimRaw = document.getElementById('adminTrimestreSel').value;
+        const trimNum = parseInt(trimRaw.replace(/\D/g, ''));
+        
+        const { data: califs, error } = await supabaseClient.from('calificaciones')
+            .select('calificacion, materia_nombre, materia_id(nombre)')
+            .eq('alumno_id', alumnoId)
+            .eq('trimestre', trimNum);
+        
+        if(error) throw error;
+        if(!califs || califs.length === 0) return alert("Este alumno no tiene calificaciones registradas en este trimestre.");
+
+        let csv = "\uFEFFMateria,Calificación\n";
+        let suma = 0;
+        califs.forEach(c => {
+            const m = c.materia_nombre || (c.materia_id?.nombre) || 'Materia';
+            csv += `"${m}",${c.calificacion}\n`;
+            suma += Number(c.calificacion);
+        });
+        csv += `"Promedio",${(suma / califs.length).toFixed(1)}\n`;
+
+        const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = `Calificaciones_${nombre.replace(/\s+/g, '_')}_T${trimNum}.csv`;
+        link.click();
+        
+        window.showToast("CSV de alumno descargado.", "success");
+        document.getElementById('resSearchAlumnoDownload').style.display = 'none';
+        document.getElementById('adminSearchAlumnoDownload').value = '';
+    } catch(e) { console.error(e); alert("Error al generar CSV: " + e.message); }
+};
