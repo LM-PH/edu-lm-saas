@@ -7418,21 +7418,18 @@ window.initEventosAdminMaestros = () => {
 
                     if(error) throw error;
 
-                    // LÓGICA DE REGISTRO DIRECTO (EduLM v112)
-                    const adminKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlwaGZsdnJ2ZmNxYXpxZHFkZmdnIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3NTY4ODQ2MywiZXhwIjoyMDkxMjY0NDYzfQ.WD1c4kOtJrwdXZj3qHilbd4XRdoB5nPl_ijthomXw6k';
-                    
-                    // 1. Crear/Asegurar usuario en Auth con la clave generada
-                    const authRes = await fetch('https://yphflvrvfcqazqdqdfgg.supabase.co/auth/v1/admin/users', {
-                        method: 'POST',
-                        headers: { 'apikey': adminKey, 'Authorization': `Bearer ${adminKey}`, 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ 
-                            email: emailValue, 
-                            password: autoPass, 
-                            email_confirm: true, 
-                            user_metadata: { rol: rolValue, nombre: nombreValue, plantel_id: currentPlantelID } 
-                        })
+                    // REGISTRO SEGURO VÍA RPC (sin claves expuestas)
+                    const { data: rpcData, error: rpcError } = await supabaseClient.rpc('crear_usuario_admin', {
+                        p_email: emailValue,
+                        p_password: autoPass,
+                        p_nombre: nombreValue,
+                        p_rol: rolValue,
+                        p_plantel_id: currentPlantelID
                     });
-                    
+
+                    if(rpcError) throw rpcError;
+                    if(rpcData && rpcData.success === false) throw new Error(rpcData.error || "Error desconocido al crear usuario");
+
                     showToast("Personal registrado con éxito. Contraseña: " + autoPass, "success");
 
                     if(window.loadSelectsMaestros) window.loadSelectsMaestros();
