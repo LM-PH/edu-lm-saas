@@ -158,20 +158,7 @@ window.handleLogin = async (e) => {
   }
 
   try {
-    // 1. Verificar si el usuario está en el padrón permitido
-    const { data: allowed, error: allowedErr } = await supabaseClient
-        .from('perfiles_permitidos')
-        .select('*')
-        .ilike('email', email)
-        .maybeSingle();
-
-    if (!allowed) {
-      throw new Error('Este correo no tiene autorización de acceso para este portal.');
-    }
-
-    const effectiveData = allowed;
-
-    // 2. Intento de Login Oficial
+    // 1. Intento de Login Oficial (Primero validamos que la cuenta exista en Supabase Auth)
     const { data: authData, error: authErr } = await supabaseClient.auth.signInWithPassword({ email, password });
     
     if (authErr) {
@@ -181,24 +168,51 @@ window.handleLogin = async (e) => {
         throw authErr;
     }
 
-    // 3. Sincronizar Perfil
-    const { error: upsertError } = await supabaseClient.from('perfiles').upsert({
-        id: authData.user.id,
-        rol: effectiveData.rol,
-        nombre: effectiveData.nombre,
-        plantel_id: effectiveData.plantel_id
-    });
+    // 2. Recuperar el perfil real de la base de datos para ver quién es
+    const { data: profile, error: profErr } = await supabaseClient
+        .from('perfiles')
+        .select('*, planteles(id, nombre)')
+        .eq('id', authData.user.id)
+        .maybeSingle();
+
+    // 3. Verificación de Autorización
+    // Es válido si: Es el Master (marcado en DB) O está en el padrón de autorizados
+    const isMasterUser = profile?.es_master || profile?.rol === 'master';
     
-    if(upsertError) console.warn("Aviso: No se pudo actualizar la tabla de perfiles, pero la sesión es válida.");
+    if (!isMasterUser) {
+        // Si no es master, verificamos si su correo está en el padrón de alguna escuela
+        const { data: allowed } = await supabaseClient
+            .from('perfiles_permitidos')
+            .select('*')
+            .ilike('email', email)
+            .maybeSingle();
 
-    // 4. Establecer Estado Global
+        if (!allowed) {
+            await supabaseClient.auth.signOut();
+            throw new Error('Su cuenta no tiene autorización activa para acceder a ningún plantel.');
+        }
+        
+        // Si estaba permitido pero no tenía perfil, lo creamos ahora
+        if (!profile) {
+            await supabaseClient.from('perfiles').upsert({
+                id: authData.user.id,
+                rol: allowed.rol,
+                nombre: allowed.nombre,
+                plantel_id: allowed.plantel_id
+            });
+        }
+    }
+
+    // 4. Sincronizar Estado Global
+    const finalProfile = profile || { rol: 'invitado' }; // Fallback de seguridad
     state.user = authData.user;
-    state.plantelId = effectiveData.plantel_id;
-    state.role = effectiveData.rol;
-    state.userName = effectiveData.nombre;
+    state.isMaster = isMasterUser;
+    state.role = isMasterUser ? 'master' : profile?.rol;
+    state.userName = profile?.nombre || authData.user.email;
+    state.plantelId = profile?.plantel_id;
 
-    window.showToast(`Bienvenido(a), ${effectiveData.nombre}`, 'success');
-    window.login(effectiveData.rol);
+    window.showToast(`Bienvenido(a), ${state.userName}`, 'success');
+    window.login(state.role);
 
   } catch (err) {
     console.error(">>> LOGIN ERROR:", err);
