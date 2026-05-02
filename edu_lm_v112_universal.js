@@ -4392,6 +4392,9 @@ function generateHTML(content) {
       <button class="mobile-nav-toggle" onclick="window.toggleSidebar()">
         <i class="fa-solid fa-bars"></i>
       </button>
+      <button class="mobile-logout-btn" onclick="window.logout()" title="Cerrar Sesión">
+        <i class="fa-solid fa-right-from-bracket"></i>
+      </button>
       <div class="sidebar-overlay" onclick="window.toggleSidebar()"></div>
       ${renderSidebar()}
       <main class="main-content">
