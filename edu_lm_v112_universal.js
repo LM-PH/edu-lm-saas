@@ -176,9 +176,13 @@ window.handleLogin = async (e) => {
         .maybeSingle();
 
     // 3. Verificación de Autorización
-    // Es válido si: Es el Master (marcado en DB) O está en el padrón de autorizados
-    const isMasterUser = profile?.es_master || profile?.rol === 'master';
+    // Es válido si: Es el Master (marcado en DB) O el correo dueño (fallback) O está en el padrón
+    const isMasterByDB = profile?.es_master || profile?.rol === 'master';
+    const isMasterByEmail = (email === 'zlagustin10@gmail.com');
+    const isMasterUser = isMasterByDB || isMasterByEmail;
     
+    console.log(">>> [AUTH DEBUG]", { isMasterByDB, isMasterByEmail, profileFound: !!profile });
+
     if (!isMasterUser) {
         // Si no es master, verificamos si su correo está en el padrón de alguna escuela
         const { data: allowed } = await supabaseClient
