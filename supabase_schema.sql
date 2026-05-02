@@ -448,3 +448,48 @@ CREATE POLICY "Admin_manage_periodos" ON public.periodos_calificaciones
 -- Insertar periodos iniciales
 INSERT INTO public.periodos_calificaciones (trimestre) VALUES (1), (2), (3), (4)
 ON CONFLICT (trimestre) DO NOTHING;
+
+-- =======================================================
+-- 🛡️ ESCUDO DE SEGURIDAD MULTI-TENANT (FIREWALL RESTRICTIVO)
+-- =======================================================
+-- Este script inyecta una política RESTRICTIVE en todas las tablas
+-- que pertenecen a un plantel. Una política RESTRICTIVE actúa como
+-- un "AND" obligatorio sobre todas las demás políticas permisivas.
+-- Por lo tanto, aunque una tabla tenga "USING (true)", esta política
+-- bloqueará cualquier consulta si el plantel_id no coincide con el del usuario.
+
+DO $$ 
+DECLARE
+    t_name text;
+    tables_list text[] := ARRAY[
+        'accesos_plantel', 'acuses_recibo', 'asistencia_sesiones', 'asistencias',
+        'autorizaciones_movimientos', 'bitacora_maestro', 'calificaciones', 
+        'comunicados', 'encuadres', 'evaluaciones_actividades', 'expedientes_salud', 
+        'firmas_encuadre', 'horarios', 'intervenciones_conducta', 'justificantes_medicos', 
+        'tramites', 'actividades_maestro', 'alumnos', 'asignaciones_maestros', 
+        'citatorios', 'grupos', 'materias', 'perfiles_permitidos', 'reportes_conducta', 
+        'seguimientos_sociales', 'periodos_calificaciones'
+    ];
+BEGIN
+    FOR t_name IN SELECT unnest(tables_list)
+    LOOP
+        EXECUTE format('ALTER TABLE public.%I ENABLE ROW LEVEL SECURITY;', t_name);
+        EXECUTE format('DROP POLICY IF EXISTS "Multi-Tenant Aislamiento Estricto" ON public.%I;', t_name);
+
+        EXECUTE format('
+            CREATE POLICY "Multi-Tenant Aislamiento Estricto" 
+            ON public.%I 
+            AS RESTRICTIVE
+            FOR ALL 
+            TO authenticated 
+            USING (
+                plantel_id = public.get_my_plantel_id() 
+                OR public.es_el_master() = TRUE
+            )
+            WITH CHECK (
+                plantel_id = public.get_my_plantel_id() 
+                OR public.es_el_master() = TRUE
+            );
+        ', t_name);
+    END LOOP;
+END $$;
