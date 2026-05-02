@@ -6424,7 +6424,7 @@ window.abrirQREvaluacion = (actId, actTitulo, actGrupoId, actTargetGrado, actMat
         
         try {
            // Buscamos por matrícula (que es lo que se codifica en el QR)
-           const { data: alumno } = await supabaseClient.from('alumnos').select('id, nombre, grupo_id, grado, taller').eq('matricula', decodedText).single();
+           const { data: alumno } = await supabaseClient.from('alumnos').select('id, nombre, grupo_id, grado, taller').eq('matricula', decodedText).eq('plantel_id', state.plantelId).single();
            
            if(alumno) {
                if(isTec) {
@@ -8020,7 +8020,7 @@ window.guardarAsistenciaQR = async (matricula, grupoId) => {
         const materia = (window.currentAulaMateria || 'N/A').trim();
         const [sessionRes, studentRes] = await Promise.all([
             supabaseClient.from('asistencia_sesiones').select('estado').eq('grupo_id', String(grupoId)).eq('materia', materia).eq('fecha', hoy).eq('plantel_id', state.plantelId).maybeSingle(),
-            supabaseClient.from('alumnos').select('id, nombre, grupo_id, grado, taller').eq('matricula', matricula).maybeSingle()
+            supabaseClient.from('alumnos').select('id, nombre, grupo_id, grado, taller').eq('matricula', matricula).eq('plantel_id', state.plantelId).maybeSingle()
         ]);
         const sesion = sessionRes.data;
         const alumno = studentRes.data;
@@ -8222,6 +8222,7 @@ window.registrarAsistenciaEntrada = async (qrText) => {
         let { data: alu, error: searchErr } = await supabaseClient.from('alumnos')
             .select('id, nombre')
             .eq('matricula', qrText)
+            .eq('plantel_id', state.plantelId)
             .maybeSingle();
 
         // Si no se encontró por matrícula, intentar por ID (solo si tiene formato UUID)
@@ -8229,6 +8230,7 @@ window.registrarAsistenciaEntrada = async (qrText) => {
             const { data: aluId } = await supabaseClient.from('alumnos')
                 .select('id, nombre')
                 .eq('id', qrText)
+                .eq('plantel_id', state.plantelId)
                 .maybeSingle();
             alu = aluId;
         }
