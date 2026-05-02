@@ -2906,40 +2906,42 @@ window.guardarAtencionFoco = async () => {
             estado: 'finalizado',
             plantel_id: state.plantelId
         }]);
-        if(errSeg) throw errSeg;
+        if(errSeg) throw new Error('Error en seguimientos_sociales: ' + errSeg.message);
         
         // 2. Guardar en Intervenciones Conducta (Para el expediente unificado)
-        await supabaseClient.from('intervenciones_conducta').insert([{
+        const { error: errInt } = await supabaseClient.from('intervenciones_conducta').insert([{
             alumno_id: aid,
             maestro_id: u.data.user.id,
             procedimiento: proc,
             compromisos: comp,
             plantel_id: state.plantelId
         }]);
+        if(errInt) throw new Error('Error en intervenciones_conducta: ' + errInt.message);
 
-        // 3. Resolver TODOS los reportes pendientes del alumno
-        await supabaseClient
+        // 3. Resolver reportes pendientes del alumno (ignorar si no hay ninguno)
+        const { error: errRep } = await supabaseClient
             .from('reportes_conducta')
             .update({ resuelto: true })
-            .eq('alumno_id', aid);
+            .eq('alumno_id', aid)
+            .eq('plantel_id', state.plantelId);
+        if(errRep) console.warn('Advertencia al resolver reportes:', errRep.message);
 
-        // 4. Si viene de un citatorio, actualizar estado y borrarlo
+        // 4. Si viene de un citatorio, actualizarlo y eliminarlo
         if(cid) {
-            // Primero lo marcamos como atendido en citatorios
             await supabaseClient.from('citatorios').update({ estado: 'atendido' }).eq('id', cid);
-            // El usuario pidió borrarlo una vez atendido (o podemos dejarlo como 'atendido')
-            // Sin embargo, si el usuario explícitamente dijo "cuando se atienda se borre", lo borramos:
             await supabaseClient.from('citatorios').delete().eq('id', cid);
         }
 
         // 5. Notificar al alumno del cierre
-        await supabaseClient.from('comunicados').insert([{
+        const { error: errCom } = await supabaseClient.from('comunicados').insert([{
             autor_id: u.data.user.id,
             titulo: `✅ SITUACIÓN ATENDIDA Y RESUELTA`,
-            mensaje: `Se ha concluido la junta de seguimiento en Trabajo Social.\n\nPROCEDIMIENTO: ${proc.substring(0, 80)}...\nCOMPROMISOS: ${comp.substring(0, 80)}...\n\nTu expediente ha sido actualizado. ¡Gracias por tu compromiso!`,
+            mensaje: `Se ha concluido la junta de seguimiento en Trabajo Social.\n\nPROCEDIMIENTO: ${proc.substring(0, 120)}\nCOMPROMISOS: ${comp.substring(0, 120)}\n\nTu expediente ha sido actualizado. ¡Gracias por tu compromiso!`,
             audiencia: `Alumno_${aid}`,
+            fecha_envio: new Date().toISOString(),
             plantel_id: state.plantelId
         }]);
+        if(errCom) console.warn('Advertencia al enviar comunicado al alumno:', errCom.message);
 
         window.showToast("Atención registrada, citatorio archivado y reportes resueltos", "success");
         document.getElementById('modalAtencionFoco').style.display = 'none';
