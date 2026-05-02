@@ -3660,7 +3660,7 @@ function renderDirectivoComunicados() {
             <input type="date" id="filtroFechaComAdmin" class="form-input" style="padding:6px; font-size:0.85rem;" onchange="window.loadComunicadosAdmin(this.value)">
           </div>
         </div>
-        <div id="listaComunicadosAdmin" style="max-height:500px; overflow-y:auto; display:flex; flex-direction:column; gap:12px;">
+        <div id="divComHistorial" style="max-height:500px; overflow-y:auto; display:flex; flex-direction:column; gap:12px;">
           <div style="text-align:center; padding:30px; color:var(--text-muted);"><i class="fa-solid fa-spinner fa-spin"></i></div>
         </div>
       </div>
