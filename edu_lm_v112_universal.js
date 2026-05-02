@@ -1685,8 +1685,8 @@ window.loadComunicadosAdmin = async (fechaFiltro = null) => {
             .order('fecha_envio', { ascending: false })
             .limit(30);
 
-        // Solo mostrar comunicados generales para el muro del admin
-        query = query.in('audiencia', ['General', 'Maestros', 'Alumnos']);
+        // Mostrar comunicados generales (todos los valores posibles de audiencia institucional)
+        query = query.in('audiencia', ['General', 'Todos', 'Maestros', 'Alumnos', 'Apoyo']);
 
         if(fechaFiltro) {
             const desde = fechaFiltro + 'T00:00:00';
@@ -1704,8 +1704,10 @@ window.loadComunicadosAdmin = async (fechaFiltro = null) => {
 
         const tipoColores = {
             'General': 'var(--success)',
-            'Maestros': 'var(--primary)',
+            'Todos':   'var(--primary)',
+            'Maestros': '#8b5cf6',
             'Alumnos': 'var(--warning)',
+            'Apoyo':   '#f97316',
         };
 
         cont.innerHTML = data.map(c => {
