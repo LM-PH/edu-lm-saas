@@ -7155,7 +7155,7 @@ window.sellarYEnviarCalificaciones = async () => {
 
     // VALIDACIÓN DE PERIODO (v112+)
     try {
-        const { data: periodo } = await supabaseClient.from('periodos_calificaciones').select('*').eq('trimestre', trim).maybeSingle();
+        const { data: periodo } = await supabaseClient.from('periodos_calificaciones').select('*').eq('trimestre', trim).eq('plantel_id', state.plantelId).maybeSingle();
         if(periodo) {
             if(periodo.bloqueado) {
                 return alert("⚠️ El sistema de envío está BLOQUEADO por la administración para este trimestre.");
@@ -10587,7 +10587,7 @@ async function renderAdminCalendario() {
 
 window.loadAdminCalendario = async () => {
     try {
-        const { data, error } = await supabaseClient.from('periodos_calificaciones').select('*').order('trimestre');
+        const { data, error } = await supabaseClient.from('periodos_calificaciones').select('*').eq('plantel_id', state.plantelId).order('trimestre');
         if(error) throw error;
 
         data.forEach(p => {
@@ -10611,10 +10611,10 @@ window.saveAdminDeadline = async (trim) => {
 
     try {
         const isoDate = new Date(dateVal).toISOString();
-        const { error } = await supabaseClient.from('periodos_calificaciones').update({
-            fecha_limite: isoDate,
-            ultima_modificacion: new Date().toISOString()
-        }).eq('trimestre', trim);
+        const { data: exist } = await supabaseClient.from('periodos_calificaciones').select('*').eq('trimestre', trim).eq('plantel_id', state.plantelId).maybeSingle();
+        const payload = { trimestre: trim, plantel_id: state.plantelId, fecha_limite: isoDate, ultima_modificacion: new Date().toISOString() };
+        if (exist) payload.bloqueado = exist.bloqueado;
+        const { error } = await supabaseClient.from('periodos_calificaciones').upsert(payload, { onConflict: 'trimestre, plantel_id' });
 
         if(error) throw error;
         window.showToast("Fecha límite actualizada con éxito", "success");
@@ -10624,10 +10624,10 @@ window.saveAdminDeadline = async (trim) => {
 window.toggleAdminDeadlineBlock = async (trim) => {
     const isBlocked = document.getElementById(`block-trim-${trim}`).checked;
     try {
-        const { error } = await supabaseClient.from('periodos_calificaciones').update({
-            bloqueado: isBlocked,
-            ultima_modificacion: new Date().toISOString()
-        }).eq('trimestre', trim);
+        const { data: exist } = await supabaseClient.from('periodos_calificaciones').select('*').eq('trimestre', trim).eq('plantel_id', state.plantelId).maybeSingle();
+        const payload = { trimestre: trim, plantel_id: state.plantelId, bloqueado: isBlocked, ultima_modificacion: new Date().toISOString() };
+        if (exist && exist.fecha_limite) payload.fecha_limite = exist.fecha_limite;
+        const { error } = await supabaseClient.from('periodos_calificaciones').upsert(payload, { onConflict: 'trimestre, plantel_id' });
 
         if(error) throw error;
         window.showToast(`Trimestre ${trim} ${isBlocked ? 'bloqueado' : 'desbloqueado'}`, "info");
@@ -10640,7 +10640,7 @@ window.updateMaestroDeadlineStatus = async () => {
     if(!trim || !statusSpan) return;
 
     try {
-        const { data: periodo } = await supabaseClient.from('periodos_calificaciones').select('*').eq('trimestre', trim).maybeSingle();
+        const { data: periodo } = await supabaseClient.from('periodos_calificaciones').select('*').eq('trimestre', trim).eq('plantel_id', state.plantelId).maybeSingle();
         if(!periodo) {
             statusSpan.innerHTML = "PERIODO ABIERTO";
             statusSpan.style.color = "var(--success)";
