@@ -4277,8 +4277,8 @@ window.resolverAutorizacion = async (id, dictamen, payloadStr = null) => {
             else if(payload.action === 'delete_personal') {
                  const { error: errPerm } = await supabaseClient.from('perfiles_permitidos').delete().eq('id', payload.id_permitido);
                  if(errPerm) throw errPerm;
-                 const { data: pExist } = await supabaseClient.from('perfiles').select('id').eq('nombre', payload.nombre).maybeSingle();
-                 if(pExist) await supabaseClient.from('perfiles').delete().eq('id', pExist.id);
+                 const { data: pExist } = await supabaseClient.from('perfiles').select('id').eq('nombre', payload.nombre).eq('plantel_id', state.plantelId).maybeSingle();
+                 if(pExist) await supabaseClient.from('perfiles').delete().eq('id', pExist.id).eq('plantel_id', state.plantelId);
             }
         }
 
@@ -6808,7 +6808,8 @@ window.cargarAlumnosLista = async () => {
             const { data: sesiones } = await supabaseClient.from('asistencia_sesiones')
                 .select('fecha')
                 .eq('grupo_id', String(rawVal))
-                .eq('materia', materiaLimpia);
+                .eq('materia', materiaLimpia)
+                .eq('plantel_id', state.plantelId);
                 
             let diasPaseLista = new Set();
             if(sesiones) sesiones.forEach(s => diasPaseLista.add(s.fecha));
@@ -7963,7 +7964,7 @@ window.toggleAsistenciaModo = async (modo) => {
 
         const materia = (window.currentAulaMateria || 'N/A').trim();
         const { data: sesion } = await supabaseClient.from('asistencia_sesiones')
-            .select('*').eq('grupo_id', String(window.currentAulaGrupoId)).eq('materia', materia).eq('fecha', hoy).maybeSingle();
+            .select('*').eq('grupo_id', String(window.currentAulaGrupoId)).eq('materia', materia).eq('fecha', hoy).eq('plantel_id', state.plantelId).maybeSingle();
 
         if(sesion && sesion.estado === 'cerrado') {
             window.showToast("Esta sesión ya está cerrada definitivamente.", "error");
@@ -7987,7 +7988,7 @@ window.toggleAsistenciaModo = async (modo) => {
             maestro_id: u.data.user.id, 
             estado: dbEstado,
             plantel_id: state.plantelId
-        }, { onConflict: 'grupo_id, materia, fecha' });
+        }, { onConflict: 'plantel_id, grupo_id, materia, fecha' });
 
         window.startMaestroQR();
         window.updateSessionUI();
@@ -8018,7 +8019,7 @@ window.guardarAsistenciaQR = async (matricula, grupoId) => {
         const hoy = new Date().toLocaleDateString('en-CA');
         const materia = (window.currentAulaMateria || 'N/A').trim();
         const [sessionRes, studentRes] = await Promise.all([
-            supabaseClient.from('asistencia_sesiones').select('estado').eq('grupo_id', String(grupoId)).eq('materia', materia).eq('fecha', hoy).maybeSingle(),
+            supabaseClient.from('asistencia_sesiones').select('estado').eq('grupo_id', String(grupoId)).eq('materia', materia).eq('fecha', hoy).eq('plantel_id', state.plantelId).maybeSingle(),
             supabaseClient.from('alumnos').select('id, nombre, grupo_id, grado, taller').eq('matricula', matricula).maybeSingle()
         ]);
         const sesion = sessionRes.data;
@@ -8071,7 +8072,7 @@ window.finalizarSesionAsistencia = async () => {
         const grupoId = String(window.currentAulaGrupoId);
         const materia = (window.currentAulaMateria || 'N/A').trim();
         
-        await supabaseClient.from('asistencia_sesiones').update({ estado: 'cerrado' }).eq('grupo_id', grupoId).eq('materia', materia).eq('fecha', hoy);
+        await supabaseClient.from('asistencia_sesiones').update({ estado: 'cerrado' }).eq('grupo_id', grupoId).eq('materia', materia).eq('fecha', hoy).eq('plantel_id', state.plantelId);
         
         let queryAl = supabaseClient.from('alumnos').select('id').eq('plantel_id', state.plantelId);
         if(grupoId.startsWith('grado:')) queryAl = queryAl.eq('grado', grupoId.split(':')[1].split('|')[0]);
@@ -8081,7 +8082,8 @@ window.finalizarSesionAsistencia = async () => {
         let queryReg = supabaseClient.from('asistencias')
             .select('alumno_id, estado, materia')
             .gte('creado_en', hoy + 'T00:00:00')
-            .lte('creado_en', hoy + 'T23:59:59');
+            .lte('creado_en', hoy + 'T23:59:59')
+            .eq('plantel_id', state.plantelId);
             
         if(grupoId.startsWith('grado:')) {
             queryReg = queryReg.is('grupo_id', null);
@@ -8328,6 +8330,7 @@ window.updateSessionUI = async () => {
             .eq('grupo_id', String(window.currentAulaGrupoId))
             .eq('materia', window.currentAulaMateria || 'N/A')
             .eq('fecha', hoy)
+            .eq('plantel_id', state.plantelId)
             .maybeSingle();
 
         const estado = sesion?.estado || 'pendiente';
@@ -8950,7 +8953,13 @@ window.cargarBitacora = async (fecha) => {
     }
     
     try {
-        const { data: bitacoras, error } = await supabaseClient.from('bitacora_maestro').select('*').eq('fecha_referencia', fecha).order('creado_en', { ascending: false });
+        const uid = (await supabaseClient.auth.getUser()).data.user.id;
+        const { data: bitacoras, error } = await supabaseClient.from('bitacora_maestro')
+            .select('*')
+            .eq('fecha_referencia', fecha)
+            .eq('plantel_id', state.plantelId)
+            .eq('perfil_id', uid)
+            .order('creado_en', { ascending: false });
         if(error) {
             console.error(error);
             tl.innerHTML = '<div style="color:var(--danger); font-size:0.9rem"><i class="fa-solid fa-circle-exclamation"></i> Error: Asegúrate de correr en SQL: CREATE TABLE bitacora_maestro... Revisa las instrucciones.</div>';
@@ -10185,8 +10194,8 @@ window.eliminarPersona = async (idPermitido, email, nombre) => {
             // Acción Directa para Directivos
             const { error: errPerm } = await supabaseClient.from('perfiles_permitidos').delete().eq('id', idPermitido);
             if(errPerm) throw errPerm;
-            const { data: pExist } = await supabaseClient.from('perfiles').select('id').eq('nombre', nombre).maybeSingle();
-            if(pExist) await supabaseClient.from('perfiles').delete().eq('id', pExist.id);
+            const { data: pExist } = await supabaseClient.from('perfiles').select('id').eq('nombre', nombre).eq('plantel_id', state.plantelId).maybeSingle();
+            if(pExist) await supabaseClient.from('perfiles').delete().eq('id', pExist.id).eq('plantel_id', state.plantelId);
             window.showToast("Personal eliminado y acceso revocado.", "success");
         } else {
             // Solicitud para Admins
