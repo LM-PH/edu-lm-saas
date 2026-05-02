@@ -6039,9 +6039,14 @@ window.loadTimelinePersonal = async (selectedDate) => {
         // Filtrar por plantel si el usuario tiene uno asignado
         if (state.plantelId) query = query.eq('plantel_id', state.plantelId);
 
-        const { data, error } = await query;
+        let { data, error } = await query;
            
         if(error) throw error;
+        
+        // Filtrar avisos de horarios (solo deben verse en el perfil de estudiante)
+        if (data && userRole !== 'alumno') {
+            data = data.filter(c => !c.titulo?.includes('HORARIO DE CLASE DISPONIBLE'));
+        }
         
         // --- RESOLUCIÓN DE AUDIENCIAS (Humano-Leíble) ---
         const groupIds = [];
