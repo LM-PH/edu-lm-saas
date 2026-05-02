@@ -190,7 +190,7 @@ window.handleLogin = async (e) => {
                 // El usuario ya existe, verificar que pertenezca a la escuela seleccionada
                 if (profile.plantel_id !== state.plantelId) {
                     await supabaseClient.auth.signOut();
-                    throw new Error(\`Tu cuenta no pertenece a esta escuela (\${CONFIG.schoolName || 'seleccionada'}).\`);
+                    throw new Error(`Tu cuenta no pertenece a esta escuela (${CONFIG.schoolName || 'seleccionada'}).`);
                 }
             } else {
                 // Es un usuario nuevo (o sin perfil), verificar en perfiles_permitidos para ESTA escuela
@@ -203,7 +203,7 @@ window.handleLogin = async (e) => {
 
                 if (!allowed) {
                     await supabaseClient.auth.signOut();
-                    throw new Error(\`No estás registrado en esta escuela (\${CONFIG.schoolName || 'seleccionada'}) o tu correo es incorrecto.\`);
+                    throw new Error(`No estás registrado en esta escuela (${CONFIG.schoolName || 'seleccionada'}) o tu correo es incorrecto.`);
                 }
                 
                 // Si estaba permitido, creamos el perfil vinculado a la escuela actual
