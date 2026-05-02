@@ -3999,6 +3999,7 @@ window.loadTramitesAdmin = async () => {
         const { data, error } = await supabaseClient
             .from('tramites')
             .select('*, alumnos(nombre, matricula)')
+            .eq('plantel_id', state.plantelId)
             .eq('estado', 'Pendiente')
             .order('fecha_solicitud', { ascending: false });
 
@@ -4134,6 +4135,7 @@ window.switchTramiteView = async (view) => {
             const { data, error } = await supabaseClient
                 .from('tramites')
                 .select('*, alumnos(nombre, matricula)')
+                .eq('plantel_id', state.plantelId)
                 .eq('estado', 'Subido')
                 .order('fecha_emision', { ascending: false });
 
