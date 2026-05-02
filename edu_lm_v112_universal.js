@@ -460,10 +460,14 @@ window.realizarSetupInicial = async () => {
 
         window.showToast("¡Plantel registrado con éxito!", "success");
         
-        // Login automático (usamos los campos que ya tenemos)
-        document.getElementById('fb-email').value = cor;
-        document.getElementById('fb-password').value = pas;
-        await window.handleLogin();
+        // Login automático directo con Supabase (sin usar el DOM)
+        const { error: loginErr } = await supabaseClient.auth.signInWithPassword({ email: cor, password: pas });
+        if(loginErr) throw loginErr;
+
+        // Recargamos la página para que el sistema inicie fresco con la nueva sesión
+        setTimeout(() => {
+            window.location.reload();
+        }, 1000);
 
     } catch(e) { 
         console.error("Setup Error:", e);
