@@ -7,14 +7,11 @@ const CONFIG = {
 // Supabase Configuration
 console.log("%c>>> EDU-LM V112 UNIVERSAL CARGADA: VIGILANCIA HUMANA ACTIVA", "color: yellow; background: black; padding: 12px; font-weight: 1000; border: 2px solid yellow;");
 const SUPABASE_URL = "https://yphflvrvfcqazqdqdfgg.supabase.co"; 
-const SUPABASE_SERVICE_ROLE = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlwaGZsdnJ2ZmNxYXpxZHFkZmdnIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3NTY4ODQ2MywiZXhwIjoyMDkxMjY0NDYzfQ.WD1c4kOtJrwdXZj3qHilbd4XRdoB5nPl_ijthomXw6k";
 const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlwaGZsdnJ2ZmNxYXpxZHFkZmdnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU2ODg0NjMsImV4cCI6MjA5MTI2NDQ2M30.-Y5pwEHhmcXPuyh0gYALNTaMMAyK7Dm883Fohq3DtV0";
 const SUPABASE_KEY = SUPABASE_ANON_KEY;
 
 const supabaseClient = window.supabase ? window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY) : null;
-const supaAdmin = window.supabase ? window.supabase.createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE, {
-  auth: { autoRefreshToken: false, persistSession: false, detectSessionInUrl: false }
-}) : null;
+// supaAdmin eliminado por seguridad (V112 Blindada)
 
 // Global State
 const ADMIN_ROLES = ['admin', 'administrativo', 'master'];
@@ -24,6 +21,7 @@ let _state = {
   role: null, 
   user: null,
   userName: '',
+  isMaster: false,
   plantelId: null,
   path: '/',
   schoolConfigured: false,
@@ -167,13 +165,11 @@ window.handleLogin = async (e) => {
         .ilike('email', email)
         .maybeSingle();
 
-    // Caso especial para el Master si no está en el padrón de un plantel específico
-    const isMaster = (email === 'zlagustin10@gmail.com');
-    const effectiveData = allowed || (isMaster ? { rol: 'master', nombre: 'Administrador Maestro', plantel_id: null } : null);
-
-    if (!effectiveData) {
+    if (!allowed) {
       throw new Error('Este correo no tiene autorización de acceso para este portal.');
     }
+
+    const effectiveData = allowed;
 
     // 2. Intento de Login Oficial
     const { data: authData, error: authErr } = await supabaseClient.auth.signInWithPassword({ email, password });
@@ -507,33 +503,17 @@ window.checkSchoolSetup = async () => {
     
     // REGLA DE ORO: Priorizar sesión REAL sobre parches locales
     const { data: { session } } = await supabaseClient.auth.getSession();
-    const currentUser = session?.user;
-
-    // Si hay un usuario que NO es el maestro, ignoramos el parche de localStorage
-    const isMasterEmail = currentUser?.email === 'zlagustin10@gmail.com';
-    const hasMasterPatch = localStorage.getItem('EduLM_MasterActive') === 'true';
-
-    if(isMasterEmail || (hasMasterPatch && !currentUser)) {
-        state.user = currentUser || { email: 'zlagustin10@gmail.com', user_metadata: { nombre: 'Creador' } };
-        state.role = 'master';
-        state.path = '/master/saas';
-        state.schoolConfigured = true;
-        await renderApp();
-        return;
-    }
-
-    try {
         // 1. Ver si hay un usuario logueado
         if(session && session.user) {
             const { data: profile } = await supabaseClient.from('perfiles')
-                .select('plantel_id, rol, nombre, planteles(id, nombre)')
+                .select('plantel_id, rol, nombre, es_master, planteles(id, nombre)')
                 .eq('id', session.user.id)
                 .maybeSingle();
             
-            // SI NO HAY PERFIL O EL PLANTEL YA NO EXISTE (BORRADO)
-            // Excepción v135: Si el rol es master, permitimos que no tenga plantel relacionado
-            if(!profile || (profile.rol !== 'master' && !profile.planteles)) {
-                console.warn(">>> [SEGURIDAD] Sesión huérfana detectada (Plantel borrado). Limpiando...");
+            const isActuallyMaster = profile?.es_master || profile?.rol === 'master';
+
+            if(!profile || (!isActuallyMaster && !profile.planteles)) {
+                console.warn(">>> [SEGURIDAD] Sesión huérfana detectada. Limpiando...");
                 await supabaseClient.auth.signOut();
                 state.schoolConfigured = false;
                 await renderApp();
@@ -542,11 +522,11 @@ window.checkSchoolSetup = async () => {
 
             state.user = session.user;
             state.userName = profile.nombre || session.user.email;
+            state.isMaster = isActuallyMaster;
             
-            // NORMALIZACIÓN DE ROL (Unificación Total de Sinónimos)
-            let normRole = profile.rol;
+            // NORMALIZACIÓN DE ROL
+            let normRole = isActuallyMaster ? 'master' : profile.rol;
             if (['admin', 'administrativo'].includes(normRole)) normRole = 'admin';
-            // Normalizar rol
 
             state.role = normRole; 
             state.plantelId = profile.plantel_id;
@@ -684,8 +664,8 @@ window.handleMagicLink = async () => {
         const { error } = await supabaseClient.from('perfiles_permitidos')
             .select('email').eq('email', email).maybeSingle();
         
-        // Excepción Maestra: zlagustin10@gmail.com puede entrar aunque no esté en una escuela
-        if (email !== 'zlagustin10@gmail.com' && (!error)) {
+        // Excepción Maestra: Master puede entrar aunque no esté en una escuela
+        if (!state.isMaster && (!error)) {
              // Si el correo no está permitido, le avisamos
              const { data: check } = await supabaseClient.from('perfiles_permitidos').select('email').eq('email', email).maybeSingle();
              if(!check) return alert("Este correo no tiene acceso autorizado a este plantel.");
@@ -777,8 +757,8 @@ function renderSidebar() {
 
   const roleNames = { master: 'Creador del Sistema', admin: 'Admin', directivo: 'Directivo', maestro: 'Maestro', apoyo: 'Trabajo Social', alumno: 'Estudiante', admin: 'Admin', administrativo: 'Admin' };
 
-  const userName = (state.user?.email === 'zlagustin10@gmail.com') ? 'M.C Luis Miguel Ponce Herrera' : (state.userName || state.user?.user_metadata?.nombre || state.user?.email || 'Usuario');
-  const shortName = (state.user?.email === 'zlagustin10@gmail.com') ? 'Luis Miguel' : userName.split(' ').slice(0, 2).join(' ');
+  const userName = (state.isMaster) ? 'M.C Luis Miguel Ponce Herrera' : (state.userName || state.user?.user_metadata?.nombre || state.user?.email || 'Usuario');
+  const shortName = (state.isMaster) ? 'Luis Miguel' : userName.split(' ').slice(0, 2).join(' ');
 
   return `
     <aside class="sidebar">
@@ -4406,8 +4386,8 @@ async function renderPage(path) {
         if(state.role === 'apoyo') return renderApoyoDashboard();
         if(state.role === 'alumno') return renderAlumnoCredencial();
         return renderLandingPage();
-    case '/master/saas': return (state.user?.email === 'zlagustin10@gmail.com') ? await renderMasterSaaS() : '<h2>Acceso Denegado</h2>';
-    case '/master/gestion-perfiles': return (state.user?.email === 'zlagustin10@gmail.com') ? await renderMasterGestionPerfiles() : '<h2>Acceso Denegado</h2>';
+    case '/master/saas': return (state.isMaster) ? await renderMasterSaaS() : '<h2>Acceso Denegado</h2>';
+    case '/master/gestion-perfiles': return (state.isMaster) ? await renderMasterGestionPerfiles() : '<h2>Acceso Denegado</h2>';
     case '/admin/inscripcion': return renderAdminInscripcion();
     case '/admin/expediente': return renderAdminExpediente();
     case '/admin/grupos': return renderAdminGrupos();
@@ -4451,7 +4431,7 @@ async function renderMasterSaaS() {
         return `
         <div class="page-header">
           <h2 class="page-title">Centro de Mando SaaS</h2>
-          <p class="page-subtitle">Panel Exclusivo de Dueño: zlagustin10@gmail.com</p>
+          <p class="page-subtitle">Panel Exclusivo de Dueño y Gestión SaaS</p>
         </div>
 
         <div class="card" style="margin-bottom:32px; border-left: 6px solid var(--danger); background:#fff5f5;">
