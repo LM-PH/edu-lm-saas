@@ -6141,6 +6141,7 @@ window.loadActividadesMaestro = async () => {
         if (selGrupo && (selGrupo.innerHTML.includes("Cargando") || selGrupo.options.length <= 1)) {
             const { data: asigs, error: errAsigs } = await supabaseClient.from('asignaciones_maestros')
                .select('materia, grupo_id, target_grado, grupos(id, nombre)')
+               .eq('plantel_id', state.plantelId)
                .eq('docente_email', email)
                .or('grupo_id.not.is.null,target_grado.not.is.null');
                
@@ -6160,6 +6161,8 @@ window.loadActividadesMaestro = async () => {
         
         const { data: misActividades, error: errAct } = await supabaseClient.from('actividades_maestro')
            .select('*, grupos(nombre), evaluaciones_actividades(id)')
+           .eq('plantel_id', state.plantelId)
+           .eq('maestro_id', currentUser.data.user.id)
            .eq('finalizada', isFinalizada)
            .eq('trimestre', trimSelected)
            .order('fecha_creacion', { ascending: false });
@@ -6616,7 +6619,7 @@ window.cargarAlumnosLista = async () => {
             const currentTrim = state.selectedMaestroTrimestre || 1;
             const isModoFinal = currentTrim === 'final';
 
-            let actsQuery = supabaseClient.from('actividades_maestro').select('id, titulo, rubro_name, rubro_peso, trimestre');
+            let actsQuery = supabaseClient.from('actividades_maestro').select('id, titulo, rubro_name, rubro_peso, trimestre').eq('plantel_id', state.plantelId);
             if(isTec) {
                 actsQuery = actsQuery.eq('target_grado', targetGrado).eq('materia', materia);
             } else {
@@ -7037,6 +7040,7 @@ window.cargarBoletasGrupo = async () => {
         if(!isModoFinal) {
             let actsQuery = supabaseClient.from('actividades_maestro')
                 .select('id, titulo, rubro_name, rubro_peso')
+                .eq('plantel_id', state.plantelId)
                 .eq('trimestre', currentTrim) 
                 .eq('materia', materiaText);
                 
