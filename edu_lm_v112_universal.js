@@ -169,7 +169,7 @@ window.handleLogin = async (e) => {
     }
 
     // 2. Recuperar el perfil real de la base de datos para ver quién es
-    const { data: profile, error: profErr } = await supabaseClient
+    let { data: profile, error: profErr } = await supabaseClient
         .from('perfiles')
         .select('*, planteles(id, nombre)')
         .eq('id', authData.user.id)
@@ -184,26 +184,61 @@ window.handleLogin = async (e) => {
     console.log(">>> [AUTH DEBUG]", { isMasterByDB, isMasterByEmail, profileFound: !!profile });
 
     if (!isMasterUser) {
-        // Si no es master, verificamos si su correo está en el padrón de alguna escuela
-        const { data: allowed } = await supabaseClient
-            .from('perfiles_permitidos')
-            .select('*')
-            .ilike('email', email)
-            .maybeSingle();
+        // Validación estricta de escuela
+        if (state.plantelId) {
+            if (profile) {
+                // El usuario ya existe, verificar que pertenezca a la escuela seleccionada
+                if (profile.plantel_id !== state.plantelId) {
+                    await supabaseClient.auth.signOut();
+                    throw new Error(\`Tu cuenta no pertenece a esta escuela (\${CONFIG.schoolName || 'seleccionada'}).\`);
+                }
+            } else {
+                // Es un usuario nuevo (o sin perfil), verificar en perfiles_permitidos para ESTA escuela
+                const { data: allowed } = await supabaseClient
+                    .from('perfiles_permitidos')
+                    .select('*')
+                    .ilike('email', email)
+                    .eq('plantel_id', state.plantelId)
+                    .maybeSingle();
 
-        if (!allowed) {
-            await supabaseClient.auth.signOut();
-            throw new Error('Su cuenta no tiene autorización activa para acceder a ningún plantel.');
-        }
-        
-        // Si estaba permitido pero no tenía perfil, lo creamos ahora
-        if (!profile) {
-            await supabaseClient.from('perfiles').upsert({
-                id: authData.user.id,
-                rol: allowed.rol,
-                nombre: allowed.nombre,
-                plantel_id: allowed.plantel_id
-            });
+                if (!allowed) {
+                    await supabaseClient.auth.signOut();
+                    throw new Error(\`No estás registrado en esta escuela (\${CONFIG.schoolName || 'seleccionada'}) o tu correo es incorrecto.\`);
+                }
+                
+                // Si estaba permitido, creamos el perfil vinculado a la escuela actual
+                const newProf = {
+                    id: authData.user.id,
+                    rol: allowed.rol,
+                    nombre: allowed.nombre,
+                    plantel_id: allowed.plantel_id
+                };
+                await supabaseClient.from('perfiles').upsert(newProf);
+                profile = newProf; // Asignar para el paso 4
+            }
+        } else {
+            // Lógica original de respaldo (si no hay escuela seleccionada)
+            const { data: allowed } = await supabaseClient
+                .from('perfiles_permitidos')
+                .select('*')
+                .ilike('email', email)
+                .maybeSingle();
+
+            if (!allowed && !profile) {
+                await supabaseClient.auth.signOut();
+                throw new Error('Su cuenta no tiene autorización activa para acceder a ningún plantel.');
+            }
+            
+            if (!profile && allowed) {
+                const newProf = {
+                    id: authData.user.id,
+                    rol: allowed.rol,
+                    nombre: allowed.nombre,
+                    plantel_id: allowed.plantel_id
+                };
+                await supabaseClient.from('perfiles').upsert(newProf);
+                profile = newProf; // Asignar para el paso 4
+            }
         }
     }
 
@@ -213,7 +248,7 @@ window.handleLogin = async (e) => {
     state.isMaster = isMasterUser;
     state.role = isMasterUser ? 'master' : profile?.rol;
     state.userName = profile?.nombre || authData.user.email;
-    state.plantelId = profile?.plantel_id;
+    state.plantelId = profile?.plantel_id || state.plantelId;
 
     window.showToast(`Bienvenido(a), ${state.userName}`, 'success');
     window.login(state.role);
