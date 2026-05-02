@@ -1688,6 +1688,10 @@ window.loadComunicadosAdmin = async (fechaFiltro = null) => {
         // Mostrar comunicados generales (todos los valores posibles de audiencia institucional)
         query = query.in('audiencia', ['General', 'Todos', 'Maestros', 'Alumnos', 'Apoyo']);
 
+        if(state.plantelId) {
+            query = query.eq('plantel_id', state.plantelId);
+        }
+
         if(fechaFiltro) {
             const desde = fechaFiltro + 'T00:00:00';
             const hasta = fechaFiltro + 'T23:59:59';
