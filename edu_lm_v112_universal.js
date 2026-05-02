@@ -7113,10 +7113,10 @@ window.sellarYEnviarCalificaciones = async () => {
     const trimName = trim === '4' ? "Final (Anual)" : "Trimestre " + trim;
     if(!confirm('¿Estás seguro de asentar estas calificaciones para el ' + trimName + '? No podrás modificarlas después.')) return;
     
-    const btn = event.currentTarget;
-    const oldHtml = btn.innerHTML;
-    btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Guardando...';
-    btn.disabled = true;
+    const btn = document.querySelector('[onclick="window.sellarYEnviarCalificaciones()"]') 
+             || document.getElementById('btnSellarCalificaciones');
+    const oldHtml = btn ? btn.innerHTML : '';
+    if(btn) { btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Guardando...'; btn.disabled = true; }
     
     try {
         const u = await supabaseClient.auth.getUser();
@@ -7177,8 +7177,7 @@ window.sellarYEnviarCalificaciones = async () => {
         console.error(e);
         alert("Ocurrió un error al guardar: " + e.message);
     } finally {
-        btn.innerHTML = oldHtml;
-        btn.disabled = false;
+        if(btn) { btn.innerHTML = oldHtml; btn.disabled = false; }
     }
 };
 
