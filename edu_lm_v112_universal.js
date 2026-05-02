@@ -5918,13 +5918,25 @@ window.loadTimelinePersonal = async (selectedDate) => {
     
     try {
         const uRes = await supabaseClient.auth.getUser();
-        let audArr = ['General', 'Maestros'];
+        const userRole = state.role || '';
+
+        // Base: siempre reciben 'Todos' (comunicados a toda la institución)
+        let audArr = ['Todos', 'General'];
+
+        // Añadir audiencias específicas según el rol
+        if (userRole === 'maestro' || userRole === 'docente') {
+            audArr.push('Maestros');
+        } else if (userRole === 'apoyo') {
+            audArr.push('Apoyo', 'Maestros');
+        } else if (userRole === 'directivo' || userRole === 'admin' || userRole === 'administrativo') {
+            audArr.push('Maestros', 'Apoyo', 'Alumnos');
+        }
         
         if(uRes.data?.user) {
             const userId = uRes.data.user.id;
             const email = uRes.data.user.email;
             
-            // Escuchar su canal personal
+            // Canal personal del usuario
             audArr.push('Maestro_' + userId);
             
             // Cargar asignaciones (grupos específicos y grados completos)
@@ -5935,7 +5947,6 @@ window.loadTimelinePersonal = async (selectedDate) => {
                     if(a.grupo_id) {
                         audArr.push('Grupo_' + a.grupo_id);
                     } else if(a.target_grado) {
-                        // Si está asignado a un grado completo (ej 3°), buscar todos los IDs de grupos que empiecen con ese grado
                         const { data: relatedGroups } = await supabaseClient
                             .from('grupos')
                             .select('id')
@@ -5948,6 +5959,7 @@ window.loadTimelinePersonal = async (selectedDate) => {
                 }
             }
         }
+
 
         const { data, error } = await supabaseClient.from('comunicados')
            .select('*, perfiles(nombre)')
