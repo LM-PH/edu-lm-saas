@@ -427,5 +427,24 @@ CREATE POLICY "Directivo_manage_config" ON public.config_institucion FOR ALL TO 
     (SELECT rol FROM perfiles WHERE id = auth.uid()) IN ('admin', 'directivo')
 );
 CREATE POLICY "Public_read_config" ON public.config_institucion FOR SELECT TO authenticated USING (true);
--- ALTER TABLE public.actividades_docente ADD COLUMN IF NOT EXISTS rubro_name text;
--- ALTER TABLE public.actividades_docente ADD COLUMN IF NOT EXISTS rubro_peso numeric(5,2);
+-- 20. TABLA PERIODOS DE CALIFICACIONES (FECHAS LÍMITE)
+CREATE TABLE IF NOT EXISTS public.periodos_calificaciones (
+    trimestre int PRIMARY KEY CHECK (trimestre BETWEEN 1 AND 4),
+    fecha_limite timestamp with time zone,
+    bloqueado boolean DEFAULT false,
+    ultima_modificacion timestamp with time zone DEFAULT now()
+);
+
+ALTER TABLE public.periodos_calificaciones ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Lectura_general_periodos" ON public.periodos_calificaciones 
+    FOR SELECT TO authenticated USING (true);
+
+CREATE POLICY "Admin_manage_periodos" ON public.periodos_calificaciones 
+    FOR ALL TO authenticated USING (
+        (SELECT rol FROM perfiles WHERE id = auth.uid()) IN ('admin', 'directivo')
+    );
+
+-- Insertar periodos iniciales
+INSERT INTO public.periodos_calificaciones (trimestre) VALUES (1), (2), (3), (4)
+ON CONFLICT (trimestre) DO NOTHING;

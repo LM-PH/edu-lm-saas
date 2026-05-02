@@ -741,6 +741,7 @@ function renderSidebar() {
       { name: 'Inscripción', path: '/admin/inscripcion', icon: 'fa-user-plus' },
       { name: 'Expediente Digital', path: '/admin/expediente', icon: 'fa-folder-open' },
       { name: 'Horarios de Clase', path: '/admin/horarios', icon: 'fa-calendar-days' },
+      { name: 'Calendario de Evaluación', path: '/admin/calendario', icon: 'fa-calendar-check' },
       { name: 'Boletas y Calificaciones', path: '/admin/calificaciones', icon: 'fa-star-half-stroke' },
       { name: 'Trámites y Constancias', path: '/admin/tramites', icon: 'fa-file-signature' },
       { name: 'Comunicados Oficiales', path: '/admin/comunicados', icon: 'fa-bullhorn' },
@@ -2122,7 +2123,7 @@ function renderMaestroCalificaciones() {
   return `
     <div class="page-header">
       <h2 class="page-title">Captura Oficial de Evaluaciones (Boletas)</h2>
-      <p class="page-subtitle">Asienta las calificaciones definitivas por alumno y grupo. Estatus: <span style="font-weight:bold; color:var(--success)">PERIODO ABIERTO POR ADMINISTRACIÓN</span>.</p>
+      <p class="page-subtitle">Asienta las calificaciones definitivas por alumno y grupo. <span id="maestroDeadlineStatus" style="font-weight:bold; color:var(--success)">Cargando estatus del periodo...</span>.</p>
     </div>
 
     <div class="card" style="margin-bottom:24px; padding:16px 24px;">
@@ -4420,6 +4421,7 @@ async function renderPage(path) {
     case '/admin/calificaciones': return renderAdminCalificaciones();
     case '/admin/tramites': return renderAdminTramites();
     case '/admin/horarios': return renderAdminHorarios();
+    case '/admin/calendario': return renderAdminCalendario();
     case '/admin/comunicados': return renderAdminComunicados();
     case '/maestro/aula': return renderMaestroAula();
     case '/maestro/actividades': return renderMaestroActividades();
@@ -6819,6 +6821,8 @@ window.loadGruposCalificacionesCarga = async () => {
         }
     } catch(err) {
         console.error(err);
+    } finally {
+        if(window.updateMaestroDeadlineStatus) window.updateMaestroDeadlineStatus();
     }
 };
 
@@ -6831,6 +6835,7 @@ window.cargarBoletasGrupo = async () => {
     
     if(!selectVal) {
         tbody.innerHTML = `<tr><td colspan="${isModoFinal ? 7 : 5}" style="padding:20px; text-align:center; color:var(--text-muted)">Seleccione una asignatura para cargar los promedios.</td></tr>`;
+        if(window.updateMaestroDeadlineStatus) window.updateMaestroDeadlineStatus();
         return;
     }
     
@@ -7021,6 +7026,22 @@ window.sellarYEnviarCalificaciones = async () => {
     const selectVal = document.getElementById('capturaCalificacionesGrupo').value;
     const trim = document.getElementById('capturaTrimestre').value;
     if(!selectVal) return alert('Seleccione una materia/grupo primero.');
+
+    // VALIDACIÓN DE PERIODO (v112+)
+    try {
+        const { data: periodo } = await supabaseClient.from('periodos_calificaciones').select('*').eq('trimestre', trim).maybeSingle();
+        if(periodo) {
+            if(periodo.bloqueado) {
+                return alert("⚠️ El sistema de envío está BLOQUEADO por la administración para este trimestre.");
+            }
+            if(periodo.fecha_limite) {
+                const deadline = new Date(periodo.fecha_limite);
+                if(new Date() > deadline) {
+                    return alert("⚠️ La fecha límite de envío ha pasado (" + deadline.toLocaleString() + "). Contacta a administración para una prórroga.");
+                }
+            }
+        }
+    } catch(e) { console.error("Error validando periodo:", e); }
     
     const [idVal, materiaText] = selectVal.split('::');
     const inputs = document.querySelectorAll('.input-calificacion');
@@ -10380,5 +10401,135 @@ window.loadMiHorario = async () => {
         console.error(e);
         cont.innerHTML = '<p>Error al cargar el horario.</p>';
     }
+};
+
+// ==========================================
+// CALENDARIO DE EVALUACIÓN (ADMIN)
+// ==========================================
+async function renderAdminCalendario() {
+    setTimeout(() => { if(window.loadAdminCalendario) window.loadAdminCalendario(); }, 100);
+    return `
+        <div class="page-header">
+            <h2 class="page-title"><i class="fa-solid fa-calendar-days text-primary"></i> Calendario de Evaluación</h2>
+            <p class="page-subtitle">Establece fechas límite para la captura de calificaciones por parte de los docentes.</p>
+        </div>
+
+        <div class="grid" style="grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 24px;">
+            ${[1, 2, 3, 4].map(trim => `
+                <div class="card shadow-md" style="border-top: 4px solid var(--primary);">
+                    <h3 style="margin-bottom: 15px;">${trim === 4 ? 'Calificación Final' : 'Trimestre ' + trim}</h3>
+                    
+                    <div class="form-group">
+                        <label class="form-label">Fecha Límite de Envío</label>
+                        <input type="datetime-local" id="deadline-trim-${trim}" class="form-input">
+                    </div>
+
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-top:20px; padding-top:15px; border-top:1px solid var(--border);">
+                        <div style="display:flex; align-items:center; gap:8px;">
+                            <label class="switch">
+                                <input type="checkbox" id="block-trim-${trim}" onchange="window.toggleAdminDeadlineBlock(${trim})">
+                                <span class="slider round"></span>
+                            </label>
+                            <span style="font-size:0.85rem; font-weight:600; color:var(--text-muted);">Bloquear Envíos</span>
+                        </div>
+                        <button class="btn btn-primary btn-sm" onclick="window.saveAdminDeadline(${trim})">
+                            <i class="fa-solid fa-floppy-disk"></i> Guardar
+                        </button>
+                    </div>
+                </div>
+            `).join('')}
+        </div>
+
+        <div class="card" style="margin-top: 32px; background: #f8fafc; border: 1px dashed var(--primary-light);">
+            <div style="display:flex; gap:16px; align-items:center;">
+                <div style="font-size:2rem; color:var(--primary);"><i class="fa-solid fa-circle-info"></i></div>
+                <div style="font-size:0.9rem; color:var(--text-muted);">
+                    <strong>Instrucciones:</strong> El bloqueo manual impide cualquier envío sin importar la fecha. Si el bloqueo está desactivado, el sistema solo permitirá envíos antes de la fecha límite establecida. Para permitir <strong>envíos extemporáneos</strong>, amplía la fecha límite o desactiva el bloqueo manual.
+                </div>
+            </div>
+        </div>
+    `;
+}
+
+window.loadAdminCalendario = async () => {
+    try {
+        const { data, error } = await supabaseClient.from('periodos_calificaciones').select('*').order('trimestre');
+        if(error) throw error;
+
+        data.forEach(p => {
+            const dateInput = document.getElementById(`deadline-trim-${p.trimestre}`);
+            const blockInput = document.getElementById(`block-trim-${p.trimestre}`);
+            
+            if(dateInput && p.fecha_limite) {
+                const localDate = new Date(p.fecha_limite).toISOString().slice(0, 16);
+                dateInput.value = localDate;
+            }
+            if(blockInput) {
+                blockInput.checked = p.bloqueado;
+            }
+        });
+    } catch(e) { console.error("Error cargando calendario:", e); }
+};
+
+window.saveAdminDeadline = async (trim) => {
+    const dateVal = document.getElementById(`deadline-trim-${trim}`).value;
+    if(!dateVal) return alert("Por favor selecciona una fecha.");
+
+    try {
+        const isoDate = new Date(dateVal).toISOString();
+        const { error } = await supabaseClient.from('periodos_calificaciones').update({
+            fecha_limite: isoDate,
+            ultima_modificacion: new Date().toISOString()
+        }).eq('trimestre', trim);
+
+        if(error) throw error;
+        window.showToast("Fecha límite actualizada con éxito", "success");
+    } catch(e) { alert("Error al guardar: " + e.message); }
+};
+
+window.toggleAdminDeadlineBlock = async (trim) => {
+    const isBlocked = document.getElementById(`block-trim-${trim}`).checked;
+    try {
+        const { error } = await supabaseClient.from('periodos_calificaciones').update({
+            bloqueado: isBlocked,
+            ultima_modificacion: new Date().toISOString()
+        }).eq('trimestre', trim);
+
+        if(error) throw error;
+        window.showToast(`Trimestre ${trim} ${isBlocked ? 'bloqueado' : 'desbloqueado'}`, "info");
+    } catch(e) { alert("Error al actualizar bloqueo: " + e.message); }
+};
+
+window.updateMaestroDeadlineStatus = async () => {
+    const trim = document.getElementById('capturaTrimestre')?.value;
+    const statusSpan = document.getElementById('maestroDeadlineStatus');
+    if(!trim || !statusSpan) return;
+
+    try {
+        const { data: periodo } = await supabaseClient.from('periodos_calificaciones').select('*').eq('trimestre', trim).maybeSingle();
+        if(!periodo) {
+            statusSpan.innerHTML = "PERIODO ABIERTO";
+            statusSpan.style.color = "var(--success)";
+            return;
+        }
+
+        if(periodo.bloqueado) {
+            statusSpan.innerHTML = "SISTEMA BLOQUEADO";
+            statusSpan.style.color = "var(--danger)";
+        } else if(periodo.fecha_limite) {
+            const deadline = new Date(periodo.fecha_limite);
+            const now = new Date();
+            if(now > deadline) {
+                statusSpan.innerHTML = `FECHA LÍMITE PASADA (${deadline.toLocaleString()})`;
+                statusSpan.style.color = "var(--danger)";
+            } else {
+                statusSpan.innerHTML = `LÍMITE DE ENVÍO: ${deadline.toLocaleString()}`;
+                statusSpan.style.color = "var(--warning)";
+            }
+        } else {
+            statusSpan.innerHTML = "PERIODO ABIERTO";
+            statusSpan.style.color = "var(--success)";
+        }
+    } catch(e) { console.error(e); }
 };
 
