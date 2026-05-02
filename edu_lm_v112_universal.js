@@ -1106,7 +1106,7 @@ window.liveSearchGestion = async (q) => {
     if(!res) return;
     if(q.length < 2) { res.style.display='none'; return; }
     try {
-        const { data } = await supabaseClient.from('alumnos').select('*, grupos(nombre)').or(`nombre.ilike.%${q}%,matricula.ilike.%${q}%`).limit(50);
+        const { data } = await supabaseClient.from('alumnos').select('*, grupos(nombre)').eq('plantel_id', state.plantelId).or(`nombre.ilike.%${q}%,matricula.ilike.%${q}%`).limit(50);
         if(!data || data.length === 0) { res.innerHTML='<p style="padding:10px; color:var(--text-muted)">Sin resultados</p>'; res.style.display='block'; return; }
         res.style.display='block';
         res.innerHTML = data.map(a => `
@@ -2327,7 +2327,7 @@ window.buscarExpedienteGlobal = async (query) => {
     const resDiv = document.getElementById('resExpedienteGlobal');
     if(!query || query.length < 2) { resDiv.style.display = 'none'; return; }
     try {
-        const { data } = await supabaseClient.from('alumnos').select('*, grupos(nombre)').or(`nombre.ilike.%${query}%,matricula.ilike.%${query}%`).limit(10);
+        const { data } = await supabaseClient.from('alumnos').select('*, grupos(nombre)').eq('plantel_id', state.plantelId).or(`nombre.ilike.%${query}%,matricula.ilike.%${query}%`).limit(10);
         if(!data || data.length === 0) {
             resDiv.innerHTML = '<div style="padding:15px; color:var(--text-muted)">No se encontraron alumnos.</div>';
             resDiv.style.display = 'block';
@@ -2657,6 +2657,7 @@ window.buscarAlumnosReporteApoyo = async (val, mode = 'reporte') => {
         const { data, error } = await supabaseClient
             .from('alumnos')
             .select('id, nombre, matricula, grupos(nombre)')
+            .eq('plantel_id', state.plantelId)
             .or(`nombre.ilike.%${val}%,matricula.ilike.%${val}%`)
             .limit(5);
 
@@ -3175,7 +3176,7 @@ window.buscarHistorialSalud = async (query) => {
     const resDiv = document.getElementById('resBusquedaSaludLocal');
     if(!query || query.length < 2) { resDiv.style.display = 'none'; return; }
     try {
-        const { data } = await supabaseClient.from('alumnos').select('*, grupos(nombre)').or(`nombre.ilike.%${query}%,matricula.ilike.%${query}%`).limit(5);
+        const { data } = await supabaseClient.from('alumnos').select('*, grupos(nombre)').eq('plantel_id', state.plantelId).or(`nombre.ilike.%${query}%,matricula.ilike.%${query}%`).limit(5);
         if(!data || data.length === 0) { resDiv.style.display = 'none'; return; }
         resDiv.style.display = 'block';
         resDiv.innerHTML = data.map(a => `
@@ -3505,6 +3506,7 @@ window.loadAsistenciasApoyo = async () => {
     try {
         let query = supabaseClient.from('accesos_plantel')
             .select('*, alumnos(nombre, grupo_id)')
+            .eq('plantel_id', state.plantelId)
             .eq('fecha', fecha)
             .order('creado_en', {ascending: false});
         
@@ -3543,12 +3545,13 @@ window.generarInasistenciasMasivas = async () => {
     try {
         const hoy = new Date().toLocaleDateString('en-CA');
         
-        // 1. Obtener TODOS los alumnos de la escuela
-        const { data: alumnos } = await supabaseClient.from('alumnos').select('id');
+        // 1. Obtener TODOS los alumnos de ESTA escuela
+        const { data: alumnos } = await supabaseClient.from('alumnos').select('id').eq('plantel_id', state.plantelId);
         
         // 2. Obtener quienes ya tienen acceso hoy
         const { data: registrados } = await supabaseClient.from('accesos_plantel')
             .select('alumno_id, estado')
+            .eq('plantel_id', state.plantelId)
             .eq('fecha', hoy);
         
         const idsRegistrados = new Set((registrados || []).map(r => r.alumno_id));
@@ -4174,6 +4177,7 @@ window.loadAutorizaciones = async () => {
         const { data, error } = await supabaseClient
             .from('autorizaciones_movimientos')
             .select('*')
+            .eq('plantel_id', state.plantelId)
             .eq('estado', 'pendiente')
             .order('fecha_solicitud', { ascending: false });
             
@@ -4897,6 +4901,7 @@ window.liveSearchAlumnos = async (term, targetId) => {
         const { data, error } = await supabaseClient
             .from('alumnos')
             .select('id, nombre, matricula, grupos(nombre)')
+            .eq('plantel_id', state.plantelId)
             .or(`nombre.ilike.%${term}%,matricula.ilike.%${term}%`)
             .limit(5);
 
@@ -5507,7 +5512,7 @@ window.loadTimelineAlumno = async (mostrarHistorial = false) => {
         const vistosIds = vistos ? vistos.map(v => v.comunicado_id) : [];
 
         console.log(">>> [TIMELINE] Buscando comunicados para audiencia:", audArr);
-        let query = supabaseClient.from('comunicados').select('*').in('audiencia', audArr);
+        let query = supabaseClient.from('comunicados').select('*').in('audiencia', audArr).eq('plantel_id', state.plantelId);
         if(al && al.creado_en) {
             query = query.gte('fecha_envio', al.creado_en);
         }
@@ -5743,6 +5748,7 @@ window.firmarEncuadreDesdeTimeline = async (comunicadoId, btn) => {
                 const isTecAviso = com.titulo.toLowerCase().includes('grado');
 
                 let qEnc = supabaseClient.from('encuadres').select('id, grupo_id, target_grado')
+                    .eq('plantel_id', state.plantelId)
                     .eq('maestro_id', com.autor_id)
                     .ilike('materia', tituloMatch); // ilike ayuda con mayúsculas/minúsculas
 
@@ -5815,6 +5821,7 @@ window.loadFirmantesEncuadre = async () => {
         // 1. Obtener TODOS los IDs de encuadre de este maestro/materia/TRIMESTRE
         let qEnc = supabaseClient.from('encuadres')
             .select('id')
+            .eq('plantel_id', state.plantelId)
             .eq('maestro_id', u.data.user.id)
             .ilike('materia', mat)
             .eq('trimestre', window.currentTrimestre || 1);
@@ -6230,7 +6237,7 @@ window.finalizarActividad = async (id) => {
 
         if (act) {
             // 2. Obtener lista de alumnos (mismo grupo o tecnología)
-            let qAlu = supabaseClient.from('alumnos').select('id, nombre');
+            let qAlu = supabaseClient.from('alumnos').select('id, nombre').eq('plantel_id', act.plantel_id);
             if(act.grupo_id) {
                 qAlu = qAlu.eq('grupo_id', act.grupo_id);
             } else if(act.target_grado) {
@@ -6565,7 +6572,7 @@ window.cargarAlumnosLista = async () => {
     const targetGrado = isTec ? idPart.replace('grado:', '').trim() : null;
 
     try {
-        let alumnosQuery = supabaseClient.from('alumnos').select('id, nombre, matricula, contacto_email');
+        let alumnosQuery = supabaseClient.from('alumnos').select('id, nombre, matricula, contacto_email').eq('plantel_id', state.plantelId);
         if(isTec) {
             const gNorm = targetGrado.includes('°') ? targetGrado : targetGrado + '°';
             // v116: Robust matching for technologies
@@ -6972,7 +6979,7 @@ window.cargarBoletasGrupo = async () => {
         const matId = tmateria?.id;
 
         // 2. Fetch Alumnos
-        let alumnosQuery = supabaseClient.from('alumnos').select('id, nombre, matricula');
+        let alumnosQuery = supabaseClient.from('alumnos').select('id, nombre, matricula').eq('plantel_id', state.plantelId);
         if(isTec) {
             const gNorm = targetGrado.includes('°') ? targetGrado : targetGrado + '°';
             // v116: Robust matching for technologies
@@ -7012,6 +7019,7 @@ window.cargarBoletasGrupo = async () => {
         const materiaClean = materiaText.trim();
         let histQuery = supabaseClient.from('calificaciones')
             .select('alumno_id, calificacion, trimestre')
+            .eq('plantel_id', state.plantelId)
             .ilike('materia_nombre', materiaClean);
             
         if(isModoFinal) {
@@ -7612,7 +7620,7 @@ function attachDOMEvents() {
               const val = e.target.value.trim();
               const resCont = document.getElementById('resBuscadorExpediente');
               if(val.length < 2) { resCont.style.display = 'none'; return; }
-              const { data } = await supabaseClient.from('alumnos').select('id, nombre, matricula').or(`nombre.ilike.%${val}%,matricula.ilike.%${val}%`).limit(5);
+              const { data } = await supabaseClient.from('alumnos').select('id, nombre, matricula').eq('plantel_id', state.plantelId).or(`nombre.ilike.%${val}%,matricula.ilike.%${val}%`).limit(5);
               if(data && data.length > 0) {
                   resCont.style.display = 'block';
                   resCont.innerHTML = data.map(a => `<div class="search-item" onclick="window.selectAlumnoExpediente('${a.id}', '${a.nombre.replace(/'/g, "\\'")}', '${a.matricula}'); document.getElementById('resBuscadorExpediente').style.display='none';">${a.nombre} (${a.matricula})</div>`).join('');
@@ -7626,7 +7634,7 @@ function attachDOMEvents() {
               const val = e.target.value.trim();
               const resCont = document.getElementById('resBuscadorTramite');
               if(val.length < 2) { resCont.style.display = 'none'; return; }
-              const { data } = await supabaseClient.from('alumnos').select('id, nombre, matricula').or(`nombre.ilike.%${val}%,matricula.ilike.%${val}%`).limit(5);
+              const { data } = await supabaseClient.from('alumnos').select('id, nombre, matricula').eq('plantel_id', state.plantelId).or(`nombre.ilike.%${val}%,matricula.ilike.%${val}%`).limit(5);
               if(data && data.length > 0) {
                   resCont.style.display = 'block';
                   resCont.innerHTML = data.map(a => `<div class="search-item" onclick="window.selectAlumnoTramite('${a.id}', '${a.nombre.replace(/'/g, "\\'")}', '${a.matricula}'); document.getElementById('resBuscadorTramite').style.display='none';">${a.nombre} (${a.matricula})</div>`).join('');
@@ -8054,7 +8062,7 @@ window.finalizarSesionAsistencia = async () => {
         
         await supabaseClient.from('asistencia_sesiones').update({ estado: 'cerrado' }).eq('grupo_id', grupoId).eq('materia', materia).eq('fecha', hoy);
         
-        let queryAl = supabaseClient.from('alumnos').select('id');
+        let queryAl = supabaseClient.from('alumnos').select('id').eq('plantel_id', state.plantelId);
         if(grupoId.startsWith('grado:')) queryAl = queryAl.eq('grado', grupoId.split(':')[1].split('|')[0]);
         else queryAl = queryAl.eq('grupo_id', grupoId);
         
@@ -8406,7 +8414,7 @@ window.openReporteModal = async () => {
     document.getElementById('app').insertAdjacentHTML('beforeend', modalHTML);
     
     try {
-        let query = supabaseClient.from('alumnos').select('id, nombre');
+        let query = supabaseClient.from('alumnos').select('id, nombre').eq('plantel_id', state.plantelId);
         
         if (window.currentAulaGrupoId && window.currentAulaGrupoId.startsWith('grado:')) {
             // Formato: "grado:1°|Computación"
@@ -8647,7 +8655,7 @@ window.cargarRubrosParaActividad = async () => {
     const trimSelected = document.getElementById('actTrimestre')?.value || 1;
 
     try {
-        let q = supabaseClient.from('encuadres').select('rubros').eq('materia', mat).eq('trimestre', trimSelected);
+        let q = supabaseClient.from('encuadres').select('rubros').eq('plantel_id', state.plantelId).eq('materia', mat).eq('trimestre', trimSelected);
         if(isTec) {
             q = q.is('grupo_id', null).eq('target_grado', targetGrado);
         } else {
@@ -8695,6 +8703,7 @@ window.cargarEncuadreActivo = async () => {
     try {
         let q = supabaseClient.from('encuadres')
             .select('rubros, notificacion_enviada, fecha_envio_notif')
+            .eq('plantel_id', state.plantelId)
             .eq('materia', mat)
             .eq('trimestre', window.currentTrimestre || 1);
 
@@ -8813,7 +8822,7 @@ window.cargarEncuadreActivo = async () => {
         }
 
         // 2. Obtener los alumnos del grupo/grado para notificarles
-        let alumnosQuery = supabaseClient.from('alumnos').select('id, nombre');
+        let alumnosQuery = supabaseClient.from('alumnos').select('id, nombre').eq('plantel_id', state.plantelId);
         if(isTec) {
             const gNorm = targetGrado.includes('°') ? targetGrado : targetGrado + '°';
             // v116: Robust matching for technologies
@@ -10205,6 +10214,7 @@ window.resetEstadoEncuadre = async () => {
         // 1. Obtener ID del encuadre específico para el trimestre actual
         let qEnc = supabaseClient.from('encuadres')
             .select('id, maestro_id')
+            .eq('plantel_id', state.plantelId)
             .eq('materia', mat)
             .eq('trimestre', window.currentTrimestre || 1);
 
@@ -10221,6 +10231,7 @@ window.resetEstadoEncuadre = async () => {
             const labelTri = (window.currentTrimestre || 1) + "° Trimestre";
             const { data: coms } = await supabaseClient.from('comunicados')
                 .select('id')
+                .eq('plantel_id', state.plantelId)
                 .eq('autor_id', encData.maestro_id)
                 .ilike('titulo', `%${mat}%`)
                 .ilike('titulo', `%${labelTri}%`);
@@ -10662,7 +10673,7 @@ window.liveSearchAlumnoCalificaciones = async (q) => {
     if(!res) return;
     if(q.length < 2) { res.style.display='none'; return; }
     try {
-        const { data } = await supabaseClient.from('alumnos').select('id, nombre, matricula, grupos(nombre)').or(`nombre.ilike.%${q}%,matricula.ilike.%${q}%`).limit(10);
+        const { data } = await supabaseClient.from('alumnos').select('id, nombre, matricula, grupos(nombre)').eq('plantel_id', state.plantelId).or(`nombre.ilike.%${q}%,matricula.ilike.%${q}%`).limit(10);
         if(!data || data.length === 0) { res.innerHTML='<p style="padding:10px; color:var(--text-muted)">Sin resultados</p>'; res.style.display='block'; return; }
         res.style.display='block';
         res.innerHTML = data.map(a => `
