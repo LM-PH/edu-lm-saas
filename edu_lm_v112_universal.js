@@ -447,24 +447,48 @@ window.realizarSetupInicial = async () => {
     }
 
     try {
-        // LLAMADA AL RPC SEGURO (Blindaje Nivel 4)
-        const { data, error } = await supabaseClient.rpc('registrar_plantel_y_director', {
-            p_nombre_escuela: esc,
-            p_nombre_director: dir,
+        // 1. Preparamos la base de datos (crea escuela y da permiso al correo)
+        const { data: prepData, error: prepErr } = await supabaseClient.rpc('preparar_registro_director', {
             p_email: cor,
-            p_password: pas
+            p_nombre_director: dir,
+            p_nombre_escuela: esc
+        });
+        if (prepErr) throw prepErr;
+        if (prepData && prepData.success === false) throw new Error(prepData.error);
+
+        // 2. Creamos al usuario OFICIALMENTE en Supabase (Esto evita el "Invalid credentials")
+        const { data: authData, error: authErr } = await supabaseClient.auth.signUp({
+            email: cor,
+            password: pas,
+            options: {
+                data: { nombre: dir, rol: 'directivo', plantel_id: prepData.plantel_id }
+            }
         });
 
-        if (error) throw error;
-        if (data && data.success === false) throw new Error(data.error);
+        if(authErr) {
+            // Si ya existía de un intento anterior, simplemente iniciamos sesión
+            if (authErr.message.toLowerCase().includes("already registered")) {
+                const { error: loginErr } = await supabaseClient.auth.signInWithPassword({ email: cor, password: pas });
+                if(loginErr) throw loginErr;
+            } else {
+                throw authErr;
+            }
+        }
+
+        // 3. Aseguramos que su perfil público exista
+        const userId = (await supabaseClient.auth.getUser()).data.user?.id;
+        if (userId) {
+            await supabaseClient.from('perfiles').upsert({
+                id: userId,
+                nombre: dir,
+                rol: 'directivo',
+                plantel_id: prepData.plantel_id
+            });
+        }
 
         window.showToast("¡Plantel registrado con éxito!", "success");
-        
-        // Login automático directo con Supabase (sin usar el DOM)
-        const { error: loginErr } = await supabaseClient.auth.signInWithPassword({ email: cor, password: pas });
-        if(loginErr) throw loginErr;
 
-        // Recargamos la página para que el sistema inicie fresco con la nueva sesión
+        // Recargamos para entrar fresco
         setTimeout(() => {
             window.location.reload();
         }, 1000);
