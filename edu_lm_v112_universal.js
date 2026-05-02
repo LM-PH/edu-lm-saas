@@ -11,7 +11,7 @@ const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBh
 const SUPABASE_KEY = SUPABASE_ANON_KEY;
 
 const supabaseClient = window.supabase ? window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY) : null;
-// supaAdmin eliminado por seguridad (V112 Blindada)
+// supabaseClient eliminado por seguridad (V112 Blindada)
 
 // Global State
 const ADMIN_ROLES = ['admin', 'administrativo', 'master'];
@@ -463,8 +463,8 @@ window.realizarSetupInicial = async () => {
         }
         const slug = esc.toLowerCase().replace(/[^a-z0-9]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '');
 
-        // 1. Crear el Plantel en la tabla Multi-Tenant (Usamos supaAdmin para saltar RLS en setup)
-        const { data: newPlantel, error: err1 } = await supaAdmin.from('planteles').insert([{
+        // 1. Crear el Plantel en la tabla Multi-Tenant (Usamos supabaseClient para saltar RLS en setup)
+        const { data: newPlantel, error: err1 } = await supabaseClient.from('planteles').insert([{
             nombre: esc, 
             slug: slug,
             owner_id: ownerId,
@@ -478,7 +478,7 @@ window.realizarSetupInicial = async () => {
 
         // 2. Vincular al Director con el Plantel
         if(ownerId) {
-            await supaAdmin.from('perfiles').upsert({
+            await supabaseClient.from('perfiles').upsert({
                 id: ownerId,
                 nombre: dir,
                 rol: 'directivo', // El creador es Directivo por defecto
@@ -487,7 +487,7 @@ window.realizarSetupInicial = async () => {
         }
 
         // 3. Registrar en padrón autorizado vinculado al plantel
-        const { error: err2 } = await supaAdmin.from('perfiles_permitidos').upsert([{
+        const { error: err2 } = await supabaseClient.from('perfiles_permitidos').upsert([{
             email: cor, 
             nombre: dir, 
             rol: 'directivo',
@@ -976,20 +976,20 @@ window.ejecutarPromocionMasiva = async () => {
     try {
         if (isDirectivo) {
             // Acción directa para Directivos
-            const { data: sData, error: sError } = await supaAdmin.from('grupos').select('id').ilike('nombre', sourceNom).maybeSingle();
+            const { data: sData, error: sError } = await supabaseClient.from('grupos').select('id').ilike('nombre', sourceNom).maybeSingle();
             if(sError) throw sError;
             if(!sData) return alert(`No se encontró el grupo "${sourceNom}"`);
 
             let targetId;
-            const { data: tData } = await supaAdmin.from('grupos').select('id').ilike('nombre', targetNom).maybeSingle();
+            const { data: tData } = await supabaseClient.from('grupos').select('id').ilike('nombre', targetNom).maybeSingle();
             if(tData) targetId = tData.id;
             else {
-                const { data: nG, error: eG } = await supaAdmin.from('grupos').insert([{ nombre: targetNom, plantel_id: state.plantelId }]).select().single();
+                const { data: nG, error: eG } = await supabaseClient.from('grupos').insert([{ nombre: targetNom, plantel_id: state.plantelId }]).select().single();
                 if(eG) throw eG;
                 targetId = nG.id;
             }
 
-            const { error: errUpdate } = await supaAdmin.from('alumnos').update({ grupo_id: targetId, grado: tGrado }).eq('grupo_id', sData.id);
+            const { error: errUpdate } = await supabaseClient.from('alumnos').update({ grupo_id: targetId, grado: tGrado }).eq('grupo_id', sData.id);
             if(errUpdate) throw errUpdate;
 
             alert(`✅ ¡Éxito! Alumnos de ${sourceNom} promovidos a ${targetNom}.`);
@@ -4440,8 +4440,8 @@ async function renderPage(path) {
 
 async function renderMasterSaaS() {
     try {
-        // USAMOS supaAdmin para ver TODO sin restricciones de RLS
-        const { data: planteles, error } = await supaAdmin.from('planteles').select('*').order('creado_en', { ascending: false });
+        // USAMOS supabaseClient para ver TODO sin restricciones de RLS
+        const { data: planteles, error } = await supabaseClient.from('planteles').select('*').order('creado_en', { ascending: false });
         if(error) throw error;
 
         return `
@@ -4497,8 +4497,8 @@ window.eliminarPlantelSaaS = async (id, nombre) => {
     if(confirmName !== nombre) return alert("Nombre incorrecto. Acción cancelada.");
 
     try {
-        // USAR supaAdmin para saltar RLS y borrar CUALQUIER plantel
-        const { error } = await supaAdmin.from('planteles').delete().eq('id', id);
+        // USAR supabaseClient para saltar RLS y borrar CUALQUIER plantel
+        const { error } = await supabaseClient.from('planteles').delete().eq('id', id);
         if(error) throw error;
         window.showToast("Plantel y datos eliminados correctamente.", "success");
         renderApp();
@@ -4515,7 +4515,7 @@ window.gestionarPlantelSaaS = (id, nombre) => {
 
 async function renderMasterGestionPerfiles() {
     try {
-        const { data: users, error } = await supaAdmin.from('perfiles')
+        const { data: users, error } = await supabaseClient.from('perfiles')
             .select('*')
             .eq('plantel_id', state.plantelId)
             .order('nombre');
@@ -8665,14 +8665,14 @@ window.cargarEncuadreActivo = async () => {
 
         if(isTec) {
             if(encExistente) {
-                const { error } = await supaAdmin.from('encuadres').update(payloadEnc).eq('id', encExistente.id);
+                const { error } = await supabaseClient.from('encuadres').update(payloadEnc).eq('id', encExistente.id);
                 if(error) throw error;
             } else {
-                const { error } = await supaAdmin.from('encuadres').insert([payloadEnc]);
+                const { error } = await supabaseClient.from('encuadres').insert([payloadEnc]);
                 if(error) throw error;
             }
         } else {
-            const { error } = await supaAdmin.from('encuadres').upsert(payloadEnc, { onConflict: 'grupo_id, materia, trimestre' });
+            const { error } = await supabaseClient.from('encuadres').upsert(payloadEnc, { onConflict: 'grupo_id, materia, trimestre' });
             if(error) throw error;
         }
 
@@ -9516,7 +9516,7 @@ window.loadExpedienteDocs = async (aluId) => {
     try {
         const folder = aluId.toString();
         // Usar cliente administrativo para listar archivos y evitar bloqueos RLS
-        const { data: files, error } = await supaAdmin.storage.from('expedientes').list(folder);
+        const { data: files, error } = await supabaseClient.storage.from('expedientes').list(folder);
         
         if(error) {
             console.error("Error cargando expedientes:", error);
@@ -9537,7 +9537,7 @@ window.loadExpedienteDocs = async (aluId) => {
                 badge.style.background = '#dcfce7'; 
                 badge.style.color = '#166534';
                 if(cont) cont.style.display = 'flex';
-                const { data: url } = supaAdmin.storage.from('expedientes').getPublicUrl(`${folder}/${f}.pdf`);
+                const { data: url } = supabaseClient.storage.from('expedientes').getPublicUrl(`${folder}/${f}.pdf`);
                 if(btnVer) btnVer.href = url.publicUrl;
                 const btnDel = document.getElementById('btn-del-' + f);
                 if(btnDel) btnDel.onclick = () => window.eliminarExpedienteDoc(aluId, f + '.pdf');
@@ -9558,7 +9558,7 @@ window.loadExpedienteDocs = async (aluId) => {
             } else {
                 listBoletas.innerHTML = boletas.map(b => {
                     const displayName = b.name.replace('boleta_', '').replace('.pdf', '').replace(/_/g, ' ');
-                    const { data: url } = supaAdmin.storage.from('expedientes').getPublicUrl(`${folder}/${b.name}`);
+                    const { data: url } = supabaseClient.storage.from('expedientes').getPublicUrl(`${folder}/${b.name}`);
                     return `
                         <div style="display:flex; justify-content:space-between; align-items:center; padding:6px; background:white; border-radius:6px; margin-bottom:4px; border:1px solid var(--border);">
                             <span style="font-size:0.75rem; font-weight:500; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:80px;" title="${displayName}">${displayName}</span>
@@ -9579,7 +9579,7 @@ window.eliminarExpedienteDoc = async (aluId, fileName) => {
     
     try {
         const folder = aluId.toString();
-        const { error } = await supaAdmin.storage.from('expedientes').remove([`${folder}/${fileName}`]);
+        const { error } = await supabaseClient.storage.from('expedientes').remove([`${folder}/${fileName}`]);
         
         if(error) throw error;
         
@@ -9627,7 +9627,7 @@ window.uploadExpedienteDoc = async (input, type) => {
 
         // CREACIÓN DINÁMICA DEL CLIENTE ADMIN PARA FORZAR BYPASS RLS
         console.log(">>> INICIANDO SUBIDA ADMINISTRATIVA PARA:", finalFileName);
-        const { data, error } = await supaAdmin.storage.from('expedientes').upload(`${folder}/${finalFileName}`, file, { upsert: true });
+        const { data, error } = await supabaseClient.storage.from('expedientes').upload(`${folder}/${finalFileName}`, file, { upsert: true });
         
         if (error) throw error;
 
