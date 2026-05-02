@@ -142,11 +142,12 @@ window.logout = async () => {
 window.handleLogin = async (e) => {
   if (e && e.preventDefault) e.preventDefault();
   const emailInput = document.getElementById('fb-email');
-  const btn = document.querySelector('.btn-login') || event?.currentTarget;
-  const email = emailInput ? emailInput.value.trim().toLowerCase() : '';
   const passwordInput = document.getElementById('fb-password');
-  const password = passwordInput ? passwordInput.value.trim() : '';
+  const btn = document.querySelector('.btn-login');
   const errorMsg = document.getElementById('auth-error-msg');
+  
+  const email = emailInput ? emailInput.value.trim().toLowerCase() : '';
+  const password = passwordInput ? passwordInput.value.trim() : '';
   
   if(!email || !password) {
     if(errorMsg) errorMsg.innerText = 'Correo y contraseña requeridos.';
@@ -159,73 +160,54 @@ window.handleLogin = async (e) => {
   }
 
   try {
-    const { data: allowed } = await supabaseClient.from('perfiles_permitidos').select('*').ilike('email', email).maybeSingle();
+    // 1. Verificar si el usuario está en el padrón permitido
+    const { data: allowed, error: allowedErr } = await supabaseClient
+        .from('perfiles_permitidos')
+        .select('*')
+        .ilike('email', email)
+        .maybeSingle();
 
-    // Excepción Maestra v136: Definir data por defecto si no está en padrón
-    const effectiveData = allowed || (email === 'zlagustin10@gmail.com' ? { rol: 'master', nombre: 'Administrador Maestro', plantel_id: null } : null);
+    // Caso especial para el Master si no está en el padrón de un plantel específico
+    const isMaster = (email === 'zlagustin10@gmail.com');
+    const effectiveData = allowed || (isMaster ? { rol: 'master', nombre: 'Administrador Maestro', plantel_id: null } : null);
 
     if (!effectiveData) {
-      if(errorMsg) errorMsg.innerText = 'Este correo no está registrado en el padrón de este plantel.';
-      if(btn) {
-        btn.disabled = false;
-        btn.innerHTML = '<i class="fa-solid fa-right-to-bracket"></i> Acceder al Portal';
-      }
-      return;
+      throw new Error('Este correo no tiene autorización de acceso para este portal.');
     }
 
-    const BYPASS_KEY = 'EduLM_Internal_Access_2026';
-    let { data: authData, error: authErr } = await supabaseClient.auth.signInWithPassword({ email, password });
+    // 2. Intento de Login Oficial
+    const { data: authData, error: authErr } = await supabaseClient.auth.signInWithPassword({ email, password });
     
-    // Si falla con la contraseña ingresada, intentamos con el bypass solo por compatibilidad de transición
-    if(authErr && password === BYPASS_KEY) {
-        // Ya intentó con bypass o ingresó una incorrecta
-    } else if (authErr) {
-        // Intentar bypass silencioso solo si no se ingresó contraseña (pero ya validamos arriba que haya una)
-        // Por ahora, forzamos la ingresada.
-    }
-
     if (authErr) {
-        await fetch('https://yphflvrvfcqazqdqdfgg.supabase.co/auth/v1/admin/users', {
-            method: 'POST',
-            headers: { 'apikey': 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlwaGZsdnJ2ZmNxYXpxZHFkZmdnIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3NTY4ODQ2MywiZXhwIjoyMDkxMjY0NDYzfQ.WD1c4kOtJrwdXZj3qHilbd4XRdoB5nPl_ijthomXw6k', 'Authorization': 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlwaGZsdnJ2ZmNxYXpxZHFkZmdnIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3NTY4ODQ2MywiZXhwIjoyMDkxMjY0NDYzfQ.WD1c4kOtJrwdXZj3qHilbd4XRdoB5nPl_ijthomXw6k', 'Content-Type': 'application/json' },
-            body: JSON.stringify({ 
-                email: email, 
-                password: BYPASS_KEY, 
-                email_confirm: true, 
-                user_metadata: { rol: effectiveData.rol, nombre: effectiveData.nombre } 
-            })
-        });
-        const retry = await supabaseClient.auth.signInWithPassword({ email, password: BYPASS_KEY });
-        if (retry.error) throw retry.error;
-        authData = retry.data;
+        if (authErr.message === 'Invalid login credentials') {
+            throw new Error('Credenciales incorrectas. Verifique su correo y contraseña.');
+        }
+        throw authErr;
     }
 
-    await supabaseClient.from('perfiles').upsert({
+    // 3. Sincronizar Perfil
+    const { error: upsertError } = await supabaseClient.from('perfiles').upsert({
         id: authData.user.id,
         rol: effectiveData.rol,
         nombre: effectiveData.nombre,
         plantel_id: effectiveData.plantel_id
     });
+    
+    if(upsertError) console.warn("Aviso: No se pudo actualizar la tabla de perfiles, pero la sesión es válida.");
 
-    // Activar el perfil en el padrón si no lo está
-    await supabaseClient.from('perfiles_permitidos').update({ estado: 'activo' }).ilike('email', email);
-
-    // SINCRONIZACIÓN DE METADATOS JWT
-    await supabaseClient.auth.updateUser({ 
-        data: { 
-            rol: effectiveData.rol, 
-            nombre: effectiveData.nombre,
-            plantel_id: effectiveData.plantel_id 
-        } 
-    });
-
+    // 4. Establecer Estado Global
     state.user = authData.user;
     state.plantelId = effectiveData.plantel_id;
+    state.role = effectiveData.rol;
+    state.userName = effectiveData.nombre;
+
+    window.showToast(`Bienvenido(a), ${effectiveData.nombre}`, 'success');
     window.login(effectiveData.rol);
 
   } catch (err) {
+    console.error(">>> LOGIN ERROR:", err);
     if(errorMsg) {
-        errorMsg.innerText = 'Error: ' + err.message;
+        errorMsg.innerText = err.message;
         errorMsg.style.color = '#ef4444';
     }
   } finally {
