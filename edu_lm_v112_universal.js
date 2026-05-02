@@ -4301,40 +4301,42 @@ window.registrarNuevoPersonal = async () => {
 
         const autoPass = 'Edu' + Math.random().toString(36).substring(2, 8).toUpperCase() + '!';
 
-        // LLAMADA SEGURA RPC (Hereda plantel automáticamente en el servidor)
-        const { error: rpcError } = await supabaseClient.rpc('registrar_personal_seguro', {
-            p_nombre: nombre,
+        // 1. Registrar en perfiles_permitidos (Seguimiento de invitaciones)
+        const { error: permError } = await supabaseClient.from('perfiles_permitidos').upsert({
+            nombre: nombre,
+            email: email,
+            rol: finalRol,
+            plantel_id: finalPlantel,
+            temp_pass: autoPass
+        }, { onConflict: 'email' });
+
+        if(permError) throw permError;
+
+        // 2. LLAMADA SEGURA AL SERVIDOR (RPC) - Sin exponer llaves secretas
+        // Esta función crea el usuario en Auth y en Perfiles de un solo paso
+        const { data: rpcData, error: rpcError } = await supabaseClient.rpc('crear_usuario_admin', {
             p_email: email,
-            p_rol: finalRol
+            p_password: autoPass,
+            p_nombre: nombre,
+            p_rol: finalRol,
+            p_plantel_id: finalPlantel
         });
 
         if(rpcError) throw rpcError;
+        if(rpcData && rpcData.success === false) throw new Error(rpcData.error || "Error desconocido al crear usuario");
 
-        // Guardar la contraseña generada en el registro
-        await supabaseClient.from('perfiles_permitidos').update({ temp_pass: autoPass }).eq('email', email);
-
-        // LÓGICA DE REGISTRO DIRECTO AUTH (EduLM v112)
-        const adminKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlwaGZsdnJ2ZmNxYXpxZHFkZmdnIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3NTY4ODQ2MywiZXhwIjoyMDkxMjY0NDYzfQ.WD1c4kOtJrwdXZj3qHilbd4XRdoB5nPl_ijthomXw6k';
+        window.showToast("Personal registrado con éxito. Contraseña: " + autoPass, "success");
         
-        await fetch('https://yphflvrvfcqazqdqdfgg.supabase.co/auth/v1/admin/users', {
-            method: 'POST',
-            headers: { 'apikey': adminKey, 'Authorization': `Bearer ${adminKey}`, 'Content-Type': 'application/json' },
-            body: JSON.stringify({ 
-                email: email, 
-                password: autoPass, 
-                email_confirm: true, 
-                user_metadata: { rol: finalRol, nombre: nombre, plantel_id: finalPlantel } 
-            })
-        });
-
-        window.showToast("Personal registrado con contraseña: " + autoPass, "success");
-        // Limpiado agresivo del formulario
+        // Limpiar formulario
         if(document.getElementById('perNombre')) document.getElementById('perNombre').value = '';
         if(document.getElementById('perEmail')) document.getElementById('perEmail').value = '';
         
         if(window.loadPersonalDirectivo) window.loadPersonalDirectivo();
         if(window.loadListasAdminPersonal) window.loadListasAdminPersonal();
-    } catch(e) { alert("Error: " + e.message); }
+    } catch(e) { 
+        console.error(">>> REGISTRATION ERROR:", e);
+        alert("Error al registrar personal: " + e.message); 
+    }
 };
 
 
