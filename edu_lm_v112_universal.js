@@ -5841,7 +5841,7 @@ window.loadFirmantesEncuadre = async () => {
         }
 
         // 2. Obtener lista de alumnos
-        let qAl = supabaseClient.from('alumnos').select('id, nombre, matricula').order('nombre');
+        let qAl = supabaseClient.from('alumnos').select('id, nombre, matricula').eq('plantel_id', state.plantelId).order('nombre');
         if(isTec) {
             const gNorm = targetGrado.includes('°') ? targetGrado : targetGrado + '°';
             // v116: Robust matching for technologies (ignores accent in word Tecnología)
