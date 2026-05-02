@@ -1003,12 +1003,12 @@ window.ejecutarPromocionMasiva = async () => {
     try {
         if (isDirectivo) {
             // Acción directa para Directivos
-            const { data: sData, error: sError } = await supabaseClient.from('grupos').select('id').ilike('nombre', sourceNom).maybeSingle();
+            const { data: sData, error: sError } = await supabaseClient.from('grupos').select('id').ilike('nombre', sourceNom).eq('plantel_id', state.plantelId).maybeSingle();
             if(sError) throw sError;
             if(!sData) return alert(`No se encontró el grupo "${sourceNom}"`);
 
             let targetId;
-            const { data: tData } = await supabaseClient.from('grupos').select('id').ilike('nombre', targetNom).maybeSingle();
+            const { data: tData } = await supabaseClient.from('grupos').select('id').ilike('nombre', targetNom).eq('plantel_id', state.plantelId).maybeSingle();
             if(tData) targetId = tData.id;
             else {
                 const { data: nG, error: eG } = await supabaseClient.from('grupos').insert([{ nombre: targetNom, plantel_id: state.plantelId }]).select().single();
@@ -1069,7 +1069,7 @@ window.graduarGeneracion = async () => {
     try {
         if (isDirectivo) {
             // Acción directa
-            const { data: grps } = await supabaseClient.from('grupos').select('id').ilike('nombre', `${grado}%`);
+            const { data: grps } = await supabaseClient.from('grupos').select('id').ilike('nombre', `${grado}%`).eq('plantel_id', state.plantelId);
             if(!grps || grps.length === 0) throw new Error("No se encontraron grupos para ese grado.");
             const ids = grps.map(g => g.id);
             const { data: grads } = await supabaseClient.from('alumnos').select('contacto_email').in('grupo_id', ids);
@@ -1174,7 +1174,7 @@ window.promoverGradoAlumno = async (id) => {
         if (isDirectivo) {
             // 1. Buscar o crear el grupo
             let grId;
-            const { data: gData } = await supabaseClient.from('grupos').select('id').eq('nombre', nombreCompletoGrupo).maybeSingle();
+            const { data: gData } = await supabaseClient.from('grupos').select('id').eq('nombre', nombreCompletoGrupo).eq('plantel_id', state.plantelId).maybeSingle();
             if(gData) {
                grId = gData.id;
             } else {
@@ -2515,7 +2515,8 @@ window.loadFocosRojos = async () => {
         const { data: reportes, error } = await supabaseClient
             .from('reportes_conducta')
             .select('alumno_id, gravedad, alumnos(id, nombre, matricula, grupos(nombre))')
-            .eq('resuelto', false); // Contamos TODOS los no resueltos
+            .eq('resuelto', false)
+            .eq('plantel_id', state.plantelId); // Contamos TODOS los no resueltos de esta escuela
 
         if(error) throw error;
         const conteo = {};
@@ -3444,7 +3445,7 @@ window.loadGruposControlAsistencia = async () => {
     const sel = document.getElementById('selGrupoAsistenciaApoyo');
     if(!sel) return;
     try {
-        const { data: grupos } = await supabaseClient.from('grupos').select('*').order('nombre');
+        const { data: grupos } = await supabaseClient.from('grupos').select('*').eq('plantel_id', state.plantelId).order('nombre');
         if(grupos) {
             sel.innerHTML = '<option value="">Todos los Grupos</option>' + 
                 grupos.map(g => `<option value="${g.id}">${g.nombre}</option>`).join('');
@@ -3458,11 +3459,12 @@ window.loadResumenEntrada = async () => {
     try {
         const hoy = new Date().toLocaleDateString('en-CA');
         
-        const { count: totalAlu } = await supabaseClient.from('alumnos').select('*', { count: 'exact', head: true });
+        const { count: totalAlu } = await supabaseClient.from('alumnos').select('*', { count: 'exact', head: true }).eq('plantel_id', state.plantelId);
         
         const { data: asistencias } = await supabaseClient.from('accesos_plantel')
             .select('estado')
-            .eq('fecha', hoy);
+            .eq('fecha', hoy)
+            .eq('plantel_id', state.plantelId);
         
         const puntuales = (asistencias || []).filter(a => a.estado === 'Asistencia').length;
         const retardos = (asistencias || []).filter(a => a.estado === 'Retardo').length;
@@ -4224,7 +4226,7 @@ window.resolverAutorizacion = async (id, dictamen, payloadStr = null) => {
                 }
             }
             else if(payload.action === 'graduar_generacion') {
-                const { data: grps } = await supabaseClient.from('grupos').select('id').ilike('nombre', `${payload.grado}%`);
+                const { data: grps } = await supabaseClient.from('grupos').select('id').ilike('nombre', `${payload.grado}%`).eq('plantel_id', state.plantelId);
                 if(grps && grps.length > 0) {
                     const ids = grps.map(g => g.id);
                     // Obtenemos todos los correos para revocarlos de un solo golpe
@@ -4242,10 +4244,10 @@ window.resolverAutorizacion = async (id, dictamen, payloadStr = null) => {
                 }
             }
             else if(payload.action === 'promover_grupo') {
-                 const { data: sData } = await supabaseClient.from('grupos').select('id').ilike('nombre', payload.sourceNom).maybeSingle();
+                 const { data: sData } = await supabaseClient.from('grupos').select('id').ilike('nombre', payload.sourceNom).eq('plantel_id', state.plantelId).maybeSingle();
                  if(sData) {
                     let targetId;
-                    const { data: tData } = await supabaseClient.from('grupos').select('id').eq('nombre', payload.targetNom).maybeSingle();
+                    const { data: tData } = await supabaseClient.from('grupos').select('id').eq('nombre', payload.targetNom).eq('plantel_id', state.plantelId).maybeSingle();
                     if(tData) targetId = tData.id;
                     else {
                         const { data: nG } = await supabaseClient.from('grupos').insert([{ nombre: payload.targetNom, plantel_id: state.plantelId }]).select().single();
@@ -4257,7 +4259,7 @@ window.resolverAutorizacion = async (id, dictamen, payloadStr = null) => {
             }
             else if(payload.action === 'promover_alumno') {
                  let grId;
-                 const { data: gData } = await supabaseClient.from('grupos').select('id').eq('nombre', payload.targetNom).maybeSingle();
+                 const { data: gData } = await supabaseClient.from('grupos').select('id').eq('nombre', payload.targetNom).eq('plantel_id', state.plantelId).maybeSingle();
                  if(gData) grId = gData.id;
                  else {
                     const { data: nG } = await supabaseClient.from('grupos').insert([{ nombre: payload.targetNom, plantel_id: state.plantelId }]).select().single();
@@ -7773,7 +7775,7 @@ function attachDOMEvents() {
             let gradoLimpio = grado.replace('°', '');
             const grupoCompleto = `${gradoLimpio}°${grupoNom.toUpperCase()}`;
             let grId;
-            const { data: gData } = await supabaseClient.from('grupos').select('id').eq('nombre', grupoCompleto).maybeSingle();
+            const { data: gData } = await supabaseClient.from('grupos').select('id').eq('nombre', grupoCompleto).eq('plantel_id', state.plantelId).maybeSingle();
             if(gData) grId = gData.id;
             else {
                const { data: nG } = await supabaseClient.from('grupos').insert([{ nombre: grupoCompleto, plantel_id: state.plantelId }]).select().single();
@@ -8996,7 +8998,7 @@ window.agregarBitacora = async () => {
 
 window.loadAdminCalificacionesFiltros = async () => {
     try {
-        const { data: grupos, error } = await supabaseClient.from('grupos').select('id, nombre, turno').order('nombre');
+        const { data: grupos, error } = await supabaseClient.from('grupos').select('id, nombre, turno').eq('plantel_id', state.plantelId).order('nombre');
         if(error) return console.error(error);
         const sel = document.getElementById('adminGrupoSel');
         if(!sel) return;
@@ -9397,10 +9399,7 @@ window.loadSelectsMaestros = async () => {
             .eq('plantel_id', currentP)
             .order('nombre');
 
-        if (!staff || staff.length === 0) {
-            const { data: globalStaff } = await supabaseClient.from('perfiles_permitidos').select('email, nombre, rol').eq('rol', 'maestro');
-            staff = globalStaff;
-        }
+        // No global fallback to prevent cross-school data bleeding
 
         if (errProf) throw errProf;
         
@@ -10334,14 +10333,14 @@ window.renderAdminHorarios = () => {
 window.loadHorariosAdmin = async () => {
     try {
         // Cargar grupos para el select
-        const { data: grupos } = await supabaseClient.from('grupos').select('id, nombre, turno').order('nombre');
+        const { data: grupos } = await supabaseClient.from('grupos').select('id, nombre, turno').eq('plantel_id', state.plantelId).order('nombre');
         const sel = document.getElementById('horarioGrupoId');
         if(sel && grupos) {
             sel.innerHTML = '<option value="">-- Todos los Grupos --</option>' + 
                 grupos.map(g => `<option value="${g.id}">${g.nombre} - ${g.turno}</option>`).join('');
         }
 
-        const { data, error } = await supabaseClient.from('horarios').select('*, grupos(nombre, turno)');
+        const { data, error } = await supabaseClient.from('horarios').select('*, grupos(nombre, turno)').eq('plantel_id', state.plantelId);
         if(error) throw error;
         
         const cont = document.getElementById('listaHorariosContenedor');
