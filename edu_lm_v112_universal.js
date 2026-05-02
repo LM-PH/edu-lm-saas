@@ -2872,26 +2872,37 @@ window.loadCitatoriosApoyo = async () => {
 };
 
 window.abrirModalAtencionFoco = (id, nombre, citatorioId = null) => {
-    document.getElementById('modalAtencionFoco').style.display = 'block';
-    document.getElementById('atencionAlumnoId').value = id;
-    document.getElementById('atencionCitatorioId').value = citatorioId || '';
-    document.getElementById('atencionAlumnoNombre').innerHTML = `<i class="fa-solid fa-user"></i> Resolviendo para: <b>${nombre}</b>`;
-    document.getElementById('atencionProcedimiento').value = '';
-    document.getElementById('atencionCompromisos').value = '';
+    const modals = document.querySelectorAll('#modalAtencionFoco');
+    modals.forEach(m => {
+        // En un SPA pueden quedar modales fantasma. Actualizamos todos pero solo mostramos el último/activo.
+        const inAid = m.querySelector('#atencionAlumnoId'); if(inAid) inAid.value = id;
+        const inCid = m.querySelector('#atencionCitatorioId'); if(inCid) inCid.value = citatorioId || '';
+        const inNom = m.querySelector('#atencionAlumnoNombre'); if(inNom) inNom.innerHTML = `<i class="fa-solid fa-user"></i> Resolviendo para: <b>${nombre}</b>`;
+        const inProc = m.querySelector('#atencionProcedimiento'); if(inProc) inProc.value = '';
+        const inComp = m.querySelector('#atencionCompromisos'); if(inComp) inComp.value = '';
+        m.style.display = 'block';
+    });
 };
 
 window.guardarAtencionFoco = async () => {
-    const aid = document.getElementById('atencionAlumnoId').value;
-    const cid = document.getElementById('atencionCitatorioId').value;
-    const proc = document.getElementById('atencionProcedimiento').value;
-    const comp = document.getElementById('atencionCompromisos').value;
+    const modals = document.querySelectorAll('#modalAtencionFoco');
+    let activeModal = modals[0];
+    modals.forEach(m => { if(m.style.display !== 'none') activeModal = m; });
+    if(!activeModal) activeModal = document; // fallback
 
-    if(!proc.trim() || !comp.trim()) return alert("Por favor, completa ambos campos para el acta de resolución.");
+    const aid = activeModal.querySelector('#atencionAlumnoId')?.value;
+    const cid = activeModal.querySelector('#atencionCitatorioId')?.value || '';
+    const proc = activeModal.querySelector('#atencionProcedimiento')?.value || '';
+    const comp = activeModal.querySelector('#atencionCompromisos')?.value || '';
 
-    const btn = document.getElementById('btnConfirmarResolucion');
-    const old = btn.innerHTML;
-    btn.disabled = true;
-    btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Procesando resolución...';
+    if(!proc.trim() || !comp.trim()) {
+        alert("Por favor, completa ambos campos para el acta de resolución.");
+        return;
+    }
+
+    const btn = activeModal.querySelector('#btnConfirmarResolucion');
+    const old = btn ? btn.innerHTML : '';
+    if(btn) { btn.disabled = true; btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Procesando...'; }
 
     try {
         const u = await supabaseClient.auth.getUser();
@@ -2955,8 +2966,10 @@ window.guardarAtencionFoco = async () => {
         console.error(e);
         alert("Error al procesar resolución: " + e.message);
     } finally {
-        btn.disabled = false;
-        btn.innerHTML = old;
+        if(btn) {
+            btn.disabled = false;
+            btn.innerHTML = old;
+        }
     }
 };
 
