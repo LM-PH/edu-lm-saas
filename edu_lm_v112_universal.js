@@ -503,6 +503,8 @@ window.checkSchoolSetup = async () => {
     
     // REGLA DE ORO: Priorizar sesión REAL sobre parches locales
     const { data: { session } } = await supabaseClient.auth.getSession();
+    
+    try {
         // 1. Ver si hay un usuario logueado
         if(session && session.user) {
             const { data: profile } = await supabaseClient.from('perfiles')
