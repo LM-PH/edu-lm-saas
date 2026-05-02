@@ -5910,9 +5910,12 @@ window.loadTimelinePersonal = async (selectedDate) => {
     // Si no viene fecha, usar hoy
     const targetDate = selectedDate || new Date().toLocaleDateString('en-CA');
     
-    // Rango de fecha para el día completo (00:00:00 a 23:59:59)
-    const startOfDay = `${targetDate}T00:00:00.000Z`;
-    const endOfDay = `${targetDate}T23:59:59.999Z`;
+    // Rango de fecha con offset de zona horaria local (evita problemas UTC)
+    const tzOffset = new Date().getTimezoneOffset() * 60000;
+    const localStart = new Date(`${targetDate}T00:00:00`);
+    const localEnd = new Date(`${targetDate}T23:59:59`);
+    const startOfDay = new Date(localStart.getTime() - tzOffset).toISOString();
+    const endOfDay = new Date(localEnd.getTime() - tzOffset).toISOString();
 
     cont.innerHTML = '<div style="padding:40px; text-align:center;"><i class="fa-solid fa-spinner fa-spin fa-2x"></i><p style="color:var(--text-muted); margin-top:10px;">Actualizando cronología...</p></div>';
     
@@ -5961,12 +5964,17 @@ window.loadTimelinePersonal = async (selectedDate) => {
         }
 
 
-        const { data, error } = await supabaseClient.from('comunicados')
+        let query = supabaseClient.from('comunicados')
            .select('*, perfiles(nombre)')
            .in('audiencia', audArr)
            .gte('fecha_envio', startOfDay)
            .lte('fecha_envio', endOfDay)
            .order('fecha_envio', { ascending: false });
+
+        // Filtrar por plantel si el usuario tiene uno asignado
+        if (state.plantelId) query = query.eq('plantel_id', state.plantelId);
+
+        const { data, error } = await query;
            
         if(error) throw error;
         
