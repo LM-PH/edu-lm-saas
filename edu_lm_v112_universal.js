@@ -123,6 +123,7 @@ window.login = (rawRole) => {
     else if(role === 'maestro') state.path = '/maestro/aula';
     else if(role === 'apoyo') state.path = '/apoyo/dashboard';
     else if(role === 'alumno') state.path = '/alumno/credencial';
+    else if(role === 'biblioteca') state.path = '/biblioteca/dashboard';
     
     renderApp();
 };
@@ -249,6 +250,10 @@ window.handleLogin = async (e) => {
     state.role = isMasterUser ? 'master' : profile?.rol;
     state.userName = profile?.nombre || authData.user.email;
     state.plantelId = profile?.plantel_id || state.plantelId;
+    
+    if (isMasterUser) {
+        CONFIG.schoolName = 'Administración Global SaaS';
+    }
 
     window.showToast(`Bienvenido(a), ${state.userName}`, 'success');
     window.login(state.role);
@@ -573,7 +578,13 @@ window.checkSchoolSetup = async () => {
 
             state.role = normRole; 
             state.plantelId = profile.plantel_id;
-            CONFIG.schoolName = profile.planteles?.nombre || 'Edu-LM SaaS';
+            
+            if (isActuallyMaster) {
+                CONFIG.schoolName = 'Administración Global SaaS';
+            } else {
+                CONFIG.schoolName = profile.planteles?.nombre || 'Edu-LM';
+            }
+            
             state.schoolConfigured = true;
 
             // DETERMINAR RUTA SEGÚN ROL RECUPERADO
@@ -583,6 +594,7 @@ window.checkSchoolSetup = async () => {
             else if(state.role === 'maestro') state.path = '/maestro/aula';
             else if(state.role === 'apoyo') state.path = '/apoyo/dashboard';
             else if(state.role === 'alumno') state.path = '/alumno/credencial';
+            else if(state.role === 'biblioteca') state.path = '/biblioteca/dashboard';
 
             await renderApp();
             return;
@@ -757,6 +769,7 @@ function renderSidebar() {
       { name: 'Listas y Seguimiento', path: '/maestro/listas', icon: 'fa-list-check' },
       { name: 'Encuadre', path: '/maestro/encuadre', icon: 'fa-sliders' },
       { name: 'Subir Calificaciones', path: '/maestro/calificaciones', icon: 'fa-cloud-arrow-up' },
+      { name: 'Aula de Medios', path: '/maestro/aula-medios', icon: 'fa-desktop' },
       { name: 'Bitácora de Maestro', path: '/maestro/bitacora', icon: 'fa-book-journal-whills' },
       { name: 'Avisos Oficiales', path: '/maestro/comunicados', icon: 'fa-bullhorn' },
     ],
@@ -779,6 +792,11 @@ function renderSidebar() {
       { name: 'Avisos y Timeline', path: '/alumno/timeline', icon: 'fa-bell' },
       { name: 'Mi Horario', path: '/alumno/horario', icon: 'fa-calendar-days' },
       { name: 'Trámites Escolares', path: '/alumno/tramites', icon: 'fa-file-pdf' },
+    ],
+    biblioteca: [
+      { name: 'Préstamos y Control', path: '/biblioteca/dashboard', icon: 'fa-book-bookmark' },
+      { name: 'Reservaciones de Aula', path: '/biblioteca/reservas', icon: 'fa-calendar-plus' },
+      { name: 'Avisos Oficiales', path: '/biblioteca/comunicados', icon: 'fa-bullhorn' }
     ]
   };
 
@@ -1557,6 +1575,7 @@ function renderAdminMaestros() {
             <option value="apoyo">Apoyo (Prefectura / Trabajo Social)</option>
             <option value="admin">Admin (Control Escolar)</option>
             <option value="directivo">Directivo del Plantel</option>
+            <option value="biblioteca">Biblioteca / Aula de Medios</option>
           </select>
         </div>
 
@@ -4345,6 +4364,7 @@ function renderDirectivoPersonal() {
                  <option value="apoyo">Apoyo (Prefectura / Trabajo Social)</option>
                  <option value="directivo">Directivo (Director / Subdirector)</option>
                  <option value="admin">Admin (Control Escolar)</option>
+                 <option value="biblioteca">Biblioteca / Aula de Medios</option>
               </select>
            </div>
            <button class="btn btn-primary" style="width:100%; margin-top:10px;" onclick="window.registrarNuevoPersonal()">
@@ -4513,7 +4533,7 @@ async function renderPage(path) {
         if(state.role === 'directivo') return renderDirectivoAutorizaciones();
         if(state.role === 'maestro') return renderMaestroAula();
         if(state.role === 'apoyo') return renderApoyoDashboard();
-        if(state.role === 'alumno') return renderAlumnoCredencial();
+        if(state.role === 'biblioteca') return renderBibliotecaDashboard();
         return renderLandingPage();
     case '/master/saas': return (state.isMaster) ? await renderMasterSaaS() : '<h2>Acceso Denegado</h2>';
     case '/master/gestion-perfiles': return (state.isMaster) ? await renderMasterGestionPerfiles() : '<h2>Acceso Denegado</h2>';
@@ -4528,6 +4548,10 @@ async function renderPage(path) {
     case '/admin/comunicados': return renderAdminComunicados();
     case '/maestro/aula': return renderMaestroAula();
     case '/maestro/actividades': return renderMaestroActividades();
+    case '/maestro/aula-medios': return renderMaestroAulaMedios();
+    case '/biblioteca/dashboard': return renderBibliotecaDashboard();
+    case '/biblioteca/reservas': return renderBibliotecaReservas();
+    case '/biblioteca/comunicados': return renderBibliotecaComunicados();
     case '/maestro/listas': return renderMaestroListas();
     case '/maestro/encuadre': return renderMaestroEncuadre();
     case '/maestro/calificaciones': return renderMaestroCalificaciones();
@@ -4627,9 +4651,25 @@ window.gestionarPlantelSaaS = (id, nombre) => {
     renderApp();
 };
 
+window.eliminarPersonaMaster = async (idPermitido, email, nombre) => {
+    if(!confirm(`⚠️ ¿Deseas ELIMINAR AHORA a "${nombre}" (${email}) del plantel?\nEsta acción revocará su acceso.`)) return;
+    try {
+        const { error: errPerm } = await supabaseClient.from('perfiles_permitidos').delete().eq('id', idPermitido);
+        if(errPerm) throw errPerm;
+        const { data: pExist } = await supabaseClient.from('perfiles').select('id').eq('nombre', nombre).eq('plantel_id', state.plantelId).maybeSingle();
+        if(pExist) await supabaseClient.from('perfiles').delete().eq('id', pExist.id).eq('plantel_id', state.plantelId);
+        
+        window.showToast("Usuario eliminado exitosamente.", "success");
+        renderApp(); // Reload current view
+    } catch(err) {
+        console.error(err);
+        alert("Fallo al eliminar: " + err.message);
+    }
+};
+
 async function renderMasterGestionPerfiles() {
     try {
-        const { data: users, error } = await supabaseClient.from('perfiles')
+        const { data: users, error } = await supabaseClient.from('perfiles_permitidos')
             .select('*')
             .eq('plantel_id', state.plantelId)
             .order('nombre');
@@ -4644,17 +4684,22 @@ async function renderMasterGestionPerfiles() {
         };
 
         const renderUserRow = (u) => `
-            <div class="card shadow-sm" style="display:flex; align-items:center; gap:12px; padding:12px; border:1px solid #edf2f7;">
-                <div style="width:40px; height:40px; border-radius:50%; background:#eff6ff; color:#3b82f6; display:flex; align-items:center; justify-content:center; font-weight:bold; font-size:1.1rem; border:1px solid #dbeafe;">
-                    ${u.nombre?.charAt(0) || '?'}
+            <div class="card shadow-sm" style="display:flex; flex-direction:column; gap:10px; padding:16px; border:1px solid #edf2f7; border-radius:12px;">
+                <div style="display:flex; align-items:center; gap:12px;">
+                    <div style="width:40px; height:40px; border-radius:50%; background:#eff6ff; color:#3b82f6; display:flex; align-items:center; justify-content:center; font-weight:bold; font-size:1.1rem; border:1px solid #dbeafe;">
+                        ${u.nombre?.charAt(0) || '?'}
+                    </div>
+                    <div style="flex:1; overflow:hidden;">
+                        <div style="font-weight:600; font-size:0.95rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${u.nombre || 'Sin nombre'}</div>
+                        <div style="font-size:0.7rem; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.05em;">${u.rol}</div>
+                    </div>
+                    <div style="display:flex; gap:6px;">
+                        <button class="btn btn-outline btn-xs" style="padding:6px 10px; border-color:var(--danger); color:var(--danger);" onclick="window.eliminarPersonaMaster('${u.id}', '${u.email}', '${u.nombre}')" title="Eliminar Registro"><i class="fa-solid fa-trash"></i> Eliminar</button>
+                    </div>
                 </div>
-                <div style="flex:1; overflow:hidden;">
-                    <div style="font-weight:600; font-size:0.9rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${u.nombre}</div>
-                    <div style="font-size:0.7rem; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.05em;">${u.rol}</div>
-                </div>
-                <div style="display:flex; gap:6px;">
-                    <button class="btn btn-outline btn-xs" style="padding:4px 8px;" onclick="window.navigate('/admin/expediente?id=${u.id}')" title="Ver Expediente"><i class="fa-solid fa-id-card"></i></button>
-                    ${u.rol === 'maestro' ? `<button class="btn btn-outline btn-xs" style="padding:4px 8px; border-color:#e2e8f0;" onclick="window.navigate('/admin/maestros')" title="Gestión Docente"><i class="fa-solid fa-chalkboard-user"></i></button>` : ''}
+                <div style="font-size:0.85rem; background:#f8fafc; padding:10px; border-radius:8px; border:1px dashed #cbd5e1; margin-top:4px;">
+                    <div style="color:var(--text-main); margin-bottom:6px;"><i class="fa-solid fa-envelope" style="color:var(--text-muted); width:20px;"></i> <strong>${u.email}</strong></div>
+                    <div style="color:var(--text-main);"><i class="fa-solid fa-key" style="color:var(--text-muted); width:20px;"></i> ${u.temp_pass || 'Contraseña configurada por usuario'}</div>
                 </div>
             </div>
         `;
@@ -4667,7 +4712,7 @@ async function renderMasterGestionPerfiles() {
                     </div>
                     <h3 style="margin:0; font-weight:800; color:#1e293b;">${title} <span style="font-size:0.9rem; font-weight:400; color:var(--text-muted); margin-left:8px;">(${items.length})</span></h3>
                 </div>
-                <div style="display:grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap:16px;">
+                <div style="display:grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap:16px;">
                     ${items.length === 0 ? `<div style="grid-column: 1/-1; padding:20px; text-align:center; background:#f8fafc; border-radius:12px; color:var(--text-muted); border:1px dashed #cbd5e1;">Ningún registro en este apartado.</div>` : 
                       items.map(u => renderUserRow(u)).join('')}
                 </div>
@@ -4678,11 +4723,11 @@ async function renderMasterGestionPerfiles() {
             <div class="page-header" style="background: linear-gradient(135deg, #1e293b 0%, #334155 100%); color:white; padding:32px; border-radius:24px; margin-bottom:32px; box-shadow:0 10px 25px -5px rgba(0,0,0,0.1);">
                 <div style="display:flex; justify-content:space-between; align-items:center;">
                     <div>
-                        <h2 class="page-title" style="color:white; margin:0 0 4px 0;">Modo Gestión: ${CONFIG.schoolName}</h2>
+                        <h2 class="page-title" style="color:white; margin:0 0 4px 0;">Gestión de Credenciales: ${CONFIG.schoolName}</h2>
                         <p style="margin:0; opacity:0.8; font-size:0.95rem;"><i class="fa-solid fa-fingerprint"></i> Has iniciado sesión como controlador global en esta sede.</p>
                     </div>
                     <button class="btn" style="background:rgba(255,255,255,0.1); border:1px solid rgba(255,255,255,0.2); color:white;" onclick="window.navigate('/master/saas')">
-                        <i class="fa-solid fa-rotate-left"></i> Panel SaaS
+                        <i class="fa-solid fa-rotate-left"></i> Volver a Planteles
                     </button>
                 </div>
             </div>
@@ -4695,7 +4740,7 @@ async function renderMasterGestionPerfiles() {
             <div style="margin-top:20px; padding:20px; background:#eff6ff; border-radius:16px; border:1px solid #dbeafe; display:flex; gap:16px; align-items:center;">
                 <div style="font-size:1.5rem; color:#3b82f6;"><i class="fa-solid fa-circle-info"></i></div>
                 <div style="font-size:0.85rem; color:#1e40af;">
-                    <strong>Nota para el Creador:</strong> Desde este panel puedes auditar el padrón completo. Utiliza los botones de acción en cada tarjeta para saltar a la sección de edición o expedientes de cada usuario.
+                    <strong>Nota para el Creador:</strong> Desde este panel puedes auditar el correo y contraseña temporal de cada usuario. También puedes revocarlos de manera definitiva eliminando su registro de acceso.
                 </div>
             </div>
         `;
@@ -10749,3 +10794,416 @@ window.descargarCSVAlumno = async (alumnoId, nombre) => {
         document.getElementById('adminSearchAlumnoDownload').value = '';
     } catch(e) { console.error(e); alert("Error al generar CSV: " + e.message); }
 };
+
+// ==========================================
+// MÓDULO BIBLIOTECA / AULA DE MEDIOS
+// ==========================================
+
+async function renderBibliotecaDashboard() {
+    setTimeout(async () => {
+        try {
+            const { count: cP } = await supabaseClient.from('biblioteca_prestamos').select('*', {count: 'exact', head:true}).eq('plantel_id', state.plantelId).eq('devuelto', false);
+            if(document.getElementById('countPrestamos')) document.getElementById('countPrestamos').innerText = cP || 0;
+            const hoy = new Date().toISOString().split('T')[0];
+            const { count: cR } = await supabaseClient.from('biblioteca_reservas').select('*', {count: 'exact', head:true}).eq('plantel_id', state.plantelId).eq('fecha', hoy);
+            if(document.getElementById('countReservas')) document.getElementById('countReservas').innerText = cR || 0;
+        } catch(e) {}
+    }, 100);
+
+    return `
+      <div class="page-header" style="background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%); color:white; padding:32px; border-radius:24px; margin-bottom:32px;">
+        <h2 class="page-title" style="color:white; margin:0 0 8px 0;"><i class="fa-solid fa-book-bookmark"></i> Panel de Biblioteca</h2>
+        <p style="margin:0; opacity:0.8;">Gestión de préstamos y aula de medios.</p>
+      </div>
+      
+      <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap:24px;">
+         <div class="card stat-card" style="cursor:pointer;" onclick="window.navigate('/biblioteca/prestamos')">
+            <div class="stat-icon" style="background:#eff6ff; color:#3b82f6;"><i class="fa-solid fa-laptop-file"></i></div>
+            <div class="stat-info">
+               <div class="stat-label">Préstamos Activos</div>
+               <div class="stat-value" id="countPrestamos"><i class="fa-solid fa-spinner fa-spin"></i></div>
+               <p style="font-size:0.75rem; color:var(--text-muted); margin:0;">Clic para gestionar</p>
+            </div>
+         </div>
+         <div class="card stat-card" style="cursor:pointer;" onclick="window.navigate('/biblioteca/reservas')">
+            <div class="stat-icon" style="background:#fef2f2; color:#ef4444;"><i class="fa-solid fa-calendar-check"></i></div>
+            <div class="stat-info">
+               <div class="stat-label">Reservas de Aula Hoy</div>
+               <div class="stat-value" id="countReservas"><i class="fa-solid fa-spinner fa-spin"></i></div>
+               <p style="font-size:0.75rem; color:var(--text-muted); margin:0;">Clic para ver calendario</p>
+            </div>
+         </div>
+      </div>
+    `;
+}
+
+async function renderBibliotecaPrestamos() {
+    setTimeout(window.loadBibliotecaPrestamos, 100);
+    return `
+      <div class="page-header">
+         <h2 class="page-title"><i class="fa-solid fa-hand-holding-hand"></i> Préstamos a Alumnos</h2>
+      </div>
+      
+      <div style="display:flex; gap:20px; align-items:flex-start; flex-wrap:wrap;">
+         <div class="card" style="flex:1; min-width:300px;">
+            <h3 style="margin-bottom:15px">Registrar Préstamo</h3>
+            <div class="form-group" style="position:relative;">
+               <label class="form-label">Buscar Alumno (Nombre o Matrícula)</label>
+               <input type="text" id="bibSearchAlumno" class="form-input" placeholder="Escribe para buscar..." oninput="window.bibLiveSearchAlumno(this.value)">
+               <div id="bibResSearchAlumno" style="display:none; position:absolute; top:100%; left:0; right:0; background:white; border:1px solid var(--border); border-radius:8px; box-shadow:0 4px 6px -1px rgba(0,0,0,0.1); z-index:10; max-height:200px; overflow-y:auto;"></div>
+            </div>
+            
+            <div id="bibAlumnoSeleccionado" style="display:none; padding:12px; background:#eff6ff; border:1px solid #bfdbfe; border-radius:8px; margin-bottom:15px;">
+               <div style="display:flex; justify-content:space-between; align-items:center;">
+                  <div>
+                     <div style="font-weight:600; color:#1e3a8a;" id="bibAluNom"></div>
+                     <div style="font-size:0.8rem; color:#3b82f6;" id="bibAluGrp"></div>
+                  </div>
+                  <button class="btn btn-outline btn-xs" onclick="window.bibDeselectAlumno()">Cambiar</button>
+               </div>
+               <input type="hidden" id="bibAluId">
+            </div>
+
+            <div class="form-group">
+               <label class="form-label">Tipo de Recurso</label>
+               <select id="bibTipo" class="form-select" onchange="document.getElementById('bibCondGrp').style.display = this.value==='computadora'?'block':'none'">
+                  <option value="libro">Libro / Material Lectura</option>
+                  <option value="computadora">Computadora / Chromebook</option>
+               </select>
+            </div>
+            
+            <div class="form-group">
+               <label class="form-label">Nombre del Libro o Número de Equipo</label>
+               <input type="text" id="bibRecurso" class="form-input" placeholder="Ej. El Principito / Chromebook #12">
+            </div>
+            
+            <div class="form-group" id="bibCondGrp" style="display:none;">
+               <label class="form-label">Condición al Entregar (Opcional)</label>
+               <input type="text" id="bibCondEntrega" class="form-input" placeholder="Ej. Pantalla rayada, falta cargador...">
+            </div>
+            
+            <button class="btn btn-primary" onclick="window.guardarPrestamoBiblioteca()" style="width:100%;">
+               <i class="fa-solid fa-plus"></i> Registrar Préstamo
+            </button>
+         </div>
+         
+         <div class="card" style="flex:2; min-width:300px;">
+            <h3 style="margin-bottom:15px">Préstamos Activos (No Devueltos)</h3>
+            <div id="bibListaPrestamos">
+               <div style="text-align:center; padding:20px; color:var(--text-muted);"><i class="fa-solid fa-spinner fa-spin"></i> Cargando...</div>
+            </div>
+         </div>
+      </div>
+    `;
+}
+
+window.bibLiveSearchAlumno = async (q) => {
+    const res = document.getElementById('bibResSearchAlumno');
+    if(!res) return;
+    if(q.length < 2) { res.style.display='none'; return; }
+    try {
+        const { data } = await supabaseClient.from('alumnos').select('id, nombre, matricula, grupos(nombre)').eq('plantel_id', state.plantelId).or(`nombre.ilike.%${q}%,matricula.ilike.%${q}%`).limit(8);
+        if(!data || data.length === 0) { res.innerHTML='<p style="padding:10px; color:var(--text-muted)">Sin resultados</p>'; res.style.display='block'; return; }
+        res.style.display='block';
+        res.innerHTML = data.map(a => `
+            <div style="padding:10px; border-bottom:1px solid var(--border); cursor:pointer;" onclick="window.bibSelectAlumno('${a.id}', '${a.nombre.replace(/'/g, "\\'")}', '${a.grupos?.nombre || ''}')">
+               <div style="font-weight:600; font-size:0.85rem;">${a.nombre}</div>
+               <div style="font-size:0.75rem; color:var(--text-muted)">${a.matricula || 'Sin matricula'} - ${a.grupos?.nombre || 'Sin Grupo'}</div>
+            </div>
+        `).join('');
+    } catch(e) { console.error(e); }
+};
+
+window.bibSelectAlumno = (id, nombre, grupo) => {
+    document.getElementById('bibAluId').value = id;
+    document.getElementById('bibAluNom').innerText = nombre;
+    document.getElementById('bibAluGrp').innerText = grupo;
+    document.getElementById('bibAlumnoSeleccionado').style.display = 'block';
+    document.getElementById('bibResSearchAlumno').style.display = 'none';
+    document.getElementById('bibSearchAlumno').value = '';
+    document.getElementById('bibSearchAlumno').parentElement.style.display = 'none';
+};
+
+window.bibDeselectAlumno = () => {
+    document.getElementById('bibAluId').value = '';
+    document.getElementById('bibAlumnoSeleccionado').style.display = 'none';
+    document.getElementById('bibSearchAlumno').parentElement.style.display = 'block';
+};
+
+window.loadBibliotecaPrestamos = async () => {
+    const container = document.getElementById('bibListaPrestamos');
+    if(!container) return;
+    try {
+        const { data, error } = await supabaseClient.from('biblioteca_prestamos')
+            .select('*, alumnos(nombre, grupos(nombre))')
+            .eq('plantel_id', state.plantelId)
+            .eq('devuelto', false)
+            .order('fecha_prestamo', { ascending: false });
+            
+        if(error) throw error;
+        
+        if(!data || data.length === 0) {
+            container.innerHTML = '<div style="text-align:center; padding:20px; color:var(--text-muted); font-style:italic;">No hay préstamos activos. Todos han devuelto su material.</div>';
+            return;
+        }
+        
+        container.innerHTML = data.map(p => {
+            const icon = p.tipo === 'libro' ? '<i class="fa-solid fa-book" style="color:#8b5cf6"></i>' : '<i class="fa-solid fa-laptop" style="color:#3b82f6"></i>';
+            const bg = p.tipo === 'libro' ? '#f3e8ff' : '#eff6ff';
+            const f = new Date(p.fecha_prestamo).toLocaleString([], {day:'2-digit', month:'short', hour:'2-digit', minute:'2-digit'});
+            
+            return `
+               <div style="border:1px solid var(--border); border-radius:12px; padding:16px; margin-bottom:12px; display:flex; gap:16px; align-items:center;">
+                  <div style="width:48px; height:48px; border-radius:12px; background:${bg}; display:flex; align-items:center; justify-content:center; font-size:1.5rem;">
+                     ${icon}
+                  </div>
+                  <div style="flex:1;">
+                     <div style="font-weight:700; font-size:1rem; color:var(--text-main); margin-bottom:4px;">${p.recurso}</div>
+                     <div style="font-size:0.85rem; color:var(--text-muted); margin-bottom:2px;"><i class="fa-regular fa-user"></i> ${p.alumnos?.nombre || 'Alumno'} (${p.alumnos?.grupos?.nombre || ''})</div>
+                     <div style="font-size:0.75rem; color:var(--text-muted);"><i class="fa-regular fa-clock"></i> Prestado: ${f}</div>
+                     ${p.condicion_entrega ? `<div style="margin-top:4px; font-size:0.75rem; background:#fffbeb; color:#d97706; padding:4px 8px; border-radius:4px; display:inline-block;"><i class="fa-solid fa-triangle-exclamation"></i> Entregado con: ${p.condicion_entrega}</div>` : ''}
+                  </div>
+                  <div>
+                     <button class="btn btn-primary btn-sm" onclick="window.bibDevolverPrestamo('${p.id}')"><i class="fa-solid fa-check"></i> Devolver</button>
+                     <button class="btn btn-outline btn-sm" style="color:var(--danger); border-color:var(--danger); padding:6px 10px;" onclick="window.bibEliminarPrestamo('${p.id}')" title="Eliminar Registro"><i class="fa-solid fa-trash"></i></button>
+                  </div>
+               </div>
+            `;
+        }).join('');
+        
+    } catch(e) {
+        console.error(e);
+        container.innerHTML = '<div style="color:var(--danger);">Error al cargar préstamos.</div>';
+    }
+};
+
+window.guardarPrestamoBiblioteca = async () => {
+    const alumno_id = document.getElementById('bibAluId').value;
+    const tipo = document.getElementById('bibTipo').value;
+    const recurso = document.getElementById('bibRecurso').value.trim();
+    const condicion_entrega = document.getElementById('bibCondEntrega').value.trim();
+    
+    if(!alumno_id) return window.showToast("Selecciona un alumno.", "error");
+    if(!recurso) return window.showToast("Escribe el nombre del libro o equipo.", "error");
+    
+    try {
+        const { error } = await supabaseClient.from('biblioteca_prestamos').insert([{
+            alumno_id, tipo, recurso, condicion_entrega, plantel_id: state.plantelId
+        }]);
+        if(error) throw error;
+        
+        window.showToast("Préstamo registrado exitosamente.", "success");
+        document.getElementById('bibRecurso').value = '';
+        document.getElementById('bibCondEntrega').value = '';
+        window.bibDeselectAlumno();
+        window.loadBibliotecaPrestamos();
+    } catch(e) {
+        console.error(e);
+        window.showToast("Error al registrar préstamo.", "error");
+    }
+};
+
+window.bibDevolverPrestamo = async (id) => {
+    const cond = prompt("¿En qué condición se devuelve? (Opcional, deja vacío si está bien)");
+    if(cond === null) return; 
+    
+    try {
+        const { error } = await supabaseClient.from('biblioteca_prestamos').update({
+            devuelto: true,
+            fecha_devolucion: new Date().toISOString(),
+            condicion_devolucion: cond || null
+        }).eq('id', id);
+        
+        if(error) throw error;
+        window.showToast("Material devuelto correctamente.", "success");
+        window.loadBibliotecaPrestamos();
+    } catch(e) {
+        console.error(e);
+        window.showToast("Error al devolver.", "error");
+    }
+};
+
+window.bibEliminarPrestamo = async (id) => {
+    if(!confirm("¿Seguro que deseas ELIMINAR este registro de préstamo por completo?")) return;
+    try {
+        const { error } = await supabaseClient.from('biblioteca_prestamos').delete().eq('id', id);
+        if(error) throw error;
+        window.showToast("Registro eliminado.", "success");
+        window.loadBibliotecaPrestamos();
+    } catch(e) {
+        console.error(e);
+        window.showToast("Error al eliminar.", "error");
+    }
+};
+
+async function renderBibliotecaReservas() {
+    setTimeout(() => { window.loadBibliotecaReservas(true); }, 100);
+    return `
+      <div class="page-header">
+         <h2 class="page-title"><i class="fa-solid fa-calendar-plus"></i> Reservaciones Aula de Medios</h2>
+      </div>
+      <div class="card">
+         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
+            <h3 style="margin:0;">Horarios Apartados</h3>
+            <input type="date" id="bibReservaFecha" class="form-input" style="width:auto;" value="${new Date().toISOString().split('T')[0]}" onchange="window.loadBibliotecaReservas(true)">
+         </div>
+         <div id="bibListaReservas">
+            <div style="text-align:center; padding:20px; color:var(--text-muted);"><i class="fa-solid fa-spinner fa-spin"></i> Cargando...</div>
+         </div>
+      </div>
+    `;
+}
+
+window.loadBibliotecaReservas = async (isBib = false) => {
+    const prefix = isBib ? 'bib' : 'maestro';
+    const container = document.getElementById(prefix + 'ListaReservas');
+    const fecha = document.getElementById(prefix + 'ReservaFecha')?.value;
+    if(!container || !fecha) return;
+    
+    try {
+        const { data, error } = await supabaseClient.from('biblioteca_reservas')
+            .select('*, perfiles(nombre)')
+            .eq('plantel_id', state.plantelId)
+            .eq('fecha', fecha)
+            .order('hora_inicio', { ascending: true });
+            
+        if(error) throw error;
+        
+        if(!data || data.length === 0) {
+            container.innerHTML = '<div style="text-align:center; padding:30px; background:#f8fafc; border-radius:12px; color:var(--text-muted); border:1px dashed #cbd5e1;">No hay reservaciones para esta fecha.</div>';
+            return;
+        }
+        
+        container.innerHTML = data.map(r => {
+            const hI = r.hora_inicio.substring(0,5);
+            const hF = r.hora_fin.substring(0,5);
+            const isMine = r.maestro_id === state.user.id || state.role === 'biblioteca' || state.role === 'admin';
+            
+            return `
+               <div style="border-left:4px solid var(--primary); background:#f8fafc; padding:16px; margin-bottom:12px; border-radius:0 8px 8px 0; display:flex; justify-content:space-between; align-items:center;">
+                  <div>
+                     <div style="font-weight:700; font-size:1.1rem; color:var(--text-main); margin-bottom:4px;">${hI} - ${hF}</div>
+                     <div style="font-size:0.9rem; color:#475569; font-weight:500;"><i class="fa-solid fa-chalkboard-user" style="color:var(--text-muted)"></i> Maestro: ${r.perfiles?.nombre || 'Desconocido'}</div>
+                     ${r.proposito ? `<div style="font-size:0.8rem; color:var(--text-muted); margin-top:4px;"><i class="fa-regular fa-comment-dots"></i> ${r.proposito}</div>` : ''}
+                  </div>
+                  ${isMine ? `<button class="btn btn-outline btn-sm" style="color:var(--danger); border-color:var(--danger);" onclick="window.bibEliminarReserva('${r.id}', ${isBib})"><i class="fa-solid fa-trash"></i> Cancelar</button>` : ''}
+               </div>
+            `;
+        }).join('');
+        
+    } catch(e) {
+        console.error(e);
+        container.innerHTML = '<div style="color:var(--danger);">Error al cargar reservaciones.</div>';
+    }
+};
+
+window.bibEliminarReserva = async (id, isBib) => {
+    if(!confirm("¿Seguro que deseas cancelar esta reservación?")) return;
+    try {
+        const { error } = await supabaseClient.from('biblioteca_reservas').delete().eq('id', id);
+        if(error) throw error;
+        window.showToast("Reservación cancelada.", "success");
+        window.loadBibliotecaReservas(isBib);
+    } catch(e) { console.error(e); window.showToast("Error al cancelar.", "error"); }
+};
+
+async function renderMaestroAulaMedios() {
+    setTimeout(() => { window.loadBibliotecaReservas(false); }, 100);
+    return `
+      <div class="page-header">
+         <h2 class="page-title"><i class="fa-solid fa-desktop"></i> Reservar Aula de Medios</h2>
+         <p style="opacity:0.8; margin:0;">Consulta disponibilidad y aparta el aula para tu clase.</p>
+      </div>
+      
+      <div style="display:flex; gap:24px; align-items:flex-start; flex-wrap:wrap;">
+         <div class="card" style="flex:1; min-width:300px;">
+            <h3 style="margin-bottom:15px">Nueva Reservación</h3>
+            
+            <div class="form-group">
+               <label class="form-label">Fecha</label>
+               <input type="date" id="mReservaFecha" class="form-input" value="${new Date().toISOString().split('T')[0]}" onchange="document.getElementById('maestroReservaFecha').value = this.value; window.loadBibliotecaReservas(false)">
+            </div>
+            
+            <div style="display:flex; gap:10px;">
+                <div class="form-group" style="flex:1;">
+                   <label class="form-label">Hora Inicio</label>
+                   <input type="time" id="mReservaInicio" class="form-input" value="08:00">
+                </div>
+                <div class="form-group" style="flex:1;">
+                   <label class="form-label">Hora Fin</label>
+                   <input type="time" id="mReservaFin" class="form-input" value="09:00">
+                </div>
+            </div>
+            
+            <div class="form-group">
+               <label class="form-label">Propósito / Grupo (Opcional)</label>
+               <input type="text" id="mReservaProposito" class="form-input" placeholder="Ej. Práctica de Excel con 2do A">
+            </div>
+            
+            <button class="btn btn-primary" onclick="window.maestroGuardarReserva()" style="width:100%;">
+               <i class="fa-solid fa-calendar-check"></i> Confirmar Reservación
+            </button>
+            <p style="font-size:0.75rem; color:var(--text-muted); margin-top:10px;">* El sistema bloqueará empalmes de horario automáticamente.</p>
+         </div>
+         
+         <div class="card" style="flex:1.5; min-width:300px;">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
+                <h3 style="margin:0;">Disponibilidad del Día</h3>
+                <input type="hidden" id="maestroReservaFecha" value="${new Date().toISOString().split('T')[0]}">
+            </div>
+            <div id="maestroListaReservas">
+               <div style="text-align:center; padding:20px; color:var(--text-muted);"><i class="fa-solid fa-spinner fa-spin"></i> Cargando...</div>
+            </div>
+         </div>
+      </div>
+    `;
+}
+
+window.maestroGuardarReserva = async () => {
+    const fecha = document.getElementById('mReservaFecha').value;
+    const inicio = document.getElementById('mReservaInicio').value;
+    const fin = document.getElementById('mReservaFin').value;
+    const proposito = document.getElementById('mReservaProposito').value.trim();
+    
+    if(!fecha || !inicio || !fin) return window.showToast("Completa la fecha y horas.", "error");
+    if(inicio >= fin) return window.showToast("La hora de fin debe ser mayor a la de inicio.", "error");
+    
+    try {
+        // Verificar empalmes
+        const { data: empalmes, error: errEmp } = await supabaseClient.from('biblioteca_reservas')
+            .select('id')
+            .eq('plantel_id', state.plantelId)
+            .eq('fecha', fecha)
+            .lte('hora_inicio', fin)
+            .gte('hora_fin', inicio);
+            
+        if(errEmp) throw errEmp;
+        
+        if(empalmes && empalmes.length > 0) {
+            return window.showToast("¡El aula ya está reservada en ese horario!", "error");
+        }
+        
+        // Guardar
+        const { error } = await supabaseClient.from('biblioteca_reservas').insert([{
+            maestro_id: state.user.id,
+            fecha: fecha,
+            hora_inicio: inicio,
+            hora_fin: fin,
+            proposito: proposito,
+            plantel_id: state.plantelId
+        }]);
+        
+        if(error) throw error;
+        
+        window.showToast("Reservación confirmada.", "success");
+        document.getElementById('mReservaProposito').value = '';
+        window.loadBibliotecaReservas(false);
+    } catch(e) {
+        console.error(e);
+        window.showToast("Error al reservar.", "error");
+    }
+};
+
+async function renderBibliotecaComunicados() {
+    return window.renderAdminComunicados(); // Reuse same component since it handles RLS
+}
