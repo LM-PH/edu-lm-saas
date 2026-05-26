@@ -1808,6 +1808,8 @@ window.loadComunicadosAdmin = async (fechaFiltro = null) => {
                 ${btnAdjunto}
             </div>`;
         }).join('');
+        
+        if (window.updateNotificationBadge) setTimeout(() => window.updateNotificationBadge(true), 1000);
     } catch(err) {
         console.error(err);
         cont.innerHTML = '<div style="color:var(--danger); padding:16px; text-align:center;"><i class="fa-solid fa-triangle-exclamation"></i> Error al cargar el historial: ' + err.message + '</div>';
