@@ -1648,6 +1648,7 @@ function renderAdminMaestros() {
             <button class="btn btn-sm btn-tab-personal ${window._activePersonalTab === 'maestro' ? 'active' : ''}" onclick="window.cambiarTabPersonal('maestro', this)" style="padding:6px 12px; font-size:0.8rem; font-weight:bold; border-radius:6px; background:${window._activePersonalTab === 'maestro' ? 'white' : 'transparent'}; border:${window._activePersonalTab === 'maestro' ? '1px solid var(--border)' : 'none'}; cursor:pointer; color:${window._activePersonalTab === 'maestro' ? 'var(--text-main)' : 'var(--text-muted)'}">Maestros</button>
             <button class="btn btn-sm btn-tab-personal ${window._activePersonalTab === 'admin' ? 'active' : ''}" onclick="window.cambiarTabPersonal('admin', this)" style="padding:6px 12px; font-size:0.8rem; font-weight:bold; border-radius:6px; background:${window._activePersonalTab === 'admin' ? 'white' : 'transparent'}; border:${window._activePersonalTab === 'admin' ? '1px solid var(--border)' : 'none'}; cursor:pointer; color:${window._activePersonalTab === 'admin' ? 'var(--text-main)' : 'var(--text-muted)'}">Administrativos</button>
             <button class="btn btn-sm btn-tab-personal ${window._activePersonalTab === 'apoyo' ? 'active' : ''}" onclick="window.cambiarTabPersonal('apoyo', this)" style="padding:6px 12px; font-size:0.8rem; font-weight:bold; border-radius:6px; background:${window._activePersonalTab === 'apoyo' ? 'white' : 'transparent'}; border:${window._activePersonalTab === 'apoyo' ? '1px solid var(--border)' : 'none'}; cursor:pointer; color:${window._activePersonalTab === 'apoyo' ? 'var(--text-main)' : 'var(--text-muted)'}">Personal de Apoyo</button>
+            <button class="btn btn-sm btn-tab-personal ${window._activePersonalTab === 'biblioteca' ? 'active' : ''}" onclick="window.cambiarTabPersonal('biblioteca', this)" style="padding:6px 12px; font-size:0.8rem; font-weight:bold; border-radius:6px; background:${window._activePersonalTab === 'biblioteca' ? 'white' : 'transparent'}; border:${window._activePersonalTab === 'biblioteca' ? '1px solid var(--border)' : 'none'}; cursor:pointer; color:${window._activePersonalTab === 'biblioteca' ? 'var(--text-main)' : 'var(--text-muted)'}">Biblioteca</button>
             <button class="btn btn-sm btn-tab-personal ${window._activePersonalTab === 'alumno' ? 'active' : ''}" onclick="window.cambiarTabPersonal('alumno', this)" style="padding:6px 12px; font-size:0.8rem; font-weight:bold; border-radius:6px; background:${window._activePersonalTab === 'alumno' ? 'white' : 'transparent'}; border:${window._activePersonalTab === 'alumno' ? '1px solid var(--border)' : 'none'}; cursor:pointer; color:${window._activePersonalTab === 'alumno' ? 'var(--text-main)' : 'var(--text-muted)'}">Alumnos</button>
         </div>
 
@@ -10177,6 +10178,7 @@ window.loadListasAdminPersonal = async (searchTerm = '') => {
             else if(window._activePersonalTab === 'maestro') tabRoles = ['maestro'];
             else if(window._activePersonalTab === 'apoyo') tabRoles = ['apoyo'];
             else if(window._activePersonalTab === 'directivo') tabRoles = ['directivo'];
+            else if(window._activePersonalTab === 'biblioteca') tabRoles = ['biblioteca'];
             
             itemsToRender = allStaff.filter(p => tabRoles.includes(p.rol));
         }
@@ -10193,7 +10195,7 @@ window.loadListasAdminPersonal = async (searchTerm = '') => {
 
         let html = '';
         itemsToRender.forEach(p => {
-            const roleLabels = { 'admin': 'Administrador', 'maestro': 'Maestro', 'apoyo': 'Apoyo', 'directivo': 'Directivo', 'alumno': 'Alumno' };
+            const roleLabels = { 'admin': 'Administrador', 'maestro': 'Maestro', 'apoyo': 'Apoyo', 'directivo': 'Directivo', 'alumno': 'Alumno', 'biblioteca': 'Biblioteca' };
             const roleClass = (p.rol === 'admin' || p.rol === 'directivo') ? 'badge-primary' : 
                               (p.rol === 'maestro' ? 'badge-success' : 
                               (p.rol === 'alumno' ? 'badge-warning' : 'badge-outline'));
