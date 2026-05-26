@@ -4249,19 +4249,7 @@ window.resolverAutorizacion = async (id, dictamen, payloadStr = null) => {
             const payload = JSON.parse(decodeURIComponent(payloadStr));
             
             // Re-ejecutar el comando interceptado
-            if(payload.action === 'delete_alumno') {
-                const idToDelete = payload.target_id;
-                // Extraer email para revocar acceso
-                const { data: alu } = await supabaseClient.from('alumnos').select('contacto_email').eq('id', idToDelete).single();
-                
-                const { error } = await supabaseClient.from('alumnos').delete().eq('id', idToDelete);
-                if(error) throw error;
-                
-                if(alu && alu.contacto_email) {
-                    await supabaseClient.from('perfiles_permitidos').delete().eq('email', alu.contacto_email);
-                }
-            }
-            else if(payload.action === 'graduar_generacion') {
+            if(payload.action === 'graduar_generacion') {
                 const { data: grps } = await supabaseClient.from('grupos').select('id').ilike('nombre', `${payload.grado}%`).eq('plantel_id', state.plantelId);
                 if(grps && grps.length > 0) {
                     const ids = grps.map(g => g.id);
@@ -4312,11 +4300,12 @@ window.resolverAutorizacion = async (id, dictamen, payloadStr = null) => {
                  if(pExist) await supabaseClient.from('perfiles').delete().eq('id', pExist.id).eq('plantel_id', state.plantelId);
             }
             else if(payload.action === 'delete_alumno') {
-                 const { error: errAlu } = await supabaseClient.from('alumnos').delete().eq('id', payload.id_permitido);
+                 const idToDelete = payload.id_permitido || payload.target_id;
+                 const { error: errAlu } = await supabaseClient.from('alumnos').delete().eq('id', idToDelete);
                  if(errAlu) throw errAlu;
                  const { data: pExist } = await supabaseClient.from('perfiles').select('id').eq('nombre', payload.nombre).eq('plantel_id', state.plantelId).maybeSingle();
                  if(pExist) await supabaseClient.from('perfiles').delete().eq('id', pExist.id).eq('plantel_id', state.plantelId);
-                 await supabaseClient.from('perfiles_permitidos').delete().eq('email', payload.email);
+                 if(payload.email) await supabaseClient.from('perfiles_permitidos').delete().eq('email', payload.email);
             }
         }
 
