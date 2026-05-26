@@ -4680,7 +4680,8 @@ async function renderMasterGestionPerfiles() {
             alumno: users.filter(u => u.rol === 'alumno'),
             maestro: users.filter(u => u.rol === 'maestro'),
             apoyo: users.filter(u => u.rol === 'apoyo'),
-            admin: users.filter(u => ['admin', 'administrativo', 'directivo'].includes(u.rol))
+            admin: users.filter(u => ['admin', 'administrativo', 'directivo'].includes(u.rol)),
+            biblioteca: users.filter(u => u.rol === 'biblioteca')
         };
 
         const renderUserRow = (u) => `
@@ -4736,6 +4737,7 @@ async function renderMasterGestionPerfiles() {
             ${renderSection('Cuerpo de Maestros', categorized.maestro, 'fa-chalkboard-user', '#8b5cf6')}
             ${renderSection('Personal de Apoyo', categorized.apoyo, 'fa-hand-holding-medical', '#10b981')}
             ${renderSection('Equipo Administrativo', categorized.admin, 'fa-user-tie', '#f59e0b')}
+            ${renderSection('Biblioteca / Aula de Medios', categorized.biblioteca, 'fa-book-open', '#06b6d4')}
             
             <div style="margin-top:20px; padding:20px; background:#eff6ff; border-radius:16px; border:1px solid #dbeafe; display:flex; gap:16px; align-items:center;">
                 <div style="font-size:1.5rem; color:#3b82f6;"><i class="fa-solid fa-circle-info"></i></div>
