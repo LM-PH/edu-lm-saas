@@ -778,6 +778,7 @@ function renderSidebar() {
       { name: 'Subir Calificaciones', path: '/maestro/calificaciones', icon: 'fa-cloud-arrow-up' },
       { name: 'Aula de Medios', path: '/maestro/aula-medios', icon: 'fa-desktop' },
       { name: 'Bitácora de Maestro', path: '/maestro/bitacora', icon: 'fa-book-journal-whills' },
+      { name: 'Reportes Escolares', path: '/maestro/reportes', icon: 'fa-file-signature' },
       { name: 'Avisos Oficiales', path: '/maestro/comunicados', icon: 'fa-bullhorn' },
     ],
     apoyo: [
@@ -2395,28 +2396,21 @@ window.abrirExpedienteDirecto = (id) => {
 };
 
 function renderApoyoReportes() {
+  const isMaestro = state.role === 'maestro' || state.role === 'docente';
   const today = new Date().toLocaleDateString('en-CA');
   setTimeout(() => { 
-      if(window.loadCitatoriosApoyo) window.loadCitatoriosApoyo();
+      if(!isMaestro && window.loadCitatoriosApoyo) window.loadCitatoriosApoyo();
   }, 100);
   
-  return `
-    <div class="page-header" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:16px;">
-      <div>
-        <h2 class="page-title">Incidencias y Conducta</h2>
-        <p class="page-subtitle">Personal de Apoyo | Triage y Mediación Escolar</p>
-      </div>
-      <div style="display:flex; gap:12px; align-items:center;">
+  const subtitle = isMaestro ? 'Reportes de Incidencias Disciplinarias' : 'Personal de Apoyo | Triage y Mediación Escolar';
+  
+  const citatoriosBtn = isMaestro ? '' : `
         <button class="btn btn-outline" onclick="window.abrirModalCitatorio()" style="padding:10px 20px; border-radius:12px; font-weight:600; display:flex; align-items:center; gap:8px; border:1.5px solid var(--primary); color:var(--primary);">
             <i class="fa-solid fa-envelope-open-text"></i> Crear Citatorio
         </button>
-        <button class="btn btn-primary" onclick="window.abrirModalReporteApoyo()" style="padding:10px 20px; border-radius:12px; font-weight:600; display:flex; align-items:center; gap:8px;">
-            <i class="fa-solid fa-plus-circle"></i> Nuevo Reporte
-        </button>
-      </div>
-    </div>
+  `;
 
-    <div style="display:grid; grid-template-columns: 1fr; gap:30px; margin-top:20px;">
+  const citatoriosSection = isMaestro ? '' : `
         <!-- SECCIÓN 1: CITATORIOS VIGENTES -->
         <div class="card" style="width:100%; border-top:4px solid var(--warning);">
             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px; flex-wrap:wrap; gap:10px;">
@@ -2432,8 +2426,24 @@ function renderApoyoReportes() {
                 <div style="text-align:center; padding:30px; color:var(--text-muted); grid-column:1/-1;"><i class="fa-solid fa-spinner fa-spin"></i> Cargando citatorios...</div>
             </div>
         </div>
+  `;
 
-        </div>
+  return `
+    <div class="page-header" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:16px;">
+      <div>
+        <h2 class="page-title">Incidencias y Conducta</h2>
+        <p class="page-subtitle">${subtitle}</p>
+      </div>
+      <div style="display:flex; gap:12px; align-items:center;">
+        ${citatoriosBtn}
+        <button class="btn btn-primary" onclick="window.abrirModalReporteApoyo()" style="padding:10px 20px; border-radius:12px; font-weight:600; display:flex; align-items:center; gap:8px;">
+            <i class="fa-solid fa-plus-circle"></i> Nuevo Reporte
+        </button>
+      </div>
+    </div>
+
+    <div style="display:grid; grid-template-columns: 1fr; gap:30px; margin-top:20px;">
+        ${citatoriosSection}
     </div>
 
     <!-- Modal de Creación de Reporte -->
@@ -4582,6 +4592,7 @@ async function renderPage(path) {
     case '/maestro/encuadre': return renderMaestroEncuadre();
     case '/maestro/calificaciones': return renderMaestroCalificaciones();
     case '/maestro/bitacora': return renderMaestroBitacora();
+    case '/maestro/reportes': return renderApoyoReportes();
     case '/maestro/comunicados': return renderPersonalComunicados('Maestros');
     case '/apoyo/dashboard': return renderApoyoDashboard();
     case '/apoyo/reportes': return renderApoyoReportes();
