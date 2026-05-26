@@ -4310,6 +4310,13 @@ window.resolverAutorizacion = async (id, dictamen, payloadStr = null) => {
                  const { data: pExist } = await supabaseClient.from('perfiles').select('id').eq('nombre', payload.nombre).eq('plantel_id', state.plantelId).maybeSingle();
                  if(pExist) await supabaseClient.from('perfiles').delete().eq('id', pExist.id).eq('plantel_id', state.plantelId);
             }
+            else if(payload.action === 'delete_alumno') {
+                 const { error: errAlu } = await supabaseClient.from('alumnos').delete().eq('id', payload.id_permitido);
+                 if(errAlu) throw errAlu;
+                 const { data: pExist } = await supabaseClient.from('perfiles').select('id').eq('nombre', payload.nombre).eq('plantel_id', state.plantelId).maybeSingle();
+                 if(pExist) await supabaseClient.from('perfiles').delete().eq('id', pExist.id).eq('plantel_id', state.plantelId);
+                 await supabaseClient.from('perfiles_permitidos').delete().eq('email', payload.email);
+            }
         }
 
         // Marcar la solicitud en SQL como concluida
@@ -10232,7 +10239,7 @@ window.loadListasAdminPersonal = async (searchTerm = '') => {
                     <td style="padding:12px; text-align:center;">
                         <button class="btn btn-outline btn-xs" 
                                 style="color:var(--danger); border-color:var(--danger);" 
-                                onclick="window.eliminarPersona('${p.id}', '${p.email}', '${p.nombre}')">
+                                onclick="window.eliminarPersona('${p.id}', '${p.email}', '${p.nombre}', '${p.rol}')">
                             <i class="fa-solid fa-trash-can"></i> Quitar Permiso
                         </button>
                     </td>
@@ -10247,7 +10254,7 @@ window.loadListasAdminPersonal = async (searchTerm = '') => {
     }
 };
 
-window.eliminarPersona = async (idPermitido, email, nombre) => {
+window.eliminarPersona = async (idPermitido, email, nombre, rol = '') => {
     const isDirectivo = state.role === 'directivo';
     const confirmMsg = isDirectivo 
         ? `⚠️ ¿Deseas ELIMINAR AHORA a "${nombre}" (${email})? Esta acción es inmediata.`
@@ -10258,20 +10265,31 @@ window.eliminarPersona = async (idPermitido, email, nombre) => {
     try {
         if (isDirectivo) {
             // Acción Directa para Directivos
-            const { error: errPerm } = await supabaseClient.from('perfiles_permitidos').delete().eq('id', idPermitido);
-            if(errPerm) throw errPerm;
-            const { data: pExist } = await supabaseClient.from('perfiles').select('id').eq('nombre', nombre).eq('plantel_id', state.plantelId).maybeSingle();
-            if(pExist) await supabaseClient.from('perfiles').delete().eq('id', pExist.id).eq('plantel_id', state.plantelId);
-            window.showToast("Personal eliminado y acceso revocado.", "success");
+            if (rol === 'alumno') {
+                const { error: errAlu } = await supabaseClient.from('alumnos').delete().eq('id', idPermitido);
+                if(errAlu) throw errAlu;
+                const { data: pExist } = await supabaseClient.from('perfiles').select('id').eq('nombre', nombre).eq('plantel_id', state.plantelId).maybeSingle();
+                if(pExist) await supabaseClient.from('perfiles').delete().eq('id', pExist.id).eq('plantel_id', state.plantelId);
+                await supabaseClient.from('perfiles_permitidos').delete().eq('email', email);
+                window.showToast("Alumno eliminado correctamente.", "success");
+            } else {
+                const { error: errPerm } = await supabaseClient.from('perfiles_permitidos').delete().eq('id', idPermitido);
+                if(errPerm) throw errPerm;
+                const { data: pExist } = await supabaseClient.from('perfiles').select('id').eq('nombre', nombre).eq('plantel_id', state.plantelId).maybeSingle();
+                if(pExist) await supabaseClient.from('perfiles').delete().eq('id', pExist.id).eq('plantel_id', state.plantelId);
+                window.showToast("Personal eliminado y acceso revocado.", "success");
+            }
         } else {
             // Solicitud para Admins
+            const actionType = (rol === 'alumno') ? 'delete_alumno' : 'delete_personal';
+            const reqType = (rol === 'alumno') ? 'BAJA DE ALUMNO' : 'BAJA DE PERSONAL';
             const { error: errReq } = await supabaseClient.from('autorizaciones_movimientos').insert([{
                 plantel_id: state.plantelId,
-                tipo_accion: 'BAJA DE PERSONAL',
+                tipo_accion: reqType,
                 detalles: `Eliminar acceso a: ${nombre} (${email})`,
                 estado: 'pendiente',
                 payload_json: {
-                    action: 'delete_personal',
+                    action: actionType,
                     id_permitido: idPermitido,
                     email: email,
                     nombre: nombre
