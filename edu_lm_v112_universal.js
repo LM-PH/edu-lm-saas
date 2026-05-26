@@ -1702,9 +1702,10 @@ function renderAdminComunicados() {
         <div class="form-group">
           <label class="form-label">Audiencia Destino a Notificar</label>
           <select id="selComAudiencia" class="form-select">
-            <option value="General">Toda la Comunidad Escolar (Maestros y Alumnos)</option>
-            <option value="Maestros">Solo Plantel de Maestros y Personal</option>
-            <option value="Alumnos">Solo Alumnos y Perfiles de Padres de Familia</option>
+            <option value="Maestros">Maestros</option>
+            <option value="Personal">Maestros, personal de apoyo y biblioteca</option>
+            <option value="Alumnos">Alumnos</option>
+            <option value="General">Toda la comunidad</option>
           </select>
         </div>
         <div class="form-group">
@@ -1750,7 +1751,7 @@ window.loadComunicadosAdmin = async (fechaFiltro = null) => {
             .limit(30);
 
         // Mostrar comunicados generales (todos los valores posibles de audiencia institucional)
-        query = query.in('audiencia', ['General', 'Todos', 'Maestros', 'Alumnos', 'Apoyo']);
+        query = query.in('audiencia', ['General', 'Todos', 'Maestros', 'Alumnos', 'Apoyo', 'Personal']);
 
         if(state.plantelId) {
             query = query.eq('plantel_id', state.plantelId);
@@ -3722,10 +3723,10 @@ function renderDirectivoComunicados() {
         <div class="form-group">
           <label class="form-label">Dirigido a</label>
           <select id="selComAudiencia" class="form-input">
-            <option value="Todos">Todos (Maestros, Apoyo y Alumnos)</option>
-            <option value="Maestros">Solo Maestros</option>
-            <option value="Apoyo">Solo Personal de Apoyo</option>
-            <option value="Alumnos">Solo Alumnos</option>
+            <option value="Maestros">Maestros</option>
+            <option value="Personal">Maestros, personal de apoyo y biblioteca</option>
+            <option value="Alumnos">Alumnos</option>
+            <option value="General">Toda la comunidad</option>
           </select>
         </div>
         <div class="form-group">
@@ -6053,11 +6054,13 @@ window.loadTimelinePersonal = async (selectedDate) => {
 
         // Añadir audiencias específicas según el rol
         if (userRole === 'maestro' || userRole === 'docente') {
-            audArr.push('Maestros');
-        } else if (userRole === 'apoyo') {
-            audArr.push('Apoyo', 'Maestros');
+            audArr.push('Maestros', 'Personal');
+        } else if (userRole === 'apoyo' || userRole === 'biblioteca') {
+            audArr.push('Personal');
+        } else if (userRole === 'alumno' || userRole === 'estudiante') {
+            audArr.push('Alumnos');
         } else if (userRole === 'directivo' || userRole === 'admin' || userRole === 'administrativo') {
-            audArr.push('Maestros', 'Apoyo', 'Alumnos');
+            audArr.push('Maestros', 'Personal', 'Alumnos');
         }
         
         if(uRes.data?.user) {
@@ -6116,7 +6119,7 @@ window.loadTimelinePersonal = async (selectedDate) => {
             if(c.audiencia.startsWith('Alumno_')) studentIds.push(c.audiencia.replace('Alumno_', ''));
         });
 
-        const nameMap = { 'General': 'Aviso General', 'Maestros': 'Solo Maestros', 'Apoyo': 'Personal de Apoyo' };
+        const nameMap = { 'General': 'Toda la comunidad', 'Todos': 'Toda la comunidad', 'Maestros': 'Maestros', 'Personal': 'Maestros, personal de apoyo y biblioteca', 'Alumnos': 'Alumnos', 'Apoyo': 'Personal de Apoyo' };
         if(groupIds.length > 0) {
             const { data: grs } = await supabaseClient.from('grupos').select('id, nombre').in('id', groupIds);
             if(grs) grs.forEach(g => nameMap['Grupo_' + g.id] = 'Grupo: ' + g.nombre);
