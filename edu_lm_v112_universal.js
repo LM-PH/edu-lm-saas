@@ -4672,9 +4672,12 @@ window.gestionarPlantelSaaS = (id, nombre) => {
     renderApp();
 };
 
-window.eliminarPersonaMaster = async (idPermitido, email, nombre) => {
+window.eliminarPersonaMaster = async (idPermitido, email, nombre, rol = '') => {
     if(!confirm(`⚠️ ¿Deseas ELIMINAR AHORA a "${nombre}" (${email}) del plantel?\nEsta acción revocará su acceso.`)) return;
     try {
+        if (rol === 'alumno') {
+            await supabaseClient.from('alumnos').delete().eq('contacto_email', email).eq('plantel_id', state.plantelId);
+        }
         const { error: errPerm } = await supabaseClient.from('perfiles_permitidos').delete().eq('id', idPermitido);
         if(errPerm) throw errPerm;
         const { data: pExist } = await supabaseClient.from('perfiles').select('id').eq('nombre', nombre).eq('plantel_id', state.plantelId).maybeSingle();
@@ -4716,7 +4719,7 @@ async function renderMasterGestionPerfiles() {
                         <div style="font-size:0.7rem; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.05em;">${u.rol}</div>
                     </div>
                     <div style="display:flex; gap:6px;">
-                        <button class="btn btn-outline btn-xs" style="padding:6px 10px; border-color:var(--danger); color:var(--danger);" onclick="window.eliminarPersonaMaster('${u.id}', '${u.email}', '${u.nombre}')" title="Eliminar Registro"><i class="fa-solid fa-trash"></i> Eliminar</button>
+                        <button class="btn btn-outline btn-xs" style="padding:6px 10px; border-color:var(--danger); color:var(--danger);" onclick="window.eliminarPersonaMaster('${u.id}', '${u.email}', '${u.nombre}', '${u.rol}')" title="Eliminar Registro"><i class="fa-solid fa-trash"></i> Eliminar</button>
                     </div>
                 </div>
                 <div style="font-size:0.85rem; background:#f8fafc; padding:10px; border-radius:8px; border:1px dashed #cbd5e1; margin-top:4px;">
