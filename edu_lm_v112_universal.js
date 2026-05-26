@@ -4542,7 +4542,11 @@ async function renderPage(path) {
         if(state.role === 'maestro') return renderMaestroAula();
         if(state.role === 'apoyo') return renderApoyoDashboard();
         if(state.role === 'biblioteca') return renderBibliotecaDashboard();
-        return renderLandingPage();
+        if(state.role === 'alumno') return renderAlumnoCredencial();
+        return `<div style="text-align:center; padding:50px;">
+                    <h2>Página no encontrada</h2>
+                    <button class="btn btn-primary" onclick="window.logout()">Cerrar sesión y volver</button>
+                </div>`;
     case '/master/saas': return (state.isMaster) ? await renderMasterSaaS() : '<h2>Acceso Denegado</h2>';
     case '/master/gestion-perfiles': return (state.isMaster) ? await renderMasterGestionPerfiles() : '<h2>Acceso Denegado</h2>';
     case '/admin/inscripcion': return renderAdminInscripcion();
