@@ -11261,5 +11261,5 @@ window.maestroGuardarReserva = async () => {
 };
 
 async function renderBibliotecaComunicados() {
-    return window.renderAdminComunicados(); // Reuse same component since it handles RLS
+    return window.renderPersonalComunicados('Biblioteca'); 
 }
