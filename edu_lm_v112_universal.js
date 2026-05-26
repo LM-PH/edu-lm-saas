@@ -802,6 +802,7 @@ function renderSidebar() {
     ],
     biblioteca: [
       { name: 'Préstamos y Control', path: '/biblioteca/dashboard', icon: 'fa-book-bookmark' },
+      { name: 'Historial de Préstamos', path: '/biblioteca/historial', icon: 'fa-calendar-days' },
       { name: 'Reservaciones de Aula', path: '/biblioteca/reservas', icon: 'fa-calendar-plus' },
       { name: 'Bitácora', path: '/biblioteca/bitacora', icon: 'fa-book-journal-whills' },
       { name: 'Avisos Oficiales', path: '/biblioteca/comunicados', icon: 'fa-bullhorn' }
@@ -4560,6 +4561,7 @@ async function renderPage(path) {
     case '/maestro/aula-medios': return renderMaestroAulaMedios();
     case '/biblioteca/dashboard': return renderBibliotecaDashboard();
     case '/biblioteca/prestamos': return renderBibliotecaPrestamos();
+    case '/biblioteca/historial': return renderBibliotecaHistorial();
     case '/biblioteca/reservas': return renderBibliotecaReservas();
     case '/biblioteca/comunicados': return renderBibliotecaComunicados();
     case '/biblioteca/bitacora': return renderBibliotecaBitacora();
@@ -11265,3 +11267,83 @@ window.maestroGuardarReserva = async () => {
 async function renderBibliotecaComunicados() {
     return window.renderPersonalComunicados('Biblioteca'); 
 }
+
+function renderBibliotecaHistorial() {
+  const today = new Date().toLocaleDateString('en-CA');
+  setTimeout(() => { if(window.loadHistorialBiblioteca) window.loadHistorialBiblioteca(today); }, 100);
+  return `
+    <div class="page-header">
+      <h2 class="page-title"><i class="fa-solid fa-calendar-days"></i> Historial de Préstamos</h2>
+      <p class="page-subtitle">Consulta qué materiales se prestaron y devolvieron en fechas anteriores.</p>
+    </div>
+    <div class="card" style="max-width:800px; margin:0 auto;">
+       <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px; border-bottom:1px solid var(--border); padding-bottom:16px; flex-wrap:wrap; gap:15px;">
+          <h3 style="margin:0;">Préstamos por Día</h3>
+          <div style="display:flex; gap:10px; align-items:center;">
+             <label style="font-size:0.8rem; font-weight:bold; color:var(--text-muted);">Selecciona una Fecha:</label>
+             <input type="date" class="form-input" id="fechaHistorialBib" value="${today}" onchange="window.loadHistorialBiblioteca(this.value)" style="margin:0;">
+          </div>
+       </div>
+       <div id="contenedorHistorialBib" style="display:flex; flex-direction:column; gap:12px;">
+          <div style="text-align:center; padding:20px; color:var(--text-muted);"><i class="fa-solid fa-spinner fa-spin"></i> Cargando historial...</div>
+       </div>
+    </div>
+  `;
+}
+
+window.loadHistorialBiblioteca = async (fecha) => {
+    const cont = document.getElementById('contenedorHistorialBib');
+    if(!cont) return;
+    try {
+        cont.innerHTML = '<div style="text-align:center; padding:20px; color:var(--text-muted);"><i class="fa-solid fa-spinner fa-spin"></i> Cargando...</div>';
+        const start = fecha + "T00:00:00.000Z";
+        const end = fecha + "T23:59:59.999Z";
+        
+        const { data, error } = await supabaseClient.from('biblioteca_prestamos')
+            .select('*, alumnos(nombre, grupos(nombre))')
+            .eq('plantel_id', state.plantelId)
+            .gte('fecha_prestamo', start)
+            .lte('fecha_prestamo', end)
+            .order('fecha_prestamo', { ascending: false });
+            
+        if(error) throw error;
+        
+        if(!data || data.length === 0) {
+            cont.innerHTML = '<div style="text-align:center; padding:30px; color:var(--text-muted);">No se registraron préstamos en esta fecha.</div>';
+            return;
+        }
+        
+        cont.innerHTML = data.map(p => {
+            let icon = '<i class="fa-solid fa-box" style="color:#f59e0b"></i>';
+            let bg = '#fef3c7';
+            if (p.tipo === 'libro') { icon = '<i class="fa-solid fa-book" style="color:#8b5cf6"></i>'; bg = '#f3e8ff'; }
+            else if (p.tipo === 'computadora') { icon = '<i class="fa-solid fa-laptop" style="color:#3b82f6"></i>'; bg = '#eff6ff'; }
+            else if (p.tipo === 'juego') { icon = '<i class="fa-solid fa-chess-knight" style="color:#10b981"></i>'; bg = '#d1fae5'; }
+            
+            const f = new Date(p.fecha_prestamo).toLocaleString([], {hour:'2-digit', minute:'2-digit'});
+            const estado = p.devuelto ? '<span style="color:var(--success); font-weight:bold;"><i class="fa-solid fa-check"></i> Devuelto</span>' : '<span style="color:var(--danger); font-weight:bold;"><i class="fa-solid fa-clock"></i> Pendiente</span>';
+            
+            return `
+               <div style="border:1px solid var(--border); border-radius:12px; padding:16px; display:flex; gap:16px; align-items:center; background:${p.devuelto ? 'white' : '#fff5f5'};">
+                  <div style="width:48px; height:48px; border-radius:12px; background:${bg}; display:flex; align-items:center; justify-content:center; font-size:1.5rem;">
+                     ${icon}
+                  </div>
+                  <div style="flex:1;">
+                     <div style="font-weight:700; font-size:1rem; color:var(--text-main); margin-bottom:4px;">${p.recurso}</div>
+                     <div style="font-size:0.85rem; color:var(--text-muted); margin-bottom:2px;"><i class="fa-regular fa-user"></i> ${p.alumnos?.nombre || 'Alumno'} (${p.alumnos?.grupos?.nombre || ''})</div>
+                     <div style="font-size:0.75rem; color:var(--text-muted);"><i class="fa-regular fa-clock"></i> Prestado: ${f}</div>
+                     ${p.condicion_entrega ? `<div style="margin-top:4px; font-size:0.75rem; color:var(--text-muted);">Condición inicial: ${p.condicion_entrega}</div>` : ''}
+                  </div>
+                  <div style="text-align:right;">
+                     <div style="margin-bottom:4px;">${estado}</div>
+                     ${p.fecha_devolucion ? `<div style="font-size:0.7rem; color:var(--text-muted);">Devolución: ${new Date(p.fecha_devolucion).toLocaleString([], {hour:'2-digit', minute:'2-digit'})}</div>` : ''}
+                     ${p.condicion_devolucion ? `<div style="margin-top:4px; font-size:0.7rem; background:#fffbeb; color:#d97706; padding:2px 6px; border-radius:4px; display:inline-block;"><i class="fa-solid fa-triangle-exclamation"></i> Detalle: ${p.condicion_devolucion}</div>` : ''}
+                  </div>
+               </div>
+            `;
+        }).join('');
+    } catch(e) {
+        console.error(e);
+        cont.innerHTML = '<div style="color:var(--danger); text-align:center;">Error al cargar historial.</div>';
+    }
+};
