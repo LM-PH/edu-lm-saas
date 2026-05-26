@@ -326,6 +326,13 @@ window.handleGoogleLogin = async () => {
 // TEMPLATES
 // ========================
 
+window.activarLoginMaster = () => {
+    state.schoolConfigured = true;
+    CONFIG.schoolName = 'Acceso Restringido SaaS';
+    state.isMasterMode = true;
+    renderApp();
+};
+
 function renderSetupScreen() {
     const currentStep = state.setupStep || 0;
 
@@ -347,7 +354,7 @@ function renderSetupScreen() {
             </div>
             
             <div style="margin-top:32px; padding:15px; border-top:1px dashed #e2e8f0; text-align:center;">
-               <div style="padding:12px; border: 1.5px solid #e2e8f0; border-radius:12px; background:#f8fafc; cursor:pointer;" onclick="state.schoolConfigured = true; renderApp();">
+               <div style="padding:12px; border: 1.5px solid #e2e8f0; border-radius:12px; background:#f8fafc; cursor:pointer;" onclick="window.activarLoginMaster()">
                   <div style="font-size:0.65rem; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.05em; margin-bottom:4px;">Desarrollado por:</div>
                   <div style="font-size:0.9rem; font-weight:800; color:var(--primary);">M.C Luis Miguel Ponce Herrera</div>
                </div>
@@ -645,7 +652,7 @@ function renderRoleSelector() {
           </button>
         </div>
 
-        <div style="text-align:center; padding:15px; border-top:1px dashed #e2e8f0; margin-top:10px;">
+        <div style="text-align:center; padding:15px; border-top:1px dashed #e2e8f0; margin-top:10px; ${state.isMasterMode ? 'display:none;' : ''}">
            <p style="font-size:0.85rem; color:var(--text-muted); margin-bottom:10px;">¿Eres un Director nuevo?</p>
            <button class="btn btn-sm btn-outline" style="border-radius:20px; color:var(--primary); border-color:var(--primary); font-weight:700; width:100%;" onclick="state.schoolConfigured = false; state.setupStep = 1; renderApp();">
              <i class="fa-solid fa-plus-circle"></i> Registrar mi Plantel aquí
