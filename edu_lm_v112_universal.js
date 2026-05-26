@@ -817,10 +817,19 @@ function renderSidebar() {
     if (item.type === 'divider') {
       return `<div style="padding:15px 20px 8px; font-size:0.65rem; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.12em; font-weight:800; border-top:1px solid rgba(0,0,0,0.05); margin-top:8px;">${item.text}</div>`;
     }
+    
+    let badgeHtml = '';
+    if (item.icon === 'fa-bullhorn' || item.icon === 'fa-bell') {
+        badgeHtml = `<span id="notif-badge-avisos" style="display:none; margin-left:auto; background:var(--danger); color:white; font-size:0.65rem; padding:2px 6px; border-radius:10px; font-weight:bold;"></span>`;
+    }
+
     return `
       <a class="nav-item ${state.path === item.path ? 'active' : ''}" onclick="window.navigate('${item.path}')">
-        <i class="fa-solid ${item.icon} w-5 text-center"></i>
-        <span>${item.name}</span>
+        <div style="display:flex; align-items:center; width:100%;">
+          <i class="fa-solid ${item.icon} w-5 text-center" style="margin-right:8px;"></i>
+          <span>${item.name}</span>
+          ${badgeHtml}
+        </div>
       </a>
     `;
   }).join('');
@@ -4803,6 +4812,7 @@ async function renderApp() {
       const pageContent = await renderPage(state.path);
       // generateHTML es la que pone el sidebar y el wrapper
       app.innerHTML = generateHTML(pageContent);
+      if(window.updateNotificationBadge) setTimeout(window.updateNotificationBadge, 500);
     }
     // Asegurar que los eventos se vuelvan a vincular
     attachDOMEvents();
@@ -4818,6 +4828,72 @@ async function renderApp() {
     `;
   }
 }
+
+window.updateNotificationBadge = async () => {
+    if(!state.user || !state.plantelId || !state.role) return;
+    try {
+        let audArr = ['Todos', 'General'];
+        const userRole = state.role || '';
+        let creadoEn = null;
+        let pId = state.user.id;
+
+        if (userRole === 'maestro' || userRole === 'docente') {
+            audArr.push('Maestros', 'Personal');
+            audArr.push('Maestro_' + state.user.id);
+            const { data: asig } = await supabaseClient.from('asignaciones_maestros').select('grupo_id, target_grado').eq('docente_email', state.user.email);
+            if(asig) {
+                for (const a of asig) {
+                    if(a.grupo_id) audArr.push('Grupo_' + a.grupo_id);
+                    else if(a.target_grado) {
+                        const { data: grps } = await supabaseClient.from('grupos').select('id').like('nombre', a.target_grado + '%');
+                        if(grps) grps.forEach(g => audArr.push('Grupo_' + g.id));
+                    }
+                }
+            }
+        } else if (userRole === 'apoyo' || userRole === 'biblioteca') {
+            audArr.push('Personal');
+        } else if (userRole === 'alumno' || userRole === 'estudiante') {
+            audArr.push('Alumnos');
+            const { data: al } = await supabaseClient.from('alumnos').select('id, creado_en, grupo_id').eq('contacto_email', state.user.email).maybeSingle();
+            if(al) {
+                audArr.push('Alumno_' + al.id);
+                if(al.grupo_id) audArr.push('Grupo_' + al.grupo_id);
+                creadoEn = al.creado_en;
+            }
+        } else if (userRole === 'directivo' || userRole === 'admin' || userRole === 'administrativo') {
+            audArr.push('Maestros', 'Personal', 'Alumnos');
+        }
+
+        let query = supabaseClient.from('comunicados').select('id').in('audiencia', audArr).eq('plantel_id', state.plantelId);
+        if(creadoEn) query = query.gte('fecha_envio', creadoEn);
+
+        const { data: coms, error } = await query;
+        if(error || !coms) return;
+
+        const comIds = coms.map(c => c.id);
+        const badgeEl = document.getElementById('notif-badge-avisos');
+        
+        if(comIds.length === 0) {
+            if(badgeEl) badgeEl.style.display = 'none';
+            return;
+        }
+
+        const { data: vistos } = await supabaseClient.from('comunicados_vistos').select('comunicado_id').eq('perfil_id', pId).in('comunicado_id', comIds);
+        const vistosCount = vistos ? vistos.length : 0;
+        const unread = comIds.length - vistosCount;
+        
+        if(badgeEl) {
+            if(unread > 0) {
+                badgeEl.innerText = unread > 99 ? '99+' : unread;
+                badgeEl.style.display = 'inline-block';
+            } else {
+                badgeEl.style.display = 'none';
+            }
+        }
+    } catch (e) {
+        console.error("Error updating badge", e);
+    }
+};
 
 window.loadMisGruposMaestro = async () => {
     const cont = document.getElementById('contenedorMisGrupos');
