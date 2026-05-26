@@ -4664,6 +4664,7 @@ window.gestionarPlantelSaaS = (id, nombre) => {
 
 window.eliminarPersonaMaster = async (idPermitido, email, nombre, rol = '') => {
     if(!confirm(`⚠️ ¿Deseas ELIMINAR AHORA a "${nombre}" (${email}) del plantel?\nEsta acción revocará su acceso.`)) return;
+    try {
         if (rol === 'alumno') {
             await supabaseClient.from('alumnos').delete().eq('contacto_email', email).eq('plantel_id', state.plantelId);
         } else {
