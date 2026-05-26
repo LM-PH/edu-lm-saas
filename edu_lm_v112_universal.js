@@ -10876,9 +10876,11 @@ async function renderBibliotecaPrestamos() {
 
             <div class="form-group">
                <label class="form-label">Tipo de Recurso</label>
-               <select id="bibTipo" class="form-select" onchange="document.getElementById('bibCondGrp').style.display = this.value==='computadora'?'block':'none'">
+               <select id="bibTipo" class="form-select">
                   <option value="libro">Libro / Material Lectura</option>
                   <option value="computadora">Computadora / Chromebook</option>
+                  <option value="juego">Juego de Mesa / Didáctico</option>
+                  <option value="otro">Otro Material / Equipo</option>
                </select>
             </div>
             
@@ -10887,9 +10889,9 @@ async function renderBibliotecaPrestamos() {
                <input type="text" id="bibRecurso" class="form-input" placeholder="Ej. El Principito / Chromebook #12">
             </div>
             
-            <div class="form-group" id="bibCondGrp" style="display:none;">
-               <label class="form-label">Condición al Entregar (Opcional)</label>
-               <input type="text" id="bibCondEntrega" class="form-input" placeholder="Ej. Pantalla rayada, falta cargador...">
+            <div class="form-group" id="bibCondGrp">
+               <label class="form-label">Condición o Detalles (Opcional)</label>
+               <input type="text" id="bibCondEntrega" class="form-input" placeholder="Ej. Pantalla rayada, faltan piezas, etc.">
             </div>
             
             <button class="btn btn-primary" onclick="window.guardarPrestamoBiblioteca()" style="width:100%;">
@@ -10958,8 +10960,11 @@ window.loadBibliotecaPrestamos = async () => {
         }
         
         container.innerHTML = data.map(p => {
-            const icon = p.tipo === 'libro' ? '<i class="fa-solid fa-book" style="color:#8b5cf6"></i>' : '<i class="fa-solid fa-laptop" style="color:#3b82f6"></i>';
-            const bg = p.tipo === 'libro' ? '#f3e8ff' : '#eff6ff';
+            let icon = '<i class="fa-solid fa-box" style="color:#f59e0b"></i>';
+            let bg = '#fef3c7';
+            if (p.tipo === 'libro') { icon = '<i class="fa-solid fa-book" style="color:#8b5cf6"></i>'; bg = '#f3e8ff'; }
+            else if (p.tipo === 'computadora') { icon = '<i class="fa-solid fa-laptop" style="color:#3b82f6"></i>'; bg = '#eff6ff'; }
+            else if (p.tipo === 'juego') { icon = '<i class="fa-solid fa-chess-knight" style="color:#10b981"></i>'; bg = '#d1fae5'; }
             const f = new Date(p.fecha_prestamo).toLocaleString([], {day:'2-digit', month:'short', hour:'2-digit', minute:'2-digit'});
             
             return `
