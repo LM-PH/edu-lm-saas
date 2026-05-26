@@ -4557,6 +4557,7 @@ async function renderPage(path) {
     case '/maestro/actividades': return renderMaestroActividades();
     case '/maestro/aula-medios': return renderMaestroAulaMedios();
     case '/biblioteca/dashboard': return renderBibliotecaDashboard();
+    case '/biblioteca/prestamos': return renderBibliotecaPrestamos();
     case '/biblioteca/reservas': return renderBibliotecaReservas();
     case '/biblioteca/comunicados': return renderBibliotecaComunicados();
     case '/maestro/listas': return renderMaestroListas();
