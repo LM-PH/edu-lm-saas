@@ -823,7 +823,7 @@ function renderSidebar() {
     `;
   }).join('');
 
-  const roleNames = { master: 'Creador del Sistema', admin: 'Admin', directivo: 'Directivo', maestro: 'Maestro', apoyo: 'Trabajo Social', alumno: 'Estudiante', admin: 'Admin', administrativo: 'Admin' };
+  const roleNames = { master: 'Creador del Sistema', admin: 'Admin', directivo: 'Directivo', maestro: 'Maestro', apoyo: 'Trabajo Social', alumno: 'Estudiante', administrativo: 'Admin', biblioteca: 'Biblioteca / Aula Medios' };
 
   const userName = (state.isMaster) ? 'M.C Luis Miguel Ponce Herrera' : (state.userName || state.user?.user_metadata?.nombre || state.user?.email || 'Usuario');
   const shortName = (state.isMaster) ? 'Luis Miguel' : userName.split(' ').slice(0, 2).join(' ');
