@@ -4305,6 +4305,7 @@ window.resolverAutorizacion = async (id, dictamen, payloadStr = null) => {
                  if(error) throw error;
             }
             else if(payload.action === 'delete_personal') {
+                 await supabaseClient.from('asignaciones_maestros').delete().eq('docente_email', payload.email).eq('plantel_id', state.plantelId);
                  const { error: errPerm } = await supabaseClient.from('perfiles_permitidos').delete().eq('id', payload.id_permitido);
                  if(errPerm) throw errPerm;
                  const { data: pExist } = await supabaseClient.from('perfiles').select('id').eq('nombre', payload.nombre).eq('plantel_id', state.plantelId).maybeSingle();
@@ -4674,9 +4675,10 @@ window.gestionarPlantelSaaS = (id, nombre) => {
 
 window.eliminarPersonaMaster = async (idPermitido, email, nombre, rol = '') => {
     if(!confirm(`⚠️ ¿Deseas ELIMINAR AHORA a "${nombre}" (${email}) del plantel?\nEsta acción revocará su acceso.`)) return;
-    try {
         if (rol === 'alumno') {
             await supabaseClient.from('alumnos').delete().eq('contacto_email', email).eq('plantel_id', state.plantelId);
+        } else {
+            await supabaseClient.from('asignaciones_maestros').delete().eq('docente_email', email).eq('plantel_id', state.plantelId);
         }
         const { error: errPerm } = await supabaseClient.from('perfiles_permitidos').delete().eq('id', idPermitido);
         if(errPerm) throw errPerm;
@@ -10276,6 +10278,7 @@ window.eliminarPersona = async (idPermitido, email, nombre, rol = '') => {
                 await supabaseClient.from('perfiles_permitidos').delete().eq('email', email);
                 window.showToast("Alumno eliminado correctamente.", "success");
             } else {
+                await supabaseClient.from('asignaciones_maestros').delete().eq('docente_email', email).eq('plantel_id', state.plantelId);
                 const { error: errPerm } = await supabaseClient.from('perfiles_permitidos').delete().eq('id', idPermitido);
                 if(errPerm) throw errPerm;
                 const { data: pExist } = await supabaseClient.from('perfiles').select('id').eq('nombre', nombre).eq('plantel_id', state.plantelId).maybeSingle();
