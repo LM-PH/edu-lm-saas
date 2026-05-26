@@ -803,6 +803,7 @@ function renderSidebar() {
     biblioteca: [
       { name: 'Préstamos y Control', path: '/biblioteca/dashboard', icon: 'fa-book-bookmark' },
       { name: 'Reservaciones de Aula', path: '/biblioteca/reservas', icon: 'fa-calendar-plus' },
+      { name: 'Bitácora', path: '/biblioteca/bitacora', icon: 'fa-book-journal-whills' },
       { name: 'Avisos Oficiales', path: '/biblioteca/comunicados', icon: 'fa-bullhorn' }
     ]
   };
@@ -4560,6 +4561,7 @@ async function renderPage(path) {
     case '/biblioteca/prestamos': return renderBibliotecaPrestamos();
     case '/biblioteca/reservas': return renderBibliotecaReservas();
     case '/biblioteca/comunicados': return renderBibliotecaComunicados();
+    case '/biblioteca/bitacora': return renderBibliotecaBitacora();
     case '/maestro/listas': return renderMaestroListas();
     case '/maestro/encuadre': return renderMaestroEncuadre();
     case '/maestro/calificaciones': return renderMaestroCalificaciones();
@@ -11017,6 +11019,45 @@ window.guardarPrestamoBiblioteca = async () => {
         window.showToast("Error al registrar préstamo.", "error");
     }
 };
+
+function renderBibliotecaBitacora() {
+  const tD = new Date().toLocaleDateString('en-CA');
+  setTimeout(() => { if(window.cargarBitacora) window.cargarBitacora(tD); }, 100);
+  return `
+    <div class="page-header">
+      <h2 class="page-title"><i class="fa-solid fa-book-journal-whills"></i> Bitácora de Biblioteca / Aula de Medios</h2>
+      <p class="page-subtitle">Registro de incidencias, recados o reportes acontecidos en tu área. Compartible con Directivo y Trabajo Social.</p>
+    </div>
+    
+    <div class="card" style="max-width: 800px;">
+       <div style="display:flex; justify-content:space-between; align-items:flex-end; border-bottom:1px solid var(--border); padding-bottom:16px; margin-bottom: 24px;">
+         <h3 style="margin:0;">Jornada Oficial</h3>
+         <div class="form-group" style="margin:0; min-width:200px">
+           <label class="form-label" style="font-size:0.8rem">Consultar Historial</label>
+           <input type="date" class="form-input" id="fechaBitacora" style="padding:6px; font-size:0.9rem" value="${tD}" onchange="window.cargarBitacora(this.value)">
+         </div>
+       </div>
+
+       <div style="display:flex; flex-direction:column; gap:12px; margin-bottom: 32px; padding-bottom:24px; border-bottom:1px solid var(--border)">
+          <div style="display:flex; gap:16px; flex-wrap:wrap">
+            <div class="form-group" style="flex:1; min-width:200px; margin:0;">
+               <label class="form-label">Firma de Registro (Tu Nombre)</label>
+               <input type="text" class="form-input" id="autorBitacora" placeholder="Escribe cómo quieres firmar...">
+            </div>
+            <div class="form-group" style="flex:2; min-width:300px; margin:0;">
+               <label class="form-label">Añadir Acontecimiento</label>
+               <textarea class="form-input" id="nuevaBitacoraTexto" rows="1" placeholder="Describe la situación ocurrida..."></textarea>
+            </div>
+            <button class="btn btn-primary" style="align-self: flex-end; height:42px" onclick="window.agregarBitacora()"><i class="fa-solid fa-pen-clip"></i> Sellar y Escribir</button>
+          </div>
+       </div>
+
+       <div id="bitacoraTimeline" style="position:relative; margin-left: 12px; border-left: 2px solid var(--border); padding-left:24px; display:flex; flex-direction:column; gap:24px;">
+          <div style="color:var(--text-muted); font-size:0.9rem"><i class="fa-solid fa-spinner fa-spin"></i> Cargando hechos de la jornada...</div>
+       </div>
+    </div>
+  `;
+}
 
 window.bibDevolverPrestamo = async (id) => {
     const cond = prompt("¿En qué condición se devuelve? (Opcional, deja vacío si está bien)");
