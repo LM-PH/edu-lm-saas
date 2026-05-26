@@ -4829,7 +4829,7 @@ async function renderApp() {
   }
 }
 
-window.updateNotificationBadge = async () => {
+window.updateNotificationBadge = async (clearAll = false) => {
     if(!state.user || !state.plantelId || !state.role) return;
     try {
         let audArr = ['Todos', 'General'];
@@ -4879,9 +4879,18 @@ window.updateNotificationBadge = async () => {
         }
 
         const { data: vistos } = await supabaseClient.from('comunicados_vistos').select('comunicado_id').eq('perfil_id', pId).in('comunicado_id', comIds);
-        const vistosCount = vistos ? vistos.length : 0;
-        const unread = comIds.length - vistosCount;
+        const vistosIds = vistos ? vistos.map(v => v.comunicado_id) : [];
+        const unread = comIds.length - vistosIds.length;
         
+        if (clearAll && unread > 0) {
+            const missingIds = comIds.filter(id => !vistosIds.includes(id));
+            const inserts = missingIds.map(id => ({ perfil_id: pId, comunicado_id: id }));
+            // Insertar para limpiar el badge
+            await supabaseClient.from('comunicados_vistos').upsert(inserts, { onConflict: 'perfil_id, comunicado_id', ignoreDuplicates: true });
+            if(badgeEl) badgeEl.style.display = 'none';
+            return;
+        }
+
         if(badgeEl) {
             if(unread > 0) {
                 badgeEl.innerText = unread > 99 ? '99+' : unread;
@@ -5730,6 +5739,8 @@ window.loadTimelineAlumno = async (mostrarHistorial = false) => {
            </div>
            `;
         }).join('');
+        
+        if (window.updateNotificationBadge) setTimeout(() => window.updateNotificationBadge(true), 1000);
     } catch(err) {
         console.error(err);
         cont.innerHTML = '<div style="color:var(--danger); padding:10px;text-align:center;">Error cargando avisos</div>';
@@ -6245,6 +6256,7 @@ window.loadTimelinePersonal = async (selectedDate) => {
            </div>
            `;
         }).join('');
+        if (window.updateNotificationBadge) setTimeout(() => window.updateNotificationBadge(true), 1000);
     } catch(err) {
         console.error(err);
         cont.innerHTML = '<div style="color:var(--danger); padding:40px;text-align:center;"><i class="fa-solid fa-circle-exclamation fa-2x"></i><p>Error de conexión al cargar la cronología.</p></div>';
