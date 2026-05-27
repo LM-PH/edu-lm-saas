@@ -2649,13 +2649,14 @@ const renderListaReciente = (data, cont) => {
         const fechaStr = dateObj.toLocaleDateString();
         const hour = dateObj.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' });
         const sevColor = r.gravedad === 'Grave' ? 'var(--danger)' : (r.gravedad === 'Moderado' ? 'var(--warning)' : 'var(--success)');
-        const autor = r.autor?.nombre || r.perfiles?.nombre || 'Personal';
+        const autorNombre = r.autor?.nombre || r.perfiles?.nombre || 'Personal';
+        const metaStr = r.autor_metadata ? ` <span style="font-weight:normal; color:var(--text-muted);">(${r.autor_metadata})</span>` : '';
 
         return `
         <div style="padding:15px; border:1px solid var(--border); border-radius:12px; background:white; display:flex; flex-direction:column; gap:8px;">
             <div style="display:flex; justify-content:space-between; align-items:center;">
                 <span style="font-size:0.75rem; color:var(--text-muted)">
-                    <i class="fa-solid fa-calendar-day"></i> ${fechaStr} ${hour} | <i class="fa-solid fa-user-tie"></i> <b>${autor}</b>
+                    <i class="fa-solid fa-calendar-day"></i> ${fechaStr} ${hour} | <i class="fa-solid fa-user-tie"></i> <b>${autorNombre}</b>${metaStr}
                 </span>
                 <span class="badge" style="background:${r.resuelto ? 'var(--success)' : sevColor}; color:white; font-size:0.65rem;">${r.resuelto ? 'ATENDIDO' : r.gravedad.toUpperCase()}</span>
             </div>
@@ -2766,6 +2767,24 @@ window.guardarReporteApoyo = async () => {
         if(!u.data.user) throw new Error("Sin sesión activa.");
 
         const finalDesc = `[${cat.toUpperCase()}] ${desc.trim()}`;
+        
+        let metaStr = null;
+        if(state.role === 'maestro' || state.role === 'docente') {
+            const { data: asig } = await supabaseClient.from('asignaciones_maestros').select('materia').eq('docente_email', state.user.email);
+            if(asig && asig.length > 0) {
+                const materias = [...new Set(asig.map(a => a.materia))].filter(Boolean).join(', ');
+                if(materias) metaStr = 'Maestro(a) de ' + materias;
+                else metaStr = 'Maestro(a)';
+            } else {
+                metaStr = 'Maestro(a)';
+            }
+        } else if (state.role === 'apoyo') {
+            metaStr = 'Personal de Apoyo';
+        } else if (state.role === 'directivo') {
+            metaStr = 'Directivo';
+        } else {
+            metaStr = state.role ? state.role.charAt(0).toUpperCase() + state.role.slice(1) : 'Personal';
+        }
 
         const { error } = await supabaseClient.from('reportes_conducta').insert([{
             id: crypto.randomUUID(),
@@ -2774,7 +2793,8 @@ window.guardarReporteApoyo = async () => {
             descripcion: finalDesc,
             gravedad: sev,
             resuelto: false,
-            plantel_id: state.plantelId
+            plantel_id: state.plantelId,
+            autor_metadata: metaStr
         }]);
 
         if(error) throw error;
