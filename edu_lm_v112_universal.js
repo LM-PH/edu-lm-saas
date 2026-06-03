@@ -787,6 +787,7 @@ function renderSidebar() {
       { name: 'Expediente Salud', path: '/apoyo/salud', icon: 'fa-notes-medical' },
       { name: 'Bitácora Diaria', path: '/apoyo/bitacora', icon: 'fa-book-journal-whills' },
       { name: 'Prefectura (Escáner)', path: '/apoyo/prefectura', icon: 'fa-qrcode' },
+      { name: 'Trabajo Social (Escáner)', path: '/apoyo/ts_escaner', icon: 'fa-qrcode' },
       { name: 'Avisos Oficiales', path: '/apoyo/comunicados', icon: 'fa-bullhorn' },
     ],
     directivo: [
@@ -3743,6 +3744,133 @@ window.actualizarUIPortal = () => {
     }
 };
 
+window._tsScannerMode = 'entrada'; // 'entrada' o 'salida'
+
+window.cambiarModoTS = (modo) => {
+    window._tsScannerMode = modo;
+    const txt = document.getElementById('txtEstadoPortalTS');
+    const desc = document.getElementById('descEstadoPortalTS');
+    const indicator = document.getElementById('statIndicatorTS');
+    const btnEntrada = document.getElementById('btnTSEntrada');
+    const btnSalida = document.getElementById('btnTSSalida');
+    
+    if(!txt) return;
+
+    if(modo === 'entrada') {
+        txt.innerText = "MODO ENTRADA";
+        txt.style.color = "var(--success)";
+        desc.innerText = "Registrando ingreso de alumnos.";
+        indicator.style.background = "var(--success)";
+        indicator.style.boxShadow = "0 0 10px var(--success)";
+        btnEntrada.classList.replace('btn-outline', 'btn-primary');
+        btnSalida.classList.replace('btn-primary', 'btn-outline');
+    } else {
+        txt.innerText = "MODO SALIDA";
+        txt.style.color = "var(--warning)";
+        desc.innerText = "Registrando salida y notificando a padres.";
+        indicator.style.background = "var(--warning)";
+        indicator.style.boxShadow = "0 0 10px var(--warning)";
+        btnEntrada.classList.replace('btn-primary', 'btn-outline');
+        btnSalida.classList.replace('btn-outline', 'btn-primary');
+    }
+};
+
+function renderApoyoTSEscaner() {
+  setTimeout(() => { 
+    if(window.loadResumenEntrada) window.loadResumenEntrada();
+    if(window.loadGruposControlAsistencia) window.loadGruposControlAsistencia();
+    window.cambiarModoTS('entrada');
+    if(window.startTSScanner) window.startTSScanner('metralleta');
+  }, 500);
+  return `
+    <div class="page-header" style="display:flex; justify-content:space-between; align-items:center;">
+      <div>
+         <h2 class="page-title">Trabajo Social | Control de Accesos</h2>
+         <p class="page-subtitle">Escáner Institucional: Entrada y Salida</p>
+      </div>
+      <button class="btn btn-outline" onclick="window.stopTSScanner().then(() => window.navigate('/apoyo/dashboard'))" style="border-radius:30px; background:white;">
+         <i class="fa-solid fa-house"></i> Volver al Inicio
+      </button>
+    </div>
+
+    <!-- Panel de Control de Estado TS -->
+    <div class="card" style="margin-bottom:24px; border-left: 6px solid var(--primary); background: #f8fafc;">
+        <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:15px;">
+            <div style="display:flex; align-items:center; gap:15px;">
+                <div id="statIndicatorTS" style="width:12px; height:12px; border-radius:50%; background:var(--success); box-shadow: 0 0 10px var(--success);"></div>
+                <div>
+                   <h4 style="margin:0; font-size:1.1rem;">Estado del Portal: <span id="txtEstadoPortalTS">MODO ENTRADA</span></h4>
+                   <p id="descEstadoPortalTS" style="margin:0; font-size:0.8rem; color:var(--text-muted)">Registrando ingreso de alumnos.</p>
+                </div>
+            </div>
+            <div style="display:flex; gap:10px;">
+                <button id="btnTSEntrada" class="btn btn-primary btn-sm" onclick="window.cambiarModoTS('entrada')">
+                   <i class="fa-solid fa-arrow-right-to-bracket"></i> Modo Entrada
+                </button>
+                <button id="btnTSSalida" class="btn btn-outline btn-sm" onclick="window.cambiarModoTS('salida')">
+                   <i class="fa-solid fa-person-walking-arrow-right"></i> Modo Salida
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <div class="card" style="text-align:center; padding: 40px; min-height: 440px; display:flex; flex-direction:column; justify-content:center; align-items:center; border-radius:30px; background: white; box-shadow: var(--shadow-xl);">
+        
+        <div id="ts-status-info" style="margin-bottom:20px;">
+            <h3 style="color:var(--primary); font-size:1.5rem; margin-bottom:5px;">Escáner de Trabajo Social Activo</h3>
+            <p style="color:var(--text-muted); font-size:0.9rem;">Apunte el código QR a la cámara para registrar el movimiento.</p>
+        </div>
+
+        <div id="reader-ts" style="width:100%; max-width:500px; height:350px; background:#1e293b; border-radius:24px; overflow:hidden; border: 4px solid var(--primary); box-shadow: 0 10px 25px rgba(0,0,0,0.2);"></div>
+        
+        <div id="ts-feedback" style="margin-top:20px; width:100%; max-width:500px; min-height:80px;"></div>
+        
+        <div style="display:flex; gap:12px; margin-top:20px;">
+            <button id="btn-stop-ts" class="btn btn-outline" onclick="window.stopTSScanner()" style="display:none; border-radius:30px; padding:10px 25px;">
+                <i class="fa-solid fa-power-off"></i> Pausar Cámara
+            </button>
+            <button id="btn-resume-ts" class="btn btn-primary" onclick="window.startTSScanner('metralleta')" style="display:none; border-radius:30px; padding:10px 25px;">
+                <i class="fa-solid fa-play"></i> Reanudar Cámara
+            </button>
+            <button class="btn btn-info" onclick="window.toggleCameraModeTS()" style="border-radius:30px; padding:10px 25px;">
+                <i class="fa-solid fa-camera-rotate"></i> Girar Cámara
+            </button>
+        </div>
+    </div>
+    
+    <!-- RESUMEN EN TIEMPO REAL -->
+    <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap:24px; margin-top:30px;">
+        <div class="card" style="border-radius:24px;">
+           <h3 style="margin-bottom:16px; color:var(--primary);"><i class="fa-solid fa-chart-pie"></i> Avance de Hoy</h3>
+           <div id="resumenEntradaCont" style="display:flex; flex-direction:column; gap:12px; max-height:400px; overflow-y:auto; padding-right:10px;">
+              <p style="text-align:center; padding:20px; opacity:0.5;">Cargando estadísticas...</p>
+           </div>
+        </div>
+
+        <div class="card" style="border-radius:24px;">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
+                <h3 style="margin:0;"><i class="fa-solid fa-clipboard-list"></i> Últimos Registros</h3>
+                <input type="date" id="fechaAsistenciaApoyoTS" class="form-control" style="width:auto; height:36px; padding:4px 10px; font-size:0.8rem;" onchange="window.loadAsistenciasApoyo()" value="\${new Date().toLocaleDateString('en-CA')}">
+            </div>
+            <div style="display:flex; gap:10px; margin-bottom:16px;">
+                <select class="form-select" id="selGrupoAsistenciaApoyoTS" onchange="window.loadAsistenciasApoyo()" style="flex:1;">
+                    <option value="">Selecciona Grupo...</option>
+                </select>
+                <button class="btn btn-primary btn-sm" onclick="window.loadAsistenciasApoyo()"><i class="fa-solid fa-rotate"></i></button>
+            </div>
+            <div style="max-height:500px; overflow-y:auto; border:1px solid var(--border); border-radius:12px;">
+                <table class="risk-table" style="width:100%">
+                    <thead><tr><th>Nombre</th><th style="text-align:center">Hora</th><th style="text-align:right">Modo</th></tr></thead>
+                    <tbody id="tablaAsistenciasApoyo">
+                        <tr><td colspan="3" style="text-align:center; padding:20px;">Sin selección</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+  \`;
+}
+
 function renderDirectivoComunicados() {
   setTimeout(() => {
     if(window.loadComunicadosAdmin) window.loadComunicadosAdmin();
@@ -4619,6 +4747,7 @@ async function renderPage(path) {
     case '/apoyo/salud': return renderApoyoSalud();
     case '/apoyo/bitacora': return renderApoyoBitacora();
     case '/apoyo/prefectura': return renderApoyoPrefectura();
+    case '/apoyo/ts_escaner': return renderApoyoTSEscaner();
     case '/apoyo/comunicados': return renderPersonalComunicados('Apoyo');
     case '/alumno/credencial': return renderAlumnoCredencial();
     case '/alumno/timeline': return renderAlumnoTimeline();
@@ -8482,6 +8611,158 @@ window.registrarAsistenciaEntrada = async (qrText) => {
         }
     } catch(e) { 
         console.error("Error registro entrada plantel:", e);
+    }
+};
+
+window.tsScanMode = 'metralleta';
+window._tsCurrentCamera = "environment";
+window.toggleCameraModeTS = () => {
+    window._tsCurrentCamera = window._tsCurrentCamera === "environment" ? "user" : "environment";
+    window.stopTSScanner().then(() => window.startTSScanner(window.tsScanMode));
+};
+
+window.stopTSScanner = async () => {
+    try {
+        if(window._tsScanner) {
+            await window._tsScanner.stop();
+            window._tsScanner.clear();
+        }
+        document.getElementById('btn-stop-ts').style.display = 'none';
+        document.getElementById('btn-resume-ts').style.display = 'inline-block';
+    } catch(e) { console.error("Error stop TS scanner", e); }
+};
+
+window.startTSScanner = async (mode = 'metralleta') => {
+    window.tsScanMode = mode;
+    const reader = document.getElementById('reader-ts');
+    if(!reader) return;
+
+    document.getElementById('btn-stop-ts').style.display = 'inline-block';
+    document.getElementById('btn-resume-ts').style.display = 'none';
+
+    try {
+        if(!window._tsScanner) {
+            window._tsScanner = new Html5Qrcode("reader-ts");
+        }
+        
+        await window._tsScanner.start(
+            { facingMode: window._tsCurrentCamera },
+            { fps: 10, qrbox: { width: 250, height: 250 } },
+            (decodedText, decodedResult) => {
+                if(window.tsScanMode === 'metralleta') {
+                    if(window._lastScanned !== decodedText) {
+                        window._lastScanned = decodedText;
+                        window.registrarAsistenciaTS(decodedText.trim());
+                        setTimeout(() => { window._lastScanned = null; }, 3000);
+                    }
+                } else {
+                    window.registrarAsistenciaTS(decodedText.trim());
+                    window.stopTSScanner();
+                }
+            },
+            (errorMessage) => { /* ignore */ }
+        );
+    } catch(e) { console.error(e); }
+};
+
+window.registrarAsistenciaTS = async (qrText) => {
+    try {
+        const modo = window._tsScannerMode || 'entrada';
+        const estadoRegistro = modo === 'entrada' ? 'Asistencia' : 'Salida';
+        
+        let { data: alu, error: searchErr } = await supabaseClient.from('alumnos')
+            .select('id, nombre')
+            .eq('matricula', qrText)
+            .eq('plantel_id', state.plantelId)
+            .maybeSingle();
+
+        if(!alu && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(qrText)) {
+            const { data: aluId } = await supabaseClient.from('alumnos')
+                .select('id, nombre')
+                .eq('id', qrText)
+                .eq('plantel_id', state.plantelId)
+                .maybeSingle();
+            alu = aluId;
+        }
+
+        if(!alu) {
+            const feedback = document.getElementById('ts-feedback');
+            if(feedback) {
+                feedback.innerHTML = `
+                    <div class="card shadow-md" style="background:var(--danger); color:white; padding:15px; border-radius:15px; display:flex; align-items:center; gap:15px; margin-bottom:10px;">
+                        <i class="fa-solid fa-triangle-exclamation" style="font-size:2rem;"></i>
+                        <div style="text-align:left;">
+                            <div style="font-size:0.7rem; opacity:0.8; font-weight:bold;">ERROR DE ESCANEO</div>
+                            <div style="font-size:1.1rem; font-weight:700;">QR NO RECONOCIDO</div>
+                            <div style="font-size:0.75rem;">El código "\${qrText}" no está registrado.</div>
+                        </div>
+                    </div>
+                `;
+                clearTimeout(window._tsFeedbackTimeout);
+                window._tsFeedbackTimeout = setTimeout(() => { feedback.innerHTML = ''; }, 5000);
+            }
+            window.showToast("QR no reconocido", "warning");
+            return;
+        }
+
+        const uRes = await supabaseClient.auth.getUser();
+        const fechaHoy = new Date().toLocaleDateString('en-CA');
+        const horaActual = new Date().toLocaleTimeString('en-GB');
+        
+        const { error } = await supabaseClient.from('accesos_plantel').insert([{
+            alumno_id: alu.id,
+            estado: estadoRegistro,
+            registrador_id: uRes.data.user?.id,
+            fecha: fechaHoy,
+            hora: horaActual,
+            plantel_id: state.plantelId
+        }]);
+
+        if(error) {
+            console.error(">>> ERROR REGISTRO QR:", error);
+            window.showToast("Error BD: " + error.message, "error");
+            return;
+        }
+
+        if(modo === 'salida') {
+            const { error: comErr } = await supabaseClient.from('comunicados').insert([{
+                autor_id: uRes.data.user?.id,
+                titulo: "Registro de Salida del Plantel",
+                mensaje: \`Estimado padre de familia/tutor: \\nTu hijo(a) \${alu.nombre} ha registrado su salida del plantel el día de hoy a las \${horaActual}.\`,
+                audiencia: \`Alumno_\${alu.id}\`,
+                plantel_id: state.plantelId
+            }]);
+            if(comErr) console.error("Error al notificar salida:", comErr);
+        }
+
+        const feedback = document.getElementById('ts-feedback');
+        if(feedback) {
+            const color = modo === 'entrada' ? 'var(--success)' : 'var(--warning)';
+            feedback.innerHTML = `
+                <div class="card shadow-md" style="background:\${color}; color:white; padding:15px; border-radius:15px; display:flex; align-items:center; gap:15px; margin-bottom:10px; animation: popIn 0.3s ease-out;">
+                    <i class="fa-solid fa-circle-check" style="font-size:2.5rem;"></i>
+                    <div style="text-align:left;">
+                        <div style="font-size:0.75rem; opacity:0.9; font-weight:bold; letter-spacing:1px; text-transform:uppercase;">
+                            \${modo === 'entrada' ? 'INGRESO AUTORIZADO' : 'SALIDA REGISTRADA'}
+                        </div>
+                        <div style="font-size:1.2rem; font-weight:800; line-height:1.2;">\${alu.nombre}</div>
+                        <div style="font-size:0.8rem; margin-top:3px; opacity:0.9;">\${horaActual}</div>
+                    </div>
+                </div>
+            `;
+            clearTimeout(window._tsFeedbackTimeout);
+            window._tsFeedbackTimeout = setTimeout(() => { feedback.innerHTML = ''; }, 3000);
+        }
+
+        const audio = new Audio('https://assets.mixkit.co/active_storage/sfx/766/766-preview.mp3');
+        audio.play().catch(()=>{});
+
+        if(state.path === '/apoyo/ts_escaner') {
+            window.loadResumenEntrada();
+            window.loadAsistenciasApoyo();
+        }
+    } catch(e) { 
+        console.error("Error registro acceso TS:", e);
     }
 };
 
