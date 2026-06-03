@@ -2757,7 +2757,7 @@ window.handleRiesgoGradoChange = () => {
         selGrupo.value = 'Todos';
     } else {
         container.style.display = 'block';
-        const filtrados = (window._riesgoGruposCacheados || []).filter(g => g.grado === grado);
+        const filtrados = (window._riesgoGruposCacheados || []).filter(g => g.nombre.startsWith(grado));
         let html = '<option value="Todos">Todos los grupos del grado</option>';
         filtrados.forEach(g => {
             html += `<option value="${g.id}">${g.nombre}</option>`;
