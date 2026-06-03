@@ -8638,8 +8638,8 @@ window.toggleCameraModeTS = () => {
 window.stopTSScanner = async () => {
     try {
         if(window._tsScanner) {
-            await window._tsScanner.stop();
-            window._tsScanner.clear();
+            await window._tsScanner.stop().catch(()=>{});
+            window._tsScanner = null;
         }
         document.getElementById('btn-stop-ts').style.display = 'none';
         document.getElementById('btn-resume-ts').style.display = 'inline-block';
@@ -8655,9 +8655,12 @@ window.startTSScanner = async (mode = 'metralleta') => {
     document.getElementById('btn-resume-ts').style.display = 'none';
 
     try {
-        if(!window._tsScanner) {
-            window._tsScanner = new Html5Qrcode("reader-ts");
+        if(window._tsScanner) {
+            await window._tsScanner.stop().catch(()=>{});
+            window._tsScanner = null;
         }
+        
+        window._tsScanner = new Html5Qrcode("reader-ts");
         
         await window._tsScanner.start(
             { facingMode: window._tsCurrentCamera },
