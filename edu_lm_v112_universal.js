@@ -1439,15 +1439,56 @@ function renderAdminGrupos() {
 // ADMIN PAGES - EXTENDED (CALIFICACIONES Y TRAMITES)
 // ========================
 
+window.switchAdminCalificacionesTab = (tab) => {
+    document.getElementById('btn-tab-concentrado').classList.remove('btn-primary');
+    document.getElementById('btn-tab-concentrado').classList.add('btn-outline');
+    document.getElementById('btn-tab-estadisticas').classList.remove('btn-primary');
+    document.getElementById('btn-tab-estadisticas').classList.add('btn-outline');
+
+    if(tab === 'concentrado') {
+        document.getElementById('btn-tab-concentrado').classList.add('btn-primary');
+        document.getElementById('btn-tab-concentrado').classList.remove('btn-outline');
+        document.getElementById('view-concentrado').style.display = 'flex';
+        document.getElementById('view-estadisticas').style.display = 'none';
+    } else {
+        document.getElementById('btn-tab-estadisticas').classList.add('btn-primary');
+        document.getElementById('btn-tab-estadisticas').classList.remove('btn-outline');
+        document.getElementById('view-concentrado').style.display = 'none';
+        document.getElementById('view-estadisticas').style.display = 'flex';
+        if(window.loadAdminEstadisticasFiltros) window.loadAdminEstadisticasFiltros();
+    }
+};
+
+window.handleAlcanceEstadisticaChange = () => {
+    const alcance = document.getElementById('adminAlcanceEstadisticaSel').value;
+    const gradoContainer = document.getElementById('adminGradoEstadisticaContainer');
+    const grupoContainer = document.getElementById('adminGrupoEstadisticaContainer');
+    gradoContainer.style.display = 'none';
+    grupoContainer.style.display = 'none';
+    
+    if(alcance === 'grado') {
+        gradoContainer.style.display = 'block';
+    } else if(alcance === 'grupo') {
+        grupoContainer.style.display = 'block';
+    }
+};
+
 function renderAdminCalificaciones() {
   setTimeout(() => { if (window.loadAdminCalificacionesFiltros) window.loadAdminCalificacionesFiltros(); }, 100);
   return `
-    <div class="page-header">
-      <h2 class="page-title">Monitor Curricular y Boletas</h2>
-      <p class="page-subtitle">Revisión de avance de subida de calificaciones oficiales, y despliegue del concentrado por grupo que los maestros ya enviaron.</p>
+    <div class="page-header" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:15px;">
+      <div>
+          <h2 class="page-title">Monitor Curricular y Boletas</h2>
+          <p class="page-subtitle">Revisión de avance de subida de calificaciones oficiales, y estadística académica.</p>
+      </div>
+      <div style="display:flex; gap:10px;">
+          <button id="btn-tab-concentrado" class="btn btn-primary" onclick="window.switchAdminCalificacionesTab('concentrado')"><i class="fa-solid fa-list-check"></i> Concentrado por Grupo</button>
+          <button id="btn-tab-estadisticas" class="btn btn-outline" onclick="window.switchAdminCalificacionesTab('estadisticas')" style="background:white;"><i class="fa-solid fa-chart-pie"></i> Estadística de Aprobación</button>
+      </div>
     </div>
 
-    <div style="display:flex; gap:24px; flex-wrap:wrap;">
+    <!-- VISTA 1: CONCENTRADO POR GRUPO -->
+    <div id="view-concentrado" style="display:flex; gap:24px; flex-wrap:wrap;">
       <div class="card" style="flex:1; min-width:320px; align-self: flex-start;">
          <h3 style="margin-bottom:12px">Filtros de Búsqueda</h3>
          <p style="font-size:0.85rem; color:var(--text-muted); margin-bottom:16px;">Selecciona un trimestre y el grupo para cargar las sábanas de calificaciones recopiladas.</p>
@@ -1474,7 +1515,7 @@ function renderAdminCalificaciones() {
          </div>
       </div>
       
-      <!-- Nuevo Bloque: Revisión Detallada por Grupo -->
+      <!-- Bloque: Revisión Detallada por Grupo -->
       <div class="card" style="flex:3; min-width:400px; width: 100%;">
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; flex-wrap:wrap; gap:16px;">
           <h3 style="margin:0;">Concentrado de Calificaciones Consolidadas</h3>
@@ -1491,6 +1532,67 @@ function renderAdminCalificaciones() {
            <button class="btn btn-success" style="border-color:var(--success); color:white;" onclick="window.exportarSabanaCalificaciones()">
               <i class="fa-solid fa-file-excel"></i> Descargar Sábana (CSV/Excel)
            </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- VISTA 2: ESTADISTICAS DE APROBACIÓN -->
+    <div id="view-estadisticas" style="display:none; gap:24px; flex-wrap:wrap;">
+      <div class="card" style="flex:1; min-width:320px; align-self: flex-start;">
+         <h3 style="margin-bottom:12px">Filtros Estadísticos</h3>
+         <p style="font-size:0.85rem; color:var(--text-muted); margin-bottom:16px;">Configura los filtros para visualizar la estadística de aprobación y reprobación.</p>
+         
+         <div class="form-group">
+            <label class="form-label">Trimestre</label>
+            <select class="form-select" id="adminTrimestreEstadisticaSel">
+                <option value="Todos">Todos los Trimestres</option>
+                <option value="1">Trimestre 1</option>
+                <option value="2">Trimestre 2</option>
+                <option value="3">Trimestre 3</option>
+            </select>
+         </div>
+         
+         <div class="form-group">
+            <label class="form-label">Alcance</label>
+            <select class="form-select" id="adminAlcanceEstadisticaSel" onchange="window.handleAlcanceEstadisticaChange()">
+                <option value="escuela">Toda la Escuela</option>
+                <option value="grado">Por Grado</option>
+                <option value="grupo">Por Grupo</option>
+            </select>
+         </div>
+
+         <div class="form-group" id="adminGradoEstadisticaContainer" style="display:none;">
+            <label class="form-label">Grado</label>
+            <select class="form-select" id="adminGradoEstadisticaSel">
+                <option value="1°">1° Grado</option>
+                <option value="2°">2° Grado</option>
+                <option value="3°">3° Grado</option>
+            </select>
+         </div>
+
+         <div class="form-group" id="adminGrupoEstadisticaContainer" style="display:none;">
+            <label class="form-label">Grupo</label>
+            <select class="form-select" id="adminGrupoEstadisticaSel">
+               <option value="">Cargando grupos...</option>
+            </select>
+         </div>
+
+         <button class="btn btn-primary" style="width:100%; margin-top:10px;" onclick="window.generarEstadisticaAprobacion()">
+            <i class="fa-solid fa-chart-bar"></i> Generar Estadística
+         </button>
+      </div>
+
+      <div class="card" style="flex:3; min-width:400px; width: 100%;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+          <h3 style="margin:0;">Dashboard Académico</h3>
+          <button class="btn btn-success btn-sm" onclick="window.descargarEstadisticaCSV()" id="btnDownloadEstadisticaCSV" style="display:none;">
+             <i class="fa-solid fa-file-csv"></i> Exportar CSV
+          </button>
+        </div>
+        
+        <div id="estadisticasDashboardContent" style="min-height:300px; display:flex; flex-direction:column; justify-content:center; align-items:center; text-align:center;">
+           <i class="fa-solid fa-chart-line" style="font-size:3rem; color:var(--border); margin-bottom:15px;"></i>
+           <p style="color:var(--text-muted);">Selecciona los filtros y haz clic en "Generar Estadística" para visualizar los datos.</p>
         </div>
       </div>
     </div>
@@ -9665,6 +9767,173 @@ window.cargarSabanaGrupo = async () => {
         console.error(err);
         hold.innerHTML = '<div style="color:var(--danger); font-size:0.9rem;">Ocurrió un error inesperado al armar la sábana.</div>';
     }
+};
+
+window.loadAdminEstadisticasFiltros = async () => {
+    try {
+        const { data: grupos } = await supabaseClient.from('grupos')
+            .select('*')
+            .eq('plantel_id', state.plantelId)
+            .order('nombre');
+        
+        const selGrupo = document.getElementById('adminGrupoEstadisticaSel');
+        if(selGrupo && grupos) {
+            selGrupo.innerHTML = grupos.map(g => `<option value="${g.id}">${g.nombre}</option>`).join('');
+        }
+    } catch(e) { console.error("Error al cargar grupos", e); }
+};
+
+window.generarEstadisticaAprobacion = async () => {
+    const hold = document.getElementById('estadisticasDashboardContent');
+    const btnDownload = document.getElementById('btnDownloadEstadisticaCSV');
+    const trim = document.getElementById('adminTrimestreEstadisticaSel').value;
+    const alcance = document.getElementById('adminAlcanceEstadisticaSel').value;
+    const grado = document.getElementById('adminGradoEstadisticaSel').value;
+    const grupoId = document.getElementById('adminGrupoEstadisticaSel').value;
+    
+    hold.innerHTML = '<p style="text-align:center; padding:20px;">Calculando estadísticas, por favor espere...</p>';
+    btnDownload.style.display = 'none';
+
+    try {
+        let query = supabaseClient.from('calificaciones')
+            .select('calificacion, materia_nombre, alumnos!inner(grado, grupo_id)')
+            .eq('plantel_id', state.plantelId);
+
+        if(trim !== 'Todos') {
+            query = query.eq('trimestre', parseInt(trim));
+        }
+
+        if(alcance === 'grado') {
+            query = query.eq('alumnos.grado', grado);
+        } else if(alcance === 'grupo') {
+            query = query.eq('alumnos.grupo_id', grupoId);
+        }
+
+        const { data, error } = await query;
+
+        if(error) throw error;
+
+        if(!data || data.length === 0) {
+            hold.innerHTML = '<p style="text-align:center; padding:20px; color:var(--text-muted);">No se encontraron calificaciones para los filtros seleccionados.</p>';
+            return;
+        }
+
+        let totalAprobados = 0;
+        let totalReprobados = 0;
+        const statsMateria = {};
+
+        data.forEach(row => {
+            const calif = parseFloat(row.calificacion);
+            const mat = row.materia_nombre || 'Sin Asignatura';
+            
+            if(!statsMateria[mat]) statsMateria[mat] = { total: 0, aprobados: 0, reprobados: 0 };
+            
+            statsMateria[mat].total++;
+            if(calif >= 6) {
+                totalAprobados++;
+                statsMateria[mat].aprobados++;
+            } else {
+                totalReprobados++;
+                statsMateria[mat].reprobados++;
+            }
+        });
+
+        const totalEvaluaciones = totalAprobados + totalReprobados;
+        const pctReprobacionGeneral = totalEvaluaciones > 0 ? ((totalReprobados / totalEvaluaciones) * 100).toFixed(1) : 0;
+        const pctAprobacionGeneral = totalEvaluaciones > 0 ? ((totalAprobados / totalEvaluaciones) * 100).toFixed(1) : 0;
+
+        const materiasSorted = Object.keys(statsMateria).sort();
+
+        let tableRows = '';
+        materiasSorted.forEach(m => {
+            const s = statsMateria[m];
+            const pRep = s.total > 0 ? ((s.reprobados / s.total) * 100).toFixed(1) : 0;
+            const pApr = s.total > 0 ? ((s.aprobados / s.total) * 100).toFixed(1) : 0;
+            
+            tableRows += `
+                <tr>
+                    <td style="text-align:left; font-weight:bold;">${m}</td>
+                    <td>${s.total}</td>
+                    <td style="color:var(--success); font-weight:bold;">${s.aprobados} <span style="font-size:0.7rem; font-weight:normal; color:#166534;">(${pApr}%)</span></td>
+                    <td style="color:var(--danger); font-weight:bold;">${s.reprobados} <span style="font-size:0.7rem; font-weight:normal; color:#991b1b;">(${pRep}%)</span></td>
+                </tr>
+            `;
+        });
+
+        hold.innerHTML = `
+            <div style="display:flex; justify-content:space-around; width:100%; margin-bottom:20px; flex-wrap:wrap; gap:15px;">
+                <div style="text-align:center; background:#f8fafc; padding:15px; border-radius:12px; border:1px solid #e2e8f0; flex:1; min-width:150px;">
+                    <div style="font-size:2rem; font-weight:800; color:#0f172a;">${totalEvaluaciones}</div>
+                    <div style="font-size:0.8rem; color:#64748b; font-weight:600; text-transform:uppercase;">Evaluaciones</div>
+                </div>
+                <div style="text-align:center; background:#f0fdf4; padding:15px; border-radius:12px; border:1px solid #bbf7d0; flex:1; min-width:150px;">
+                    <div style="font-size:2rem; font-weight:800; color:#166534;">${pctAprobacionGeneral}%</div>
+                    <div style="font-size:0.8rem; color:#15803d; font-weight:600; text-transform:uppercase;">Aprobación Total</div>
+                    <div style="font-size:0.7rem; color:#166534; margin-top:5px;">${totalAprobados} de ${totalEvaluaciones}</div>
+                </div>
+                <div style="text-align:center; background:#fef2f2; padding:15px; border-radius:12px; border:1px solid #fecaca; flex:1; min-width:150px;">
+                    <div style="font-size:2rem; font-weight:800; color:#991b1b;">${pctReprobacionGeneral}%</div>
+                    <div style="font-size:0.8rem; color:#b91c1c; font-weight:600; text-transform:uppercase;">Reprobación Total</div>
+                    <div style="font-size:0.7rem; color:#991b1b; margin-top:5px;">${totalReprobados} de ${totalEvaluaciones}</div>
+                </div>
+            </div>
+
+            <div style="width:100%; overflow-x:auto;">
+                <table class="risk-table" style="width:100%; min-width:600px;" id="tablaEstadisticasAprobacion">
+                    <thead>
+                        <tr>
+                            <th style="text-align:left;">Asignatura</th>
+                            <th>Total Eval.</th>
+                            <th>Aprobados (>=6)</th>
+                            <th>Reprobados (<6)</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${tableRows}
+                    </tbody>
+                </table>
+            </div>
+        `;
+        
+        btnDownload.style.display = 'inline-flex';
+    } catch(err) {
+        console.error(err);
+        hold.innerHTML = '<p style="text-align:center; color:var(--danger);">Error al calcular estadísticas. Intente de nuevo.</p>';
+    }
+};
+
+window.descargarEstadisticaCSV = () => {
+    const table = document.getElementById('tablaEstadisticasAprobacion');
+    if(!table) return;
+
+    try {
+        const rows = Array.from(table.querySelectorAll('tr'));
+        let csvContent = "\\uFEFF"; 
+        
+        rows.forEach(row => {
+            const cols = Array.from(row.querySelectorAll('th, td'));
+            const rowData = cols.map(col => {
+                let text = col.innerText.replace(/\\n/g, ' ').replace(/"/g, '""');
+                return \`"\${text}"\`;
+            }).join(',');
+            csvContent += rowData + "\\n";
+        });
+
+        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        
+        const alcance = document.getElementById('adminAlcanceEstadisticaSel').value;
+        const nombreArchivo = \`Estadisticas_Aprobacion_\${alcance}.csv\`;
+        
+        link.setAttribute("href", url);
+        link.setAttribute("download", nombreArchivo);
+        link.style.visibility = 'hidden';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        
+    } catch(e) { console.error("Error desc CSV", e); }
 };
 
 window.exportarSabanaCalificaciones = () => {
