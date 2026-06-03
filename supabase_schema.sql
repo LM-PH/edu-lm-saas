@@ -228,10 +228,10 @@ CREATE POLICY "Lectura general de comunicados" ON public.comunicados
     FOR SELECT
     USING (true);
 
-CREATE POLICY "Solo admins crean comunicados" ON public.comunicados
+CREATE POLICY "Permitir creacion de comunicados" ON public.comunicados
     FOR INSERT
     WITH CHECK (
-        (SELECT rol FROM perfiles WHERE perfiles.id = auth.uid()) = 'admin'
+        (SELECT rol FROM perfiles WHERE perfiles.id = auth.uid()) IN ('admin', 'directivo', 'apoyo')
     );
 
 -- Bucket para adjuntos de comunicados
