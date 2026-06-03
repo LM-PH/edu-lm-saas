@@ -9908,15 +9908,15 @@ window.descargarEstadisticaCSV = () => {
 
     try {
         const rows = Array.from(table.querySelectorAll('tr'));
-        let csvContent = "\\uFEFF"; 
+        let csvContent = "\uFEFF"; 
         
         rows.forEach(row => {
             const cols = Array.from(row.querySelectorAll('th, td'));
             const rowData = cols.map(col => {
-                let text = col.innerText.replace(/\\n/g, ' ').replace(/"/g, '""');
-                return \`"\${text}"\`;
+                let text = col.innerText.replace(/\n/g, ' ').replace(/"/g, '""');
+                return `"${text}"`;
             }).join(',');
-            csvContent += rowData + "\\n";
+            csvContent += rowData + "\n";
         });
 
         const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
@@ -9924,7 +9924,7 @@ window.descargarEstadisticaCSV = () => {
         const link = document.createElement("a");
         
         const alcance = document.getElementById('adminAlcanceEstadisticaSel').value;
-        const nombreArchivo = \`Estadisticas_Aprobacion_\${alcance}.csv\`;
+        const nombreArchivo = `Estadisticas_Aprobacion_${alcance}.csv`;
         
         link.setAttribute("href", url);
         link.setAttribute("download", nombreArchivo);
