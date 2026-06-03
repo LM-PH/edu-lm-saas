@@ -3515,13 +3515,16 @@ window.initPortalAsistenciaEstado = () => {
 };
 
 window.loadGruposControlAsistencia = async () => {
-    const sel = document.getElementById('selGrupoAsistenciaApoyo');
-    if(!sel) return;
+    const sel1 = document.getElementById('selGrupoAsistenciaApoyo');
+    const sel2 = document.getElementById('selGrupoAsistenciaApoyoTS');
+    if(!sel1 && !sel2) return;
     try {
         const { data: grupos } = await supabaseClient.from('grupos').select('*').eq('plantel_id', state.plantelId).order('nombre');
         if(grupos) {
-            sel.innerHTML = '<option value="">Todos los Grupos</option>' + 
+            const options = '<option value="">Todos los Grupos</option>' + 
                 grupos.map(g => `<option value="${g.id}">${g.nombre}</option>`).join('');
+            if(sel1) sel1.innerHTML = options;
+            if(sel2) sel2.innerHTML = options;
         }
     } catch(e) { console.error(e); }
 };
