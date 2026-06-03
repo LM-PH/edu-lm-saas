@@ -3850,7 +3850,7 @@ function renderApoyoTSEscaner() {
         <div class="card" style="border-radius:24px;">
             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
                 <h3 style="margin:0;"><i class="fa-solid fa-clipboard-list"></i> Últimos Registros</h3>
-                <input type="date" id="fechaAsistenciaApoyoTS" class="form-control" style="width:auto; height:36px; padding:4px 10px; font-size:0.8rem;" onchange="window.loadAsistenciasApoyo()" value="\${new Date().toLocaleDateString('en-CA')}">
+                <input type="date" id="fechaAsistenciaApoyoTS" class="form-control" style="width:auto; height:36px; padding:4px 10px; font-size:0.8rem;" onchange="window.loadAsistenciasApoyo()" value="${new Date().toLocaleDateString('en-CA')}">
             </div>
             <div style="display:flex; gap:10px; margin-bottom:16px;">
                 <select class="form-select" id="selGrupoAsistenciaApoyoTS" onchange="window.loadAsistenciasApoyo()" style="flex:1;">
@@ -3868,7 +3868,7 @@ function renderApoyoTSEscaner() {
             </div>
         </div>
     </div>
-  \`;
+  `;
 }
 
 function renderDirectivoComunicados() {
@@ -8694,7 +8694,7 @@ window.registrarAsistenciaTS = async (qrText) => {
                         <div style="text-align:left;">
                             <div style="font-size:0.7rem; opacity:0.8; font-weight:bold;">ERROR DE ESCANEO</div>
                             <div style="font-size:1.1rem; font-weight:700;">QR NO RECONOCIDO</div>
-                            <div style="font-size:0.75rem;">El código "\${qrText}" no está registrado.</div>
+                            <div style="font-size:0.75rem;">El código "${qrText}" no está registrado.</div>
                         </div>
                     </div>
                 `;
@@ -8728,8 +8728,8 @@ window.registrarAsistenciaTS = async (qrText) => {
             const { error: comErr } = await supabaseClient.from('comunicados').insert([{
                 autor_id: uRes.data.user?.id,
                 titulo: "Registro de Salida del Plantel",
-                mensaje: \`Estimado padre de familia/tutor: \\nTu hijo(a) \${alu.nombre} ha registrado su salida del plantel el día de hoy a las \${horaActual}.\`,
-                audiencia: \`Alumno_\${alu.id}\`,
+                mensaje: `Estimado padre de familia/tutor: \nTu hijo(a) ${alu.nombre} ha registrado su salida del plantel el día de hoy a las ${horaActual}.`,
+                audiencia: `Alumno_${alu.id}`,
                 plantel_id: state.plantelId
             }]);
             if(comErr) console.error("Error al notificar salida:", comErr);
@@ -8739,14 +8739,14 @@ window.registrarAsistenciaTS = async (qrText) => {
         if(feedback) {
             const color = modo === 'entrada' ? 'var(--success)' : 'var(--warning)';
             feedback.innerHTML = `
-                <div class="card shadow-md" style="background:\${color}; color:white; padding:15px; border-radius:15px; display:flex; align-items:center; gap:15px; margin-bottom:10px; animation: popIn 0.3s ease-out;">
+                <div class="card shadow-md" style="background:${color}; color:white; padding:15px; border-radius:15px; display:flex; align-items:center; gap:15px; margin-bottom:10px; animation: popIn 0.3s ease-out;">
                     <i class="fa-solid fa-circle-check" style="font-size:2.5rem;"></i>
                     <div style="text-align:left;">
                         <div style="font-size:0.75rem; opacity:0.9; font-weight:bold; letter-spacing:1px; text-transform:uppercase;">
-                            \${modo === 'entrada' ? 'INGRESO AUTORIZADO' : 'SALIDA REGISTRADA'}
+                            ${modo === 'entrada' ? 'INGRESO AUTORIZADO' : 'SALIDA REGISTRADA'}
                         </div>
-                        <div style="font-size:1.2rem; font-weight:800; line-height:1.2;">\${alu.nombre}</div>
-                        <div style="font-size:0.8rem; margin-top:3px; opacity:0.9;">\${horaActual}</div>
+                        <div style="font-size:1.2rem; font-weight:800; line-height:1.2;">${alu.nombre}</div>
+                        <div style="font-size:0.8rem; margin-top:3px; opacity:0.9;">${horaActual}</div>
                     </div>
                 </div>
             `;
