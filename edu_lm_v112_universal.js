@@ -3528,8 +3528,9 @@ window.imprimirExpediente = async (idAlumno) => {
                     <style>
                         body { font-family: 'Segoe UI', Arial, sans-serif; padding: 40px; color: #333; line-height: 1.5; }
                         .header { text-align: center; margin-bottom: 30px; border-bottom: 2px solid #1e40af; padding-bottom: 15px; }
-                        .header h1 { margin: 0; color: #1e40af; font-size: 24px; text-transform: uppercase; }
-                        .header p { margin: 5px 0; font-size: 14px; color: #555; }
+                        .header h2 { font-size: 28px; margin: 0 0 5px 0; color: #000; text-transform: uppercase; }
+                        .header h1 { margin: 0; color: #1e40af; font-size: 20px; text-transform: uppercase; }
+                        .header p { margin: 5px 0; font-size: 14px; color: #555; font-weight: bold; }
                         .student-info { background: #f8fafc; border: 1px solid #e2e8f0; padding: 20px; border-radius: 8px; margin-bottom: 30px; display: grid; grid-template-columns: 1fr 1fr; gap: 15px; font-size: 14px; }
                         .section-title { font-size: 18px; color: #1e40af; border-bottom: 2px solid #cbd5e1; padding-bottom: 5px; margin-top: 30px; margin-bottom: 15px; text-transform: uppercase; }
                         .item-box { border: 1px solid #cbd5e1; padding: 12px; border-radius: 6px; margin-bottom: 12px; page-break-inside: avoid; }
@@ -3550,6 +3551,7 @@ window.imprimirExpediente = async (idAlumno) => {
                 </head>
                 <body>
                     <div class="header">
+                        <h2>${CONFIG.schoolName || 'Escuela'}</h2>
                         <h1>SISTEMA EDU-LM: DEPARTAMENTO DE TRABAJO SOCIAL</h1>
                         <p>EXPEDIENTE INTEGRAL DEL ALUMNO</p>
                     </div>
@@ -3734,9 +3736,14 @@ window.verHistorialSaludUnico = async (id, nombre) => {
         cont.innerHTML = `
             <div style="margin-bottom:15px; padding-bottom:10px; border-bottom:1px solid var(--border); display:flex; justify-content:space-between; align-items:center;">
                 <h4 style="margin:0; color:var(--primary)">Expediente de ${nombre}</h4>
-                <button class="btn btn-xs btn-outline" onclick="window.loadHistorialSalud()">
-                    <i class="fa-solid fa-rotate-left"></i> Ver Recientes
-                </button>
+                <div>
+                    <button class="btn btn-xs btn-outline" onclick="window.imprimirExpedienteMedico('${id}')" style="margin-right:8px; border-color:var(--primary); color:var(--primary);">
+                        <i class="fa-solid fa-print"></i> Imprimir
+                    </button>
+                    <button class="btn btn-xs btn-outline" onclick="window.loadHistorialSalud()">
+                        <i class="fa-solid fa-rotate-left"></i> Ver Recientes
+                    </button>
+                </div>
             </div>
             ${historico.map(s => {
                 if(s.tipoItem === 'atencion') {
@@ -3767,6 +3774,124 @@ window.verHistorialSaludUnico = async (id, nombre) => {
     } catch(e) {
         console.error(e);
         cont.innerHTML = '<p style="color:var(--danger)">Error al cargar el historial médico.</p>';
+    }
+};
+
+window.imprimirExpedienteMedico = async (idAlumno) => {
+    try {
+        const id = String(idAlumno).trim();
+        const [alRes, atencRes, justRes] = await Promise.all([
+            supabaseClient.from('alumnos').select('*, grupos(nombre)').eq('id', id).single(),
+            supabaseClient.from('expedientes_salud').select('*').eq('alumno_id', id).order('creado_en', { ascending: false }),
+            supabaseClient.from('justificantes_medicos').select('*').eq('alumno_id', id).order('fecha_emision', { ascending: false })
+        ]);
+
+        const al = alRes.data;
+        const atenciones = atencRes.data || [];
+        const justificantes = justRes.data || [];
+
+        if(!al) throw new Error("Alumno no encontrado");
+
+        const printWindow = window.open('', '_blank');
+        const fechaImpresion = new Date().toLocaleDateString();
+
+        let atencHtml = atenciones.length > 0 ? atenciones.map(a => `
+            <div class="item-box success">
+                <div class="item-header">
+                    <strong>Atención Médica: ${a.tipo_alergia || 'Consulta General'}</strong>
+                    <span>${new Date(a.creado_en).toLocaleDateString()}</span>
+                </div>
+                <p><strong>Observaciones / Acciones:</strong> ${a.observaciones_medicas || 'Ninguna'}</p>
+            </div>
+        `).join('') : '<p class="text-muted">Sin atenciones registradas.</p>';
+
+        let justHtml = justificantes.length > 0 ? justificantes.map(j => `
+            <div class="item-box grave">
+                <div class="item-header">
+                    <strong>Justificante Médico</strong>
+                    <span>Emitido: ${new Date(j.fecha_emision).toLocaleDateString()}</span>
+                </div>
+                <p><strong>Motivo:</strong> ${j.motivo}</p>
+                <p><strong>Rango:</strong> ${new Date(j.fecha_inicio).toLocaleDateString()} al ${new Date(j.fecha_fin).toLocaleDateString()}</p>
+            </div>
+        `).join('') : '<p class="text-muted">Sin justificantes registrados.</p>';
+
+        printWindow.document.write(`
+            <html>
+                <head>
+                    <title>Expediente Médico - ${al.nombre}</title>
+                    <style>
+                        body { font-family: 'Segoe UI', Arial, sans-serif; padding: 40px; color: #333; line-height: 1.5; }
+                        .header { text-align: center; margin-bottom: 30px; border-bottom: 2px solid #1e40af; padding-bottom: 15px; }
+                        .header h2 { font-size: 28px; margin: 0 0 5px 0; color: #000; text-transform: uppercase; }
+                        .header h1 { margin: 0; color: #1e40af; font-size: 20px; text-transform: uppercase; }
+                        .header p { margin: 5px 0; font-size: 14px; color: #555; font-weight: bold; }
+                        .student-info { background: #f8fafc; border: 1px solid #e2e8f0; padding: 20px; border-radius: 8px; margin-bottom: 30px; display: grid; grid-template-columns: 1fr 1fr; gap: 15px; font-size: 14px; }
+                        .section-title { font-size: 18px; color: #1e40af; border-bottom: 2px solid #cbd5e1; padding-bottom: 5px; margin-top: 30px; margin-bottom: 15px; text-transform: uppercase; }
+                        .item-box { border: 1px solid #cbd5e1; padding: 12px; border-radius: 6px; margin-bottom: 12px; page-break-inside: avoid; }
+                        .item-box.grave { border-left: 4px solid #ef4444; background: #fffdf7; }
+                        .item-box.success { border-left: 4px solid #10b981; background: #f0fdf4; }
+                        .item-header { display: flex; justify-content: space-between; margin-bottom: 8px; font-size: 13px; }
+                        .item-box p { margin: 4px 0; font-size: 13px; }
+                        .text-muted { color: #64748b; font-style: italic; font-size: 13px; }
+                        .footer-signatures { display: flex; justify-content: space-around; margin-top: 60px; page-break-inside: avoid; }
+                        .sig-line { border-top: 1px solid #000; width: 200px; text-align: center; padding-top: 5px; font-size: 12px; }
+                        @media print {
+                            @page { margin: 2cm; }
+                            body { padding: 0; }
+                        }
+                    </style>
+                </head>
+                <body>
+                    <div class="header">
+                        <h2>${CONFIG.schoolName || 'Escuela'}</h2>
+                        <h1>SISTEMA EDU-LM: ÁREA DE SALUD ESCOLAR</h1>
+                        <p>EXPEDIENTE MÉDICO Y JUSTIFICANTES</p>
+                    </div>
+                    
+                    <div class="student-info">
+                        <div>
+                            <strong>Nombre:</strong> ${al.nombre}<br>
+                            <strong>Matrícula:</strong> ${al.matricula}<br>
+                            <strong>Grado:</strong> ${al.grado || 'S/G'}
+                        </div>
+                        <div style="text-align:right;">
+                            <strong>Grupo:</strong> ${al.grupos?.nombre || 'S/G'}<br>
+                            <strong>Fecha de Impresión:</strong> ${fechaImpresion}
+                        </div>
+                    </div>
+
+                    <div class="section-title">Atenciones Médicas en Plantel</div>
+                    ${atencHtml}
+
+                    <div class="section-title">Justificantes Médicos Emitidos</div>
+                    ${justHtml}
+
+                    <div class="footer-signatures">
+                        <div class="sig-line">
+                            <strong>Firma Área de Salud / TS</strong><br>
+                            Sello Oficial
+                        </div>
+                        <div class="sig-line">
+                            <strong>Firma Director/Coordinador</strong><br>
+                            Vo.Bo.
+                        </div>
+                    </div>
+
+                    <script>
+                        window.onload = () => {
+                            setTimeout(() => {
+                                window.print();
+                                window.close();
+                            }, 500);
+                        };
+                    </script>
+                </body>
+            </html>
+        `);
+        printWindow.document.close();
+    } catch (e) {
+        alert("Error al generar formato médico: " + e.message);
     }
 };
 
