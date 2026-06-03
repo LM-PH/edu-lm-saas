@@ -1440,19 +1440,23 @@ function renderAdminGrupos() {
 // ========================
 
 window.switchAdminCalificacionesTab = (tab) => {
-    document.getElementById('btn-tab-concentrado').classList.remove('btn-primary');
-    document.getElementById('btn-tab-concentrado').classList.add('btn-outline');
-    document.getElementById('btn-tab-estadisticas').classList.remove('btn-primary');
-    document.getElementById('btn-tab-estadisticas').classList.add('btn-outline');
+    const btnConcentrado = document.getElementById('btn-tab-concentrado');
+    const btnEstadisticas = document.getElementById('btn-tab-estadisticas');
+    
+    btnConcentrado.className = 'btn btn-outline';
+    btnConcentrado.style.background = 'white';
+    
+    btnEstadisticas.className = 'btn btn-outline';
+    btnEstadisticas.style.background = 'white';
 
     if(tab === 'concentrado') {
-        document.getElementById('btn-tab-concentrado').classList.add('btn-primary');
-        document.getElementById('btn-tab-concentrado').classList.remove('btn-outline');
+        btnConcentrado.className = 'btn btn-primary';
+        btnConcentrado.style.background = ''; // Quitar fondo blanco para que tome el de btn-primary
         document.getElementById('view-concentrado').style.display = 'flex';
         document.getElementById('view-estadisticas').style.display = 'none';
     } else {
-        document.getElementById('btn-tab-estadisticas').classList.add('btn-primary');
-        document.getElementById('btn-tab-estadisticas').classList.remove('btn-outline');
+        btnEstadisticas.className = 'btn btn-primary';
+        btnEstadisticas.style.background = ''; // Quitar fondo blanco para que tome el de btn-primary
         document.getElementById('view-concentrado').style.display = 'none';
         document.getElementById('view-estadisticas').style.display = 'flex';
         if(window.loadAdminEstadisticasFiltros) window.loadAdminEstadisticasFiltros();
