@@ -2429,11 +2429,8 @@ function renderApoyoRiesgoAcademico() {
          <div class="form-group">
             <label class="form-label">Umbral de Alerta</label>
             <select class="form-select" id="riesgoUmbralSel">
-                <option value="1">1 o más materias reprobadas</option>
-                <option value="2">2 o más materias reprobadas</option>
-                <option value="3" selected>3 o más materias reprobadas</option>
-                <option value="4">4 o más materias reprobadas</option>
-                <option value="5">5 o más materias reprobadas</option>
+                <option value="1-2">De 1 a 2 materias reprobadas</option>
+                <option value="3+" selected>3 o más materias reprobadas</option>
             </select>
          </div>
 
@@ -2775,7 +2772,7 @@ window.loadApoyoRiesgoData = async () => {
     const trim = document.getElementById('riesgoTrimestreSel').value;
     const grado = document.getElementById('riesgoGradoSel').value;
     const grupo = document.getElementById('riesgoGrupoSel') ? document.getElementById('riesgoGrupoSel').value : 'Todos';
-    const umbral = parseInt(document.getElementById('riesgoUmbralSel').value) || 3;
+    const umbral = document.getElementById('riesgoUmbralSel').value || '3+';
 
     hold.innerHTML = '<p style="text-align:center; padding:30px;">Analizando calificaciones...</p>';
     badge.style.display = 'none';
@@ -2823,11 +2820,16 @@ window.loadApoyoRiesgoData = async () => {
 
         const alumnosEnRiesgo = Object.values(mapaAlumnos)
             .map(a => ({ ...a, materias: Array.from(a.materias) }))
-            .filter(a => a.materias.length >= umbral)
+            .filter(a => {
+                if (umbral === '1-2') return a.materias.length >= 1 && a.materias.length <= 2;
+                if (umbral === '3+') return a.materias.length >= 3;
+                return false;
+            })
             .sort((a,b) => b.materias.length - a.materias.length);
 
         if(alumnosEnRiesgo.length === 0) {
-            hold.innerHTML = `<p style="text-align:center; padding:30px; color:var(--success);">No hay alumnos con ${umbral} o más materias reprobadas.</p>`;
+            let msg = umbral === '1-2' ? 'de 1 a 2 materias reprobadas' : '3 o más materias reprobadas';
+            hold.innerHTML = `<p style="text-align:center; padding:30px; color:var(--success);">No hay alumnos con ${msg}.</p>`;
             return;
         }
 
