@@ -12573,17 +12573,35 @@ function renderApoyoPsicosocial() {
     </div>
 
     <div class="tabs" style="margin-bottom:20px;">
-        <button class="tab-btn active" onclick="window.switchTab(this, 'tab-psico-stats')">Estadística General</button>
-        <button class="tab-btn" onclick="window.switchTab(this, 'tab-psico-enviar')">Enviar Cuestionarios</button>
-        <button class="tab-btn" onclick="window.switchTab(this, 'tab-psico-expediente')">Revisión Individual</button>
+        <button class="tab-btn active" onclick="window.switchTabPsico(this, 'tab-psico-stats')">Estadística General</button>
+        <button class="tab-btn" onclick="window.switchTabPsico(this, 'tab-psico-enviar')">Enviar Cuestionarios</button>
+        <button class="tab-btn" onclick="window.switchTabPsico(this, 'tab-psico-expediente')">Revisión Individual</button>
     </div>
 
     <!-- TAB ESTADISTICAS -->
     <div id="tab-psico-stats" class="tab-content" style="display:block;">
         <div class="card" style="padding:20px;">
             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
-                <h3 style="margin:0;">Estadísticas del Plantel</h3>
+                <h3 style="margin:0;">Análisis Psicosocial</h3>
                 <button class="btn btn-sm btn-outline" onclick="window.loadPsicosocialStats()"><i class="fa-solid fa-rotate"></i> Actualizar</button>
+            </div>
+            <div style="background:#f8f9fa; padding:15px; border-radius:8px; border:1px solid var(--border); display:flex; gap:15px; margin-bottom:20px; align-items:flex-end;">
+                <div style="flex:1;">
+                    <label style="font-size:0.85rem; font-weight:bold; color:var(--text-main);">Analizar Por:</label>
+                    <select id="psicoStatsFiltro" class="form-input" onchange="window.loadPsicosocialStats()">
+                        <option value="todos">Todo el Plantel (Escuela)</option>
+                        <option value="grado">Por Grado (1, 2, 3)</option>
+                        <option value="grupo">Por Grupo (ID)</option>
+                        <option value="alumno">Por Alumno (ID)</option>
+                    </select>
+                </div>
+                <div style="flex:1;">
+                    <label style="font-size:0.85rem; font-weight:bold; color:var(--text-main);">Valor Específico:</label>
+                    <input type="text" id="psicoStatsValor" class="form-input" placeholder="Ej. 1, 2, 3 o el ID a buscar" onkeyup="if(event.key === 'Enter') window.loadPsicosocialStats()">
+                </div>
+                <div>
+                    <button class="btn btn-primary" onclick="window.loadPsicosocialStats()"><i class="fa-solid fa-filter"></i> Filtrar Gráficos</button>
+                </div>
             </div>
             <div class="grid" style="grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap:15px; margin-bottom:20px;" id="psicoStatsCards">
                 <div style="padding:20px; text-align:center; color:var(--text-muted);"><i class="fa-solid fa-spinner fa-spin"></i> Cargando...</div>
@@ -12638,6 +12656,14 @@ function renderApoyoPsicosocial() {
     </div>
     `;
 }
+
+window.switchTabPsico = (btn, tabId) => {
+    const parent = btn.closest('.page-content') || document.getElementById('mainContent');
+    parent.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    parent.querySelectorAll('.tab-content').forEach(c => c.style.display = 'none');
+    btn.classList.add('active');
+    document.getElementById(tabId).style.display = 'block';
+};
 
 window.buscarAlumnoPsico = async (term) => {
     const res = document.getElementById('resPsicoAlu');
@@ -12756,9 +12782,23 @@ window.enviarPsicosocial = async () => {
 window.loadPsicosocialStats = async () => {
     const cards = document.getElementById('psicoStatsCards');
     if(!cards) return;
+
+    const filtro = document.getElementById('psicoStatsFiltro')?.value || 'todos';
+    const esp = (document.getElementById('psicoStatsValor')?.value || '').trim();
+
     try {
-        const { data, error } = await supabaseClient.from('estudios_psicosociales').select('*').eq('plantel_id', state.plantelId);
+        let { data, error } = await supabaseClient.from('estudios_psicosociales').select('*, alumnos(id, grado, grupo_id)').eq('plantel_id', state.plantelId);
         if(error) throw error;
+        
+        if (filtro !== 'todos' && esp) {
+            if (filtro === 'grado') {
+                data = data.filter(d => String(d.alumnos?.grado) === esp);
+            } else if (filtro === 'grupo') {
+                data = data.filter(d => String(d.alumnos?.grupo_id) === esp);
+            } else if (filtro === 'alumno') {
+                data = data.filter(d => String(d.alumno_id) === esp);
+            }
+        }
         
         const total = data.length;
         const completados = data.filter(d => d.estado === 'completado').length;
