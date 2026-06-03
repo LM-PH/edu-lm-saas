@@ -3611,8 +3611,11 @@ window.loadResumenSalida = async () => {
 
 window.loadAsistenciasApoyo = async () => {
     const table = document.getElementById('tablaAsistenciasApoyo');
-    const grupoId = document.getElementById('selGrupoAsistenciaApoyo').value;
-    const fecha = document.getElementById('fechaAsistenciaApoyo').value;
+    const elGrupo = document.getElementById('selGrupoAsistenciaApoyo') || document.getElementById('selGrupoAsistenciaApoyoTS');
+    const elFecha = document.getElementById('fechaAsistenciaApoyo') || document.getElementById('fechaAsistenciaApoyoTS');
+    
+    const grupoId = elGrupo ? elGrupo.value : '';
+    const fecha = elFecha ? elFecha.value : new Date().toLocaleDateString('en-CA');
     if(!table) return;
 
     try {
@@ -3622,27 +3625,40 @@ window.loadAsistenciasApoyo = async () => {
             .eq('fecha', fecha)
             .order('creado_en', {ascending: false});
         
+        if (state.path === '/apoyo/ts_escaner') {
+            query = query.eq('estado', 'Salida');
+        } else if (state.path === '/apoyo/prefectura') {
+            query = query.in('estado', ['Asistencia', 'Retardo']);
+        }
+
         const { data: rawData } = await query;
         const data = grupoId ? (rawData || []).filter(a => a.alumnos?.grupo_id === grupoId) : (rawData || []);
 
         if(!data || data.length === 0) {
-            table.innerHTML = '<tr><td colspan="3" style="text-align:center; padding:20px; color:var(--text-muted);">Sin ingresos registrados aún.</td></tr>';
+            table.innerHTML = '<tr><td colspan="3" style="text-align:center; padding:20px; color:var(--text-muted);">Sin registros aún.</td></tr>';
             return;
         }
 
-        table.innerHTML = data.map(a => `
+        table.innerHTML = data.map(a => {
+            let badgeBg = '#f0fdf4';
+            let badgeColor = '#166534';
+            if(a.estado === 'Retardo') { badgeBg = '#fef3c7'; badgeColor = '#92400e'; }
+            if(a.estado === 'Salida') { badgeBg = '#fffbeb'; badgeColor = '#d97706'; }
+
+            return `
             <tr>
                 <td style="font-size:0.85rem; padding:10px;">
                     <div style="font-weight:600;">${a.alumnos?.nombre || 'Alumno'}</div>
                 </td>
                 <td style="text-align:center; font-size:0.8rem; color:var(--text-muted);">${new Date(a.creado_en).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</td>
                 <td style="text-align:right;">
-                    <span class="badge" style="background:${a.estado==='Retardo'?'#fef3c7':'#f0fdf4'}; color:${a.estado==='Retardo'?'#92400e':'#166534'}; font-size:0.65rem; border:none; padding:4px 8px; border-radius:6px;">
+                    <span class="badge" style="background:${badgeBg}; color:${badgeColor}; font-size:0.65rem; border:none; padding:4px 8px; border-radius:6px;">
                         ${a.estado}
                     </span>
                 </td>
             </tr>
-        `).join('');
+            `;
+        }).join('');
     } catch(e) { console.error(e); }
 };
 
