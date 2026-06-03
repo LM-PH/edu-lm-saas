@@ -237,9 +237,34 @@ CREATE POLICY "Permitir creacion de comunicados" ON public.comunicados
 -- =======================================================
 -- MÓDULO: ESTUDIOS PSICOSOCIALES
 -- =======================================================
+CREATE TABLE public.cuestionarios_psicosociales (
+    id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+    plantel_id uuid NOT NULL,
+    titulo text NOT NULL,
+    preguntas_json jsonb NOT NULL,
+    creado_por uuid REFERENCES public.perfiles(id) ON DELETE SET NULL,
+    created_at timestamp with time zone DEFAULT now()
+);
+
+ALTER TABLE public.cuestionarios_psicosociales ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Permitir accesos a staff cuestionarios" ON public.cuestionarios_psicosociales
+    FOR ALL
+    USING (
+        (SELECT rol FROM perfiles WHERE perfiles.id = auth.uid()) IN ('admin', 'directivo', 'apoyo')
+    )
+    WITH CHECK (
+        (SELECT rol FROM perfiles WHERE perfiles.id = auth.uid()) IN ('admin', 'directivo', 'apoyo')
+    );
+
+CREATE POLICY "Alumno puede leer cuestionarios" ON public.cuestionarios_psicosociales
+    FOR SELECT
+    USING (true);
+
 CREATE TABLE public.estudios_psicosociales (
     id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
     alumno_id uuid REFERENCES public.alumnos(id) ON DELETE CASCADE,
+    cuestionario_id uuid REFERENCES public.cuestionarios_psicosociales(id) ON DELETE CASCADE,
     plantel_id uuid NOT NULL,
     estado text DEFAULT 'pendiente',
     respuestas jsonb,
@@ -503,7 +528,8 @@ DECLARE
         'firmas_encuadre', 'horarios', 'intervenciones_conducta', 'justificantes_medicos', 
         'tramites', 'actividades_maestro', 'alumnos', 'asignaciones_maestros', 
         'citatorios', 'grupos', 'materias', 'perfiles_permitidos', 'reportes_conducta', 
-        'seguimientos_sociales', 'periodos_calificaciones', 'estudios_psicosociales'
+        'seguimientos_sociales', 'periodos_calificaciones', 'estudios_psicosociales',
+        'cuestionarios_psicosociales'
     ];
 BEGIN
     FOR t_name IN SELECT unnest(tables_list)
