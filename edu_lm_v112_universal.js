@@ -786,6 +786,7 @@ function renderSidebar() {
       { name: 'Riesgo Académico', path: '/apoyo/riesgo', icon: 'fa-user-graduate' },
       { name: 'Reportes Escolares', path: '/apoyo/reportes', icon: 'fa-file-signature' },
       { name: 'Expediente Salud', path: '/apoyo/salud', icon: 'fa-notes-medical' },
+      { name: 'Estudio Psicosocial', path: '/apoyo/psicosocial', icon: 'fa-brain' },
       { name: 'Bitácora Diaria', path: '/apoyo/bitacora', icon: 'fa-book-journal-whills' },
       { name: 'Escáner Entrada', path: '/apoyo/prefectura', icon: 'fa-qrcode' },
       { name: 'Escáner de Salida', path: '/apoyo/ts_escaner', icon: 'fa-person-walking-arrow-right' },
@@ -4615,6 +4616,15 @@ window.loadCredencialAlumno = async () => {
         matEl.innerText = "Matrícula: " + data.matricula;
         grEl.innerText = data.grupos?.nombre || "Sin Grupo";
 
+        // CHEQUEO DE ESTUDIO PSICOSOCIAL PENDIENTE
+        const { data: psdata } = await supabaseClient.from('estudios_psicosociales').select('id, estado').eq('alumno_id', data.id).eq('estado', 'pendiente').limit(1);
+        if(psdata && psdata.length > 0) {
+            window.psicosocialPendienteGlobal = psdata[0].id;
+            document.getElementById('mainContent').innerHTML = renderAlumnoPsicosocial();
+            if(window.loadAlumnoPsicosocialForm) window.loadAlumnoPsicosocialForm();
+            return;
+        }
+
         // Generar QR
         qrCont.innerHTML = '';
         if(window.qrcode) {
@@ -5353,11 +5363,13 @@ async function renderPage(path) {
     case '/apoyo/riesgo': return renderApoyoRiesgoAcademico();
     case '/apoyo/reportes': return renderApoyoReportes();
     case '/apoyo/salud': return renderApoyoSalud();
+    case '/apoyo/psicosocial': return renderApoyoPsicosocial();
     case '/apoyo/bitacora': return renderApoyoBitacora();
     case '/apoyo/prefectura': return renderApoyoPrefectura();
     case '/apoyo/ts_escaner': return renderApoyoTSEscaner();
     case '/apoyo/comunicados': return renderPersonalComunicados('Apoyo');
     case '/alumno/credencial': return renderAlumnoCredencial();
+    case '/alumno/psicosocial': return renderAlumnoPsicosocial();
     case '/alumno/timeline': return renderAlumnoTimeline();
     case '/alumno/boletas': return renderAlumnoBoletas();
     case '/alumno/horario': return renderAlumnoHorario();
@@ -12537,7 +12549,6 @@ window.loadHistorialBiblioteca = async (fecha) => {
                   </div>
                   <div style="text-align:right;">
                      <div style="margin-bottom:4px;">${estado}</div>
-                     ${p.fecha_devolucion ? `<div style="font-size:0.7rem; color:var(--text-muted);">Devolución: ${new Date(p.fecha_devolucion).toLocaleString([], {hour:'2-digit', minute:'2-digit'})}</div>` : ''}
                      ${p.condicion_devolucion ? `<div style="margin-top:4px; font-size:0.7rem; background:#fffbeb; color:#d97706; padding:2px 6px; border-radius:4px; display:inline-block;"><i class="fa-solid fa-triangle-exclamation"></i> Detalle: ${p.condicion_devolucion}</div>` : ''}
                   </div>
                </div>
@@ -12546,5 +12557,421 @@ window.loadHistorialBiblioteca = async (fecha) => {
     } catch(e) {
         console.error(e);
         cont.innerHTML = '<div style="color:var(--danger); text-align:center;">Error al cargar historial.</div>';
+    }
+};
+
+// =====================================================================
+// MÓDULO ESTUDIO PSICOSOCIAL (TRABAJO SOCIAL & ALUMNO)
+// =====================================================================
+
+function renderApoyoPsicosocial() {
+    setTimeout(() => { window.loadPsicosocialStats(); }, 100);
+    return `
+    <div class="page-header">
+        <h2 class="page-title"><i class="fa-solid fa-brain" style="color:var(--primary)"></i> Estudio Psicosocial</h2>
+        <p class="page-subtitle">Gestión de cuestionarios psicosociales para familias.</p>
+    </div>
+
+    <div class="tabs" style="margin-bottom:20px;">
+        <button class="tab-btn active" onclick="window.switchTab(this, 'tab-psico-stats')">Estadística General</button>
+        <button class="tab-btn" onclick="window.switchTab(this, 'tab-psico-enviar')">Enviar Cuestionarios</button>
+        <button class="tab-btn" onclick="window.switchTab(this, 'tab-psico-expediente')">Revisión Individual</button>
+    </div>
+
+    <!-- TAB ESTADISTICAS -->
+    <div id="tab-psico-stats" class="tab-content" style="display:block;">
+        <div class="card" style="padding:20px;">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
+                <h3 style="margin:0;">Estadísticas del Plantel</h3>
+                <button class="btn btn-sm btn-outline" onclick="window.loadPsicosocialStats()"><i class="fa-solid fa-rotate"></i> Actualizar</button>
+            </div>
+            <div class="grid" style="grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap:15px; margin-bottom:20px;" id="psicoStatsCards">
+                <div style="padding:20px; text-align:center; color:var(--text-muted);"><i class="fa-solid fa-spinner fa-spin"></i> Cargando...</div>
+            </div>
+            <h4>Gráficos</h4>
+            <div class="grid" style="grid-template-columns: 1fr 1fr; gap:20px;">
+                <div style="background:#f8f9fa; border-radius:8px; padding:15px; border:1px solid var(--border);"><canvas id="psicoChartFamilia" style="max-height:250px;"></canvas></div>
+                <div style="background:#f8f9fa; border-radius:8px; padding:15px; border:1px solid var(--border);"><canvas id="psicoChartIngreso" style="max-height:250px;"></canvas></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- TAB ENVIAR -->
+    <div id="tab-psico-enviar" class="tab-content" style="display:none;">
+        <div class="card" style="padding:20px;">
+            <h3 style="margin-top:0;">Programar Cuestionarios</h3>
+            <p style="color:var(--text-muted); font-size:0.9rem;">Selecciona a quién deseas enviar el requerimiento de estudio psicosocial. Les aparecerá una alerta obligatoria en su pantalla de inicio.</p>
+            
+            <div style="margin:20px 0; display:flex; gap:15px; align-items:flex-end;">
+                <div style="flex:1;">
+                    <label>Filtro de Envío:</label>
+                    <select id="psicoFiltroEnvio" class="form-input">
+                        <option value="todos">Todos los alumnos del plantel</option>
+                        <option value="grado">Por Grado</option>
+                        <option value="grupo">Por ID de Grupo</option>
+                    </select>
+                </div>
+                <div style="flex:1;">
+                    <label>Específico (Grado o ID):</label>
+                    <input type="text" id="psicoEspecifEnvio" class="form-input" placeholder="Ej. 1, 2, 3 o ID del Grupo">
+                </div>
+                <div>
+                    <button class="btn btn-primary" onclick="window.enviarPsicosocial()"><i class="fa-solid fa-paper-plane"></i> Enviar Ahora</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- TAB REVISIÓN INDIVIDUAL -->
+    <div id="tab-psico-expediente" class="tab-content" style="display:none;">
+        <div class="card" style="padding:20px;">
+            <h3 style="margin-top:0;">Expediente Psicosocial del Alumno</h3>
+            <div style="display:flex; gap:10px; margin-bottom:20px;">
+                <input type="text" id="busquedaPsicoInput" class="form-input" placeholder="Buscar alumno por nombre o matrícula..." onkeyup="window.buscarAlumnoPsico(this.value)" style="flex:1;">
+            </div>
+            <div id="resPsicoAlu" style="position:relative; z-index:10; background:white; width:100%; border-radius:8px; box-shadow:var(--shadow); display:none; max-height:200px; overflow-y:auto; margin-top:-10px; margin-bottom:20px; border:1px solid var(--border);"></div>
+
+            <div id="psicoExpedienteView" style="display:none; margin-top:20px; border-top:1px solid var(--border); padding-top:20px;">
+                <!-- Aqui se renderiza el expediente -->
+            </div>
+        </div>
+    </div>
+    `;
+}
+
+window.buscarAlumnoPsico = async (term) => {
+    const res = document.getElementById('resPsicoAlu');
+    if(!term || term.length < 3) { res.style.display = 'none'; return; }
+    
+    try {
+        const { data, error } = await supabaseClient.from('alumnos').select('id, nombre, matricula, grupos(nombre)').ilike('nombre', `%${term}%`).limit(5);
+        if(error || !data) return;
+        
+        if(data.length === 0) { res.innerHTML = '<div style="padding:10px;">Sin resultados</div>'; res.style.display = 'block'; return; }
+        
+        res.innerHTML = data.map(a => `
+            <div style="padding:10px; border-bottom:1px solid var(--border); cursor:pointer;" onclick="window.selectAlumnoPsico('${a.id}', '${a.nombre}')">
+                <strong style="color:var(--primary)">${a.nombre}</strong> <small style="color:var(--text-muted)">(${a.grupos?.nombre || 'Sin Grupo'}) - ${a.matricula}</small>
+            </div>
+        `).join('');
+        res.style.display = 'block';
+    } catch(e) { console.error(e); }
+};
+
+window.selectAlumnoPsico = async (id, nombre) => {
+    document.getElementById('resPsicoAlu').style.display = 'none';
+    document.getElementById('busquedaPsicoInput').value = nombre;
+    const view = document.getElementById('psicoExpedienteView');
+    view.innerHTML = '<div style="text-align:center;"><i class="fa-solid fa-spinner fa-spin"></i> Cargando expediente...</div>';
+    view.style.display = 'block';
+
+    try {
+        const { data, error } = await supabaseClient.from('estudios_psicosociales').select('*').eq('alumno_id', id).order('fecha_envio', {ascending: false}).limit(1);
+        
+        if(error || !data || data.length === 0) {
+            view.innerHTML = `<div class="alert alert-warning">No hay un estudio psicosocial registrado ni pendiente para ${nombre}.</div>`;
+            return;
+        }
+        
+        const est = data[0];
+        
+        if(est.estado === 'pendiente') {
+            view.innerHTML = `<div class="alert alert-warning">El estudio fue enviado el ${new Date(est.fecha_envio).toLocaleDateString()}, pero la familia aún no lo ha respondido.</div>`;
+            return;
+        }
+
+        const r = est.respuestas || {};
+        
+        view.innerHTML = `
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px;">
+                <h3 style="margin:0; color:var(--primary);">Respuestas de la Familia</h3>
+                <span class="badge" style="background:var(--success); color:white;">Completado el ${new Date(est.fecha_respuesta).toLocaleDateString()}</span>
+            </div>
+            
+            <div class="grid" style="grid-template-columns: 1fr 1fr; gap:15px; margin-bottom:20px;">
+                <div style="background:#f8f9fa; padding:10px; border-radius:8px;"><strong>Quién llenó:</strong> ${r.quien_llena || '---'}</div>
+                <div style="background:#f8f9fa; padding:10px; border-radius:8px;"><strong>Tipo de Familia:</strong> ${r.tipo_familia || '---'}</div>
+                <div style="background:#f8f9fa; padding:10px; border-radius:8px;"><strong>Ingreso Mensual:</strong> ${r.ingreso || '---'}</div>
+                <div style="background:#f8f9fa; padding:10px; border-radius:8px;"><strong>Vivienda:</strong> ${r.vivienda || '---'}</div>
+                <div style="background:#f8f9fa; padding:10px; border-radius:8px; grid-column:span 2;"><strong>Servicios Básicos:</strong> ${(r.servicios || []).join(', ')}</div>
+                <div style="background:#f8f9fa; padding:10px; border-radius:8px; grid-column:span 2;"><strong>Problemas de Salud:</strong> ${r.salud || 'Ninguno reportado'}</div>
+                <div style="background:#f8f9fa; padding:10px; border-radius:8px;"><strong>Dinámica Familiar:</strong> ${r.dinamica || '---'}</div>
+                <div style="background:#f8f9fa; padding:10px; border-radius:8px;"><strong>Apoyo en Tareas:</strong> ${r.apoyo_tareas || '---'}</div>
+            </div>
+
+            <div style="background:#fffdf7; border:1px solid #ffeeba; padding:15px; border-radius:8px;">
+                <h4 style="margin-top:0; color:#856404;"><i class="fa-solid fa-lock"></i> Notas Privadas de Trabajo Social</h4>
+                <p style="font-size:0.8rem; color:#856404;">Estas notas son invisibles para la familia y maestros. Solo Trabajo Social/Directivos tienen acceso.</p>
+                <textarea id="psicoNota_${est.id}" class="form-input" style="height:100px; margin-bottom:10px;" placeholder="Registrar situaciones particulares del estudiante o la familia aquí...">${est.notas_privadas || ''}</textarea>
+                <button class="btn btn-sm" style="background:#856404; color:white;" onclick="window.guardarNotaPsico('${est.id}')">Guardar Nota</button>
+            </div>
+        `;
+    } catch(e) { console.error(e); }
+};
+
+window.guardarNotaPsico = async (id) => {
+    const txt = document.getElementById(`psicoNota_${id}`).value;
+    window.showToast('Guardando...', 'info');
+    try {
+        const { error } = await supabaseClient.from('estudios_psicosociales').update({ notas_privadas: txt }).eq('id', id);
+        if(error) throw error;
+        window.showToast('Nota privada guardada', 'success');
+    } catch(e) { console.error(e); window.showToast('Error al guardar', 'error'); }
+};
+
+window.enviarPsicosocial = async () => {
+    const filtro = document.getElementById('psicoFiltroEnvio').value;
+    const esp = document.getElementById('psicoEspecifEnvio').value.trim();
+    
+    if(filtro !== 'todos' && !esp) return alert('Por favor, especifica el grado o grupo en la caja de texto.');
+    if(!confirm('¿Estás seguro de enviar el cuestionario psicosocial? Esto creará una alerta obligatoria en el perfil de cada alumno/familia seleccionada.')) return;
+    
+    window.showToast('Procesando envíos...', 'info');
+    
+    try {
+        let query = supabaseClient.from('alumnos').select('id');
+        if(filtro === 'grado') query = query.eq('grado', esp);
+        if(filtro === 'grupo') query = query.eq('grupo_id', esp);
+        
+        const { data: alus, error } = await query;
+        if(error) throw error;
+        if(!alus || alus.length === 0) return alert('No se encontraron alumnos con ese filtro.');
+        
+        const inserts = alus.map(a => ({
+            alumno_id: a.id,
+            plantel_id: state.plantelId,
+            estado: 'pendiente',
+            creado_por: state.user.id
+        }));
+        
+        const { error: insErr } = await supabaseClient.from('estudios_psicosociales').insert(inserts);
+        if(insErr) throw insErr;
+        
+        window.showToast(`Cuestionarios enviados a ${alus.length} alumnos correctamente.`, 'success');
+        document.getElementById('psicoEspecifEnvio').value = '';
+        window.loadPsicosocialStats();
+    } catch(e) { console.error(e); window.showToast('Error al enviar cuestionarios.', 'error'); }
+};
+
+window.loadPsicosocialStats = async () => {
+    const cards = document.getElementById('psicoStatsCards');
+    if(!cards) return;
+    try {
+        const { data, error } = await supabaseClient.from('estudios_psicosociales').select('*').eq('plantel_id', state.plantelId);
+        if(error) throw error;
+        
+        const total = data.length;
+        const completados = data.filter(d => d.estado === 'completado').length;
+        const pendientes = total - completados;
+        const pct = total === 0 ? 0 : Math.round((completados / total) * 100);
+        
+        cards.innerHTML = `
+            <div style="background:#f0fdf4; border:1px solid #bbf7d0; border-radius:8px; padding:15px; text-align:center;">
+                <h2 style="margin:0; color:#166534;">${completados}</h2>
+                <span style="color:#15803d; font-size:0.85rem; font-weight:bold;">Completados (${pct}%)</span>
+            </div>
+            <div style="background:#fffbeb; border:1px solid #fef08a; border-radius:8px; padding:15px; text-align:center;">
+                <h2 style="margin:0; color:#854d0e;">${pendientes}</h2>
+                <span style="color:#a16207; font-size:0.85rem; font-weight:bold;">Pendientes</span>
+            </div>
+            <div style="background:#eff6ff; border:1px solid #bfdbfe; border-radius:8px; padding:15px; text-align:center;">
+                <h2 style="margin:0; color:#1e40af;">${total}</h2>
+                <span style="color:#1d4ed8; font-size:0.85rem; font-weight:bold;">Total Solicitados</span>
+            </div>
+        `;
+
+        // Renderizado simple de gráficas si Chart.js está cargado
+        if(window.Chart && completados > 0) {
+            const res = data.filter(d => d.estado === 'completado').map(d => d.respuestas);
+            
+            // Stats Familia
+            const fams = res.reduce((acc, curr) => {
+                const f = curr.tipo_familia || 'Otro';
+                acc[f] = (acc[f] || 0) + 1;
+                return acc;
+            }, {});
+            
+            // Stats Vivienda
+            const vivs = res.reduce((acc, curr) => {
+                const v = curr.vivienda || 'Otro';
+                acc[v] = (acc[v] || 0) + 1;
+                return acc;
+            }, {});
+
+            const ctxFam = document.getElementById('psicoChartFamilia');
+            if(ctxFam) {
+                if(window.chartFamIns) window.chartFamIns.destroy();
+                window.chartFamIns = new Chart(ctxFam, {
+                    type: 'pie',
+                    data: {
+                        labels: Object.keys(fams),
+                        datasets: [{ data: Object.values(fams), backgroundColor: ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6'] }]
+                    },
+                    options: { responsive: true, maintainAspectRatio: false, plugins: { title: { display:true, text: 'Tipos de Familia' } } }
+                });
+            }
+
+            const ctxViv = document.getElementById('psicoChartIngreso');
+            if(ctxViv) {
+                if(window.chartVivIns) window.chartVivIns.destroy();
+                window.chartVivIns = new Chart(ctxViv, {
+                    type: 'doughnut',
+                    data: {
+                        labels: Object.keys(vivs),
+                        datasets: [{ data: Object.values(vivs), backgroundColor: ['#10b981', '#8b5cf6', '#f59e0b', '#ef4444'] }]
+                    },
+                    options: { responsive: true, maintainAspectRatio: false, plugins: { title: { display:true, text: 'Situación de Vivienda' } } }
+                });
+            }
+        }
+    } catch(e) { console.error(e); }
+};
+
+function renderAlumnoPsicosocial() {
+    return `
+    <div class="mobile-app" style="background:var(--page-bg)">
+        <div class="mobile-header" style="text-align: center; padding:30px 20px; background:var(--danger); color:white;">
+            <div style="font-size:3rem; margin-bottom:10px;"><i class="fa-solid fa-file-contract"></i></div>
+            <h2 style="margin:0;">Estudio Psicosocial Requerido</h2>
+            <p style="margin-top:5px; font-size:0.85rem; opacity:0.9;">Departamento de Trabajo Social</p>
+        </div>
+        <div class="mobile-content" style="padding: 20px;">
+            <div class="alert alert-warning" style="margin-bottom:20px; font-size:0.85rem;">
+                <strong>Aviso a Padres/Tutores:</strong> Por favor llene este cuestionario de forma veraz. La información es estrictamente confidencial y se utilizará únicamente con fines estadísticos y de apoyo escolar por el departamento de Trabajo Social.
+            </div>
+
+            <div class="card" style="padding:20px;">
+                <form id="formPsicosocialAlumno" onsubmit="window.enviarRespuestasPsicosocial(event)">
+                    
+                    <div style="margin-bottom:15px;">
+                        <label style="font-weight:bold; font-size:0.9rem; color:var(--text-main); display:block; margin-bottom:5px;">¿Quién llena este cuestionario?</label>
+                        <select id="psi_quien" class="form-input" required>
+                            <option value="">Seleccione...</option>
+                            <option value="Madre">Madre</option>
+                            <option value="Padre">Padre</option>
+                            <option value="Tutor Legal">Tutor Legal</option>
+                            <option value="Alumno">Alumno</option>
+                        </select>
+                    </div>
+
+                    <div style="margin-bottom:15px;">
+                        <label style="font-weight:bold; font-size:0.9rem; color:var(--text-main); display:block; margin-bottom:5px;">Tipo de Estructura Familiar</label>
+                        <select id="psi_familia" class="form-input" required>
+                            <option value="">Seleccione...</option>
+                            <option value="Nuclear (Padre, Madre e Hijos)">Nuclear (Padre, Madre e Hijos)</option>
+                            <option value="Monoparental (Solo Madre o Padre)">Monoparental (Solo Madre o Padre)</option>
+                            <option value="Extendida (Con Abuelos, Tíos, etc.)">Extendida (Con Abuelos, Tíos, etc.)</option>
+                            <option value="Reconstruida">Reconstruida</option>
+                        </select>
+                    </div>
+
+                    <div style="margin-bottom:15px;">
+                        <label style="font-weight:bold; font-size:0.9rem; color:var(--text-main); display:block; margin-bottom:5px;">Situación de Vivienda</label>
+                        <select id="psi_vivienda" class="form-input" required>
+                            <option value="">Seleccione...</option>
+                            <option value="Propia">Propia</option>
+                            <option value="Rentada">Rentada</option>
+                            <option value="Prestada / Compartida">Prestada / Compartida</option>
+                        </select>
+                    </div>
+
+                    <div style="margin-bottom:15px;">
+                        <label style="font-weight:bold; font-size:0.9rem; color:var(--text-main); display:block; margin-bottom:5px;">Ingreso Familiar Mensual Aproximado</label>
+                        <select id="psi_ingreso" class="form-input" required>
+                            <option value="">Seleccione...</option>
+                            <option value="Menos de $5,000">Menos de $5,000</option>
+                            <option value="$5,000 - $10,000">$5,000 - $10,000</option>
+                            <option value="$10,000 - $20,000">$10,000 - $20,000</option>
+                            <option value="Más de $20,000">Más de $20,000</option>
+                        </select>
+                    </div>
+
+                    <div style="margin-bottom:15px;">
+                        <label style="font-weight:bold; font-size:0.9rem; color:var(--text-main); display:block; margin-bottom:5px;">Servicios Básicos (Seleccione los que tenga)</label>
+                        <div style="display:flex; flex-direction:column; gap:5px; font-size:0.85rem; color:var(--text-muted);">
+                            <label><input type="checkbox" name="psi_serv" value="Agua Potable"> Agua Potable</label>
+                            <label><input type="checkbox" name="psi_serv" value="Luz Eléctrica"> Luz Eléctrica</label>
+                            <label><input type="checkbox" name="psi_serv" value="Internet"> Internet en Casa</label>
+                            <label><input type="checkbox" name="psi_serv" value="Drenaje"> Drenaje</label>
+                        </div>
+                    </div>
+
+                    <div style="margin-bottom:15px;">
+                        <label style="font-weight:bold; font-size:0.9rem; color:var(--text-main); display:block; margin-bottom:5px;">Relación / Dinámica Familiar</label>
+                        <select id="psi_dinamica" class="form-input" required>
+                            <option value="">Seleccione...</option>
+                            <option value="Buena / Armoniosa">Buena / Armoniosa</option>
+                            <option value="Regular / Conflictos Ocasionales">Regular / Conflictos Ocasionales</option>
+                            <option value="Difícil / Conflictiva">Difícil / Conflictiva</option>
+                        </select>
+                    </div>
+
+                    <div style="margin-bottom:15px;">
+                        <label style="font-weight:bold; font-size:0.9rem; color:var(--text-main); display:block; margin-bottom:5px;">Apoyo en Tareas del Alumno</label>
+                        <select id="psi_apoyo" class="form-input" required>
+                            <option value="">Seleccione...</option>
+                            <option value="Siempre superviso">Siempre superviso</option>
+                            <option value="A veces reviso">A veces reviso</option>
+                            <option value="Trabaja de forma independiente">Trabaja de forma independiente</option>
+                        </select>
+                    </div>
+
+                    <div style="margin-bottom:20px;">
+                        <label style="font-weight:bold; font-size:0.9rem; color:var(--text-main); display:block; margin-bottom:5px;">Enfermedades o situaciones médicas relevantes (Breve)</label>
+                        <textarea id="psi_salud" class="form-input" style="height:60px;" placeholder="Si no aplica, escriba 'Ninguna'" required></textarea>
+                    </div>
+
+                    <button type="submit" class="btn btn-primary" style="width:100%; padding:15px; font-size:1rem; border-radius:12px;">
+                        <i class="fa-solid fa-check-circle"></i> Enviar Información Oficial
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+    `;
+}
+
+window.loadAlumnoPsicosocialForm = () => {
+    // Inicializaciones si es necesario
+};
+
+window.enviarRespuestasPsicosocial = async (e) => {
+    e.preventDefault();
+    if(!window.psicosocialPendienteGlobal) return alert("Error: No se detectó estudio pendiente.");
+    
+    const checkboxes = document.querySelectorAll('input[name="psi_serv"]:checked');
+    const servicios = Array.from(checkboxes).map(c => c.value);
+
+    const respuestas = {
+        quien_llena: document.getElementById('psi_quien').value,
+        tipo_familia: document.getElementById('psi_familia').value,
+        vivienda: document.getElementById('psi_vivienda').value,
+        ingreso: document.getElementById('psi_ingreso').value,
+        servicios: servicios,
+        dinamica: document.getElementById('psi_dinamica').value,
+        apoyo_tareas: document.getElementById('psi_apoyo').value,
+        salud: document.getElementById('psi_salud').value
+    };
+
+    window.showToast('Enviando...', 'info');
+
+    try {
+        const { error } = await supabaseClient.from('estudios_psicosociales')
+            .update({
+                estado: 'completado',
+                respuestas: respuestas,
+                fecha_respuesta: new Date().toISOString()
+            }).eq('id', window.psicosocialPendienteGlobal);
+
+        if(error) throw error;
+        
+        window.psicosocialPendienteGlobal = null;
+        alert("¡Muchas gracias! El estudio psicosocial ha sido guardado exitosamente.");
+        document.getElementById('mainContent').innerHTML = renderAlumnoCredencial();
+        if(window.loadCredencialAlumno) window.loadCredencialAlumno();
+        
+    } catch(err) {
+        console.error(err);
+        window.showToast('Hubo un error al guardar.', 'error');
     }
 };

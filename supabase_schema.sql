@@ -234,6 +234,41 @@ CREATE POLICY "Permitir creacion de comunicados" ON public.comunicados
         (SELECT rol FROM perfiles WHERE perfiles.id = auth.uid()) IN ('admin', 'directivo', 'apoyo')
     );
 
+-- =======================================================
+-- MÓDULO: ESTUDIOS PSICOSOCIALES
+-- =======================================================
+CREATE TABLE public.estudios_psicosociales (
+    id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+    alumno_id uuid REFERENCES public.alumnos(id) ON DELETE CASCADE,
+    plantel_id uuid NOT NULL,
+    estado text DEFAULT 'pendiente',
+    respuestas jsonb,
+    notas_privadas text,
+    fecha_envio timestamp with time zone DEFAULT now(),
+    fecha_respuesta timestamp with time zone,
+    creado_por uuid REFERENCES public.perfiles(id) ON DELETE SET NULL
+);
+
+ALTER TABLE public.estudios_psicosociales ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Permitir accesos a staff estudios" ON public.estudios_psicosociales
+    FOR ALL
+    USING (
+        (SELECT rol FROM perfiles WHERE perfiles.id = auth.uid()) IN ('admin', 'directivo', 'apoyo')
+    )
+    WITH CHECK (
+        (SELECT rol FROM perfiles WHERE perfiles.id = auth.uid()) IN ('admin', 'directivo', 'apoyo')
+    );
+
+CREATE POLICY "Alumno puede leer su estudio" ON public.estudios_psicosociales
+    FOR SELECT
+    USING (alumno_id IN (SELECT id FROM alumnos WHERE perfil_id = auth.uid()));
+
+CREATE POLICY "Alumno puede actualizar su estudio" ON public.estudios_psicosociales
+    FOR UPDATE
+    USING (alumno_id IN (SELECT id FROM alumnos WHERE perfil_id = auth.uid()))
+    WITH CHECK (alumno_id IN (SELECT id FROM alumnos WHERE perfil_id = auth.uid()));
+
 -- Bucket para adjuntos de comunicados
 INSERT INTO storage.buckets (id, name, public) VALUES ('comunicados_adjuntos', 'comunicados_adjuntos', true);
 
@@ -468,7 +503,7 @@ DECLARE
         'firmas_encuadre', 'horarios', 'intervenciones_conducta', 'justificantes_medicos', 
         'tramites', 'actividades_maestro', 'alumnos', 'asignaciones_maestros', 
         'citatorios', 'grupos', 'materias', 'perfiles_permitidos', 'reportes_conducta', 
-        'seguimientos_sociales', 'periodos_calificaciones'
+        'seguimientos_sociales', 'periodos_calificaciones', 'estudios_psicosociales'
     ];
 BEGIN
     FOR t_name IN SELECT unnest(tables_list)
