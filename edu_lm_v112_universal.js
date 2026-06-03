@@ -3713,14 +3713,14 @@ window.verHistorialSaludUnico = async (id, nombre) => {
         // 1. Obtener Atenciones
         const { data: atenciones } = await supabaseClient
             .from('expedientes_salud')
-            .select('*')
+            .select('*, perfiles(nombre)')
             .eq('alumno_id', id)
             .order('creado_en', {ascending:false});
 
         // 2. Obtener Justificantes
         const { data: justificantes } = await supabaseClient
             .from('justificantes_medicos')
-            .select('*')
+            .select('*, perfiles(nombre)')
             .eq('alumno_id', id)
             .order('fecha_emision', {ascending:false});
 
@@ -3757,6 +3757,7 @@ window.verHistorialSaludUnico = async (id, nombre) => {
                         </div>
                         <div style="font-weight:bold; margin:5px 0;">${s.tipo_alergia || 'Consulta General'}</div>
                         <p style="margin:0; font-size:0.8rem;">${s.observaciones_medicas || ''}</p>
+                        <div style="font-size:0.75rem; color:var(--text-muted); margin-top:4px;">Por: ${s.perfiles?.nombre || 'Trabajo Social'}</div>
                       </div>`;
                 } else {
                     return `
@@ -3769,6 +3770,7 @@ window.verHistorialSaludUnico = async (id, nombre) => {
                         <p style="margin:0; font-size:0.8rem; color:#856404;">
                             Rango: <strong>${new Date(s.fecha_inicio).toLocaleDateString()}</strong> al <strong>${new Date(s.fecha_fin).toLocaleDateString()}</strong>
                         </p>
+                        <div style="font-size:0.75rem; color:var(--text-muted); margin-top:4px;">Por: ${s.perfiles?.nombre || 'Trabajo Social'}</div>
                       </div>`;
                 }
             }).join('')}
@@ -3784,8 +3786,8 @@ window.imprimirExpedienteMedico = async (idAlumno) => {
         const id = String(idAlumno).trim();
         const [alRes, atencRes, justRes, plantelRes] = await Promise.all([
             supabaseClient.from('alumnos').select('*, grupos(nombre)').eq('id', id).single(),
-            supabaseClient.from('expedientes_salud').select('*').eq('alumno_id', id).order('creado_en', { ascending: false }),
-            supabaseClient.from('justificantes_medicos').select('*').eq('alumno_id', id).order('fecha_emision', { ascending: false }),
+            supabaseClient.from('expedientes_salud').select('*, perfiles(nombre)').eq('alumno_id', id).order('creado_en', { ascending: false }),
+            supabaseClient.from('justificantes_medicos').select('*, perfiles(nombre)').eq('alumno_id', id).order('fecha_emision', { ascending: false }),
             supabaseClient.from('planteles').select('nombre').eq('id', state.plantelId).single()
         ]);
 
@@ -3806,6 +3808,7 @@ window.imprimirExpedienteMedico = async (idAlumno) => {
                     <span>${new Date(a.creado_en).toLocaleDateString()}</span>
                 </div>
                 <p><strong>Observaciones / Acciones:</strong> ${a.observaciones_medicas || 'Ninguna'}</p>
+                <p class="text-muted" style="margin-top: 5px;">Por: ${a.perfiles?.nombre || 'Trabajo Social'}</p>
             </div>
         `).join('') : '<p class="text-muted">Sin atenciones registradas.</p>';
 
@@ -3817,6 +3820,7 @@ window.imprimirExpedienteMedico = async (idAlumno) => {
                 </div>
                 <p><strong>Motivo:</strong> ${j.motivo}</p>
                 <p><strong>Rango:</strong> ${new Date(j.fecha_inicio).toLocaleDateString()} al ${new Date(j.fecha_fin).toLocaleDateString()}</p>
+                <p class="text-muted" style="margin-top: 5px;">Por: ${j.perfiles?.nombre || 'Trabajo Social'}</p>
             </div>
         `).join('') : '<p class="text-muted">Sin justificantes registrados.</p>';
 
@@ -5988,14 +5992,14 @@ window.loadHistorialSalud = async () => {
         // 1. Obtener Atenciones
         const { data: atenciones, error: errAt } = await supabaseClient
             .from('expedientes_salud')
-            .select('*, alumnos(nombre)')
+            .select('*, alumnos(nombre), perfiles(nombre)')
             .order('creado_en', {ascending: false})
             .limit(10);
             
         // 2. Obtener Justificantes
         const { data: justificantes, error: errJust } = await supabaseClient
             .from('justificantes_medicos')
-            .select('*, alumnos(nombre, grupos(nombre))')
+            .select('*, alumnos(nombre, grupos(nombre)), perfiles(nombre)')
             .order('fecha_emision', {ascending: false})
             .limit(10);
 
@@ -6022,6 +6026,7 @@ window.loadHistorialSalud = async () => {
                 </div>
                 <div style="font-size:0.85rem; color:var(--text-main); margin:4px 0; font-weight:bold;">${s.tipo_alergia || 'Atención General'}</div>
                 <p style="margin:0; font-size:0.8rem; color:var(--text-muted)">${s.observaciones_medicas || ''}</p>
+                <div style="font-size:0.75rem; color:var(--text-muted); margin-top:4px;">Por: ${s.perfiles?.nombre || 'Trabajo Social'}</div>
               </div>`;
           } else {
             return `
@@ -6037,6 +6042,7 @@ window.loadHistorialSalud = async () => {
                 <div style="font-size:0.75rem; color:var(--text-main); background:#fff3cd; padding:4px 8px; border-radius:4px; display:inline-block; margin:4px 0;">
                     Válido: ${new Date(s.fecha_inicio).toLocaleDateString()} al ${new Date(s.fecha_fin).toLocaleDateString()}
                 </div>
+                <div style="font-size:0.75rem; color:var(--text-muted); margin-top:4px;">Por: ${s.perfiles?.nombre || 'Trabajo Social'}</div>
                 <p style="margin:0; font-size:0.8rem; color:var(--text-muted)">Justificante oficial enviado a maestros.</p>
               </div>`;
           }
