@@ -787,7 +787,7 @@ function renderSidebar() {
       { name: 'Expediente Salud', path: '/apoyo/salud', icon: 'fa-notes-medical' },
       { name: 'Bitácora Diaria', path: '/apoyo/bitacora', icon: 'fa-book-journal-whills' },
       { name: 'Prefectura (Escáner)', path: '/apoyo/prefectura', icon: 'fa-qrcode' },
-      { name: 'Trabajo Social (Escáner)', path: '/apoyo/ts_escaner', icon: 'fa-qrcode' },
+      { name: 'Escáner de Salida', path: '/apoyo/ts_escaner', icon: 'fa-person-walking-arrow-right' },
       { name: 'Avisos Oficiales', path: '/apoyo/comunicados', icon: 'fa-bullhorn' },
     ],
     directivo: [
@@ -3744,49 +3744,31 @@ window.actualizarUIPortal = () => {
     }
 };
 
-window._tsScannerMode = 'entrada'; // 'entrada' o 'salida'
-
-window.cambiarModoTS = (modo) => {
-    window._tsScannerMode = modo;
+window.actualizarUIPortalTS = () => {
     const txt = document.getElementById('txtEstadoPortalTS');
     const desc = document.getElementById('descEstadoPortalTS');
     const indicator = document.getElementById('statIndicatorTS');
-    const btnEntrada = document.getElementById('btnTSEntrada');
-    const btnSalida = document.getElementById('btnTSSalida');
-    
     if(!txt) return;
 
-    if(modo === 'entrada') {
-        txt.innerText = "MODO ENTRADA";
-        txt.style.color = "var(--success)";
-        desc.innerText = "Registrando ingreso de alumnos.";
-        indicator.style.background = "var(--success)";
-        indicator.style.boxShadow = "0 0 10px var(--success)";
-        btnEntrada.classList.replace('btn-outline', 'btn-primary');
-        btnSalida.classList.replace('btn-primary', 'btn-outline');
-    } else {
-        txt.innerText = "MODO SALIDA";
-        txt.style.color = "var(--warning)";
-        desc.innerText = "Registrando salida y notificando a padres.";
-        indicator.style.background = "var(--warning)";
-        indicator.style.boxShadow = "0 0 10px var(--warning)";
-        btnEntrada.classList.replace('btn-primary', 'btn-outline');
-        btnSalida.classList.replace('btn-outline', 'btn-primary');
-    }
+    txt.innerText = "MODO SALIDA";
+    txt.style.color = "var(--warning)";
+    desc.innerText = "Registrando salida y notificando a padres.";
+    indicator.style.background = "var(--warning)";
+    indicator.style.boxShadow = "0 0 10px var(--warning)";
 };
 
 function renderApoyoTSEscaner() {
   setTimeout(() => { 
     if(window.loadResumenEntrada) window.loadResumenEntrada();
     if(window.loadGruposControlAsistencia) window.loadGruposControlAsistencia();
-    window.cambiarModoTS('entrada');
+    window.actualizarUIPortalTS();
     if(window.startTSScanner) window.startTSScanner('metralleta');
   }, 500);
   return `
     <div class="page-header" style="display:flex; justify-content:space-between; align-items:center;">
       <div>
-         <h2 class="page-title">Trabajo Social | Control de Accesos</h2>
-         <p class="page-subtitle">Escáner Institucional: Entrada y Salida</p>
+         <h2 class="page-title">Control de Salidas</h2>
+         <p class="page-subtitle">Escáner de Salida de Alumnos</p>
       </div>
       <button class="btn btn-outline" onclick="window.stopTSScanner().then(() => window.navigate('/apoyo/dashboard'))" style="border-radius:30px; background:white;">
          <i class="fa-solid fa-house"></i> Volver al Inicio
@@ -3794,22 +3776,14 @@ function renderApoyoTSEscaner() {
     </div>
 
     <!-- Panel de Control de Estado TS -->
-    <div class="card" style="margin-bottom:24px; border-left: 6px solid var(--primary); background: #f8fafc;">
+    <div class="card" style="margin-bottom:24px; border-left: 6px solid var(--warning); background: #fffbeb;">
         <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:15px;">
             <div style="display:flex; align-items:center; gap:15px;">
-                <div id="statIndicatorTS" style="width:12px; height:12px; border-radius:50%; background:var(--success); box-shadow: 0 0 10px var(--success);"></div>
+                <div id="statIndicatorTS" style="width:12px; height:12px; border-radius:50%; background:var(--warning); box-shadow: 0 0 10px var(--warning);"></div>
                 <div>
-                   <h4 style="margin:0; font-size:1.1rem;">Estado del Portal: <span id="txtEstadoPortalTS">MODO ENTRADA</span></h4>
-                   <p id="descEstadoPortalTS" style="margin:0; font-size:0.8rem; color:var(--text-muted)">Registrando ingreso de alumnos.</p>
+                   <h4 style="margin:0; font-size:1.1rem;">Estado del Portal: <span id="txtEstadoPortalTS">MODO SALIDA</span></h4>
+                   <p id="descEstadoPortalTS" style="margin:0; font-size:0.8rem; color:var(--text-muted)">Registrando salida y notificando a padres.</p>
                 </div>
-            </div>
-            <div style="display:flex; gap:10px;">
-                <button id="btnTSEntrada" class="btn btn-primary btn-sm" onclick="window.cambiarModoTS('entrada')">
-                   <i class="fa-solid fa-arrow-right-to-bracket"></i> Modo Entrada
-                </button>
-                <button id="btnTSSalida" class="btn btn-outline btn-sm" onclick="window.cambiarModoTS('salida')">
-                   <i class="fa-solid fa-person-walking-arrow-right"></i> Modo Salida
-                </button>
             </div>
         </div>
     </div>
@@ -3817,8 +3791,8 @@ function renderApoyoTSEscaner() {
     <div class="card" style="text-align:center; padding: 40px; min-height: 440px; display:flex; flex-direction:column; justify-content:center; align-items:center; border-radius:30px; background: white; box-shadow: var(--shadow-xl);">
         
         <div id="ts-status-info" style="margin-bottom:20px;">
-            <h3 style="color:var(--primary); font-size:1.5rem; margin-bottom:5px;">Escáner de Trabajo Social Activo</h3>
-            <p style="color:var(--text-muted); font-size:0.9rem;">Apunte el código QR a la cámara para registrar el movimiento.</p>
+            <h3 style="color:var(--warning); font-size:1.5rem; margin-bottom:5px;">Escáner de Salida Activo</h3>
+            <p style="color:var(--text-muted); font-size:0.9rem;">Apunte el código QR a la cámara para registrar la salida del alumno.</p>
         </div>
 
         <div id="reader-ts" style="width:100%; max-width:500px; height:350px; background:#1e293b; border-radius:24px; overflow:hidden; border: 4px solid var(--primary); box-shadow: 0 10px 25px rgba(0,0,0,0.2);"></div>
@@ -8667,8 +8641,7 @@ window.startTSScanner = async (mode = 'metralleta') => {
 
 window.registrarAsistenciaTS = async (qrText) => {
     try {
-        const modo = window._tsScannerMode || 'entrada';
-        const estadoRegistro = modo === 'entrada' ? 'Asistencia' : 'Salida';
+        const estadoRegistro = 'Salida';
         
         let { data: alu, error: searchErr } = await supabaseClient.from('alumnos')
             .select('id, nombre')
@@ -8724,26 +8697,24 @@ window.registrarAsistenciaTS = async (qrText) => {
             return;
         }
 
-        if(modo === 'salida') {
-            const { error: comErr } = await supabaseClient.from('comunicados').insert([{
-                autor_id: uRes.data.user?.id,
-                titulo: "Registro de Salida del Plantel",
-                mensaje: `Estimado padre de familia/tutor: \nTu hijo(a) ${alu.nombre} ha registrado su salida del plantel el día de hoy a las ${horaActual}.`,
-                audiencia: `Alumno_${alu.id}`,
-                plantel_id: state.plantelId
-            }]);
-            if(comErr) console.error("Error al notificar salida:", comErr);
-        }
+        const { error: comErr } = await supabaseClient.from('comunicados').insert([{
+            autor_id: uRes.data.user?.id,
+            titulo: "Registro de Salida del Plantel",
+            mensaje: `Estimado padre de familia/tutor: \nTu hijo(a) ${alu.nombre} ha registrado su salida del plantel el día de hoy a las ${horaActual}.`,
+            audiencia: `Alumno_${alu.id}`,
+            plantel_id: state.plantelId
+        }]);
+        if(comErr) console.error("Error al notificar salida:", comErr);
 
         const feedback = document.getElementById('ts-feedback');
         if(feedback) {
-            const color = modo === 'entrada' ? 'var(--success)' : 'var(--warning)';
+            const color = 'var(--warning)';
             feedback.innerHTML = `
                 <div class="card shadow-md" style="background:${color}; color:white; padding:15px; border-radius:15px; display:flex; align-items:center; gap:15px; margin-bottom:10px; animation: popIn 0.3s ease-out;">
                     <i class="fa-solid fa-circle-check" style="font-size:2.5rem;"></i>
                     <div style="text-align:left;">
                         <div style="font-size:0.75rem; opacity:0.9; font-weight:bold; letter-spacing:1px; text-transform:uppercase;">
-                            ${modo === 'entrada' ? 'INGRESO AUTORIZADO' : 'SALIDA REGISTRADA'}
+                            SALIDA REGISTRADA
                         </div>
                         <div style="font-size:1.2rem; font-weight:800; line-height:1.2;">${alu.nombre}</div>
                         <div style="font-size:0.8rem; margin-top:3px; opacity:0.9;">${horaActual}</div>
