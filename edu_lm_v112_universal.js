@@ -3431,6 +3431,7 @@ window.showAlumnoExpediente = async (idAlumno) => {
         content.innerHTML = `
             <!-- Encabezado -->
             <div style="padding:24px; border-bottom:1px solid var(--border); background: var(--page-bg); text-align:center; position:relative;">
+                <button class="btn btn-outline btn-sm" onclick="window.imprimirExpediente('${al.id}')" style="position:absolute; top:12px; right:45px; border-color:var(--primary); color:var(--primary);"><i class="fa-solid fa-print"></i> Imprimir</button>
                 <button class="btn-close" onclick="document.getElementById('expedienteDrawer').style.display='none'" style="position:absolute; top:12px; right:12px; border:none; background:none; font-size:1.4rem; cursor:pointer;">&times;</button>
                 <div style="width:70px; height:70px; border-radius:50%; background:var(--primary); color:white; display:grid; place-items:center; margin:0 auto 10px auto; font-size:1.8rem; font-weight:bold;">${al.nombre.substring(0,1)}</div>
                 <h3 style="margin:0;">${al.nombre}</h3>
@@ -3477,6 +3478,125 @@ window.showAlumnoExpediente = async (idAlumno) => {
     } catch(e) { 
         console.error(e);
         content.innerHTML = `<div style="padding:40px; text-align:center; color:var(--danger)"><p>Error: ${e.message}</p></div>`; 
+    }
+};
+
+window.imprimirExpediente = async (idAlumno) => {
+    try {
+        const id = String(idAlumno).trim();
+        const [alRes, repsRes, intervsRes] = await Promise.all([
+            supabaseClient.from('alumnos').select('*, grupos(nombre)').eq('id', id).single(),
+            supabaseClient.from('reportes_conducta').select('*, perfiles(nombre)').eq('alumno_id', id).order('fecha', { ascending: false }),
+            supabaseClient.from('intervenciones_conducta').select('*').eq('alumno_id', id).order('fecha', { ascending: false })
+        ]);
+
+        const al = alRes.data;
+        const reps = repsRes.data || [];
+        const intervs = intervsRes.data || [];
+
+        if(!al) throw new Error("Alumno no encontrado");
+
+        const printWindow = window.open('', '_blank');
+        const fechaImpresion = new Date().toLocaleDateString();
+
+        let repsHtml = reps.length > 0 ? reps.map(r => `
+            <div class="item-box ${r.gravedad === 'Grave' ? 'grave' : ''}">
+                <div class="item-header">
+                    <strong>${r.gravedad}</strong>
+                    <span>${new Date(r.fecha).toLocaleDateString()}</span>
+                </div>
+                <p>${r.descripcion}</p>
+                <small>Reportó: ${r.perfiles?.nombre || 'Maestro'}</small>
+            </div>
+        `).join('') : '<p class="text-muted">Sin reportes registrados.</p>';
+
+        let intervsHtml = intervs.length > 0 ? intervs.map(i => `
+            <div class="item-box success">
+                <div class="item-header">
+                    <strong>Intervención TS</strong>
+                    <span>${new Date(i.fecha).toLocaleDateString()}</span>
+                </div>
+                <p><strong>Procedimiento:</strong> ${i.procedimiento}</p>
+                <p><strong>Compromisos:</strong> ${i.compromisos}</p>
+            </div>
+        `).join('') : '<p class="text-muted">Sin intervenciones registradas.</p>';
+
+        printWindow.document.write(`
+            <html>
+                <head>
+                    <title>Expediente Alumno - ${al.nombre}</title>
+                    <style>
+                        body { font-family: 'Segoe UI', Arial, sans-serif; padding: 40px; color: #333; line-height: 1.5; }
+                        .header { text-align: center; margin-bottom: 30px; border-bottom: 2px solid #1e40af; padding-bottom: 15px; }
+                        .header h1 { margin: 0; color: #1e40af; font-size: 24px; text-transform: uppercase; }
+                        .header p { margin: 5px 0; font-size: 14px; color: #555; }
+                        .student-info { background: #f8fafc; border: 1px solid #e2e8f0; padding: 20px; border-radius: 8px; margin-bottom: 30px; display: grid; grid-template-columns: 1fr 1fr; gap: 15px; font-size: 14px; }
+                        .section-title { font-size: 18px; color: #1e40af; border-bottom: 2px solid #cbd5e1; padding-bottom: 5px; margin-top: 30px; margin-bottom: 15px; text-transform: uppercase; }
+                        .item-box { border: 1px solid #cbd5e1; padding: 12px; border-radius: 6px; margin-bottom: 12px; page-break-inside: avoid; }
+                        .item-box.grave { border-left: 4px solid #ef4444; }
+                        .item-box.success { border-left: 4px solid #10b981; background: #f0fdf4; }
+                        .item-header { display: flex; justify-content: space-between; margin-bottom: 8px; }
+                        .item-box p { margin: 4px 0; font-size: 13px; }
+                        .item-box small { font-size: 11px; color: #64748b; }
+                        .text-muted { color: #64748b; font-style: italic; font-size: 13px; }
+                        .footer-signatures { display: flex; justify-content: space-around; margin-top: 60px; page-break-inside: avoid; }
+                        .sig-line { border-top: 1px solid #000; width: 200px; text-align: center; padding-top: 5px; font-size: 12px; }
+                        @media print {
+                            @page { margin: 2cm; }
+                            body { padding: 0; }
+                            .btn-print { display: none; }
+                        }
+                    </style>
+                </head>
+                <body>
+                    <div class="header">
+                        <h1>SISTEMA EDU-LM: DEPARTAMENTO DE TRABAJO SOCIAL</h1>
+                        <p>EXPEDIENTE INTEGRAL DEL ALUMNO</p>
+                    </div>
+                    
+                    <div class="student-info">
+                        <div>
+                            <strong>Nombre:</strong> ${al.nombre}<br>
+                            <strong>Matrícula:</strong> ${al.matricula}<br>
+                            <strong>Grado:</strong> ${al.grado || 'S/G'}
+                        </div>
+                        <div style="text-align:right;">
+                            <strong>Grupo:</strong> ${al.grupos?.nombre || 'S/G'}<br>
+                            <strong>Fecha de Impresión:</strong> ${fechaImpresion}
+                        </div>
+                    </div>
+
+                    <div class="section-title">Historial de Conducta y Reportes</div>
+                    ${repsHtml}
+
+                    <div class="section-title">Intervenciones y Compromisos</div>
+                    ${intervsHtml}
+
+                    <div class="footer-signatures">
+                        <div class="sig-line">
+                            <strong>Firma Trabajo Social</strong><br>
+                            Sello Oficial
+                        </div>
+                        <div class="sig-line">
+                            <strong>Firma Padre/Tutor</strong><br>
+                            Aceptación de Acuerdos
+                        </div>
+                    </div>
+
+                    <script>
+                        window.onload = () => {
+                            setTimeout(() => {
+                                window.print();
+                                window.close();
+                            }, 500);
+                        };
+                    </script>
+                </body>
+            </html>
+        `);
+        printWindow.document.close();
+    } catch (e) {
+        alert("Error al generar el formato de impresión: " + e.message);
     }
 };
 
