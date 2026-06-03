@@ -3484,15 +3484,17 @@ window.showAlumnoExpediente = async (idAlumno) => {
 window.imprimirExpediente = async (idAlumno) => {
     try {
         const id = String(idAlumno).trim();
-        const [alRes, repsRes, intervsRes] = await Promise.all([
+        const [alRes, repsRes, intervsRes, plantelRes] = await Promise.all([
             supabaseClient.from('alumnos').select('*, grupos(nombre)').eq('id', id).single(),
             supabaseClient.from('reportes_conducta').select('*, perfiles(nombre)').eq('alumno_id', id).order('fecha', { ascending: false }),
-            supabaseClient.from('intervenciones_conducta').select('*').eq('alumno_id', id).order('fecha', { ascending: false })
+            supabaseClient.from('intervenciones_conducta').select('*').eq('alumno_id', id).order('fecha', { ascending: false }),
+            supabaseClient.from('planteles').select('nombre').eq('id', state.plantelId).single()
         ]);
 
         const al = alRes.data;
         const reps = repsRes.data || [];
         const intervs = intervsRes.data || [];
+        const schoolName = plantelRes.data?.nombre || 'Escuela';
 
         if(!al) throw new Error("Alumno no encontrado");
 
@@ -3551,7 +3553,7 @@ window.imprimirExpediente = async (idAlumno) => {
                 </head>
                 <body>
                     <div class="header">
-                        <h2>${CONFIG.schoolName || 'Escuela'}</h2>
+                        <h2>${schoolName}</h2>
                         <h1>SISTEMA EDU-LM: DEPARTAMENTO DE TRABAJO SOCIAL</h1>
                         <p>EXPEDIENTE INTEGRAL DEL ALUMNO</p>
                     </div>
@@ -3780,15 +3782,17 @@ window.verHistorialSaludUnico = async (id, nombre) => {
 window.imprimirExpedienteMedico = async (idAlumno) => {
     try {
         const id = String(idAlumno).trim();
-        const [alRes, atencRes, justRes] = await Promise.all([
+        const [alRes, atencRes, justRes, plantelRes] = await Promise.all([
             supabaseClient.from('alumnos').select('*, grupos(nombre)').eq('id', id).single(),
             supabaseClient.from('expedientes_salud').select('*').eq('alumno_id', id).order('creado_en', { ascending: false }),
-            supabaseClient.from('justificantes_medicos').select('*').eq('alumno_id', id).order('fecha_emision', { ascending: false })
+            supabaseClient.from('justificantes_medicos').select('*').eq('alumno_id', id).order('fecha_emision', { ascending: false }),
+            supabaseClient.from('planteles').select('nombre').eq('id', state.plantelId).single()
         ]);
 
         const al = alRes.data;
         const atenciones = atencRes.data || [];
         const justificantes = justRes.data || [];
+        const schoolName = plantelRes.data?.nombre || 'Escuela';
 
         if(!al) throw new Error("Alumno no encontrado");
 
@@ -3844,7 +3848,7 @@ window.imprimirExpedienteMedico = async (idAlumno) => {
                 </head>
                 <body>
                     <div class="header">
-                        <h2>${CONFIG.schoolName || 'Escuela'}</h2>
+                        <h2>${schoolName}</h2>
                         <h1>SISTEMA EDU-LM: ÁREA DE SALUD ESCOLAR</h1>
                         <p>EXPEDIENTE MÉDICO Y JUSTIFICANTES</p>
                     </div>
@@ -3914,14 +3918,15 @@ window.emitirJustificanteSalud = async (alumnoId, nombre) => {
             autor_id: uRes.data.user.id,
             titulo: `JUSTIFICANTE: ${nombre}`,
             mensaje: `Se informa que el alumno(a) ${nombre} cuenta con justificante oficial por el siguiente motivo: ${motivo}. Favor de brindar las facilidades académicas correspondientes.`,
-            audiencia: `Grupo_${alu.grupo_id}`
+            audiencia: `Grupo_${alu.grupo_id}`,
+            plantel_id: state.plantelId
         }]);
 
         if(error) throw error;
         alert("Justificante enviado exitosamente a todos los maestros del grupo.");
     } catch(e) { 
         console.error(e);
-        alert("Error al enviar el justificante.");
+        alert("Error al enviar el justificante: " + e.message);
     }
 };
 
@@ -5962,12 +5967,13 @@ window.notificarMaestrosJustificante = async (alumnoId, motivo, inicio, fin) => 
             autor_id: state.user.id,
             titulo: 'JUSTIFICANTE MÉDICO: ' + al.nombre,
             audiencia: 'Grupo_' + al.grupo_id,
-            mensaje: mensaje
+            mensaje: mensaje,
+            plantel_id: state.plantelId
         }]);
 
         if(comErr) {
             console.error("Error al insertar comunicado:", comErr);
-            throw new Error("Justificante guardado, pero los maestros no pudieron ser notificados (Error de permisos en Comunicados).");
+            throw new Error("Justificante guardado, pero los maestros no pudieron ser notificados. Detalles: " + comErr.message + " " + JSON.stringify(comErr));
         }
     } catch(e) { 
         console.error("Error al notificar maestros:", e);
