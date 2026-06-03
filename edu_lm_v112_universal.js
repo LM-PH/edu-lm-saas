@@ -786,7 +786,7 @@ function renderSidebar() {
       { name: 'Reportes Escolares', path: '/apoyo/reportes', icon: 'fa-file-signature' },
       { name: 'Expediente Salud', path: '/apoyo/salud', icon: 'fa-notes-medical' },
       { name: 'Bitácora Diaria', path: '/apoyo/bitacora', icon: 'fa-book-journal-whills' },
-      { name: 'Prefectura (Escáner)', path: '/apoyo/prefectura', icon: 'fa-qrcode' },
+      { name: 'Escáner Entrada', path: '/apoyo/prefectura', icon: 'fa-qrcode' },
       { name: 'Escáner de Salida', path: '/apoyo/ts_escaner', icon: 'fa-person-walking-arrow-right' },
       { name: 'Avisos Oficiales', path: '/apoyo/comunicados', icon: 'fa-bullhorn' },
     ],
