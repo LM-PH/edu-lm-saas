@@ -783,6 +783,7 @@ function renderSidebar() {
     ],
     apoyo: [
       { name: 'Focos Rojos', path: '/apoyo/dashboard', icon: 'fa-triangle-exclamation' },
+      { name: 'Riesgo Académico', path: '/apoyo/riesgo', icon: 'fa-user-graduate' },
       { name: 'Reportes Escolares', path: '/apoyo/reportes', icon: 'fa-file-signature' },
       { name: 'Expediente Salud', path: '/apoyo/salud', icon: 'fa-notes-medical' },
       { name: 'Bitácora Diaria', path: '/apoyo/bitacora', icon: 'fa-book-journal-whills' },
@@ -2386,6 +2387,78 @@ function renderMaestroBitacora() {
 // ========================
 // APOYO PAGES
 // ========================
+function renderApoyoRiesgoAcademico() {
+  setTimeout(() => { if(window.loadApoyoRiesgoFiltros) window.loadApoyoRiesgoFiltros(); }, 100);
+  return `
+    <div class="page-header">
+      <h2 class="page-title">Riesgo Académico</h2>
+      <p class="page-subtitle">Identificación automática de alumnos con 3 o más materias reprobadas.</p>
+    </div>
+
+    <div style="display:flex; gap:24px; flex-wrap:wrap;">
+      <div class="card" style="flex:1; min-width:320px; align-self:flex-start;">
+         <h3 style="margin-bottom:12px"><i class="fa-solid fa-filter"></i> Filtros de Búsqueda</h3>
+         
+         <div class="form-group">
+            <label class="form-label">Trimestre</label>
+            <select class="form-select" id="riesgoTrimestreSel">
+                <option value="Todos">Todos los Trimestres (Promedio general u orientativo)</option>
+                <option value="1">Trimestre 1</option>
+                <option value="2">Trimestre 2</option>
+                <option value="3">Trimestre 3</option>
+            </select>
+         </div>
+
+         <div class="form-group">
+            <label class="form-label">Grado</label>
+            <select class="form-select" id="riesgoGradoSel" onchange="window.handleRiesgoGradoChange()">
+                <option value="Todos">Toda la Escuela</option>
+                <option value="1°">1° Grado</option>
+                <option value="2°">2° Grado</option>
+                <option value="3°">3° Grado</option>
+            </select>
+         </div>
+
+         <div class="form-group" id="riesgoGrupoContainer" style="display:none;">
+            <label class="form-label">Grupo</label>
+            <select class="form-select" id="riesgoGrupoSel">
+               <option value="Todos">Todos los grupos del grado</option>
+            </select>
+         </div>
+
+         <div class="form-group">
+            <label class="form-label">Umbral de Alerta</label>
+            <select class="form-select" id="riesgoUmbralSel">
+                <option value="1">1 o más materias reprobadas</option>
+                <option value="2">2 o más materias reprobadas</option>
+                <option value="3" selected>3 o más materias reprobadas</option>
+                <option value="4">4 o más materias reprobadas</option>
+                <option value="5">5 o más materias reprobadas</option>
+            </select>
+         </div>
+
+         <button class="btn btn-primary" style="width:100%; margin-top:10px;" onclick="window.loadApoyoRiesgoData()">
+            <i class="fa-solid fa-search"></i> Detectar Alumnos
+         </button>
+      </div>
+
+      <div class="card" style="flex:3; min-width:400px; width:100%;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+          <h3 style="margin:0;"><i class="fa-solid fa-triangle-exclamation" style="color:var(--danger);"></i> Alumnos en Riesgo</h3>
+          <span id="riesgoTotalBadge" class="badge" style="background:var(--danger); color:white; display:none;">0 detectados</span>
+        </div>
+        
+        <div id="riesgoDataContainer" style="min-height:300px;">
+           <div style="text-align:center; padding:40px; color:var(--text-muted);">
+             <i class="fa-solid fa-user-graduate" style="font-size:3rem; margin-bottom:15px; color:var(--border);"></i>
+             <p>Ajusta los filtros y haz clic en "Detectar Alumnos".</p>
+           </div>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
 function renderApoyoDashboard() {
   setTimeout(() => { if(window.loadFocosRojos) window.loadFocosRojos(); }, 100);
   return `
@@ -2665,6 +2738,145 @@ function renderApoyoReportes() {
 // ========================
 // APOYO DATA LOADERS
 // ========================
+
+window.loadApoyoRiesgoFiltros = async () => {
+    try {
+        const { data: grupos } = await supabaseClient.from('grupos')
+            .select('*')
+            .eq('plantel_id', state.plantelId)
+            .order('nombre');
+        
+        window._riesgoGruposCacheados = grupos || [];
+    } catch(e) { console.error("Error cargando grupos riesgo", e); }
+};
+
+window.handleRiesgoGradoChange = () => {
+    const grado = document.getElementById('riesgoGradoSel').value;
+    const container = document.getElementById('riesgoGrupoContainer');
+    const selGrupo = document.getElementById('riesgoGrupoSel');
+    
+    if(grado === 'Todos') {
+        container.style.display = 'none';
+        selGrupo.value = 'Todos';
+    } else {
+        container.style.display = 'block';
+        const filtrados = (window._riesgoGruposCacheados || []).filter(g => g.grado === grado);
+        let html = '<option value="Todos">Todos los grupos del grado</option>';
+        filtrados.forEach(g => {
+            html += `<option value="${g.id}">${g.nombre}</option>`;
+        });
+        selGrupo.innerHTML = html;
+    }
+};
+
+window.loadApoyoRiesgoData = async () => {
+    const hold = document.getElementById('riesgoDataContainer');
+    const badge = document.getElementById('riesgoTotalBadge');
+    const trim = document.getElementById('riesgoTrimestreSel').value;
+    const grado = document.getElementById('riesgoGradoSel').value;
+    const grupo = document.getElementById('riesgoGrupoSel') ? document.getElementById('riesgoGrupoSel').value : 'Todos';
+    const umbral = parseInt(document.getElementById('riesgoUmbralSel').value) || 3;
+
+    hold.innerHTML = '<p style="text-align:center; padding:30px;">Analizando calificaciones...</p>';
+    badge.style.display = 'none';
+
+    try {
+        let query = supabaseClient.from('calificaciones')
+            .select('calificacion, materia_nombre, alumnos!inner(id, nombre, grado, grupo_id, grupos(nombre))')
+            .eq('plantel_id', state.plantelId)
+            .lt('calificacion', 6); // Solo buscar reprobadas (< 6)
+
+        if(trim !== 'Todos') {
+            query = query.eq('trimestre', parseInt(trim));
+        }
+
+        if(grado !== 'Todos') {
+            query = query.eq('alumnos.grado', grado);
+        }
+
+        if(grupo !== 'Todos') {
+            query = query.eq('alumnos.grupo_id', grupo);
+        }
+
+        const { data, error } = await query;
+        if(error) throw error;
+
+        if(!data || data.length === 0) {
+            hold.innerHTML = '<p style="text-align:center; padding:30px; color:var(--success);"><i class="fa-solid fa-check-circle" style="font-size:2rem; display:block; margin-bottom:10px;"></i>No se detectaron alumnos con calificaciones reprobatorias bajo estos filtros.</p>';
+            return;
+        }
+
+        const mapaAlumnos = {};
+        data.forEach(row => {
+            const aId = row.alumnos.id;
+            if(!mapaAlumnos[aId]) {
+                mapaAlumnos[aId] = {
+                    id: aId,
+                    nombre: row.alumnos.nombre,
+                    grado: row.alumnos.grado,
+                    grupo: row.alumnos.grupos ? row.alumnos.grupos.nombre : 'Sin grupo',
+                    materias: new Set()
+                };
+            }
+            mapaAlumnos[aId].materias.add(row.materia_nombre);
+        });
+
+        const alumnosEnRiesgo = Object.values(mapaAlumnos)
+            .map(a => ({ ...a, materias: Array.from(a.materias) }))
+            .filter(a => a.materias.length >= umbral)
+            .sort((a,b) => b.materias.length - a.materias.length);
+
+        if(alumnosEnRiesgo.length === 0) {
+            hold.innerHTML = `<p style="text-align:center; padding:30px; color:var(--success);">No hay alumnos con ${umbral} o más materias reprobadas.</p>`;
+            return;
+        }
+
+        badge.style.display = 'inline-block';
+        badge.innerText = `${alumnosEnRiesgo.length} detectados`;
+
+        let html = `
+            <div style="overflow-x:auto;">
+                <table class="risk-table" style="width:100%;">
+                    <thead>
+                        <tr>
+                            <th>Alumno</th>
+                            <th>Grado/Grupo</th>
+                            <th style="text-align:center;">Materias Reprobadas</th>
+                            <th>Asignaturas</th>
+                            <th style="text-align:center;">Acción</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+        `;
+
+        alumnosEnRiesgo.forEach(al => {
+            const badgesMaterias = al.materias.map(m => `<span class="badge" style="background:#f1f5f9; color:#475569; margin:2px; font-weight:normal; border:1px solid #cbd5e1;">${m}</span>`).join('');
+            
+            html += `
+                <tr>
+                    <td style="font-weight:600;">${al.nombre}</td>
+                    <td>${al.grado} - ${al.grupo}</td>
+                    <td style="text-align:center;">
+                        <span style="font-size:1.2rem; font-weight:bold; color:var(--danger);">${al.materias.length}</span>
+                    </td>
+                    <td style="max-width:300px; line-height:1.6;">${badgesMaterias}</td>
+                    <td style="text-align:center;">
+                        <button class="btn btn-primary btn-sm" onclick="window.navigate('/apoyo/reportes'); setTimeout(()=> { document.getElementById('searchAlumnoFoco').value='${al.nombre}'; window.searchAlumnoParaReporte(); }, 500);">
+                            <i class="fa-solid fa-calendar-check"></i> Citar / Reporte
+                        </button>
+                    </td>
+                </tr>
+            `;
+        });
+
+        html += '</tbody></table></div>';
+        hold.innerHTML = html;
+
+    } catch(err) {
+        console.error(err);
+        hold.innerHTML = '<p style="text-align:center; color:var(--danger);">Error al calcular el riesgo académico.</p>';
+    }
+};
 
 window.loadFocosRojos = async () => {
     const cont = document.getElementById('focosRojosContenedor');
@@ -4882,6 +5094,7 @@ async function renderPage(path) {
     case '/maestro/reportes': return renderApoyoReportes();
     case '/maestro/comunicados': return renderPersonalComunicados('Maestros');
     case '/apoyo/dashboard': return renderApoyoDashboard();
+    case '/apoyo/riesgo': return renderApoyoRiesgoAcademico();
     case '/apoyo/reportes': return renderApoyoReportes();
     case '/apoyo/salud': return renderApoyoSalud();
     case '/apoyo/bitacora': return renderApoyoBitacora();
