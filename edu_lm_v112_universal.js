@@ -3569,6 +3569,46 @@ window.loadResumenEntrada = async () => {
     } catch(e) { console.error(e); }
 };
 
+window.loadResumenSalida = async () => {
+    const cont = document.getElementById('resumenSalidaCont');
+    if(!cont) return;
+    try {
+        const hoy = new Date().toLocaleDateString('en-CA');
+        
+        const { data: accesos } = await supabaseClient.from('accesos_plantel')
+            .select('estado')
+            .eq('fecha', hoy)
+            .eq('plantel_id', state.plantelId);
+        
+        const entradas = (accesos || []).filter(a => a.estado === 'Asistencia' || a.estado === 'Retardo').length;
+        const salidas = (accesos || []).filter(a => a.estado === 'Salida').length;
+        
+        const pct = entradas > 0 ? Math.round((salidas / entradas) * 100) : 0;
+        const faltanSalir = entradas - salidas;
+
+        cont.innerHTML = `
+            <div style="text-align:center; margin-bottom:20px;">
+                <div style="font-size:3rem; font-weight:800; color:var(--warning); line-height:1;">${pct}%</div>
+                <div style="font-size:0.8rem; color:var(--text-muted); text-transform:uppercase; letter-spacing:1px; margin-top:5px;">Alumnos que han salido</div>
+            </div>
+            <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px;">
+                <div class="card" style="padding:10px; text-align:center; background:#f0fdf4; border:1px solid #bbf7d0; border-radius:15px;">
+                    <div style="font-size:1.2rem; font-weight:bold; color:#166534;">${entradas}</div>
+                    <div style="font-size:0.7rem; color:#16a34a;">Entraron Hoy</div>
+                </div>
+                <div class="card" style="padding:10px; text-align:center; background:#fffbeb; border:1px solid #fde68a; border-radius:15px;">
+                    <div style="font-size:1.2rem; font-weight:bold; color:#92400e;">${salidas}</div>
+                    <div style="font-size:0.7rem; color:#d97706;">Salieron</div>
+                </div>
+            </div>
+            <div class="card" style="padding:12px; margin-top:10px; display:flex; justify-content:space-between; align-items:center; border-radius:15px; border-left:4px solid var(--danger);">
+                <span style="font-size:0.85rem; color:var(--text-muted);">Aún en el plantel:</span>
+                <span style="font-weight:bold; color:var(--danger);">${faltanSalir > 0 ? faltanSalir : 0} alumnos</span>
+            </div>
+        `;
+    } catch(e) { console.error(e); }
+};
+
 window.loadAsistenciasApoyo = async () => {
     const table = document.getElementById('tablaAsistenciasApoyo');
     const grupoId = document.getElementById('selGrupoAsistenciaApoyo').value;
@@ -3759,7 +3799,7 @@ window.actualizarUIPortalTS = () => {
 
 function renderApoyoTSEscaner() {
   setTimeout(() => { 
-    if(window.loadResumenEntrada) window.loadResumenEntrada();
+    if(window.loadResumenSalida) window.loadResumenSalida();
     if(window.loadGruposControlAsistencia) window.loadGruposControlAsistencia();
     window.actualizarUIPortalTS();
     if(window.startTSScanner) window.startTSScanner('metralleta');
@@ -3815,8 +3855,8 @@ function renderApoyoTSEscaner() {
     <!-- RESUMEN EN TIEMPO REAL -->
     <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap:24px; margin-top:30px;">
         <div class="card" style="border-radius:24px;">
-           <h3 style="margin-bottom:16px; color:var(--primary);"><i class="fa-solid fa-chart-pie"></i> Avance de Hoy</h3>
-           <div id="resumenEntradaCont" style="display:flex; flex-direction:column; gap:12px; max-height:400px; overflow-y:auto; padding-right:10px;">
+           <h3 style="margin-bottom:16px; color:var(--warning);"><i class="fa-solid fa-chart-pie"></i> Avance de Salida</h3>
+           <div id="resumenSalidaCont" style="display:flex; flex-direction:column; gap:12px; max-height:400px; overflow-y:auto; padding-right:10px;">
               <p style="text-align:center; padding:20px; opacity:0.5;">Cargando estadísticas...</p>
            </div>
         </div>
@@ -8729,7 +8769,7 @@ window.registrarAsistenciaTS = async (qrText) => {
         audio.play().catch(()=>{});
 
         if(state.path === '/apoyo/ts_escaner') {
-            window.loadResumenEntrada();
+            window.loadResumenSalida();
             window.loadAsistenciasApoyo();
         }
     } catch(e) { 
