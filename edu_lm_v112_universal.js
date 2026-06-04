@@ -6427,7 +6427,13 @@ window.descargarBoletaPDF = async (aluId, nombre, matricula) => {
             }
         } catch(e) { console.warn('Error fetching firma:', e); }
 
-        const plantelName = (typeof state !== 'undefined' && state && state.plantelNombre) ? state.plantelNombre : CONFIG.schoolName;
+        let plantelName = CONFIG.schoolName;
+        try {
+            if (state && state.plantelId) {
+                const { data: pt } = await supabaseClient.from('planteles').select('nombre').eq('id', state.plantelId).maybeSingle();
+                if (pt && pt.nombre) plantelName = pt.nombre;
+            }
+        } catch(e) {}
 
         printWindow.document.write(`
             <html>
@@ -12730,7 +12736,13 @@ window.descargarBoletaAdminPDF = async (alumnoId, nombre, matricula) => {
             }
         } catch(e) { console.warn('Error fetching firma:', e); }
 
-        const plantelName = (typeof state !== 'undefined' && state && state.plantelNombre) ? state.plantelNombre : CONFIG.schoolName;
+        let plantelName = CONFIG.schoolName;
+        try {
+            if (state && state.plantelId) {
+                const { data: pt } = await supabaseClient.from('planteles').select('nombre').eq('id', state.plantelId).maybeSingle();
+                if (pt && pt.nombre) plantelName = pt.nombre;
+            }
+        } catch(e) {}
 
         printWindow.document.write(`
             <html>
