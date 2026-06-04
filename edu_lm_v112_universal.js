@@ -12900,11 +12900,23 @@ window.updatePsicoEspecifInput = async (filtroId, containerId, inputId) => {
     if (filtro === 'todos') {
         container.innerHTML = `<input type="text" id="${inputId}" class="form-input" placeholder="No aplica para 'Todos'" disabled>`;
     } else if (filtro === 'grado') {
-        container.innerHTML = `
-            <select id="${inputId}" class="form-input">
-                <option value="1">1</option><option value="2">2</option><option value="3">3</option>
-                <option value="4">4</option><option value="5">5</option><option value="6">6</option>
-            </select>`;
+        container.innerHTML = `<select id="${inputId}" class="form-input"><option>Cargando grados...</option></select>`;
+        try {
+            const { data } = await supabaseClient.from('grupos').select('grado').eq('plantel_id', state.plantelId);
+            if(data && data.length > 0) {
+                const grados = [...new Set(data.map(g => g.grado).filter(g => g))].sort((a,b)=>a-b);
+                if(grados.length > 0) {
+                    container.innerHTML = `<select id="${inputId}" class="form-input">` + 
+                        grados.map(g => `<option value="${g}">${g}</option>`).join('') + `</select>`;
+                } else {
+                    container.innerHTML = `<select id="${inputId}" class="form-input"><option value="">Sin grados registrados</option></select>`;
+                }
+            } else {
+                container.innerHTML = `<select id="${inputId}" class="form-input"><option value="">Sin grados registrados</option></select>`;
+            }
+        } catch(e) {
+            container.innerHTML = `<input type="text" id="${inputId}" class="form-input" placeholder="Error al cargar grados">`;
+        }
     } else if (filtro === 'grupo') {
         container.innerHTML = `<select id="${inputId}" class="form-input"><option>Cargando grupos...</option></select>`;
         try {
