@@ -1613,36 +1613,36 @@ function renderAdminCalificaciones() {
       <!-- Panel Izquierdo: Escáner -->
       <div class="card" style="flex:1; min-width:320px; align-self:flex-start;">
         <h3 style="margin-bottom:8px;"><i class="fa-solid fa-qrcode" style="color:var(--primary);"></i> Escáner QR de Alumno</h3>
-        <p style="font-size:0.85rem; color:var(--text-muted); margin-bottom:16px;">Escanea el código QR del alumno para registrar la firma de su boleta.</p>
+        <p style="font-size:0.85rem; color:var(--text-muted); margin-bottom:16px;">Escanea el código QR del alumno. Se enviará un aviso al padre/tutor para que firme de enterado desde su dispositivo.</p>
         
         <div id="firmaQrReader" style="width:100%; border-radius:12px; overflow:hidden; border:2px solid var(--border);"></div>
         <p id="firmaQrStatus" style="text-align:center; font-size:0.85rem; color:var(--text-muted); margin-top:10px; min-height:20px;"></p>
 
         <div id="firmaAlumnoInfo" style="display:none; margin-top:16px; background:var(--primary-light); border-radius:12px; padding:16px; border-left:4px solid var(--primary);">
-          <div style="display:flex; align-items:center; gap:12px; margin-bottom:12px;">
+          <div style="display:flex; align-items:center; gap:12px; margin-bottom:14px;">
             <i class="fa-solid fa-user-graduate" style="font-size:2rem; color:var(--primary);"></i>
             <div>
               <div id="firmaAlumnoNombre" style="font-weight:700; font-size:1.1rem;"></div>
               <div id="firmaAlumnoGrupo" style="font-size:0.85rem; color:var(--text-muted);"></div>
             </div>
           </div>
+
+          <div style="background:rgba(255,255,255,0.6); border-radius:8px; padding:10px 12px; margin-bottom:14px; font-size:0.82rem; color:var(--text-main);">
+            <i class="fa-solid fa-circle-info" style="color:var(--primary);"></i>
+            Se enviará una notificación al perfil del padre/tutor para que ingrese su nombre y confirme haber visto las calificaciones del <strong id="firmaTrimNombrePreview"></strong>.
+          </div>
           
           <div class="form-group">
             <label class="form-label">Trimestre a Firmar</label>
-            <select class="form-select" id="firmaTrimestreSel">
+            <select class="form-select" id="firmaTrimestreSel" onchange="document.getElementById('firmaTrimNombrePreview').textContent=this.value">
               <option value="Trimestre 1">Trimestre 1</option>
               <option value="Trimestre 2">Trimestre 2</option>
               <option value="Trimestre 3">Trimestre 3</option>
             </select>
           </div>
           
-          <div class="form-group">
-            <label class="form-label">Nombre completo del Padre/Tutor que firma</label>
-            <input type="text" class="form-input" id="firmaNombreTutor" placeholder="Ej. María López García" style="width:100%;" />
-          </div>
-          
-          <button class="btn btn-primary" style="width:100%; margin-top:8px;" onclick="window.registrarFirmaBoletaQR()">
-            <i class="fa-solid fa-signature"></i> Registrar Firma
+          <button class="btn btn-primary" style="width:100%; margin-top:8px;" onclick="window.enviarAvisoFirmaBoletaQR()">
+            <i class="fa-solid fa-paper-plane"></i> Enviar Aviso de Firma al Padre/Tutor
           </button>
           <button class="btn btn-outline" style="width:100%; margin-top:8px;" onclick="window.resetFirmaQR()">
             <i class="fa-solid fa-rotate-left"></i> Escanear otro alumno
@@ -6590,12 +6590,17 @@ window.loadTimelineAlumno = async (mostrarHistorial = false) => {
                btnAdjunto = `<a href="${c.archivo_url}" target="_blank" class="btn btn-outline" style="margin-top: 12px; font-size: 0.8rem; padding: 6px 12px; border-color:var(--primary); color:var(--primary)"><i class="fa-solid fa-paperclip"></i> Ver Documento</a>`;
            }
            const esVisto = vistosIds.includes(c.id);
-           const tipoColor = esEncuadre ? 'var(--warning)' : (c.audiencia === 'General' ? 'var(--success)' : 'var(--danger)');
-           const icon = esEncuadre ? 'fa-file-signature' : 'fa-bullhorn';
+           const esFirmaBoletaAviso = c.tipo === 'aviso_firma_boleta';
+           const tipoColor = esFirmaBoletaAviso ? '#d97706' : (esEncuadre ? 'var(--warning)' : (c.audiencia === 'General' ? 'var(--success)' : 'var(--danger)'));
+           const icon = esFirmaBoletaAviso ? 'fa-file-invoice' : (esEncuadre ? 'fa-file-signature' : 'fa-bullhorn');
 
            let btnAccion = '';
            if(!esVisto) {
-               if(esEncuadre) {
+               if(c.tipo === 'aviso_firma_boleta') {
+                   btnAccion = `<button onclick="window.firmarBoletaDesdeTimeline('${c.id}', this)" class="btn btn-sm btn-primary" style="font-size:0.75rem; display:flex; align-items:center; gap:6px; background:#d97706; border-color:#d97706;">
+                       <i class="fa-solid fa-signature"></i> Firmar de Enterado
+                   </button>`;
+               } else if(esEncuadre) {
                    btnAccion = `<button onclick="window.firmarEncuadreDesdeTimeline('${c.id}', this)" class="btn btn-sm btn-primary" style="font-size:0.75rem; display:flex; align-items:center; gap:6px;">
                        <i class="fa-solid fa-signature"></i> Firmar de Enterado
                    </button>`;
@@ -6603,7 +6608,7 @@ window.loadTimelineAlumno = async (mostrarHistorial = false) => {
                    btnAccion = `<button onclick="window.marcarAvisoEnterado('${c.id}')" class="btn btn-sm" style="font-size:0.7rem; background:var(--page-bg); color:var(--text-main); border:1px solid var(--border)"><i class="fa-solid fa-check"></i> Enterado</button>`;
                }
            } else {
-               btnAccion = esEncuadre
+               btnAccion = (esEncuadre || c.tipo === 'aviso_firma_boleta')
                    ? '<span style="font-size:0.75rem; color:var(--success); display:flex; align-items:center; gap:4px;"><i class="fa-solid fa-pen-nib"></i> Firmado</span>'
                    : '<span style="font-size:0.7rem; color:var(--success)"><i class="fa-solid fa-check-double"></i> Leído</span>';
            }
@@ -10710,19 +10715,20 @@ window.__firmaQrState = { scanner: null, alumnoId: null, alumnoNombre: null };
 
 /**
  * Inicializa el escáner QR en la pestaña de Firma por QR.
- * Usa Html5QrcodeScanner (misma librería que el control de acceso).
  */
 window.initFirmaBoletasQR = () => {
     const readerEl = document.getElementById('firmaQrReader');
     if(!readerEl) return;
 
-    // Si ya hay un escáner activo, no reiniciar
+    // Si ya hay un escáner activo, reanudar
     if(window.__firmaQrState.scanner) {
         try { window.__firmaQrState.scanner.resume(); } catch(e) {}
+        document.getElementById('firmaAlumnoInfo').style.display = 'none';
+        document.getElementById('firmaQrStatus').textContent = 'Apunta la cámara al código QR del alumno.';
+        window.loadHistorialFirmas();
         return;
     }
 
-    // Limpiar contenido previo
     readerEl.innerHTML = '';
     document.getElementById('firmaAlumnoInfo').style.display = 'none';
     document.getElementById('firmaQrStatus').textContent = 'Iniciando cámara...';
@@ -10739,14 +10745,15 @@ window.initFirmaBoletasQR = () => {
         showTorchButtonIfSupported: true
     }, false);
 
-    scanner.render(window.onFirmaQrScanSuccess, (err) => {
-        // Ignorar errores normales de frames
-    });
-
+    scanner.render(window.onFirmaQrScanSuccess, () => {});
     window.__firmaQrState.scanner = scanner;
     document.getElementById('firmaQrStatus').textContent = 'Apunta la cámara al código QR del alumno.';
 
-    // Cargar historial al abrir el tab
+    // Inicializar preview del trimestre
+    const trimSel = document.getElementById('firmaTrimestreSel');
+    const preview = document.getElementById('firmaTrimNombrePreview');
+    if(trimSel && preview) preview.textContent = trimSel.value;
+
     window.loadHistorialFirmas();
 };
 
@@ -10757,54 +10764,62 @@ window.onFirmaQrScanSuccess = async (decodedText) => {
     const statusEl = document.getElementById('firmaQrStatus');
     if(!statusEl) return;
 
-    // Pausar el escáner para no seguir leyendo
     try { window.__firmaQrState.scanner?.pause(true); } catch(e) {}
-
     statusEl.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Buscando alumno...';
 
     try {
-        // El QR puede contener el ID del alumno directamente o su matrícula
-        // Intentamos buscar por ID primero, luego por matrícula
         let alumno = null;
-        const { data: byId } = await supabaseClient
-            .from('alumnos')
-            .select('id, nombre, matricula, grupo_id, grupos(nombre)')
-            .eq('id', decodedText.trim())
-            .maybeSingle();
 
-        if(byId) {
-            alumno = byId;
-        } else {
-            const { data: byMatricula } = await supabaseClient
+        // Intentar buscar por ID (UUID)
+        const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(decodedText.trim());
+        if(isUUID) {
+            const { data } = await supabaseClient
                 .from('alumnos')
-                .select('id, nombre, matricula, grupo_id, grupos(nombre)')
+                .select('id, nombre, matricula, perfil_id, contacto_email, grupo_id, grupos(nombre)')
+                .eq('id', decodedText.trim())
+                .maybeSingle();
+            alumno = data;
+        }
+
+        // Si no encontró por ID, buscar por matrícula
+        if(!alumno) {
+            const { data } = await supabaseClient
+                .from('alumnos')
+                .select('id, nombre, matricula, perfil_id, contacto_email, grupo_id, grupos(nombre)')
                 .eq('matricula', decodedText.trim())
                 .maybeSingle();
-            alumno = byMatricula;
+            alumno = data;
         }
 
         if(!alumno) {
             statusEl.innerHTML = '❌ Alumno no encontrado. Verifica el código QR.';
-            setTimeout(() => { try { window.__firmaQrState.scanner?.resume(); } catch(e) {} }, 2000);
+            setTimeout(() => { try { window.__firmaQrState.scanner?.resume(); } catch(e) {} }, 2500);
             return;
         }
 
-        // Guardar datos del alumno en el estado
+        // Guardar en estado
         window.__firmaQrState.alumnoId = alumno.id;
         window.__firmaQrState.alumnoNombre = alumno.nombre;
+        window.__firmaQrState.alumnoPerfilId = alumno.perfil_id;
+        window.__firmaQrState.alumnoContactoEmail = alumno.contacto_email;
 
-        // Mostrar información del alumno
+        // Mostrar info del alumno
         document.getElementById('firmaAlumnoNombre').textContent = alumno.nombre;
-        document.getElementById('firmaAlumnoGrupo').textContent = 
+        document.getElementById('firmaAlumnoGrupo').textContent =
             `Matrícula: ${alumno.matricula || 'N/A'} | Grupo: ${alumno.grupos?.nombre || 'Sin grupo'}`;
         document.getElementById('firmaAlumnoInfo').style.display = 'block';
-        document.getElementById('firmaNombreTutor').value = '';
-        statusEl.innerHTML = `✅ Alumno identificado correctamente.`;
+
+        // Inicializar preview del trimestre
+        const trimSel = document.getElementById('firmaTrimestreSel');
+        const preview = document.getElementById('firmaTrimNombrePreview');
+        if(trimSel && preview) preview.textContent = trimSel.value;
+
+        statusEl.innerHTML = '✅ Alumno identificado. Selecciona el trimestre y envía el aviso.';
 
     } catch(e) {
         console.error('[FirmaQR] Error al buscar alumno:', e);
         statusEl.innerHTML = '❌ Error de conexión. Intenta de nuevo.';
-        setTimeout(() => { try { window.__firmaQrState.scanner?.resume(); } catch(e) {} }, 2000);
+        setTimeout(() => { try { window.__firmaQrState.scanner?.resume(); } catch(e) {} }, 2500);
     }
 };
 
@@ -10814,28 +10829,38 @@ window.onFirmaQrScanSuccess = async (decodedText) => {
 window.resetFirmaQR = () => {
     window.__firmaQrState.alumnoId = null;
     window.__firmaQrState.alumnoNombre = null;
+    window.__firmaQrState.alumnoPerfilId = null;
+    window.__firmaQrState.alumnoContactoEmail = null;
     document.getElementById('firmaAlumnoInfo').style.display = 'none';
     document.getElementById('firmaQrStatus').textContent = 'Apunta la cámara al código QR del alumno.';
     try { window.__firmaQrState.scanner?.resume(); } catch(e) {}
 };
 
 /**
- * Guarda la firma de la boleta en la tabla firmas_boleta.
+ * Envía una notificación al padre/tutor del alumno para que firme de enterado.
+ * El admin solo escanea el QR y elige el trimestre — NO firma en el admin.
+ * La firma real la hace el padre desde SU dispositivo al ver la notificación.
  */
-window.registrarFirmaBoletaQR = async () => {
+window.enviarAvisoFirmaBoletaQR = async () => {
     const alumnoId = window.__firmaQrState.alumnoId;
-    const nombreTutor = document.getElementById('firmaNombreTutor')?.value?.trim();
+    const alumnoNombre = window.__firmaQrState.alumnoNombre;
+    const alumnoPerfilId = window.__firmaQrState.alumnoPerfilId;
+    const alumnoContactoEmail = window.__firmaQrState.alumnoContactoEmail;
     const trimestre = document.getElementById('firmaTrimestreSel')?.value;
 
     if(!alumnoId) return window.showToast('Escanea primero el código QR del alumno.', 'error');
-    if(!nombreTutor) return window.showToast('Escribe el nombre del padre o tutor que firma.', 'error');
     if(!trimestre) return window.showToast('Selecciona el trimestre.', 'error');
+
+    // Verificar que el alumno tiene cuenta (perfil) para recibir la notificación
+    if(!alumnoPerfilId && !alumnoContactoEmail) {
+        return window.showToast(`⚠️ El alumno ${alumnoNombre} no tiene cuenta de acceso configurada.`, 'error');
+    }
 
     try {
         const uRes = await supabaseClient.auth.getUser();
         if(!uRes.data?.user) throw new Error('Sin sesión activa');
 
-        // Verificar si ya existe una firma para este alumno y trimestre
+        // Verificar si ya existe firma confirmada para este trimestre
         const { data: firmaExistente } = await supabaseClient
             .from('firmas_boleta')
             .select('id, nombre_tutor, fecha_firma')
@@ -10845,43 +10870,132 @@ window.registrarFirmaBoletaQR = async () => {
 
         if(firmaExistente) {
             const confirmar = confirm(
-                `⚠️ Este alumno ya tiene una firma registrada para ${trimestre}:\n` +
+                `⚠️ Ya existe una firma registrada para ${alumnoNombre} — ${trimestre}:\n` +
                 `Firmó: ${firmaExistente.nombre_tutor}\n` +
                 `Fecha: ${new Date(firmaExistente.fecha_firma).toLocaleString('es-MX')}\n\n` +
-                `¿Deseas sobreescribir la firma anterior?`
+                `¿Deseas reenviar el aviso de firma de todos modos?`
             );
             if(!confirmar) return;
-
-            // Actualizar firma existente
-            const { error } = await supabaseClient
-                .from('firmas_boleta')
-                .update({ nombre_tutor: nombreTutor, fecha_firma: new Date().toISOString(), registrado_por: uRes.data.user.id })
-                .eq('id', firmaExistente.id);
-            if(error) throw error;
-        } else {
-            // Insertar nueva firma
-            const { error } = await supabaseClient.from('firmas_boleta').insert([{
-                alumno_id: alumnoId,
-                plantel_id: state.plantelId,
-                trimestre: trimestre,
-                nombre_tutor: nombreTutor,
-                registrado_por: uRes.data.user.id
-            }]);
-            if(error) throw error;
         }
 
-        window.showToast(`✅ Firma de ${window.__firmaQrState.alumnoNombre} registrada para ${trimestre}.`, 'success');
+        // Determinar el receptor: usar perfil_id si existe, o audiencia por email
+        const receptorId = alumnoPerfilId || null;
+
+        // Insertar comunicado tipo 'aviso_firma_boleta' en la tabla de comunicados
+        const { data: com, error: errCom } = await supabaseClient.from('comunicados').insert([{
+            autor_id: uRes.data.user.id,
+            receptor_id: receptorId,
+            audiencia: `Alumno_${alumnoId}`,
+            titulo: `✍️ Firma de Boleta Requerida — ${trimestre}`,
+            mensaje: `Estimado padre de familia o tutor:\n\nSe te solicita firmar de enterado las calificaciones de ${alumnoNombre} correspondientes al ${trimestre}.\n\nPor favor presiona el botón "Firmar de Enterado" y escribe tu nombre completo para quedar registrado en el sistema escolar.\n\n📌 Esta firma digital tiene validez dentro del portal educativo.`,
+            plantel_id: state.plantelId,
+            tipo: 'aviso_firma_boleta',
+            // Metadatos para la firma
+            archivo_url: null
+        }]).select('id').single();
+
+        if(errCom) throw errCom;
+
+        // Guardar en firmas_boleta el estado "pendiente" con el ID del comunicado como referencia
+        // La firma se completará cuando el padre confirme desde su timeline
+        // Por ahora guardamos el comunicado_id como referencia en una columna adicional
+        // (Alternativamente, la firma se registra al confirmar)
+
+        window.showToast(`✅ Aviso de firma enviado a ${alumnoNombre}. El padre/tutor debe confirmarlo desde su dispositivo.`, 'success');
         window.resetFirmaQR();
         window.loadHistorialFirmas();
 
     } catch(e) {
-        console.error('[FirmaQR] Error al guardar firma:', e);
-        window.showToast('Error al guardar la firma: ' + e.message, 'error');
+        console.error('[FirmaQR] Error al enviar aviso:', e);
+        window.showToast('Error al enviar el aviso: ' + e.message, 'error');
     }
 };
 
 /**
- * Carga y muestra el historial de firmas registradas en el admin.
+ * Función llamada desde el timeline del alumno cuando el padre presiona "Firmar de Enterado".
+ * Pide el nombre del padre y guarda la firma en firmas_boleta.
+ */
+window.firmarBoletaDesdeTimeline = async (comunicadoId, btn) => {
+    const firmaTexto = prompt('Para completar tu Firma Digital de Enterado, escribe tu Nombre Completo (Padre o Tutor):');
+    if(!firmaTexto || !firmaTexto.trim()) return;
+
+    try {
+        if(btn) { btn.disabled = true; btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Registrando...'; }
+
+        const u = await supabaseClient.auth.getUser();
+        if(!u.data?.user) throw new Error('Sin sesión activa');
+
+        // Marcar el comunicado como visto/firmado
+        await supabaseClient.from('comunicados_vistos').upsert({
+            perfil_id: u.data.user.id,
+            comunicado_id: comunicadoId
+        }, { onConflict: 'perfil_id,comunicado_id' });
+
+        // Obtener datos del comunicado para extraer el alumno y trimestre
+        const { data: com } = await supabaseClient
+            .from('comunicados')
+            .select('titulo, mensaje, audiencia, autor_id')
+            .eq('id', comunicadoId)
+            .maybeSingle();
+
+        if(!com) throw new Error('Comunicado no encontrado');
+
+        // Extraer alumno_id de la audiencia "Alumno_<uuid>"
+        const alumnoIdMatch = (com.audiencia || '').match(/^Alumno_([a-f0-9-]{36})$/i);
+        if(!alumnoIdMatch) throw new Error('No se pudo identificar al alumno del comunicado.');
+        const alumnoId = alumnoIdMatch[1];
+
+        // Extraer trimestre del título: "✍️ Firma de Boleta Requerida — Trimestre X"
+        const trimestreMatch = (com.titulo || '').match(/Trimestre\s+\d+/i);
+        const trimestre = trimestreMatch ? trimestreMatch[0] : 'Sin especificar';
+
+        // Registrar la firma en firmas_boleta
+        const { error: errFirma } = await supabaseClient.from('firmas_boleta').upsert({
+            alumno_id: alumnoId,
+            plantel_id: state.plantelId,
+            trimestre: trimestre,
+            nombre_tutor: firmaTexto.trim(),
+            registrado_por: u.data.user.id,
+            fecha_firma: new Date().toISOString()
+        }, { onConflict: 'alumno_id,trimestre' });
+
+        if(errFirma) throw errFirma;
+
+        // Notificar al administrador que el padre firmó
+        if(com.autor_id) {
+            await supabaseClient.from('comunicados').insert([{
+                autor_id: u.data.user.id,
+                receptor_id: com.autor_id,
+                titulo: `✅ Boleta Firmada: ${firmaTexto.trim()}`,
+                mensaje: `El padre/tutor ha firmado de enterado las calificaciones del ${trimestre}.\n\n✍️ Firma: ${firmaTexto.trim()}\n📅 Fecha: ${new Date().toLocaleString('es-MX')}`,
+                audiencia: `Admin_Firma`,
+                plantel_id: state.plantelId
+            }]);
+        }
+
+        // Animar la eliminación del card del timeline
+        const card = document.getElementById(`aviso-${comunicadoId}`);
+        if(card) {
+            card.style.transform = 'translateX(100%)';
+            card.style.opacity = '0';
+            card.style.transition = 'all 0.5s ease';
+            setTimeout(() => card.remove(), 500);
+        }
+
+        alert(`✅ ¡Firma registrada con éxito!\n\nNombre: ${firmaTexto.trim()}\nTrimestre: ${trimestre}\n\nTu firma quedó registrada en el sistema escolar.`);
+
+        // Refrescar boletas si estamos en esa vista
+        if(window.loadBoletasAlumno) window.loadBoletasAlumno();
+
+    } catch(e) {
+        console.error('[FirmaQR] Error al registrar firma:', e);
+        if(btn) { btn.disabled = false; btn.innerHTML = '<i class="fa-solid fa-signature"></i> Firmar de Enterado'; }
+        alert('Error al registrar la firma: ' + e.message);
+    }
+};
+
+/**
+ * Carga y muestra el historial de firmas registradas en el panel admin.
  */
 window.loadHistorialFirmas = async () => {
     const cont = document.getElementById('firmaHistorialContainer');
@@ -10899,8 +11013,28 @@ window.loadHistorialFirmas = async () => {
 
         if(error) throw error;
 
+        // También cargar avisos pendientes (enviados pero aún no firmados)
+        const { data: pendientes } = await supabaseClient
+            .from('comunicados')
+            .select('id, titulo, audiencia, fecha_envio')
+            .eq('plantel_id', state.plantelId)
+            .eq('tipo', 'aviso_firma_boleta')
+            .order('fecha_envio', { ascending: false })
+            .limit(50);
+
         if(!data || data.length === 0) {
-            cont.innerHTML = '<p style="text-align:center; color:var(--text-muted); padding:30px 0;"><i class="fa-solid fa-signature" style="font-size:2.5rem; display:block; margin-bottom:10px; opacity:0.3;"></i>No hay firmas registradas todavía.</p>';
+            let pendHtml = '';
+            if(pendientes && pendientes.length > 0) {
+                pendHtml = `
+                <div style="margin-bottom:16px; padding:12px; background:#fef3c7; border-radius:10px; border:1px solid #fde68a;">
+                    <p style="margin:0 0 8px 0; font-weight:700; font-size:0.85rem; color:#92400e;"><i class="fa-solid fa-clock"></i> Avisos Enviados — En Espera de Firma (${pendientes.length})</p>
+                    ${pendientes.map(p => {
+                        const trim = (p.titulo || '').match(/Trimestre\s+\d+/i)?.[0] || '';
+                        return `<div style="font-size:0.8rem; color:#78350f; margin-bottom:4px;"><i class="fa-solid fa-hourglass-half"></i> ${trim} | ${new Date(p.fecha_envio).toLocaleDateString('es-MX')}</div>`;
+                    }).join('')}
+                </div>`;
+            }
+            cont.innerHTML = pendHtml + '<p style="text-align:center; color:var(--text-muted); padding:20px 0;"><i class="fa-solid fa-signature" style="font-size:2.5rem; display:block; margin-bottom:10px; opacity:0.3;"></i>No hay firmas confirmadas todavía.</p>';
             return;
         }
 
@@ -10912,6 +11046,25 @@ window.loadHistorialFirmas = async () => {
         });
 
         let html = '';
+
+        // Mostrar pendientes al inicio si hay
+        if(pendientes && pendientes.length > 0) {
+            const firmaIds = new Set(data.map(f => f.alumno_id + f.trimestre));
+            const realPend = pendientes.filter(p => {
+                const alumnoIdM = (p.audiencia||'').match(/^Alumno_([a-f0-9-]{36})$/i);
+                const trim = (p.titulo||'').match(/Trimestre\s+\d+/i)?.[0]||'';
+                if(!alumnoIdM) return false;
+                return !firmaIds.has(alumnoIdM[1] + trim);
+            });
+            if(realPend.length > 0) {
+                html += `
+                <div style="margin-bottom:20px; padding:12px 16px; background:#fef3c7; border-radius:10px; border:1px solid #fde68a;">
+                    <p style="margin:0 0 8px 0; font-weight:700; font-size:0.85rem; color:#92400e;"><i class="fa-solid fa-hourglass-half"></i> Avisos en Espera de Firma (${realPend.length})</p>
+                    <p style="font-size:0.78rem; color:#78350f; margin:0;">Estos alumnos recibieron el aviso pero aún no han firmado desde su dispositivo.</p>
+                </div>`;
+            }
+        }
+
         Object.keys(porTrimestre).sort().forEach(trim => {
             const firmas = porTrimestre[trim];
             html += `
@@ -10927,8 +11080,8 @@ window.loadHistorialFirmas = async () => {
                 const alumno = f.alumnos;
                 const fecha = new Date(f.fecha_firma).toLocaleString('es-MX', { day:'2-digit', month:'short', year:'numeric', hour:'2-digit', minute:'2-digit' });
                 html += `
-                <div style="background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:12px; display:flex; gap:10px; align-items:flex-start;">
-                  <i class="fa-solid fa-signature" style="color:var(--success); margin-top:3px; flex-shrink:0;"></i>
+                <div style="background:var(--surface); border:1px solid #d1fae5; border-radius:10px; padding:12px; display:flex; gap:10px; align-items:flex-start;">
+                  <i class="fa-solid fa-signature" style="color:#059669; margin-top:3px; flex-shrink:0;"></i>
                   <div>
                     <div style="font-weight:600; font-size:0.9rem;">${alumno?.nombre || 'Desconocido'}</div>
                     <div style="font-size:0.78rem; color:var(--text-muted);">Grupo: ${alumno?.grupos?.nombre || 'N/A'} | Mat: ${alumno?.matricula || 'N/A'}</div>
