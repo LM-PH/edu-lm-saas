@@ -12956,7 +12956,7 @@ window.enviarPsicosocial = async () => {
     
     try {
         let query = supabaseClient.from('alumnos').select('id');
-        if(filtro === 'grado') query = query.eq('grado', esp);
+        if(filtro === 'grado') query = query.ilike('grado', `${esp}%`);
         if(filtro === 'grupo') query = query.eq('grupo_id', esp);
         if(filtro === 'alumno') {
             const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(esp);
@@ -13016,7 +13016,7 @@ window.loadPsicosocialStats = async () => {
         
         if (filtro !== 'todos' && esp) {
             if (filtro === 'grado') {
-                data = data.filter(d => String(d.alumnos?.grado) === esp);
+                data = data.filter(d => String(d.alumnos?.grado).startsWith(esp));
             } else if (filtro === 'grupo') {
                 data = data.filter(d => String(d.alumnos?.grupo_id) === esp);
             } else if (filtro === 'alumno') {
@@ -13044,35 +13044,62 @@ window.loadPsicosocialStats = async () => {
             </div>
         `;
 
-        // Renderizado dinámico de gráficas si Chart.js está cargado
-        if(window.Chart && completados > 0) {
-            const res = data.filter(d => d.estado === 'completado' && d.respuestas).map(d => d.respuestas);
-            const container = document.getElementById('psicoChartsDynamicContainer');
-            if(container) {
-                container.innerHTML = '';
-                
-                // Collect all unique keys from all responses
+        const container = document.getElementById('psicoChartsDynamicContainer');
+        if(container) {
+            container.innerHTML = '';
+            if(window.psicoChartInstances) {
+                window.psicoChartInstances.forEach(c => c.destroy());
+            }
+            window.psicoChartInstances = [];
+
+            if(window.Chart && completados > 0) {
+                const res = data.filter(d => d.estado === 'completado' && d.respuestas).map(d => d.respuestas);
                 const keys = new Set();
                 res.forEach(r => Object.keys(r).forEach(k => keys.add(k)));
                 
-                if(window.psicoChartInstances) {
-                    window.psicoChartInstances.forEach(c => c.destroy());
-                }
-                window.psicoChartInstances = [];
-
-                const colors = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#06b6d4'];
-
-                keys.forEach(k => {
-                    let isCat = false;
+                const validKeys = Array.from(keys).filter(k => {
                     for(let r of res) {
                         if(r[k] !== undefined) {
-                            if(typeof r[k] === 'string' && r[k].length < 60) isCat = true;
-                            if(Array.isArray(r[k])) isCat = true;
+                            if(typeof r[k] === 'string' && r[k].length < 60) return true;
+                            if(Array.isArray(r[k])) return true;
                             break; 
                         }
                     }
+                    return false;
+                });
 
-                    if(isCat) {
+                if(validKeys.length > 0) {
+                    const uiHtml = `
+                    <div style="grid-column: 1 / -1; background:#fff; padding:20px; border-radius:12px; border:1px solid var(--border);">
+                        <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:15px; margin-bottom:20px;">
+                            <div style="flex:1; min-width:250px;">
+                                <label style="font-size:0.85rem; color:var(--text-muted); display:block; margin-bottom:5px;">Selecciona la Pregunta a Visualizar:</label>
+                                <select id="chartQuestionSelect" class="form-input" style="margin:0;">
+                                    ${validKeys.map((k, i) => `<option value="${i}">${k}</option>`).join('')}
+                                </select>
+                            </div>
+                            <button id="btnDownloadChart" class="btn btn-outline" style="border-color:var(--primary); color:var(--primary);">
+                                <i class="fa-solid fa-download"></i> Descargar Gráfico
+                            </button>
+                        </div>
+                        <div style="position:relative; height:350px; width:100%;">
+                            <canvas id="mainChartCanvas"></canvas>
+                        </div>
+                    </div>
+                    `;
+                    container.innerHTML = uiHtml;
+                    
+                    const canvas = document.getElementById('mainChartCanvas');
+                    const select = document.getElementById('chartQuestionSelect');
+                    const btnDl = document.getElementById('btnDownloadChart');
+                    const colors = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#06b6d4'];
+
+                    const drawChart = (index) => {
+                        const k = validKeys[index];
+                        if(window.psicoChartInstances[0]) {
+                            window.psicoChartInstances[0].destroy();
+                        }
+                        
                         const stats = res.reduce((acc, curr) => {
                             let val = curr[k];
                             if(val === undefined || val === '') return acc;
@@ -13084,30 +13111,38 @@ window.loadPsicosocialStats = async () => {
                             return acc;
                         }, {});
 
-                        if(Object.keys(stats).length > 0) {
-                            const div = document.createElement('div');
-                            div.style.cssText = 'background:#f8f9fa; border-radius:8px; padding:15px; border:1px solid var(--border);';
-                            const canvas = document.createElement('canvas');
-                            canvas.style.maxHeight = '250px';
-                            div.appendChild(canvas);
-                            container.appendChild(div);
-
-                            const chart = new Chart(canvas, {
-                                type: Object.keys(stats).length > 4 ? 'bar' : 'pie',
-                                data: {
-                                    labels: Object.keys(stats),
-                                    datasets: [{ label: 'Respuestas', data: Object.values(stats), backgroundColor: colors }]
-                                },
-                                options: { responsive: true, maintainAspectRatio: false, plugins: { title: { display:true, text: k } } }
-                            });
-                            window.psicoChartInstances.push(chart);
-                        }
-                    }
-                });
-                
-                if(container.innerHTML === '') {
-                    container.innerHTML = '<div style="color:var(--text-muted); font-size:0.9rem;">No hay datos de opción múltiple para graficar aún.</div>';
+                        const chart = new Chart(canvas, {
+                            type: Object.keys(stats).length > 4 ? 'bar' : 'pie',
+                            data: {
+                                labels: Object.keys(stats),
+                                datasets: [{ label: 'Respuestas', data: Object.values(stats), backgroundColor: colors }]
+                            },
+                            options: { 
+                                responsive: true, 
+                                maintainAspectRatio: false,
+                                plugins: {
+                                    title: { display: true, text: k, font: { size: 16 } }
+                                }
+                            }
+                        });
+                        window.psicoChartInstances[0] = chart;
+                    };
+                    
+                    drawChart(0);
+                    
+                    select.addEventListener('change', (e) => drawChart(e.target.value));
+                    
+                    btnDl.addEventListener('click', () => {
+                        const link = document.createElement('a');
+                        link.download = validKeys[select.value] + '_grafico.png';
+                        link.href = canvas.toDataURL('image/png', 1.0);
+                        link.click();
+                    });
+                } else {
+                    container.innerHTML = '<div style="grid-column: 1 / -1; padding:20px; text-align:center; color:var(--text-muted); background:#f9f9f9; border-radius:8px;">No hay datos de opción múltiple para graficar aún.</div>';
                 }
+            } else {
+                container.innerHTML = '<div style="grid-column: 1 / -1; padding:20px; text-align:center; color:var(--text-muted); background:#f9f9f9; border-radius:8px;">Aún no hay estudios completados para mostrar gráficas.</div>';
             }
         }
     } catch(e) { console.error(e); }
