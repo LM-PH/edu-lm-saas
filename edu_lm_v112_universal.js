@@ -72,7 +72,17 @@ window.autoHumanize = () => {
 setInterval(window.autoHumanize, 3000); // Revisión constante cada 3 segundos (menos agresivo)
 
 // Utils & Globals
+window._stopFirmaQRScanner = () => {
+    if(window.__firmaQrState && window.__firmaQrState.scanner) {
+        try { 
+            window.__firmaQrState.scanner.clear();
+            window.__firmaQrState.scanner = null;
+        } catch(e) {}
+    }
+};
+
 window.navigate = (path) => {
+  window._stopFirmaQRScanner();
   state.path = path;
   if(document.body.classList.contains('sidebar-open')) {
       document.body.classList.remove('sidebar-open');
@@ -1451,6 +1461,10 @@ window.switchAdminCalificacionesTab = (tab) => {
 
     const allViews = ['view-concentrado','view-estadisticas','view-firma-qr'];
     allViews.forEach(v => { const el = document.getElementById(v); if(el) el.style.display = 'none'; });
+
+    if(tab !== 'firma-qr') {
+        if(window._stopFirmaQRScanner) window._stopFirmaQRScanner();
+    }
 
     if(tab === 'concentrado') {
         if(btnConcentrado) { btnConcentrado.className = 'btn btn-primary'; btnConcentrado.style.background = ''; }
