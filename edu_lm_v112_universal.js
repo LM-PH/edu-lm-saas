@@ -12642,12 +12642,12 @@ function renderApoyoPsicosocial() {
                         <option value="todos">Todos los alumnos del plantel</option>
                         <option value="grado">Por Grado</option>
                         <option value="grupo">Por ID de Grupo</option>
-                        <option value="alumno">Por Alumno (ID)</option>
+                        <option value="alumno">Por Alumno (ID o Nombre)</option>
                     </select>
                 </div>
                 <div style="flex:1;">
-                    <label style="font-weight:bold;">Específico (Grado o ID):</label>
-                    <input type="text" id="psicoEspecifEnvio" class="form-input" placeholder="Ej. 1, 2, 3 o ID del Grupo">
+                    <label style="font-weight:bold;">Específico (Grado, ID o Nombre):</label>
+                    <input type="text" id="psicoEspecifEnvio" class="form-input" placeholder="Grado, Grupo ID, Nombre o Alumno ID">
                 </div>
                 <div>
                     <button class="btn btn-primary" onclick="window.enviarPsicosocial()"><i class="fa-solid fa-paper-plane"></i> Guardar y Enviar a Alumnos</button>
@@ -12882,7 +12882,14 @@ window.enviarPsicosocial = async () => {
         let query = supabaseClient.from('alumnos').select('id');
         if(filtro === 'grado') query = query.eq('grado', esp);
         if(filtro === 'grupo') query = query.eq('grupo_id', esp);
-        if(filtro === 'alumno') query = query.eq('id', esp);
+        if(filtro === 'alumno') {
+            const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(esp);
+            if(isUUID) {
+                query = query.eq('id', esp);
+            } else {
+                query = query.ilike('nombre', `%${esp}%`);
+            }
+        }
         
         const { data: alus, error } = await query;
         if(error) throw error;
