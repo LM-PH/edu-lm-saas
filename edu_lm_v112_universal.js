@@ -12589,16 +12589,18 @@ function renderApoyoPsicosocial() {
             <div style="background:#f8f9fa; padding:15px; border-radius:8px; border:1px solid var(--border); display:flex; gap:15px; margin-bottom:20px; align-items:flex-end;">
                 <div style="flex:1;">
                     <label style="font-size:0.85rem; font-weight:bold; color:var(--text-main);">Analizar Por:</label>
-                    <select id="psicoStatsFiltro" class="form-input" onchange="window.loadPsicosocialStats()">
+                    <select id="psicoStatsFiltro" class="form-input" onchange="window.updatePsicoEspecifInput('psicoStatsFiltro', 'psicoStatsInputContainer', 'psicoStatsValor')">
                         <option value="todos">Todo el Plantel (Escuela)</option>
-                        <option value="grado">Por Grado (1, 2, 3)</option>
-                        <option value="grupo">Por Grupo (ID)</option>
-                        <option value="alumno">Por Alumno (ID)</option>
+                        <option value="grado">Por Grado</option>
+                        <option value="grupo">Por Grupo</option>
+                        <option value="alumno">Por Alumno (ID o Nombre)</option>
                     </select>
                 </div>
                 <div style="flex:1;">
                     <label style="font-size:0.85rem; font-weight:bold; color:var(--text-main);">Valor Específico:</label>
-                    <input type="text" id="psicoStatsValor" class="form-input" placeholder="Ej. 1, 2, 3 o el ID a buscar" onkeyup="if(event.key === 'Enter') window.loadPsicosocialStats()">
+                    <div id="psicoStatsInputContainer">
+                        <input type="text" id="psicoStatsValor" class="form-input" placeholder="No aplica para 'Todos'" disabled>
+                    </div>
                 </div>
                 <div>
                     <button class="btn btn-primary" onclick="window.loadPsicosocialStats()"><i class="fa-solid fa-filter"></i> Filtrar Gráficos</button>
@@ -12638,16 +12640,18 @@ function renderApoyoPsicosocial() {
             <div style="margin:20px 0; display:flex; gap:15px; align-items:flex-end;">
                 <div style="flex:1;">
                     <label style="font-weight:bold;">Filtro de Envío:</label>
-                    <select id="psicoFiltroEnvio" class="form-input">
+                    <select id="psicoFiltroEnvio" class="form-input" onchange="window.updatePsicoEspecifInput('psicoFiltroEnvio', 'psicoEnvioInputContainer', 'psicoEspecifEnvio')">
                         <option value="todos">Todos los alumnos del plantel</option>
                         <option value="grado">Por Grado</option>
-                        <option value="grupo">Por ID de Grupo</option>
+                        <option value="grupo">Por Grupo</option>
                         <option value="alumno">Por Alumno (ID o Nombre)</option>
                     </select>
                 </div>
                 <div style="flex:1;">
-                    <label style="font-weight:bold;">Específico (Grado, ID o Nombre):</label>
-                    <input type="text" id="psicoEspecifEnvio" class="form-input" placeholder="Grado, Grupo ID, Nombre o Alumno ID">
+                    <label style="font-weight:bold;">Específico (Grado, Grupo, Nombre/ID):</label>
+                    <div id="psicoEnvioInputContainer">
+                        <input type="text" id="psicoEspecifEnvio" class="form-input" placeholder="No aplica para 'Todos'" disabled>
+                    </div>
                 </div>
                 <div>
                     <button class="btn btn-primary" onclick="window.enviarPsicosocial()"><i class="fa-solid fa-paper-plane"></i> Guardar y Enviar a Alumnos</button>
@@ -12861,6 +12865,37 @@ window.psicoBuilderGetJSON = () => {
         }
     });
     return arr;
+};
+
+window.updatePsicoEspecifInput = async (filtroId, containerId, inputId) => {
+    const filtro = document.getElementById(filtroId).value;
+    const container = document.getElementById(containerId);
+    if(!container) return;
+
+    if (filtro === 'todos') {
+        container.innerHTML = `<input type="text" id="${inputId}" class="form-input" placeholder="No aplica para 'Todos'" disabled>`;
+    } else if (filtro === 'grado') {
+        container.innerHTML = `
+            <select id="${inputId}" class="form-input">
+                <option value="1">1</option><option value="2">2</option><option value="3">3</option>
+                <option value="4">4</option><option value="5">5</option><option value="6">6</option>
+            </select>`;
+    } else if (filtro === 'grupo') {
+        container.innerHTML = `<select id="${inputId}" class="form-input"><option>Cargando grupos...</option></select>`;
+        try {
+            const { data } = await supabaseClient.from('grupos').select('id, nombre').eq('plantel_id', state.plantelId).order('nombre');
+            if(data && data.length > 0) {
+                container.innerHTML = `<select id="${inputId}" class="form-input">` + 
+                    data.map(g => `<option value="${g.id}">${g.nombre}</option>`).join('') + `</select>`;
+            } else {
+                container.innerHTML = `<select id="${inputId}" class="form-input"><option value="">Sin grupos registrados</option></select>`;
+            }
+        } catch(e) {
+            container.innerHTML = `<input type="text" id="${inputId}" class="form-input" placeholder="Error al cargar grupos">`;
+        }
+    } else if (filtro === 'alumno') {
+        container.innerHTML = `<input type="text" id="${inputId}" class="form-input" placeholder="Nombre o Alumno ID">`;
+    }
 };
 
 window.enviarPsicosocial = async () => {
