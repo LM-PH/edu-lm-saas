@@ -6361,44 +6361,116 @@ window.descargarBoletaPDF = async (aluId, nombre, matricula) => {
             return;
         }
 
-        // 2. Si no hay archivo oficial, generar el PDF informativo con jsPDF (o simulación de renderizado)
-        // Nota: En un entorno real usaríamos window.jspdf. Aquí simulamos la apertura de una vista de impresión limpia
+        // 2. Si no hay archivo oficial, generar el PDF informativo con vista de impresión institucional
         const printWindow = window.open('', '_blank');
+        
+        // Calcular ciclo escolar actual basado en el mes (Agosto inicia nuevo ciclo)
+        const currentYear = new Date().getFullYear();
+        const cicloEscolar = (new Date().getMonth() >= 7) ? `${currentYear} - ${currentYear + 1}` : `${currentYear - 1} - ${currentYear}`;
+        
         const gradesHtml = Array.from(document.querySelectorAll('.grades-table-pdf-source')).map(table => {
             const t = table.cloneNode(true);
             t.style.width = "100%";
-            t.style.border = "1px solid #ccc";
-            t.style.marginTop = "20px";
-            return `<h3>Trimestre ${table.dataset.trimestre}</h3>${t.outerHTML}`;
+            t.style.borderCollapse = "collapse";
+            t.style.marginBottom = "30px";
+            
+            // Forzar estilos de tabla institucionales
+            t.querySelectorAll('th, td').forEach(cell => {
+                cell.style.border = "1px solid #000";
+                cell.style.padding = "8px 10px";
+                cell.style.fontSize = "12px";
+                if(cell.tagName.toLowerCase() === 'td') {
+                    // Solo alinear al centro si es un número corto, la materia se deja a la izquierda
+                    cell.style.textAlign = (cell.innerText.length > 5) ? "left" : "center";
+                }
+            });
+            t.querySelectorAll('th').forEach(th => {
+                th.style.backgroundColor = "#e5e7eb";
+                th.style.fontWeight = "bold";
+                th.style.textAlign = "center";
+                th.style.textTransform = "uppercase";
+            });
+            
+            return `<div class="trim-title">EVALUACIÓN DEL TRIMESTRE ${table.dataset.trimestre}</div>${t.outerHTML}`;
         }).join('');
+
+        const plantelName = (window.state && window.state.plantelNombre) ? window.state.plantelNombre : CONFIG.schoolName;
 
         printWindow.document.write(`
             <html>
                 <head>
-                    <title>Reporte de Calificaciones - ${nombre}</title>
+                    <title>Reporte Individual de Calificaciones - ${nombre}</title>
                     <style>
-                        body { font-family: sans-serif; padding: 40px; }
-                        .header { text-align: center; border-bottom: 2px solid #1e3a8a; padding-bottom: 20px; }
-                        table { border-collapse: collapse; margin-bottom: 20px; }
-                        th, td { border: 1px solid #eee; padding: 10px; text-align: left; }
-                        .footer { margin-top: 50px; font-size: 0.8rem; color: #666; text-align: center; }
+                        body { font-family: 'Segoe UI', Arial, sans-serif; padding: 40px; color: #111; line-height: 1.4; margin: 0; }
+                        .header { text-align: center; margin-bottom: 20px; border-bottom: 4px double #1e3a8a; padding-bottom: 20px; }
+                        .header h1 { margin: 0; color: #1e3a8a; font-size: 26px; text-transform: uppercase; letter-spacing: 1px; }
+                        .header h2 { margin: 6px 0 0 0; color: #333; font-size: 16px; font-weight: bold; letter-spacing: 0.5px; }
+                        .header h3 { margin: 4px 0 0 0; color: #555; font-size: 14px; font-weight: normal; }
+                        
+                        .meta-info { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 30px; font-size: 14px; background: #f8fafc; padding: 18px; border: 1px solid #cbd5e1; border-radius: 8px; }
+                        .meta-info div { margin-bottom: 6px; }
+                        .meta-info strong { color: #1e3a8a; display: inline-block; width: 130px; }
+                        
+                        .trim-title { font-size: 15px; font-weight: bold; color: #1e3a8a; margin-bottom: 12px; border-left: 5px solid #1e3a8a; padding-left: 10px; text-transform: uppercase; background: #f1f5f9; padding-top: 4px; padding-bottom: 4px; }
+                        
+                        .signatures { display: flex; justify-content: space-around; margin-top: 70px; page-break-inside: avoid; }
+                        .signature-box { text-align: center; width: 260px; }
+                        .signature-line { border-bottom: 1px solid #000; height: 60px; margin-bottom: 10px; }
+                        .signature-title { font-size: 13px; font-weight: bold; color: #111; text-transform: uppercase; }
+                        
+                        .footer { margin-top: 50px; font-size: 11px; color: #666; text-align: center; border-top: 1px solid #cbd5e1; padding-top: 15px; }
+                        
+                        @media print {
+                            body { padding: 0; margin: 20px; }
+                            button { display: none; }
+                            .meta-info { border: 1px solid #000; background: transparent; }
+                            .header { border-bottom: 3px solid #000; }
+                            .header h1, .header h2, .trim-title, .meta-info strong { color: #000; }
+                            .trim-title { border-left: 5px solid #000; background: transparent; }
+                        }
                     </style>
                 </head>
                 <body>
                     <div class="header">
-                        <h1>${CONFIG.appName.toUpperCase()}: REPORTE ACADÉMICO</h1>
-                        <p>${CONFIG.schoolName.toUpperCase()}</p>
+                        <h1>${plantelName.toUpperCase()}</h1>
+                        <h2>SISTEMA EDUCATIVO INSTITUCIONAL</h2>
+                        <h3>BOLETA INDIVIDUAL DE EVALUACIONES</h3>
                     </div>
-                    <div style="margin-top: 20px;">
-                        <p><b>Alumno:</b> ${nombre}</p>
-                        <p><b>Matrícula:</b> ${matricula}</p>
-                        <p><b>Fecha de Emisión:</b> ${new Date().toLocaleDateString()}</p>
+                    
+                    <div class="meta-info">
+                        <div>
+                            <div><strong>Alumno(a):</strong> <span style="text-transform: uppercase; font-weight: bold;">${nombre}</span></div>
+                            <div><strong>Matrícula/CURP:</strong> <span style="text-transform: uppercase;">${matricula || 'N/A'}</span></div>
+                        </div>
+                        <div>
+                            <div><strong>Ciclo Escolar:</strong> ${cicloEscolar}</div>
+                            <div><strong>Fecha de Emisión:</strong> ${new Date().toLocaleDateString('es-MX', { year:'numeric', month:'long', day:'numeric' })}</div>
+                        </div>
                     </div>
+
                     ${gradesHtml}
-                    <div class="footer">
-                        <p>Este documento es un reporte informativo generado por el sistema ${CONFIG.appName}.</p>
-                        <p>Para validez oficial, requiere firma y sello de la Dirección del Plantel.</p>
+
+                    <div class="signatures">
+                        <div class="signature-box">
+                            <div class="signature-line"></div>
+                            <div class="signature-title">Dirección del Plantel</div>
+                            <div style="font-size:11px; margin-top:5px; color:#555;">Firma y Sello Oficial</div>
+                        </div>
+                        <div class="signature-box">
+                            <div class="signature-line"></div>
+                            <div class="signature-title">Padre de Familia o Tutor</div>
+                            <div style="font-size:11px; margin-top:5px; color:#555;">Firma de Enterado</div>
+                        </div>
                     </div>
+
+                    <div class="footer">
+                        <p>Documento de carácter informativo generado mediante la Plataforma de Control Escolar <strong>${CONFIG.appName}</strong>.</p>
+                        <p>Para poseer validez oficial ante las autoridades educativas, este formato requiere las firmas y los sellos originales de la institución.</p>
+                    </div>
+                    
+                    <script>
+                        setTimeout(() => { window.print(); }, 800);
+                    </script>
                 </body>
             </html>
         `);
