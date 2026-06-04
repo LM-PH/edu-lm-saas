@@ -786,7 +786,7 @@ function renderSidebar() {
       { name: 'Riesgo Académico', path: '/apoyo/riesgo', icon: 'fa-user-graduate' },
       { name: 'Reportes Escolares', path: '/apoyo/reportes', icon: 'fa-file-signature' },
       { name: 'Expediente Salud', path: '/apoyo/salud', icon: 'fa-notes-medical' },
-      { name: 'Estudio Psicosocial', path: '/apoyo/psicosocial', icon: 'fa-brain' },
+      { name: 'Estudio Biopsicosocial', path: '/apoyo/psicosocial', icon: 'fa-brain' },
       { name: 'Bitácora Diaria', path: '/apoyo/bitacora', icon: 'fa-book-journal-whills' },
       { name: 'Escáner Entrada', path: '/apoyo/prefectura', icon: 'fa-qrcode' },
       { name: 'Escáner de Salida', path: '/apoyo/ts_escaner', icon: 'fa-person-walking-arrow-right' },
@@ -12562,15 +12562,15 @@ window.loadHistorialBiblioteca = async (fecha) => {
 };
 
 // =====================================================================
-// MÓDULO ESTUDIO PSICOSOCIAL (TRABAJO SOCIAL & ALUMNO)
+// MÓDULO ESTUDIO BIOPSICOSOCIAL (TRABAJO SOCIAL & ALUMNO)
 // =====================================================================
 
 function renderApoyoPsicosocial() {
     setTimeout(() => { window.loadPsicosocialStats(); }, 100);
     return `
     <div class="page-header">
-        <h2 class="page-title"><i class="fa-solid fa-brain" style="color:var(--primary)"></i> Estudio Psicosocial</h2>
-        <p class="page-subtitle">Gestión de cuestionarios psicosociales para familias.</p>
+        <h2 class="page-title"><i class="fa-solid fa-brain" style="color:var(--primary)"></i> Estudio Biopsicosocial</h2>
+        <p class="page-subtitle">Gestión de cuestionarios biopsicosociales para familias.</p>
     </div>
 
     <div class="tabs" style="margin-bottom:20px;">
@@ -12583,7 +12583,7 @@ function renderApoyoPsicosocial() {
     <div id="tab-psico-stats" class="tab-content" style="display:block;">
         <div class="card" style="padding:20px;">
             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
-                <h3 style="margin:0;">Análisis Psicosocial</h3>
+                <h3 style="margin:0;">Análisis Biopsicosocial</h3>
                 <button class="btn btn-sm btn-outline" onclick="window.loadPsicosocialStats()"><i class="fa-solid fa-rotate"></i> Actualizar</button>
             </div>
             <div style="background:#f8f9fa; padding:15px; border-radius:8px; border:1px solid var(--border); display:flex; gap:15px; margin-bottom:20px; align-items:flex-end;">
@@ -12620,11 +12620,11 @@ function renderApoyoPsicosocial() {
     <div id="tab-psico-enviar" class="tab-content" style="display:none;">
         <div class="card" style="padding:20px;">
             <h3 style="margin-top:0;">Crear y Enviar Cuestionario</h3>
-            <p style="color:var(--text-muted); font-size:0.9rem;">Diseña tu propio cuestionario psicosocial y selecciona a quién deseas enviarlo. Les aparecerá una alerta obligatoria en su pantalla de inicio.</p>
+            <p style="color:var(--text-muted); font-size:0.9rem;">Diseña tu propio cuestionario biopsicosocial y selecciona a quién deseas enviarlo. Les aparecerá una alerta obligatoria en su pantalla de inicio.</p>
             
             <div style="margin-bottom:15px; margin-top:15px;">
                 <label style="font-weight:bold;">Título del Estudio:</label>
-                <input type="text" id="psicoBuilderTitulo" class="form-input" placeholder="Ej. Estudio Familiar 2026-A" value="Estudio Psicosocial General">
+                <input type="text" id="psicoBuilderTitulo" class="form-input" placeholder="Ej. Estudio Familiar 2026-A" value="Estudio Biopsicosocial General">
             </div>
 
             <div style="background:#f8f9fa; border:1px solid var(--border); border-radius:8px; padding:15px; margin-bottom:20px;">
@@ -12663,7 +12663,7 @@ function renderApoyoPsicosocial() {
     <!-- TAB REVISIÓN INDIVIDUAL -->
     <div id="tab-psico-expediente" class="tab-content" style="display:none;">
         <div class="card" style="padding:20px;">
-            <h3 style="margin-top:0;">Expediente Psicosocial del Alumno</h3>
+            <h3 style="margin-top:0;">Expediente Biopsicosocial del Alumno</h3>
             <div style="display:flex; gap:10px; margin-bottom:20px;">
                 <input type="text" id="busquedaPsicoInput" class="form-input" placeholder="Buscar alumno por nombre o matrícula..." onkeyup="window.buscarAlumnoPsico(this.value)" style="flex:1;">
             </div>
@@ -12743,7 +12743,7 @@ window.selectAlumnoPsico = async (id, nombre) => {
         const { data, error } = await supabaseClient.from('estudios_psicosociales').select('*').eq('alumno_id', id).order('fecha_envio', {ascending: false}).limit(1);
         
         if(error || !data || data.length === 0) {
-            view.innerHTML = `<div class="alert alert-warning">No hay un estudio psicosocial registrado ni pendiente para ${nombre}.</div>`;
+            view.innerHTML = `<div class="alert alert-warning">No hay un estudio biopsicosocial registrado ni pendiente para ${nombre}.</div>`;
             return;
         }
         
@@ -12813,16 +12813,19 @@ window.imprimirExpedientePsicosocial = async (nombre, estId) => {
         });
         tbl += `</tbody></table>`;
         
-        const title = data.cuestionarios_psicosociales?.titulo || "Estudio Psicosocial";
+        const title = data.cuestionarios_psicosociales?.titulo || "Estudio Biopsicosocial";
         const notasHTML = data.notas_privadas ? `<h3 style="margin-top:30px;">Notas Confidenciales</h3><p style="white-space:pre-wrap;">${data.notas_privadas}</p>` : '';
+        
+        const plantelRes = await supabaseClient.from('planteles').select('nombre').eq('id', state.plantelId).single();
+        const schoolName = plantelRes.data?.nombre || CONFIG.schoolName || 'Escuela';
         
         const win = window.open('', '_blank');
         win.document.write(`
-            <html><head><title>Expediente Psicosocial</title>
+            <html><head><title>Expediente Biopsicosocial</title>
             <style>body{font-family:Arial,sans-serif; padding:20px;} h2,h3{color:#333; margin-bottom:5px;} .header{text-align:center; margin-bottom:20px; border-bottom:2px solid #000; padding-bottom:10px;}</style>
             </head><body>
                 <div class="header">
-                    <h2>${state.plantelNombre || 'PORTAL EDUCATIVO'}</h2>
+                    <h2>${schoolName}</h2>
                     <h3>Expediente del ${title}</h3>
                 </div>
                 <p><strong>Alumno(a):</strong> ${nombre}</p>
@@ -13149,7 +13152,7 @@ window.loadPsicosocialStats = async () => {
 };
 
 function renderAlumnoPsicosocial() {
-    let titulo = window.psicoCuestionarioActual ? window.psicoCuestionarioActual.titulo : "Estudio Psicosocial Requerido";
+    let titulo = window.psicoCuestionarioActual ? window.psicoCuestionarioActual.titulo : "Estudio Biopsicosocial Requerido";
     let preguntas = window.psicoCuestionarioActual ? window.psicoCuestionarioActual.preguntas_json : [];
     
     let htmlInputs = "";
@@ -13240,7 +13243,7 @@ window.enviarRespuestasPsicosocial = async (e) => {
         if(error) throw error;
         
         window.psicosocialPendienteGlobal = null;
-        alert("¡Muchas gracias! El estudio psicosocial ha sido guardado exitosamente.");
+        alert("¡Muchas gracias! El estudio biopsicosocial ha sido guardado exitosamente.");
         document.getElementById('app').innerHTML = renderAlumnoCredencial();
         if(window.loadCredencialAlumno) window.loadCredencialAlumno();
         
