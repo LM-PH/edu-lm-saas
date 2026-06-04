@@ -12902,9 +12902,9 @@ window.updatePsicoEspecifInput = async (filtroId, containerId, inputId) => {
     } else if (filtro === 'grado') {
         container.innerHTML = `<select id="${inputId}" class="form-input"><option>Cargando grados...</option></select>`;
         try {
-            const { data } = await supabaseClient.from('grupos').select('grado').eq('plantel_id', state.plantelId);
+            const { data } = await supabaseClient.from('grupos').select('nombre').eq('plantel_id', state.plantelId);
             if(data && data.length > 0) {
-                const grados = [...new Set(data.map(g => g.grado).filter(g => g))].sort((a,b)=>a-b);
+                const grados = [...new Set(data.map(g => parseInt(g.nombre)).filter(g => !isNaN(g)))].sort((a,b)=>a-b);
                 if(grados.length > 0) {
                     container.innerHTML = `<select id="${inputId}" class="form-input">` + 
                         grados.map(g => `<option value="${g}">${g}</option>`).join('') + `</select>`;
