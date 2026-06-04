@@ -12997,7 +12997,10 @@ window.enviarPsicosocial = async () => {
         window.showToast(`Cuestionario enviado a ${alus.length} alumnos correctamente.`, 'success');
         document.getElementById('psicoEspecifEnvio').value = '';
         window.loadPsicosocialStats();
-    } catch(e) { console.error(e); window.showToast('Error al enviar cuestionarios.', 'error'); }
+    } catch(e) { 
+        console.error(e); 
+        window.showToast('Error: ' + (e.message || e.details || JSON.stringify(e)), 'error'); 
+    }
 };
 
 window.loadPsicosocialStats = async () => {
