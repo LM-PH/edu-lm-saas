@@ -11061,13 +11061,30 @@ window.firmarBoletaDesdeTimeline = async (comunicadoId, btn) => {
         const pId = com.plantel_id || (state ? state.plantelId : null);
 
         // Registrar la firma en firmas_boleta
-        const { error: errFirma } = await supabaseClient.from('firmas_boleta').upsert({
-            alumno_id: alumnoId,
-            plantel_id: pId,
-            trimestre: trimestre,
-            nombre_tutor: firmaTexto.trim(),
-            fecha_firma: new Date().toISOString()
-        }, { onConflict: 'alumno_id,trimestre' });
+        const { data: existente } = await supabaseClient.from('firmas_boleta')
+            .select('id')
+            .eq('alumno_id', alumnoId)
+            .eq('trimestre', trimestre)
+            .maybeSingle();
+
+        let errFirma;
+        if (existente) {
+            const { error } = await supabaseClient.from('firmas_boleta').update({
+                plantel_id: pId,
+                nombre_tutor: firmaTexto.trim(),
+                fecha_firma: new Date().toISOString()
+            }).eq('id', existente.id);
+            errFirma = error;
+        } else {
+            const { error } = await supabaseClient.from('firmas_boleta').insert({
+                alumno_id: alumnoId,
+                plantel_id: pId,
+                trimestre: trimestre,
+                nombre_tutor: firmaTexto.trim(),
+                fecha_firma: new Date().toISOString()
+            });
+            errFirma = error;
+        }
 
         if(errFirma) throw errFirma;
 
