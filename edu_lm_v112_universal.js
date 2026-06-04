@@ -1610,43 +1610,31 @@ function renderAdminCalificaciones() {
 
     <!-- VISTA 3: FIRMA POR QR -->
     <div id="view-firma-qr" style="display:none; gap:24px; flex-wrap:wrap;">
-      <!-- Panel Izquierdo: Escáner -->
+      <!-- Panel Izquierdo: Escáner Rápido -->
       <div class="card" style="flex:1; min-width:320px; align-self:flex-start;">
-        <h3 style="margin-bottom:8px;"><i class="fa-solid fa-qrcode" style="color:var(--primary);"></i> Escáner QR de Alumno</h3>
-        <p style="font-size:0.85rem; color:var(--text-muted); margin-bottom:16px;">Escanea el código QR del alumno. Se enviará un aviso al padre/tutor para que firme de enterado desde su dispositivo.</p>
+        <h3 style="margin-bottom:8px;"><i class="fa-solid fa-bolt" style="color:#d97706;"></i> Escáner Rápido de Firma</h3>
+        <p style="font-size:0.82rem; color:var(--text-muted); margin-bottom:12px;">Selecciona el trimestre y escanea. El aviso se envía <strong>automáticamente</strong> al padre/tutor.</p>
         
+        <div class="form-group" style="margin-bottom:12px;">
+          <label class="form-label" style="font-size:0.8rem;">Trimestre activo</label>
+          <select class="form-select" id="firmaTrimestreSel" style="font-weight:700; font-size:1rem; border:2px solid var(--primary);">
+            <option value="Trimestre 1">Trimestre 1</option>
+            <option value="Trimestre 2">Trimestre 2</option>
+            <option value="Trimestre 3">Trimestre 3</option>
+          </select>
+        </div>
+
         <div id="firmaQrReader" style="width:100%; border-radius:12px; overflow:hidden; border:2px solid var(--border);"></div>
         <p id="firmaQrStatus" style="text-align:center; font-size:0.85rem; color:var(--text-muted); margin-top:10px; min-height:20px;"></p>
 
-        <div id="firmaAlumnoInfo" style="display:none; margin-top:16px; background:var(--primary-light); border-radius:12px; padding:16px; border-left:4px solid var(--primary);">
-          <div style="display:flex; align-items:center; gap:12px; margin-bottom:14px;">
-            <i class="fa-solid fa-user-graduate" style="font-size:2rem; color:var(--primary);"></i>
-            <div>
-              <div id="firmaAlumnoNombre" style="font-weight:700; font-size:1.1rem;"></div>
-              <div id="firmaAlumnoGrupo" style="font-size:0.85rem; color:var(--text-muted);"></div>
-            </div>
-          </div>
+        <!-- Log de escaneos rápidos -->
+        <div id="firmaQrScanLog" style="margin-top:12px; max-height:250px; overflow-y:auto;"></div>
 
-          <div style="background:rgba(255,255,255,0.6); border-radius:8px; padding:10px 12px; margin-bottom:14px; font-size:0.82rem; color:var(--text-main);">
-            <i class="fa-solid fa-circle-info" style="color:var(--primary);"></i>
-            Se enviará una notificación al perfil del padre/tutor para que ingrese su nombre y confirme haber visto las calificaciones del <strong id="firmaTrimNombrePreview"></strong>.
-          </div>
-          
-          <div class="form-group">
-            <label class="form-label">Trimestre a Firmar</label>
-            <select class="form-select" id="firmaTrimestreSel" onchange="document.getElementById('firmaTrimNombrePreview').textContent=this.value">
-              <option value="Trimestre 1">Trimestre 1</option>
-              <option value="Trimestre 2">Trimestre 2</option>
-              <option value="Trimestre 3">Trimestre 3</option>
-            </select>
-          </div>
-          
-          <button class="btn btn-primary" style="width:100%; margin-top:8px;" onclick="window.enviarAvisoFirmaBoletaQR()">
-            <i class="fa-solid fa-paper-plane"></i> Enviar Aviso de Firma al Padre/Tutor
-          </button>
-          <button class="btn btn-outline" style="width:100%; margin-top:8px;" onclick="window.resetFirmaQR()">
-            <i class="fa-solid fa-rotate-left"></i> Escanear otro alumno
-          </button>
+        <!-- Hidden info panel para compatibilidad -->
+        <div id="firmaAlumnoInfo" style="display:none;">
+          <span id="firmaAlumnoNombre"></span>
+          <span id="firmaAlumnoGrupo"></span>
+          <span id="firmaTrimNombrePreview"></span>
         </div>
       </div>
 
@@ -10711,26 +10699,23 @@ window.notificarRevisionSabana = async () => {
    ======================================================== */
 
 // Estado interno del módulo de firma
-window.__firmaQrState = { scanner: null, alumnoId: null, alumnoNombre: null };
+window.__firmaQrState = { scanner: null, alumnoId: null, alumnoNombre: null, recentScans: new Set(), processing: false };
 
 /**
- * Inicializa el escáner QR en la pestaña de Firma por QR.
+ * Inicializa el escáner QR rápido para firma de boletas.
  */
 window.initFirmaBoletasQR = () => {
     const readerEl = document.getElementById('firmaQrReader');
     if(!readerEl) return;
 
-    // Si ya hay un escáner activo, reanudar
     if(window.__firmaQrState.scanner) {
         try { window.__firmaQrState.scanner.resume(); } catch(e) {}
-        document.getElementById('firmaAlumnoInfo').style.display = 'none';
-        document.getElementById('firmaQrStatus').textContent = 'Apunta la cámara al código QR del alumno.';
+        document.getElementById('firmaQrStatus').innerHTML = '📷 <strong>Listo.</strong> Escanea códigos QR uno tras otro.';
         window.loadHistorialFirmas();
         return;
     }
 
     readerEl.innerHTML = '';
-    document.getElementById('firmaAlumnoInfo').style.display = 'none';
     document.getElementById('firmaQrStatus').textContent = 'Iniciando cámara...';
 
     if(typeof Html5QrcodeScanner === 'undefined') {
@@ -10739,176 +10724,189 @@ window.initFirmaBoletasQR = () => {
     }
 
     const scanner = new Html5QrcodeScanner('firmaQrReader', {
-        fps: 10,
-        qrbox: { width: 250, height: 250 },
+        fps: 15,
+        qrbox: { width: 220, height: 220 },
         rememberLastUsedCamera: true,
-        showTorchButtonIfSupported: true
+        showTorchButtonIfSupported: true,
+        aspectRatio: 1.0
     }, false);
 
     scanner.render(window.onFirmaQrScanSuccess, () => {});
     window.__firmaQrState.scanner = scanner;
-    document.getElementById('firmaQrStatus').textContent = 'Apunta la cámara al código QR del alumno.';
-
-    // Inicializar preview del trimestre
-    const trimSel = document.getElementById('firmaTrimestreSel');
-    const preview = document.getElementById('firmaTrimNombrePreview');
-    if(trimSel && preview) preview.textContent = trimSel.value;
+    document.getElementById('firmaQrStatus').innerHTML = '📷 <strong>Listo.</strong> Escanea códigos QR uno tras otro.';
 
     window.loadHistorialFirmas();
 };
 
 /**
- * Callback cuando se detecta un QR. Busca al alumno en la BD.
+ * Agrega una entrada al log visual de escaneos rápidos.
+ */
+window._addScanLogEntry = (nombre, grupo, status, statusColor) => {
+    const log = document.getElementById('firmaQrScanLog');
+    if(!log) return;
+    const hora = new Date().toLocaleTimeString('es-MX', { hour:'2-digit', minute:'2-digit', second:'2-digit' });
+    const entry = document.createElement('div');
+    entry.style.cssText = `display:flex; align-items:center; gap:8px; padding:8px 10px; margin-bottom:4px; border-radius:8px; border-left:4px solid ${statusColor}; background:var(--page-bg); animation: fadeInUp 0.3s ease;`;
+    entry.innerHTML = `
+        <div style="flex:1; min-width:0;">
+            <div style="font-weight:600; font-size:0.85rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${nombre}</div>
+            <div style="font-size:0.72rem; color:var(--text-muted);">${grupo} · ${hora}</div>
+        </div>
+        <span style="font-size:0.75rem; font-weight:700; color:${statusColor}; white-space:nowrap;">${status}</span>
+    `;
+    log.prepend(entry);
+    // Limitar a 20 entradas
+    while(log.children.length > 20) log.removeChild(log.lastChild);
+};
+
+/**
+ * Callback automático al detectar QR: busca alumno → envía aviso → reanuda escáner.
  */
 window.onFirmaQrScanSuccess = async (decodedText) => {
     const statusEl = document.getElementById('firmaQrStatus');
     if(!statusEl) return;
 
+    const code = decodedText.trim();
+
+    // Evitar escaneos duplicados mientras se procesa
+    if(window.__firmaQrState.processing) return;
+
+    // Evitar re-escanear el mismo código en la sesión actual
+    const trimestre = document.getElementById('firmaTrimestreSel')?.value || 'Trimestre 1';
+    const scanKey = `${code}_${trimestre}`;
+    if(window.__firmaQrState.recentScans.has(scanKey)) {
+        // Ya se envió este — ignorar silenciosamente
+        return;
+    }
+
+    window.__firmaQrState.processing = true;
     try { window.__firmaQrState.scanner?.pause(true); } catch(e) {}
-    statusEl.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Buscando alumno...';
+    statusEl.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Procesando...';
 
     try {
+        // 1. Buscar alumno rápido
         let alumno = null;
+        const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(code);
 
-        // Intentar buscar por ID (UUID)
-        const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(decodedText.trim());
         if(isUUID) {
             const { data } = await supabaseClient
                 .from('alumnos')
                 .select('id, nombre, matricula, perfil_id, contacto_email, grupo_id, grupos(nombre)')
-                .eq('id', decodedText.trim())
+                .eq('id', code)
                 .maybeSingle();
             alumno = data;
         }
-
-        // Si no encontró por ID, buscar por matrícula
         if(!alumno) {
             const { data } = await supabaseClient
                 .from('alumnos')
                 .select('id, nombre, matricula, perfil_id, contacto_email, grupo_id, grupos(nombre)')
-                .eq('matricula', decodedText.trim())
+                .eq('matricula', code)
                 .maybeSingle();
             alumno = data;
         }
 
         if(!alumno) {
-            statusEl.innerHTML = '❌ Alumno no encontrado. Verifica el código QR.';
-            setTimeout(() => { try { window.__firmaQrState.scanner?.resume(); } catch(e) {} }, 2500);
+            window._addScanLogEntry(code.substring(0, 20), 'No encontrado', '❌ ERROR', '#ef4444');
+            statusEl.innerHTML = '❌ Alumno no encontrado — escaneando siguiente...';
+            window.__firmaQrState.processing = false;
+            setTimeout(() => { try { window.__firmaQrState.scanner?.resume(); } catch(e) {} statusEl.innerHTML = '📷 <strong>Listo.</strong> Escanea el siguiente.'; }, 1200);
             return;
         }
 
-        // Guardar en estado
-        window.__firmaQrState.alumnoId = alumno.id;
-        window.__firmaQrState.alumnoNombre = alumno.nombre;
-        window.__firmaQrState.alumnoPerfilId = alumno.perfil_id;
-        window.__firmaQrState.alumnoContactoEmail = alumno.contacto_email;
+        // 2. Verificar que tenga cuenta
+        if(!alumno.perfil_id && !alumno.contacto_email) {
+            window._addScanLogEntry(alumno.nombre, alumno.grupos?.nombre || 'N/A', '⚠️ SIN CUENTA', '#f59e0b');
+            statusEl.innerHTML = `⚠️ ${alumno.nombre} no tiene cuenta — escaneando siguiente...`;
+            window.__firmaQrState.processing = false;
+            setTimeout(() => { try { window.__firmaQrState.scanner?.resume(); } catch(e) {} statusEl.innerHTML = '📷 <strong>Listo.</strong> Escanea el siguiente.'; }, 1200);
+            return;
+        }
 
-        // Mostrar info del alumno
-        document.getElementById('firmaAlumnoNombre').textContent = alumno.nombre;
-        document.getElementById('firmaAlumnoGrupo').textContent =
-            `Matrícula: ${alumno.matricula || 'N/A'} | Grupo: ${alumno.grupos?.nombre || 'Sin grupo'}`;
-        document.getElementById('firmaAlumnoInfo').style.display = 'block';
+        // 3. Verificar si ya tiene firma para este trimestre
+        const { data: firmaExistente } = await supabaseClient
+            .from('firmas_boleta')
+            .select('id')
+            .eq('alumno_id', alumno.id)
+            .eq('trimestre', trimestre)
+            .maybeSingle();
 
-        // Inicializar preview del trimestre
-        const trimSel = document.getElementById('firmaTrimestreSel');
-        const preview = document.getElementById('firmaTrimNombrePreview');
-        if(trimSel && preview) preview.textContent = trimSel.value;
+        if(firmaExistente) {
+            window._addScanLogEntry(alumno.nombre, alumno.grupos?.nombre || 'N/A', '✅ YA FIRMÓ', '#10b981');
+            window.__firmaQrState.recentScans.add(scanKey);
+            statusEl.innerHTML = `✅ ${alumno.nombre} ya tiene firma — escaneando siguiente...`;
+            window.__firmaQrState.processing = false;
+            setTimeout(() => { try { window.__firmaQrState.scanner?.resume(); } catch(e) {} statusEl.innerHTML = '📷 <strong>Listo.</strong> Escanea el siguiente.'; }, 1000);
+            return;
+        }
 
-        statusEl.innerHTML = '✅ Alumno identificado. Selecciona el trimestre y envía el aviso.';
+        // 4. Enviar aviso automáticamente
+        const uRes = await supabaseClient.auth.getUser();
+        if(!uRes.data?.user) throw new Error('Sin sesión');
+
+        const { error: errCom } = await supabaseClient.from('comunicados').insert([{
+            autor_id: uRes.data.user.id,
+            receptor_id: alumno.perfil_id || null,
+            audiencia: `Alumno_${alumno.id}`,
+            titulo: `✍️ Firma de Boleta Requerida — ${trimestre}`,
+            mensaje: `Estimado padre de familia o tutor:\n\nSe te solicita firmar de enterado las calificaciones de ${alumno.nombre} correspondientes al ${trimestre}.\n\nPor favor presiona el botón "Firmar de Enterado" y escribe tu nombre completo para quedar registrado en el sistema escolar.\n\n📌 Esta firma digital tiene validez dentro del portal educativo.`,
+            plantel_id: state.plantelId,
+            tipo: 'aviso_firma_boleta',
+            archivo_url: null
+        }]);
+
+        if(errCom) throw errCom;
+
+        // Marcar como enviado para no repetir
+        window.__firmaQrState.recentScans.add(scanKey);
+
+        // Log visual
+        window._addScanLogEntry(alumno.nombre, alumno.grupos?.nombre || 'N/A', '📨 ENVIADO', '#3b82f6');
+        statusEl.innerHTML = `📨 Aviso enviado a <strong>${alumno.nombre}</strong> — escaneando siguiente...`;
+
+        // Sonido de confirmación (beep sutil)
+        try {
+            const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.connect(gain); gain.connect(audioCtx.destination);
+            osc.frequency.value = 880; gain.gain.value = 0.15;
+            osc.start(); osc.stop(audioCtx.currentTime + 0.12);
+        } catch(e) {}
 
     } catch(e) {
-        console.error('[FirmaQR] Error al buscar alumno:', e);
-        statusEl.innerHTML = '❌ Error de conexión. Intenta de nuevo.';
-        setTimeout(() => { try { window.__firmaQrState.scanner?.resume(); } catch(e) {} }, 2500);
+        console.error('[FirmaQR] Error:', e);
+        window._addScanLogEntry('Error', e.message?.substring(0, 30) || 'Desconocido', '❌ ERROR', '#ef4444');
+        statusEl.innerHTML = '❌ Error al enviar — escaneando siguiente...';
     }
+
+    // 5. Reanudar escáner rápido
+    window.__firmaQrState.processing = false;
+    setTimeout(() => {
+        try { window.__firmaQrState.scanner?.resume(); } catch(e) {}
+        const s = document.getElementById('firmaQrStatus');
+        if(s) s.innerHTML = '📷 <strong>Listo.</strong> Escanea el siguiente.';
+    }, 1200);
 };
 
 /**
- * Limpia el estado del escáner para escanear otro alumno.
+ * Limpia el estado del escáner.
  */
 window.resetFirmaQR = () => {
     window.__firmaQrState.alumnoId = null;
     window.__firmaQrState.alumnoNombre = null;
     window.__firmaQrState.alumnoPerfilId = null;
     window.__firmaQrState.alumnoContactoEmail = null;
+    window.__firmaQrState.processing = false;
     document.getElementById('firmaAlumnoInfo').style.display = 'none';
-    document.getElementById('firmaQrStatus').textContent = 'Apunta la cámara al código QR del alumno.';
+    document.getElementById('firmaQrStatus').innerHTML = '📷 <strong>Listo.</strong> Escanea códigos QR uno tras otro.';
     try { window.__firmaQrState.scanner?.resume(); } catch(e) {}
 };
 
 /**
- * Envía una notificación al padre/tutor del alumno para que firme de enterado.
- * El admin solo escanea el QR y elige el trimestre — NO firma en el admin.
- * La firma real la hace el padre desde SU dispositivo al ver la notificación.
+ * Compatibilidad: el envío ahora es automático.
  */
-window.enviarAvisoFirmaBoletaQR = async () => {
-    const alumnoId = window.__firmaQrState.alumnoId;
-    const alumnoNombre = window.__firmaQrState.alumnoNombre;
-    const alumnoPerfilId = window.__firmaQrState.alumnoPerfilId;
-    const alumnoContactoEmail = window.__firmaQrState.alumnoContactoEmail;
-    const trimestre = document.getElementById('firmaTrimestreSel')?.value;
-
-    if(!alumnoId) return window.showToast('Escanea primero el código QR del alumno.', 'error');
-    if(!trimestre) return window.showToast('Selecciona el trimestre.', 'error');
-
-    // Verificar que el alumno tiene cuenta (perfil) para recibir la notificación
-    if(!alumnoPerfilId && !alumnoContactoEmail) {
-        return window.showToast(`⚠️ El alumno ${alumnoNombre} no tiene cuenta de acceso configurada.`, 'error');
-    }
-
-    try {
-        const uRes = await supabaseClient.auth.getUser();
-        if(!uRes.data?.user) throw new Error('Sin sesión activa');
-
-        // Verificar si ya existe firma confirmada para este trimestre
-        const { data: firmaExistente } = await supabaseClient
-            .from('firmas_boleta')
-            .select('id, nombre_tutor, fecha_firma')
-            .eq('alumno_id', alumnoId)
-            .eq('trimestre', trimestre)
-            .maybeSingle();
-
-        if(firmaExistente) {
-            const confirmar = confirm(
-                `⚠️ Ya existe una firma registrada para ${alumnoNombre} — ${trimestre}:\n` +
-                `Firmó: ${firmaExistente.nombre_tutor}\n` +
-                `Fecha: ${new Date(firmaExistente.fecha_firma).toLocaleString('es-MX')}\n\n` +
-                `¿Deseas reenviar el aviso de firma de todos modos?`
-            );
-            if(!confirmar) return;
-        }
-
-        // Determinar el receptor: usar perfil_id si existe, o audiencia por email
-        const receptorId = alumnoPerfilId || null;
-
-        // Insertar comunicado tipo 'aviso_firma_boleta' en la tabla de comunicados
-        const { data: com, error: errCom } = await supabaseClient.from('comunicados').insert([{
-            autor_id: uRes.data.user.id,
-            receptor_id: receptorId,
-            audiencia: `Alumno_${alumnoId}`,
-            titulo: `✍️ Firma de Boleta Requerida — ${trimestre}`,
-            mensaje: `Estimado padre de familia o tutor:\n\nSe te solicita firmar de enterado las calificaciones de ${alumnoNombre} correspondientes al ${trimestre}.\n\nPor favor presiona el botón "Firmar de Enterado" y escribe tu nombre completo para quedar registrado en el sistema escolar.\n\n📌 Esta firma digital tiene validez dentro del portal educativo.`,
-            plantel_id: state.plantelId,
-            tipo: 'aviso_firma_boleta',
-            // Metadatos para la firma
-            archivo_url: null
-        }]).select('id').single();
-
-        if(errCom) throw errCom;
-
-        // Guardar en firmas_boleta el estado "pendiente" con el ID del comunicado como referencia
-        // La firma se completará cuando el padre confirme desde su timeline
-        // Por ahora guardamos el comunicado_id como referencia en una columna adicional
-        // (Alternativamente, la firma se registra al confirmar)
-
-        window.showToast(`✅ Aviso de firma enviado a ${alumnoNombre}. El padre/tutor debe confirmarlo desde su dispositivo.`, 'success');
-        window.resetFirmaQR();
-        window.loadHistorialFirmas();
-
-    } catch(e) {
-        console.error('[FirmaQR] Error al enviar aviso:', e);
-        window.showToast('Error al enviar el aviso: ' + e.message, 'error');
-    }
+window.enviarAvisoFirmaBoletaQR = () => {
+    window.showToast('El aviso se envía automáticamente al escanear el QR.', 'info');
 };
 
 /**
