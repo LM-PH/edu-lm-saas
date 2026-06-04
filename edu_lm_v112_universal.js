@@ -11066,7 +11066,6 @@ window.firmarBoletaDesdeTimeline = async (comunicadoId, btn) => {
             plantel_id: pId,
             trimestre: trimestre,
             nombre_tutor: firmaTexto.trim(),
-            registrado_por: u.data.user.id,
             fecha_firma: new Date().toISOString()
         }, { onConflict: 'alumno_id,trimestre' });
 
