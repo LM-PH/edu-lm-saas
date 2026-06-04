@@ -12688,6 +12688,31 @@ window.switchTabPsico = (btn, tabId) => {
     document.getElementById(tabId).style.display = 'block';
 };
 
+window.buscarAlumnoPsicoGenerico = async (term, inputId, resId) => {
+    const res = document.getElementById(resId);
+    if(!term || term.length < 3) { res.style.display = 'none'; return; }
+    
+    try {
+        const { data, error } = await supabaseClient.from('alumnos').select('id, nombre, matricula, grupos(nombre)').ilike('nombre', `%${term}%`).limit(5);
+        if(error || !data) return;
+        
+        if(data.length === 0) { res.innerHTML = '<div style="padding:10px;">Sin resultados</div>'; res.style.display = 'block'; return; }
+        
+        res.innerHTML = data.map(a => `
+            <div style="padding:10px; border-bottom:1px solid var(--border); cursor:pointer; background:white;" onclick="window.selectAlumnoPsicoGenerico('${a.id}', '${a.nombre}', '${inputId}', '${resId}')" onmouseover="this.style.background='#f0fdf4'" onmouseout="this.style.background='white'">
+                <strong style="color:var(--primary)">${a.nombre}</strong> <small style="color:var(--text-muted)">(${a.grupos?.nombre || 'Sin Grupo'}) - ${a.matricula}</small>
+            </div>
+        `).join('');
+        res.style.display = 'block';
+    } catch(e) { console.error(e); }
+};
+
+window.selectAlumnoPsicoGenerico = (id, nombre, inputId, resId) => {
+    document.getElementById(resId).style.display = 'none';
+    document.getElementById(inputId).value = id;
+    window.showToast(`Alumno seleccionado: ${nombre}`, 'success');
+};
+
 window.buscarAlumnoPsico = async (term) => {
     const res = document.getElementById('resPsicoAlu');
     if(!term || term.length < 3) { res.style.display = 'none'; return; }
@@ -12894,7 +12919,11 @@ window.updatePsicoEspecifInput = async (filtroId, containerId, inputId) => {
             container.innerHTML = `<input type="text" id="${inputId}" class="form-input" placeholder="Error al cargar grupos">`;
         }
     } else if (filtro === 'alumno') {
-        container.innerHTML = `<input type="text" id="${inputId}" class="form-input" placeholder="Nombre o Alumno ID">`;
+        container.innerHTML = `
+        <div style="position:relative;">
+            <input type="text" id="${inputId}" class="form-input" placeholder="Nombre del alumno o ID" onkeyup="window.buscarAlumnoPsicoGenerico(this.value, '${inputId}', '${inputId}_res')" autocomplete="off">
+            <div id="${inputId}_res" style="position:absolute; top:100%; left:0; right:0; background:white; border:1px solid var(--border); z-index:100; display:none; max-height:200px; overflow-y:auto; border-radius:0 0 8px 8px; box-shadow:0 4px 6px rgba(0,0,0,0.1);"></div>
+        </div>`;
     }
 };
 
