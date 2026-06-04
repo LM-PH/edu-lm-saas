@@ -4621,7 +4621,7 @@ window.loadCredencialAlumno = async () => {
         if(psdata && psdata.length > 0) {
             window.psicosocialPendienteGlobal = psdata[0].id;
             window.psicoCuestionarioActual = psdata[0].cuestionarios_psicosociales;
-            document.getElementById('mainContent').innerHTML = renderAlumnoPsicosocial();
+            document.getElementById('app').innerHTML = renderAlumnoPsicosocial();
             if(window.loadAlumnoPsicosocialForm) window.loadAlumnoPsicosocialForm();
             return;
         }
@@ -13206,7 +13206,7 @@ window.enviarRespuestasPsicosocial = async (e) => {
         
         window.psicosocialPendienteGlobal = null;
         alert("¡Muchas gracias! El estudio psicosocial ha sido guardado exitosamente.");
-        document.getElementById('mainContent').innerHTML = renderAlumnoCredencial();
+        document.getElementById('app').innerHTML = renderAlumnoCredencial();
         if(window.loadCredencialAlumno) window.loadCredencialAlumno();
         
     } catch(err) {
