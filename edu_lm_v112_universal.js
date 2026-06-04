@@ -1518,7 +1518,7 @@ function renderAdminCalificaciones() {
             </select>
          </div>
          <div style="margin-top:20px; padding-top:20px; border-top:1px dashed var(--border); position:relative;">
-            <h4 style="margin-bottom:10px; font-size:0.9rem;"><i class="fa-solid fa-file-csv"></i> Descarga Directa por Alumno</h4>
+            <h4 style="margin-bottom:10px; font-size:0.9rem;"><i class="fa-solid fa-file-pdf"></i> Impresión de Boleta Individual (PDF)</h4>
             <div class="form-group">
                 <input type="text" id="adminSearchAlumnoDownload" class="form-input" placeholder="Nombre del alumno..." onkeyup="window.liveSearchAlumnoCalificaciones(this.value)">
                 <div id="resSearchAlumnoDownload" style="display:none; background:white; border:1px solid var(--border); border-radius:8px; margin-top:5px; max-height:200px; overflow-y:auto; position:absolute; width: 100%; z-index: 100; box-shadow: var(--shadow-lg);"></div>
@@ -6427,7 +6427,7 @@ window.descargarBoletaPDF = async (aluId, nombre, matricula) => {
             }
         } catch(e) { console.warn('Error fetching firma:', e); }
 
-        const plantelName = (window.state && window.state.plantelNombre) ? window.state.plantelNombre : CONFIG.schoolName;
+        const plantelName = (typeof state !== 'undefined' && state && state.plantelNombre) ? state.plantelNombre : CONFIG.schoolName;
 
         printWindow.document.write(`
             <html>
@@ -10819,7 +10819,7 @@ window.initFirmaBoletasQR = () => {
     }
 
     // Cargar grupos para el filtro
-    supabaseClient.from('grupos').select('id, nombre').eq('plantel_id', window.state.plantelId).then(({data}) => {
+    supabaseClient.from('grupos').select('id, nombre').eq('plantel_id', state.plantelId).then(({data}) => {
         const sel = document.getElementById('firmaFiltroGrupo');
         if(sel && data) {
             sel.innerHTML = '<option value="">Todos los grupos</option>' + data.map(g => `<option value="${g.id}">${g.nombre}</option>`).join('');
@@ -11058,7 +11058,7 @@ window.firmarBoletaDesdeTimeline = async (comunicadoId, btn) => {
         const trimestreMatch = (com.titulo || '').match(/Trimestre\s+\d+/i);
         const trimestre = trimestreMatch ? trimestreMatch[0] : 'Sin especificar';
 
-        const pId = com.plantel_id || (window.state ? window.state.plantelId : null);
+        const pId = com.plantel_id || (state ? state.plantelId : null);
 
         // Registrar la firma en firmas_boleta
         const { error: errFirma } = await supabaseClient.from('firmas_boleta').upsert({
@@ -12627,50 +12627,177 @@ window.liveSearchAlumnoCalificaciones = async (q) => {
         if(!data || data.length === 0) { res.innerHTML='<p style="padding:10px; color:var(--text-muted)">Sin resultados</p>'; res.style.display='block'; return; }
         res.style.display='block';
         res.innerHTML = data.map(a => `
-            <div style="padding:10px; border-bottom:1px solid var(--border); cursor:pointer; display:flex; justify-content:space-between; align-items:center;" onclick="window.descargarCSVAlumno('${a.id}', '${a.nombre}')">
+            <div style="padding:10px; border-bottom:1px solid var(--border); cursor:pointer; display:flex; justify-content:space-between; align-items:center;" onclick="window.descargarBoletaAdminPDF('${a.id}', '${a.nombre}', '${a.matricula}')">
                <div>
                   <div style="font-weight:600; font-size:0.85rem;">${a.nombre}</div>
                   <div style="font-size:0.75rem; color:var(--text-muted)">${a.grupos ? a.grupos.nombre : 'Sin Grupo'}</div>
                </div>
-               <i class="fa-solid fa-download" style="color:var(--primary)"></i>
+               <i class="fa-solid fa-file-pdf" style="color:var(--danger)"></i>
             </div>
         `).join('');
     } catch(e) { console.error(e); }
 };
 
-window.descargarCSVAlumno = async (alumnoId, nombre) => {
+window.descargarBoletaAdminPDF = async (alumnoId, nombre, matricula) => {
     try {
-        const trimRaw = document.getElementById('adminTrimestreSel').value;
-        const trimNum = parseInt(trimRaw.replace(/\D/g, ''));
-        
+        // Obtenemos todas las calificaciones del alumno
         const { data: califs, error } = await supabaseClient.from('calificaciones')
-            .select('calificacion, materia_nombre, materia_id(nombre)')
+            .select('calificacion, trimestre, materia_nombre, materia_id(nombre)')
             .eq('alumno_id', alumnoId)
-            .eq('trimestre', trimNum);
+            .order('trimestre', { ascending: true });
         
         if(error) throw error;
-        if(!califs || califs.length === 0) return alert("Este alumno no tiene calificaciones registradas en este trimestre.");
+        if(!califs || califs.length === 0) return alert("Este alumno no tiene calificaciones registradas aún.");
 
-        let csv = "\uFEFFMateria,Calificación\n";
-        let suma = 0;
+        // Agrupar por trimestre
+        const porTrimestre = {};
         califs.forEach(c => {
-            const m = c.materia_nombre || (c.materia_id?.nombre) || 'Materia';
-            csv += `"${m}",${c.calificacion}\n`;
-            suma += Number(c.calificacion);
+            if(!porTrimestre[c.trimestre]) porTrimestre[c.trimestre] = [];
+            porTrimestre[c.trimestre].push(c);
         });
-        csv += `"Promedio",${(suma / califs.length).toFixed(1)}\n`;
 
-        const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-        const url = URL.createObjectURL(blob);
-        const link = document.createElement("a");
-        link.href = url;
-        link.download = `Calificaciones_${nombre.replace(/\s+/g, '_')}_T${trimNum}.csv`;
-        link.click();
+        let gradesHtml = '';
+        Object.keys(porTrimestre).sort().forEach(trim => {
+            const materias = porTrimestre[trim];
+            let suma = 0;
+            let rows = '';
+            materias.forEach(m => {
+                const matNom = m.materia_nombre || (m.materia_id?.nombre) || 'Materia';
+                suma += Number(m.calificacion);
+                rows += `<tr><td style="border: 1px solid #000; padding: 8px 10px; font-size: 12px; text-align: left;">${matNom}</td><td style="border: 1px solid #000; padding: 8px 10px; font-size: 12px; text-align: center;">${m.calificacion}</td></tr>`;
+            });
+            const promedio = (suma / materias.length).toFixed(1);
+            rows += `<tr><td style="border: 1px solid #000; padding: 8px 10px; font-size: 12px; text-align: right; font-weight: bold; background-color: #f8fafc;">PROMEDIO</td><td style="border: 1px solid #000; padding: 8px 10px; font-size: 12px; text-align: center; font-weight: bold; background-color: #f8fafc;">${promedio}</td></tr>`;
+
+            gradesHtml += `
+            <div class="trim-title">EVALUACIÓN DEL TRIMESTRE ${trim}</div>
+            <table style="width: 100%; border-collapse: collapse; margin-bottom: 30px;">
+                <thead>
+                    <tr>
+                        <th style="border: 1px solid #000; padding: 8px 10px; font-size: 12px; background-color: #e5e7eb; font-weight: bold; text-align: center; text-transform: uppercase;">Materia</th>
+                        <th style="border: 1px solid #000; padding: 8px 10px; font-size: 12px; background-color: #e5e7eb; font-weight: bold; text-align: center; text-transform: uppercase; width: 120px;">Calificación</th>
+                    </tr>
+                </thead>
+                <tbody>${rows}</tbody>
+            </table>`;
+        });
+
+        // Generar ventana de impresión (igual que en descargarBoletaPDF)
+        const printWindow = window.open('', '_blank');
+        const currentYear = new Date().getFullYear();
+        const cicloEscolar = (new Date().getMonth() >= 7) ? `${currentYear} - ${currentYear + 1}` : `${currentYear - 1} - ${currentYear}`;
         
-        window.showToast("CSV de alumno descargado.", "success");
+        let firmaTutorHtml = `
+            <div class="signature-line"></div>
+            <div class="signature-title">Padre de Familia o Tutor</div>
+            <div style="font-size:11px; margin-top:5px; color:#555;">Firma de Enterado</div>
+        `;
+        try {
+            const { data: firma } = await supabaseClient.from('firmas_boleta')
+                .select('nombre_tutor, fecha_firma')
+                .eq('alumno_id', alumnoId)
+                .order('fecha_firma', { ascending: false })
+                .limit(1)
+                .maybeSingle();
+            
+            if(firma) {
+                const fechaFormat = new Date(firma.fecha_firma).toLocaleDateString('es-MX', { year:'numeric', month:'short', day:'numeric' });
+                firmaTutorHtml = `
+                    <div class="signature-line" style="display:flex; align-items:flex-end; justify-content:center; padding-bottom:4px;">
+                        <span style="font-family:'Courier New', monospace; font-size:15px; font-weight:bold; color:#1e3a8a; font-style:italic;">${firma.nombre_tutor}</span>
+                    </div>
+                    <div class="signature-title">Padre de Familia o Tutor</div>
+                    <div style="font-size:11px; margin-top:5px; color:#059669; font-weight:bold;">
+                        <span style="font-family:sans-serif;">✔ Firmado digitalmente el ${fechaFormat}</span>
+                    </div>
+                `;
+            }
+        } catch(e) { console.warn('Error fetching firma:', e); }
+
+        const plantelName = (typeof state !== 'undefined' && state && state.plantelNombre) ? state.plantelNombre : CONFIG.schoolName;
+
+        printWindow.document.write(`
+            <html>
+                <head>
+                    <title>Reporte Individual de Calificaciones - ${nombre}</title>
+                    <style>
+                        body { font-family: 'Segoe UI', Arial, sans-serif; padding: 40px; color: #111; line-height: 1.4; margin: 0; }
+                        .header { text-align: center; margin-bottom: 20px; border-bottom: 4px double #1e3a8a; padding-bottom: 20px; }
+                        .header h1 { margin: 0; color: #1e3a8a; font-size: 26px; text-transform: uppercase; letter-spacing: 1px; }
+                        .header h2 { margin: 6px 0 0 0; color: #333; font-size: 16px; font-weight: bold; letter-spacing: 0.5px; }
+                        .header h3 { margin: 4px 0 0 0; color: #555; font-size: 14px; font-weight: normal; }
+                        
+                        .meta-info { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 30px; font-size: 14px; background: #f8fafc; padding: 18px; border: 1px solid #cbd5e1; border-radius: 8px; }
+                        .meta-info div { margin-bottom: 6px; }
+                        .meta-info strong { color: #1e3a8a; display: inline-block; width: 130px; }
+                        
+                        .trim-title { font-size: 15px; font-weight: bold; color: #1e3a8a; margin-bottom: 12px; border-left: 5px solid #1e3a8a; padding-left: 10px; text-transform: uppercase; background: #f1f5f9; padding-top: 4px; padding-bottom: 4px; }
+                        
+                        .signatures { display: flex; justify-content: space-around; margin-top: 70px; page-break-inside: avoid; }
+                        .signature-box { text-align: center; width: 260px; }
+                        .signature-line { border-bottom: 1px solid #000; height: 60px; margin-bottom: 10px; }
+                        .signature-title { font-size: 13px; font-weight: bold; color: #111; text-transform: uppercase; }
+                        
+                        .footer { margin-top: 50px; font-size: 11px; color: #666; text-align: center; border-top: 1px solid #cbd5e1; padding-top: 15px; }
+                        
+                        @media print {
+                            body { padding: 0; margin: 20px; }
+                            button { display: none; }
+                            .meta-info { border: 1px solid #000; background: transparent; }
+                            .header { border-bottom: 3px solid #000; }
+                            .header h1, .header h2, .trim-title, .meta-info strong { color: #000; }
+                            .trim-title { border-left: 5px solid #000; background: transparent; }
+                        }
+                    </style>
+                </head>
+                <body>
+                    <div class="header">
+                        <h1>${plantelName.toUpperCase()}</h1>
+                        <h2>SISTEMA EDUCATIVO INSTITUCIONAL</h2>
+                        <h3>BOLETA INDIVIDUAL DE EVALUACIONES</h3>
+                    </div>
+                    
+                    <div class="meta-info">
+                        <div>
+                            <div><strong>Alumno(a):</strong> <span style="text-transform: uppercase; font-weight: bold;">${nombre}</span></div>
+                            <div><strong>Matrícula/CURP:</strong> <span style="text-transform: uppercase;">${matricula || 'N/A'}</span></div>
+                        </div>
+                        <div>
+                            <div><strong>Ciclo Escolar:</strong> ${cicloEscolar}</div>
+                            <div><strong>Fecha de Emisión:</strong> ${new Date().toLocaleDateString('es-MX', { year:'numeric', month:'long', day:'numeric' })}</div>
+                        </div>
+                    </div>
+
+                    ${gradesHtml}
+
+                    <div class="signatures">
+                        <div class="signature-box">
+                            <div class="signature-line"></div>
+                            <div class="signature-title">Dirección del Plantel</div>
+                            <div style="font-size:11px; margin-top:5px; color:#555;">Firma y Sello Oficial</div>
+                        </div>
+                        <div class="signature-box">
+                            ${firmaTutorHtml}
+                        </div>
+                    </div>
+
+                    <div class="footer">
+                        <p>Documento de carácter informativo generado mediante la Plataforma de Control Escolar <strong>${CONFIG.appName}</strong>.</p>
+                        <p>Para poseer validez oficial ante las autoridades educativas, este formato requiere las firmas y los sellos originales de la institución.</p>
+                    </div>
+                    
+                    <script>
+                        setTimeout(() => { window.print(); }, 800);
+                    </script>
+                </body>
+            </html>
+        `);
+        printWindow.document.close();
+        
+        window.showToast("Boleta PDF generada con éxito.", "success");
         document.getElementById('resSearchAlumnoDownload').style.display = 'none';
         document.getElementById('adminSearchAlumnoDownload').value = '';
-    } catch(e) { console.error(e); alert("Error al generar CSV: " + e.message); }
+    } catch(e) { console.error(e); alert("Error al generar boleta: " + e.message); }
 };
 
 // ==========================================
