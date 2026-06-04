@@ -1642,7 +1642,12 @@ function renderAdminCalificaciones() {
       <div class="card" style="flex:2; min-width:360px;">
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; flex-wrap:wrap; gap:10px;">
           <h3 style="margin:0;"><i class="fa-solid fa-clock-rotate-left" style="color:var(--primary);"></i> Historial de Firmas</h3>
-          <button class="btn btn-outline btn-sm" onclick="window.loadHistorialFirmas()"><i class="fa-solid fa-rotate-right"></i> Actualizar</button>
+          <div style="display:flex; gap:10px; align-items:center;">
+             <select class="form-select" id="firmaFiltroGrupo" onchange="window.loadHistorialFirmas()" style="padding:4px 8px; font-size:0.85rem; border-radius:6px; min-width:120px;">
+                <option value="">Todos los grupos</option>
+             </select>
+             <button class="btn btn-outline btn-sm" onclick="window.loadHistorialFirmas()"><i class="fa-solid fa-rotate-right"></i> Actualizar</button>
+          </div>
         </div>
         <div id="firmaHistorialContainer">
           <p style="text-align:center; color:var(--text-muted); padding:30px 0;"><i class="fa-solid fa-signature" style="font-size:2.5rem; display:block; margin-bottom:10px; opacity:0.3;"></i>Las firmas registradas aparecerán aquí.</p>
@@ -6394,6 +6399,34 @@ window.descargarBoletaPDF = async (aluId, nombre, matricula) => {
             return `<div class="trim-title">EVALUACIÓN DEL TRIMESTRE ${table.dataset.trimestre}</div>${t.outerHTML}`;
         }).join('');
 
+        // 3. Buscar si existe una firma digital en firmas_boleta
+        let firmaTutorHtml = `
+            <div class="signature-line"></div>
+            <div class="signature-title">Padre de Familia o Tutor</div>
+            <div style="font-size:11px; margin-top:5px; color:#555;">Firma de Enterado</div>
+        `;
+        try {
+            const { data: firma } = await supabaseClient.from('firmas_boleta')
+                .select('nombre_tutor, fecha_firma')
+                .eq('alumno_id', aluId)
+                .order('fecha_firma', { ascending: false })
+                .limit(1)
+                .maybeSingle();
+            
+            if(firma) {
+                const fechaFormat = new Date(firma.fecha_firma).toLocaleDateString('es-MX', { year:'numeric', month:'short', day:'numeric' });
+                firmaTutorHtml = `
+                    <div class="signature-line" style="display:flex; align-items:flex-end; justify-content:center; padding-bottom:4px;">
+                        <span style="font-family:'Courier New', monospace; font-size:15px; font-weight:bold; color:#1e3a8a; font-style:italic;">${firma.nombre_tutor}</span>
+                    </div>
+                    <div class="signature-title">Padre de Familia o Tutor</div>
+                    <div style="font-size:11px; margin-top:5px; color:#059669; font-weight:bold;">
+                        <span style="font-family:sans-serif;">✔ Firmado digitalmente el ${fechaFormat}</span>
+                    </div>
+                `;
+            }
+        } catch(e) { console.warn('Error fetching firma:', e); }
+
         const plantelName = (window.state && window.state.plantelNombre) ? window.state.plantelNombre : CONFIG.schoolName;
 
         printWindow.document.write(`
@@ -6457,9 +6490,7 @@ window.descargarBoletaPDF = async (aluId, nombre, matricula) => {
                             <div style="font-size:11px; margin-top:5px; color:#555;">Firma y Sello Oficial</div>
                         </div>
                         <div class="signature-box">
-                            <div class="signature-line"></div>
-                            <div class="signature-title">Padre de Familia o Tutor</div>
-                            <div style="font-size:11px; margin-top:5px; color:#555;">Firma de Enterado</div>
+                            ${firmaTutorHtml}
                         </div>
                     </div>
 
@@ -10787,6 +10818,14 @@ window.initFirmaBoletasQR = () => {
         return;
     }
 
+    // Cargar grupos para el filtro
+    supabaseClient.from('grupos').select('id, nombre').eq('plantel_id', window.state.plantelId).then(({data}) => {
+        const sel = document.getElementById('firmaFiltroGrupo');
+        if(sel && data) {
+            sel.innerHTML = '<option value="">Todos los grupos</option>' + data.map(g => `<option value="${g.id}">${g.nombre}</option>`).join('');
+        }
+    });
+
     readerEl.innerHTML = '';
     document.getElementById('firmaQrStatus').textContent = 'Iniciando cámara...';
 
@@ -11004,7 +11043,7 @@ window.firmarBoletaDesdeTimeline = async (comunicadoId, btn) => {
         // Obtener datos del comunicado para extraer el alumno y trimestre
         const { data: com } = await supabaseClient
             .from('comunicados')
-            .select('titulo, mensaje, audiencia, autor_id')
+            .select('titulo, mensaje, audiencia, autor_id, plantel_id')
             .eq('id', comunicadoId)
             .maybeSingle();
 
@@ -11019,10 +11058,12 @@ window.firmarBoletaDesdeTimeline = async (comunicadoId, btn) => {
         const trimestreMatch = (com.titulo || '').match(/Trimestre\s+\d+/i);
         const trimestre = trimestreMatch ? trimestreMatch[0] : 'Sin especificar';
 
+        const pId = com.plantel_id || (window.state ? window.state.plantelId : null);
+
         // Registrar la firma en firmas_boleta
         const { error: errFirma } = await supabaseClient.from('firmas_boleta').upsert({
             alumno_id: alumnoId,
-            plantel_id: state.plantelId,
+            plantel_id: pId,
             trimestre: trimestre,
             nombre_tutor: firmaTexto.trim(),
             registrado_por: u.data.user.id,
@@ -11039,7 +11080,7 @@ window.firmarBoletaDesdeTimeline = async (comunicadoId, btn) => {
                 titulo: `✅ Boleta Firmada: ${firmaTexto.trim()}`,
                 mensaje: `El padre/tutor ha firmado de enterado las calificaciones del ${trimestre}.\n\n✍️ Firma: ${firmaTexto.trim()}\n📅 Fecha: ${new Date().toLocaleString('es-MX')}`,
                 audiencia: `Admin_Firma`,
-                plantel_id: state.plantelId
+                plantel_id: pId
             }]);
         }
 
@@ -11071,17 +11112,36 @@ window.loadHistorialFirmas = async () => {
     const cont = document.getElementById('firmaHistorialContainer');
     if(!cont) return;
 
+    const filtroGrupoId = document.getElementById('firmaFiltroGrupo')?.value;
+
     cont.innerHTML = '<p style="text-align:center; padding:20px; color:var(--text-muted);"><i class="fa-solid fa-spinner fa-spin"></i> Cargando historial...</p>';
 
     try {
+        let totalAlumnosGrupo = 0;
+        let alumnosFiltroSet = null;
+
+        if (filtroGrupoId) {
+            const { data: alums } = await supabaseClient.from('alumnos').select('id').eq('grupo_id', filtroGrupoId);
+            if (alums) {
+                totalAlumnosGrupo = alums.length;
+                alumnosFiltroSet = new Set(alums.map(a => a.id));
+            }
+        }
+
         const { data, error } = await supabaseClient
             .from('firmas_boleta')
-            .select('*, alumnos(nombre, matricula, grupos(nombre))')
+            .select('*, alumnos(id, nombre, matricula, grupo_id, grupos(nombre))')
             .eq('plantel_id', state.plantelId)
-            .order('fecha_firma', { ascending: false })
-            .limit(100);
+            .order('fecha_firma', { ascending: false });
 
         if(error) throw error;
+
+        let firmasFiltradas = data || [];
+        if (filtroGrupoId && alumnosFiltroSet) {
+            firmasFiltradas = firmasFiltradas.filter(f => f.alumnos && alumnosFiltroSet.has(f.alumno_id));
+        } else {
+            firmasFiltradas = firmasFiltradas.slice(0, 100);
+        }
 
         // También cargar avisos pendientes (enviados pero aún no firmados)
         const { data: pendientes } = await supabaseClient
@@ -11089,38 +11149,57 @@ window.loadHistorialFirmas = async () => {
             .select('id, titulo, audiencia, fecha_envio')
             .eq('plantel_id', state.plantelId)
             .eq('tipo', 'aviso_firma_boleta')
-            .order('fecha_envio', { ascending: false })
-            .limit(50);
+            .order('fecha_envio', { ascending: false });
 
-        if(!data || data.length === 0) {
-            let pendHtml = '';
-            if(pendientes && pendientes.length > 0) {
-                pendHtml = `
-                <div style="margin-bottom:16px; padding:12px; background:#fef3c7; border-radius:10px; border:1px solid #fde68a;">
-                    <p style="margin:0 0 8px 0; font-weight:700; font-size:0.85rem; color:#92400e;"><i class="fa-solid fa-clock"></i> Avisos Enviados — En Espera de Firma (${pendientes.length})</p>
-                    ${pendientes.map(p => {
-                        const trim = (p.titulo || '').match(/Trimestre\s+\d+/i)?.[0] || '';
-                        return `<div style="font-size:0.8rem; color:#78350f; margin-bottom:4px;"><i class="fa-solid fa-hourglass-half"></i> ${trim} | ${new Date(p.fecha_envio).toLocaleDateString('es-MX')}</div>`;
-                    }).join('')}
-                </div>`;
-            }
-            cont.innerHTML = pendHtml + '<p style="text-align:center; color:var(--text-muted); padding:20px 0;"><i class="fa-solid fa-signature" style="font-size:2.5rem; display:block; margin-bottom:10px; opacity:0.3;"></i>No hay firmas confirmadas todavía.</p>';
+        let pendientesFiltrados = pendientes || [];
+        if(filtroGrupoId && alumnosFiltroSet) {
+            pendientesFiltrados = pendientesFiltrados.filter(p => {
+                const match = (p.audiencia||'').match(/^Alumno_([a-f0-9-]{36})$/i);
+                return match && alumnosFiltroSet.has(match[1]);
+            });
+        } else {
+            pendientesFiltrados = pendientesFiltrados.slice(0, 50);
+        }
+
+        if(firmasFiltradas.length === 0 && pendientesFiltrados.length === 0) {
+            cont.innerHTML = '<p style="text-align:center; color:var(--text-muted); padding:20px 0;"><i class="fa-solid fa-signature" style="font-size:2.5rem; display:block; margin-bottom:10px; opacity:0.3;"></i>No hay firmas registradas ni pendientes.</p>';
             return;
         }
 
         // Agrupar por trimestre
         const porTrimestre = {};
-        data.forEach(f => {
+        firmasFiltradas.forEach(f => {
             if(!porTrimestre[f.trimestre]) porTrimestre[f.trimestre] = [];
             porTrimestre[f.trimestre].push(f);
         });
 
         let html = '';
+        
+        // Agregar barra de estadísticas si hay grupo seleccionado y al menos 1 alumno
+        if (filtroGrupoId && totalAlumnosGrupo > 0) {
+            const firmasRecientes = firmasFiltradas.length; // Todas las firmas de este grupo
+            const pct = Math.min(100, Math.round((firmasRecientes / totalAlumnosGrupo) * 100)) || 0;
+            const color = pct >= 80 ? '#10b981' : pct >= 50 ? '#f59e0b' : '#ef4444';
+            
+            html += `
+            <div style="margin-bottom:20px; padding:16px; background:white; border-radius:10px; border:1px solid var(--border); box-shadow:0 2px 4px rgba(0,0,0,0.05);">
+                <div style="display:flex; justify-content:space-between; margin-bottom:8px;">
+                    <span style="font-weight:bold; color:var(--text-color);"><i class="fa-solid fa-chart-pie" style="color:var(--primary);"></i> Progreso de Firmas del Grupo</span>
+                    <span style="font-weight:bold; color:${color};">${pct}%</span>
+                </div>
+                <div style="width:100%; height:12px; background:#e2e8f0; border-radius:6px; overflow:hidden;">
+                    <div style="width:${pct}%; height:100%; background:${color}; transition:width 0.5s;"></div>
+                </div>
+                <div style="margin-top:8px; font-size:0.8rem; color:var(--text-muted); text-align:right;">
+                    <strong>${firmasRecientes}</strong> firmas de <strong>${totalAlumnosGrupo}</strong> alumnos registrados
+                </div>
+            </div>`;
+        }
 
         // Mostrar pendientes al inicio si hay
-        if(pendientes && pendientes.length > 0) {
-            const firmaIds = new Set(data.map(f => f.alumno_id + f.trimestre));
-            const realPend = pendientes.filter(p => {
+        if(pendientesFiltrados.length > 0) {
+            const firmaIds = new Set(firmasFiltradas.map(f => f.alumno_id + f.trimestre));
+            const realPend = pendientesFiltrados.filter(p => {
                 const alumnoIdM = (p.audiencia||'').match(/^Alumno_([a-f0-9-]{36})$/i);
                 const trim = (p.titulo||'').match(/Trimestre\s+\d+/i)?.[0]||'';
                 if(!alumnoIdM) return false;
