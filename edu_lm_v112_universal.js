@@ -12642,6 +12642,7 @@ function renderApoyoPsicosocial() {
                         <option value="todos">Todos los alumnos del plantel</option>
                         <option value="grado">Por Grado</option>
                         <option value="grupo">Por ID de Grupo</option>
+                        <option value="alumno">Por Alumno (ID)</option>
                     </select>
                 </div>
                 <div style="flex:1;">
@@ -12872,7 +12873,7 @@ window.enviarPsicosocial = async () => {
     const filtro = document.getElementById('psicoFiltroEnvio').value;
     const esp = document.getElementById('psicoEspecifEnvio').value.trim();
     
-    if(filtro !== 'todos' && !esp) return alert('Por favor, especifica el grado o grupo en la caja de texto.');
+    if(filtro !== 'todos' && !esp) return alert('Por favor, especifica el grado, grupo o ID de alumno en la caja de texto.');
     if(!confirm('¿Estás seguro de enviar este nuevo cuestionario? Esto creará una alerta obligatoria en el perfil de cada alumno seleccionado.')) return;
     
     window.showToast('Creando cuestionario y procesando envíos...', 'info');
@@ -12881,6 +12882,7 @@ window.enviarPsicosocial = async () => {
         let query = supabaseClient.from('alumnos').select('id');
         if(filtro === 'grado') query = query.eq('grado', esp);
         if(filtro === 'grupo') query = query.eq('grupo_id', esp);
+        if(filtro === 'alumno') query = query.eq('id', esp);
         
         const { data: alus, error } = await query;
         if(error) throw error;
