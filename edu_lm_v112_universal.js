@@ -412,6 +412,15 @@ function renderSetupScreen() {
                            placeholder="Mínimo 6 caracteres..."
                            autocomplete="new-password">
                 </div>
+                <div class="form-group" style="margin-bottom:32px; text-align:center;">
+                    <label class="form-label" style="font-weight:600; margin-bottom:8px; display:block;">Logo de la Institución (Opcional)</label>
+                    <input type="file" id="setupLogo" accept="image/png, image/jpeg" style="display:none;" onchange="window.previewSetupLogo(event)">
+                    <button class="btn btn-outline" style="width:100%; height:60px; border-radius:12px; border-style:dashed; color:var(--text-muted);" onclick="document.getElementById('setupLogo').click(); return false;">
+                        <i class="fa-solid fa-cloud-arrow-up"></i> Seleccionar Imagen...
+                    </button>
+                    <img id="setupLogoPreview" style="max-height:80px; margin-top:15px; display:none; border-radius:8px; box-shadow:0 4px 6px rgba(0,0,0,0.1); margin-left:auto; margin-right:auto;">
+                    <input type="hidden" id="setupLogoBase64" value="">
+                </div>
                 <button class="btn btn-primary" style="width:100%; height:64px; font-size:1.1rem; border-radius:16px; font-weight:700; box-shadow: var(--shadow-sm);" onclick="window.realizarSetupInicial()">
                     <i class="fa-solid fa-rocket"></i> Registrar Plantel y Acceder
                 </button>
@@ -448,6 +457,55 @@ function renderSetupScreen() {
         `;
     }
 }
+
+window.previewSetupLogo = (event) => {
+    const file = event.target.files[0];
+    if(!file) return;
+    
+    // Validar tipo
+    if(!file.type.match(/image.*/)) {
+        alert("Por favor, selecciona una imagen (PNG o JPG).");
+        return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = function(readerEvent) {
+        const img = new Image();
+        img.onload = function() {
+            // Compress image to max 300px height/width
+            const canvas = document.createElement('canvas');
+            let width = img.width;
+            let height = img.height;
+            const maxSize = 300;
+
+            if (width > height) {
+                if (width > maxSize) {
+                    height *= maxSize / width;
+                    width = maxSize;
+                }
+            } else {
+                if (height > maxSize) {
+                    width *= maxSize / height;
+                    height = maxSize;
+                }
+            }
+            
+            canvas.width = width;
+            canvas.height = height;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(img, 0, 0, width, height);
+            
+            // Compresión a JPEG calidad 0.8
+            const dataUrl = canvas.toDataURL('image/jpeg', 0.8);
+            
+            document.getElementById('setupLogoPreview').src = dataUrl;
+            document.getElementById('setupLogoPreview').style.display = 'block';
+            document.getElementById('setupLogoBase64').value = dataUrl;
+        }
+        img.src = readerEvent.target.result;
+    }
+    reader.readAsDataURL(file);
+};
 
 window.validarEscuelaYaRegistrada = async () => {
     const btn = event?.currentTarget;
@@ -494,6 +552,7 @@ window.realizarSetupInicial = async () => {
     const dir = document.getElementById('setupDirector').value.trim();
     const cor = document.getElementById('setupCorreo').value.trim().toLowerCase();
     const pas = document.getElementById('setupPass').value.trim();
+    const logoBase64 = document.getElementById('setupLogoBase64') ? document.getElementById('setupLogoBase64').value : null;
 
     if(!esc || !dir || !cor || !pas) return alert("Por favor completa todos los campos, incluyendo la contraseña.");
     if(pas.length < 6) return alert("La contraseña debe tener al menos 6 caracteres.");
@@ -508,7 +567,8 @@ window.realizarSetupInicial = async () => {
         const { data: prepData, error: prepErr } = await supabaseClient.rpc('preparar_registro_director', {
             p_email: cor,
             p_nombre_director: dir,
-            p_nombre_escuela: esc
+            p_nombre_escuela: esc,
+            p_logo_url: logoBase64
         });
         if (prepErr) throw prepErr;
         if (prepData && prepData.success === false) throw new Error(prepData.error);
@@ -3555,13 +3615,14 @@ window.imprimirExpediente = async (idAlumno) => {
             supabaseClient.from('alumnos').select('*, grupos(nombre)').eq('id', id).single(),
             supabaseClient.from('reportes_conducta').select('*, perfiles(nombre)').eq('alumno_id', id).order('fecha', { ascending: false }),
             supabaseClient.from('intervenciones_conducta').select('*').eq('alumno_id', id).order('fecha', { ascending: false }),
-            supabaseClient.from('planteles').select('nombre').eq('id', state.plantelId).single()
+            supabaseClient.from('planteles').select('nombre, logo_url').eq('id', state.plantelId).single()
         ]);
 
         const al = alRes.data;
         const reps = repsRes.data || [];
         const intervs = intervsRes.data || [];
         const schoolName = plantelRes.data?.nombre || 'Escuela';
+        const schoolLogo = plantelRes.data?.logo_url || null;
 
         if(!al) throw new Error("Alumno no encontrado");
 
@@ -3600,6 +3661,7 @@ window.imprimirExpediente = async (idAlumno) => {
                         .header h2 { font-size: 28px; margin: 0 0 5px 0; color: #000; text-transform: uppercase; }
                         .header h1 { margin: 0; color: #1e40af; font-size: 20px; text-transform: uppercase; }
                         .header p { margin: 5px 0; font-size: 14px; color: #555; font-weight: bold; }
+                        .logo-img { max-height: 80px; margin-bottom: 10px; object-fit: contain; }
                         .student-info { background: #f8fafc; border: 1px solid #e2e8f0; padding: 20px; border-radius: 8px; margin-bottom: 30px; display: grid; grid-template-columns: 1fr 1fr; gap: 15px; font-size: 14px; }
                         .section-title { font-size: 18px; color: #1e40af; border-bottom: 2px solid #cbd5e1; padding-bottom: 5px; margin-top: 30px; margin-bottom: 15px; text-transform: uppercase; }
                         .item-box { border: 1px solid #cbd5e1; padding: 12px; border-radius: 6px; margin-bottom: 12px; page-break-inside: avoid; }
@@ -3620,6 +3682,7 @@ window.imprimirExpediente = async (idAlumno) => {
                 </head>
                 <body>
                     <div class="header">
+                        ${schoolLogo ? `<img src="${schoolLogo}" class="logo-img" alt="Logo">` : ''}
                         <h2>${schoolName}</h2>
                         <h1>SISTEMA EDU-LM: DEPARTAMENTO DE TRABAJO SOCIAL</h1>
                         <p>EXPEDIENTE INTEGRAL DEL ALUMNO</p>
@@ -3855,13 +3918,14 @@ window.imprimirExpedienteMedico = async (idAlumno) => {
             supabaseClient.from('alumnos').select('*, grupos(nombre)').eq('id', id).single(),
             supabaseClient.from('expedientes_salud').select('*, perfiles(nombre)').eq('alumno_id', id).order('creado_en', { ascending: false }),
             supabaseClient.from('justificantes_medicos').select('*, perfiles(nombre)').eq('alumno_id', id).order('fecha_emision', { ascending: false }),
-            supabaseClient.from('planteles').select('nombre').eq('id', state.plantelId).single()
+            supabaseClient.from('planteles').select('nombre, logo_url').eq('id', state.plantelId).single()
         ]);
 
         const al = alRes.data;
         const atenciones = atencRes.data || [];
         const justificantes = justRes.data || [];
         const schoolName = plantelRes.data?.nombre || 'Escuela';
+        const schoolLogo = plantelRes.data?.logo_url || null;
 
         if(!al) throw new Error("Alumno no encontrado");
 
@@ -3898,6 +3962,7 @@ window.imprimirExpedienteMedico = async (idAlumno) => {
                     <style>
                         body { font-family: 'Segoe UI', Arial, sans-serif; padding: 40px; color: #333; line-height: 1.5; }
                         .header { text-align: center; margin-bottom: 30px; border-bottom: 2px solid #1e40af; padding-bottom: 15px; }
+                        .logo-img { max-height: 80px; margin-bottom: 10px; object-fit: contain; }
                         .header h2 { font-size: 28px; margin: 0 0 5px 0; color: #000; text-transform: uppercase; }
                         .header h1 { margin: 0; color: #1e40af; font-size: 20px; text-transform: uppercase; }
                         .header p { margin: 5px 0; font-size: 14px; color: #555; font-weight: bold; }
@@ -3919,6 +3984,7 @@ window.imprimirExpedienteMedico = async (idAlumno) => {
                 </head>
                 <body>
                     <div class="header">
+                        ${schoolLogo ? `<img src="${schoolLogo}" class="logo-img" alt="Logo">` : ''}
                         <h2>${schoolName}</h2>
                         <h1>SISTEMA EDU-LM: ÁREA DE SALUD ESCOLAR</h1>
                         <p>EXPEDIENTE MÉDICO Y JUSTIFICANTES</p>
@@ -6442,10 +6508,12 @@ window.descargarBoletaPDF = async (aluId, nombre, matricula) => {
         } catch(e) { console.warn('Error fetching firma:', e); }
 
         let plantelName = CONFIG.schoolName;
+        let plantelLogo = null;
         try {
             if (state && state.plantelId) {
-                const { data: pt } = await supabaseClient.from('planteles').select('nombre').eq('id', state.plantelId).maybeSingle();
+                const { data: pt } = await supabaseClient.from('planteles').select('nombre, logo_url').eq('id', state.plantelId).maybeSingle();
                 if (pt && pt.nombre) plantelName = pt.nombre;
+                if (pt && pt.logo_url) plantelLogo = pt.logo_url;
             }
         } catch(e) {}
 
@@ -6459,6 +6527,7 @@ window.descargarBoletaPDF = async (aluId, nombre, matricula) => {
                         .header h1 { margin: 0; color: #1e3a8a; font-size: 26px; text-transform: uppercase; letter-spacing: 1px; }
                         .header h2 { margin: 6px 0 0 0; color: #333; font-size: 16px; font-weight: bold; letter-spacing: 0.5px; }
                         .header h3 { margin: 4px 0 0 0; color: #555; font-size: 14px; font-weight: normal; }
+                        .logo-img { max-height: 80px; margin-bottom: 10px; object-fit: contain; }
                         
                         .meta-info { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 30px; font-size: 14px; background: #f8fafc; padding: 18px; border: 1px solid #cbd5e1; border-radius: 8px; }
                         .meta-info div { margin-bottom: 6px; }
@@ -6485,6 +6554,7 @@ window.descargarBoletaPDF = async (aluId, nombre, matricula) => {
                 </head>
                 <body>
                     <div class="header">
+                        ${plantelLogo ? `<img src="${plantelLogo}" class="logo-img" alt="Logo de la Institución">` : ''}
                         <h1>${plantelName.toUpperCase()}</h1>
                         <h2>SISTEMA EDUCATIVO INSTITUCIONAL</h2>
                         <h3>BOLETA INDIVIDUAL DE EVALUACIONES</h3>
@@ -8510,7 +8580,7 @@ window.exportarListasCSV = () => {
     link.click();
 };
 
-window.imprimirLista = () => {
+window.imprimirLista = async () => {
     const tabla = document.querySelector(".risk-table");
     const tbody = document.getElementById('listaMaestroAlumnos');
     const statsCont = document.getElementById('statsListaMaestro');
@@ -8526,6 +8596,19 @@ window.imprimirLista = () => {
     const fecha = new Date().toLocaleDateString();
 
     const currentTrim = state.selectedMaestroTrimestre === 'final' ? 'PROMEDIO FINAL DEL AÑO ESCOLAR' : `EVALUACIÓN DEL ${state.selectedMaestroTrimestre}° TRIMESTRE`;
+
+    // Obtener datos del plantel para el membrete
+    let schoolName = CONFIG.schoolName || 'Escuela';
+    let schoolLogo = null;
+    try {
+        if(state.plantelId) {
+            const { data: pt } = await supabaseClient.from('planteles').select('nombre, logo_url').eq('id', state.plantelId).maybeSingle();
+            if(pt) {
+                if(pt.nombre) schoolName = pt.nombre;
+                if(pt.logo_url) schoolLogo = pt.logo_url;
+            }
+        }
+    } catch(e) {}
 
     // Clonar tabla y limpiar columnas de contacto/acciones
     const cloneTable = tabla.cloneNode(true);
@@ -8562,6 +8645,7 @@ window.imprimirLista = () => {
                 <style>
                     body { font-family: 'Segoe UI', Arial, sans-serif; padding: 30px; color: #333; line-height: 1.4; }
                     .header { text-align: center; margin-bottom: 20px; }
+                    .logo-img { max-height: 80px; margin-bottom: 10px; object-fit: contain; }
                     .header h1 { margin: 0; color: #1e40af; font-size: 22px; }
                     .header p { margin: 2px 0; font-size: 14px; color: #444; }
                     .meta-info { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 20px; font-size: 13px; border-top: 1px solid #eee; padding-top: 15px; }
@@ -8580,7 +8664,8 @@ window.imprimirLista = () => {
             </head>
             <body>
                 <div class="header">
-                    <h1>SISTEMA EDU-LM: SEGUIMIENTO ACADÉMICO</h1>
+                    ${schoolLogo ? `<img src="${schoolLogo}" class="logo-img" alt="Logo">` : ''}
+                    <h1>${schoolName.toUpperCase()}</h1>
                     <p>ACTA OFICIAL DE RESULTADOS</p>
                 </div>
                 <div class="meta-info">
@@ -12751,10 +12836,12 @@ window.descargarBoletaAdminPDF = async (alumnoId, nombre, matricula) => {
         } catch(e) { console.warn('Error fetching firma:', e); }
 
         let plantelName = CONFIG.schoolName;
+        let plantelLogo = null;
         try {
             if (state && state.plantelId) {
-                const { data: pt } = await supabaseClient.from('planteles').select('nombre').eq('id', state.plantelId).maybeSingle();
+                const { data: pt } = await supabaseClient.from('planteles').select('nombre, logo_url').eq('id', state.plantelId).maybeSingle();
                 if (pt && pt.nombre) plantelName = pt.nombre;
+                if (pt && pt.logo_url) plantelLogo = pt.logo_url;
             }
         } catch(e) {}
 
@@ -12768,6 +12855,7 @@ window.descargarBoletaAdminPDF = async (alumnoId, nombre, matricula) => {
                         .header h1 { margin: 0; color: #1e3a8a; font-size: 26px; text-transform: uppercase; letter-spacing: 1px; }
                         .header h2 { margin: 6px 0 0 0; color: #333; font-size: 16px; font-weight: bold; letter-spacing: 0.5px; }
                         .header h3 { margin: 4px 0 0 0; color: #555; font-size: 14px; font-weight: normal; }
+                        .logo-img { max-height: 80px; margin-bottom: 10px; object-fit: contain; }
                         
                         .meta-info { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 30px; font-size: 14px; background: #f8fafc; padding: 18px; border: 1px solid #cbd5e1; border-radius: 8px; }
                         .meta-info div { margin-bottom: 6px; }
@@ -12794,6 +12882,7 @@ window.descargarBoletaAdminPDF = async (alumnoId, nombre, matricula) => {
                 </head>
                 <body>
                     <div class="header">
+                        ${plantelLogo ? `<img src="${plantelLogo}" class="logo-img" alt="Logo de la Institución">` : ''}
                         <h1>${plantelName.toUpperCase()}</h1>
                         <h2>SISTEMA EDUCATIVO INSTITUCIONAL</h2>
                         <h3>BOLETA INDIVIDUAL DE EVALUACIONES</h3>
@@ -13633,15 +13722,17 @@ window.imprimirExpedientePsicosocial = async (nombre, estId) => {
         const title = data.cuestionarios_psicosociales?.titulo || "Estudio Biopsicosocial";
         const notasHTML = data.notas_privadas ? `<h3 style="margin-top:30px;">Notas Confidenciales</h3><p style="white-space:pre-wrap;">${data.notas_privadas}</p>` : '';
         
-        const plantelRes = await supabaseClient.from('planteles').select('nombre').eq('id', state.plantelId).single();
+        const plantelRes = await supabaseClient.from('planteles').select('nombre, logo_url').eq('id', state.plantelId).single();
         const schoolName = plantelRes.data?.nombre || CONFIG.schoolName || 'Escuela';
+        const schoolLogo = plantelRes.data?.logo_url || null;
         
         const win = window.open('', '_blank');
         win.document.write(`
             <html><head><title>Expediente Biopsicosocial</title>
-            <style>body{font-family:Arial,sans-serif; padding:20px;} h2,h3{color:#333; margin-bottom:5px;} .header{text-align:center; margin-bottom:20px; border-bottom:2px solid #000; padding-bottom:10px;}</style>
+            <style>body{font-family:Arial,sans-serif; padding:20px;} h2,h3{color:#333; margin-bottom:5px;} .header{text-align:center; margin-bottom:20px; border-bottom:2px solid #000; padding-bottom:10px;} .logo-img { max-height: 80px; margin-bottom: 10px; object-fit: contain; }</style>
             </head><body>
                 <div class="header">
+                    ${schoolLogo ? `<img src="${schoolLogo}" class="logo-img" alt="Logo">` : ''}
                     <h2>${schoolName}</h2>
                     <h3>Expediente del ${title}</h3>
                 </div>
