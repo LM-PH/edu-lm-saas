@@ -2330,9 +2330,10 @@ function renderMaestroListas() {
              <button class="btn btn-sm t-btn" onclick="window.cambiarTrimestreLista('final', this)" style="padding:6px 12px; font-size:0.8rem; font-weight:bold; border-radius:6px; background:transparent; border:none; cursor:pointer; color:var(--text-muted);">PROMEDIO FINAL</button>
           </div>
           <div style="display:flex; gap:8px; flex-wrap:wrap;">
-             <button class="btn btn-outline" style="border-color:var(--text-muted); color:var(--text-main)" onclick="window.exportarRejillaBlancoCSV()" title="Descargar plantilla de evaluación en blanco (20 columnas)"><i class="fa-solid fa-table-cells"></i> Plantilla Vacía</button>
+             <button class="btn btn-outline" style="border-color:var(--text-muted); color:var(--text-main)" onclick="window.exportarRejillaBlancoCSV()" title="Descargar plantilla CSV en blanco (20 columnas)"><i class="fa-solid fa-file-csv"></i> CSV Vacío</button>
+             <button class="btn btn-outline" style="border-color:#6366f1; color:#6366f1" onclick="window.imprimirLista(true)" title="Imprimir plantilla oficial en blanco (15 columnas) con membrete"><i class="fa-solid fa-print"></i> Imprimir Vacía</button>
              <button class="btn btn-outline" style="border-color:var(--success); color:var(--success)" onclick="window.exportarListasCSV()"><i class="fa-solid fa-file-csv"></i> Excel de Datos</button>
-             <button class="btn btn-outline" style="border-color:var(--primary); color:var(--primary)" onclick="window.imprimirLista()"><i class="fa-solid fa-print"></i> Imprimir</button>
+             <button class="btn btn-outline" style="border-color:var(--primary); color:var(--primary)" onclick="window.imprimirLista(false)"><i class="fa-solid fa-print"></i> Imprimir Lista</button>
           </div>
        </div>
        
@@ -8584,7 +8585,7 @@ window.exportarListasCSV = () => {
     link.click();
 };
 
-window.imprimirLista = async () => {
+window.imprimirLista = async (esVacia = false) => {
     const tabla = document.querySelector(".risk-table");
     const tbody = document.getElementById('listaMaestroAlumnos');
     const statsCont = document.getElementById('statsListaMaestro');
@@ -8614,54 +8615,95 @@ window.imprimirLista = async () => {
         }
     } catch(e) {}
 
-    // Clonar tabla y limpiar columnas de contacto/acciones
-    const cloneTable = tabla.cloneNode(true);
-    cloneTable.querySelectorAll('tr').forEach(r => {
-        const lastTd = r.cells[r.cells.length - 1];
-        if(lastTd && (lastTd.innerHTML.includes('fa-envelope') || lastTd.innerText.includes('Contacto'))) {
-            lastTd.remove();
-        }
-    });
-
-    // Preparar HTML de estadísticas para impresión
+    let tableContentHtml = '';
     let statsHtml = '';
-    if(statsCont) {
-        const statsData = Array.from(statsCont.querySelectorAll('.card')).map(c => {
-            return { label: c.children[0].innerText, value: c.children[1].innerText };
-        });
-        statsHtml = `
-            <div style="display: flex; gap: 20px; margin-bottom: 25px; border: 1px solid #ddd; padding: 15px; border-radius: 8px; background: #f9fafb;">
-                ${statsData.map(s => `
-                    <div style="flex: 1; text-align: center;">
-                        <div style="font-size: 10px; color: #666; text-transform: uppercase; font-weight: bold; margin-bottom: 5px;">${s.label}</div>
-                        <div style="font-size: 18px; font-weight: bold; color: #1e40af;">${s.value}</div>
-                    </div>
-                `).join('<div style="width:1px; background:#ddd;"></div>')}
-            </div>
+    
+    if (esVacia) {
+        // Generar una plantilla vacía (cuadrícula de 15 columnas para firmas/evaluación manual)
+        const numCols = 15;
+        let headers = `<th style="width:40px; border: 1px solid #000; padding: 6px; font-size:10px;">No.</th><th style="border: 1px solid #000; padding: 6px; text-align:left; font-size:11px; min-width: 200px;">Nombre del Alumno</th>`;
+        for (let i = 1; i <= numCols; i++) {
+            headers += `<th style="border: 1px solid #000; padding: 6px; width: 32px; font-size:10px; text-align:center;">${i}</th>`;
+        }
+        
+        let rowsHtml = '';
+        const rows = tbody.querySelectorAll("tr");
+        let count = 1;
+        for (let i = 0; i < rows.length; i++) {
+            const spanNombre = rows[i].querySelector("td span[style*='font-weight:600']") || rows[i].cells[0];
+            if (spanNombre && spanNombre.innerText && !spanNombre.innerText.includes("Seleccione") && !spanNombre.innerText.includes("Sin resultados")) {
+                rowsHtml += `<tr style="height: 28px;">`;
+                rowsHtml += `<td style="border: 1px solid #000; padding: 4px; text-align:center; font-size:10px;">${count}</td>`;
+                rowsHtml += `<td style="border: 1px solid #000; padding: 4px 8px; text-align:left; font-size:10px; font-weight:600;">${spanNombre.innerText.trim()}</td>`;
+                for (let j = 1; j <= numCols; j++) {
+                    rowsHtml += `<td style="border: 1px solid #000; padding: 4px;"></td>`;
+                }
+                rowsHtml += `</tr>`;
+                count++;
+            }
+        }
+        
+        tableContentHtml = `
+            <table style="width: 100%; border-collapse: collapse; margin-top: 15px;">
+                <thead>
+                    <tr style="background-color: #f2f2f2;">${headers}</tr>
+                </thead>
+                <tbody>
+                    ${rowsHtml}
+                </tbody>
+            </table>
         `;
+    } else {
+        // Clonar tabla y limpiar columnas de contacto/acciones
+        const cloneTable = tabla.cloneNode(true);
+        cloneTable.querySelectorAll('tr').forEach(r => {
+            const lastTd = r.cells[r.cells.length - 1];
+            if(lastTd && (lastTd.innerHTML.includes('fa-envelope') || lastTd.innerText.includes('Contacto'))) {
+                lastTd.remove();
+            }
+        });
+        tableContentHtml = cloneTable.outerHTML;
+
+        // Preparar HTML de estadísticas para impresión
+        if(statsCont) {
+            const statsData = Array.from(statsCont.querySelectorAll('.card')).map(c => {
+                return { label: c.children[0].innerText, value: c.children[1].innerText };
+            });
+            statsHtml = `
+                <h4 style="margin-bottom: 10px; color: #1e40af; border-bottom: 1px solid #eee; padding-bottom: 5px; margin-top:20px;">RESUMEN DE RENDIMIENTO</h4>
+                <div style="display: flex; gap: 20px; margin-bottom: 25px; border: 1px solid #ddd; padding: 15px; border-radius: 8px; background: #f9fafb;">
+                    ${statsData.map(s => `
+                        <div style="flex: 1; text-align: center;">
+                            <div style="font-size: 10px; color: #666; text-transform: uppercase; font-weight: bold; margin-bottom: 5px;">${s.label}</div>
+                            <div style="font-size: 18px; font-weight: bold; color: #1e40af;">${s.value}</div>
+                        </div>
+                    `).join('<div style="width:1px; background:#ddd;"></div>')}
+                </div>
+            `;
+        }
     }
 
     const printWindow = window.open('', '_blank');
     printWindow.document.write(`
         <html>
             <head>
-                <title>Acta de Calificaciones - Edu-LM</title>
+                <title>${esVacia ? 'Plantilla de Seguimiento' : 'Acta de Calificaciones'} - ${grupoName}</title>
                 <style>
                     body { font-family: 'Segoe UI', Arial, sans-serif; padding: 30px; color: #333; line-height: 1.4; }
-                    .header { text-align: center; margin-bottom: 20px; }
-                    .logo-img { max-height: 80px; margin-bottom: 10px; object-fit: contain; }
-                    .header h1 { margin: 0; color: #1e40af; font-size: 22px; }
-                    .header p { margin: 2px 0; font-size: 14px; color: #444; }
+                    .header { text-align: center; margin-bottom: 20px; display: flex; flex-direction: column; align-items: center; }
+                    .logo-img { max-height: 70px; margin-bottom: 10px; object-fit: contain; }
+                    .header h1 { margin: 0; color: #1e40af; font-size: 20px; text-transform: uppercase; }
+                    .header p { margin: 2px 0; font-size: 13px; color: #444; font-weight: bold; }
                     .meta-info { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 20px; font-size: 13px; border-top: 1px solid #eee; padding-top: 15px; }
                     table { width: 100%; border-collapse: collapse; margin-bottom: 40px; }
-                    th, td { border: 1px solid #000; padding: 8px; text-align: center; font-size: 11px; }
+                    th, td { border: 1px solid #000; padding: 6px; text-align: center; font-size: 10px; }
                     th { background-color: #f2f2f2; font-weight: bold; }
                     .aln-left { text-align: left; }
-                    .signatures { display: flex; justify-content: space-around; margin-top: 60px; }
+                    .signatures { display: flex; justify-content: space-around; margin-top: 50px; page-break-inside: avoid; }
                     .signature-box { text-align: center; width: 220px; }
-                    .signature-line { border-top: 1px solid #000; margin-bottom: 5px; }
+                    .signature-line { border-top: 1px solid #000; margin-bottom: 5px; height: 50px; }
                     @media print {
-                        @page { margin: 1.5cm; }
+                        @page { size: ${esVacia ? 'landscape' : 'portrait'}; margin: 1cm; }
                         body { padding: 0; }
                     }
                 </style>
@@ -8670,41 +8712,42 @@ window.imprimirLista = async () => {
                 <div class="header">
                     ${schoolLogo ? `<img src="${schoolLogo}" class="logo-img" alt="Logo">` : ''}
                     <h1>${schoolName.toUpperCase()}</h1>
-                    <p>ACTA OFICIAL DE RESULTADOS</p>
+                    <p>${esVacia ? 'AUXILIAR DE REGISTRO Y SEGUIMIENTO (PLANTILLA VACÍA)' : 'ACTA OFICIAL DE RESULTADOS'}</p>
                 </div>
                 <div class="meta-info">
                     <div>
-                        <strong>Maestro:</strong> ${state.userName || 'Maestro Titular'}<br>
+                        <strong>Docente:</strong> ${state.userName || 'Docente Titular'}<br>
                         <strong>Grupo/Materia:</strong> ${grupoName}
                     </div>
                     <div style="text-align: right;">
                         <strong>Periodo:</strong> ${currentTrim}<br>
-                        <strong>Fecha de Impresión:</strong> ${fecha}
+                        <strong>Fecha de Generación:</strong> ${fecha}
                     </div>
                 </div>
                 
-                <h4 style="margin-bottom: 10px; color: #1e40af; border-bottom: 1px solid #eee; padding-bottom: 5px;">RESUMEN DE RENDIMIENTO</h4>
                 ${statsHtml}
 
-                <h4 style="margin-bottom: 10px; color: #1e40af;">LISTADO DE ALUMNOS (ORDEN ALFABÉTICO)</h4>
-                ${cloneTable.outerHTML}
+                <h4 style="margin-bottom: 10px; color: #1e40af; text-transform: uppercase; font-size: 12px; border-bottom: 1px solid #eee; padding-bottom: 4px;">
+                    ${esVacia ? 'Listado de Alumnos para Registro Manual (Celdas de Control)' : 'Listado Oficial de Alumnos y Resultados'}
+                </h4>
+                ${tableContentHtml}
 
                 <div class="signatures">
                     <div class="signature-box">
                         <div class="signature-line"></div>
-                        <div style="font-size: 12px; font-weight: bold;">Profr(a). ${state.userName || ''}</div>
-                        <div style="font-size: 10px;">Firma del Maestro</div>
+                        <div style="font-size: 11px; font-weight: bold;">Profr(a). ${state.userName || ''}</div>
+                        <div style="font-size: 9px; color: #555;">Firma del Docente</div>
                     </div>
                     <div class="signature-box">
                         <div class="signature-line"></div>
-                        <div style="font-size: 10px; font-weight: bold;">DIRECCIÓN ESCOLAR</div>
-                        <div style="font-size: 10px;">Sello y Firma de Recibido</div>
+                        <div style="font-size: 11px; font-weight: bold;">DIRECCIÓN ESCOLAR</div>
+                        <div style="font-size: 9px; color: #555;">Sello y Firma de Recibido</div>
                     </div>
                 </div>
                 <script>
                     window.onload = function() {
                         window.print();
-                        window.onafterprint = function() { window.close(); };
+                        setTimeout(function() { window.close(); }, 500);
                     };
                 </script>
             </body>
@@ -8715,7 +8758,7 @@ window.imprimirLista = async () => {
 
 window.exportarListasPDF = () => {
     // Redirigir a impresión ya que es más nativo y profesional
-    window.imprimirLista();
+    window.imprimirLista(false);
 };
 
 
