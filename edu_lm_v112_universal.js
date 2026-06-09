@@ -12977,9 +12977,12 @@ window.renderMaestroHorario = () => {
     setTimeout(window.loadMaestroHorario, 100);
     return `
         <div class="page-container">
-            <div class="page-header">
-                <h2 class="page-title"><i class="fa-solid fa-calendar-days text-primary"></i> Horario de Clases</h2>
-                <p class="page-subtitle">Visualiza la programación semanal de tus clases asignadas.</p>
+            <div class="page-header" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:16px;">
+                <div>
+                    <h2 class="page-title"><i class="fa-solid fa-calendar-days text-primary"></i> Horario de Clases</h2>
+                    <p class="page-subtitle">Visualiza la programación semanal de tus clases asignadas.</p>
+                </div>
+                <div id="btnImprimirHorarioContenedor"></div>
             </div>
             <div class="card" style="margin-top:20px;">
                 <div id="maestroHorarioContenedor">
@@ -12992,6 +12995,7 @@ window.renderMaestroHorario = () => {
 
 window.loadMaestroHorario = async () => {
     const cont = document.getElementById('maestroHorarioContenedor');
+    const btnCont = document.getElementById('btnImprimirHorarioContenedor');
     if(!cont) return;
     try {
         const uRes = await supabaseClient.auth.getUser();
@@ -13001,6 +13005,14 @@ window.loadMaestroHorario = async () => {
             return;
         }
 
+        // Obtener el nombre descriptivo del docente
+        const { data: profData } = await supabaseClient.from('perfiles_permitidos')
+            .select('nombre')
+            .eq('email', email)
+            .eq('plantel_id', state.plantelId)
+            .maybeSingle();
+        const docName = profData?.nombre || email;
+
         const { data: slots, error } = await supabaseClient.from('horarios_maestros')
             .select('*, grupos(nombre)')
             .eq('maestro_email', email)
@@ -13009,6 +13021,7 @@ window.loadMaestroHorario = async () => {
         if(error) throw error;
         
         if(!slots || slots.length === 0) {
+            if(btnCont) btnCont.innerHTML = '';
             cont.innerHTML = `
                 <div style="text-align:center; padding:60px 20px; opacity:0.4;">
                     <i class="fa-solid fa-calendar-xmark fa-3x" style="color:var(--primary); opacity:0.5; margin-bottom:12px;"></i>
@@ -13016,6 +13029,15 @@ window.loadMaestroHorario = async () => {
                 </div>
             `;
             return;
+        }
+        
+        // Habilitar botón de impresión
+        if (btnCont) {
+            btnCont.innerHTML = `
+                <button class="btn btn-outline" style="border-color:var(--primary); color:var(--primary); font-weight:600; display:flex; align-items:center; gap:8px;" onclick="window.imprimirHorarioDocente('${email}', '${docName}')">
+                    <i class="fa-solid fa-print"></i> Descargar / Imprimir Horario
+                </button>
+            `;
         }
         
         // Ordenar slots por día y orden
@@ -13067,6 +13089,177 @@ window.loadMaestroHorario = async () => {
     } catch(e) {
         console.error(e);
         cont.innerHTML = `<p style="color:var(--danger)">Error al cargar horario: ${e.message}</p>`;
+    }
+};
+
+window.imprimirHorarioDocente = async (email, name) => {
+    try {
+        window.showToast("Generando vista de impresión...", "info");
+        
+        // 1. Obtener datos del plantel para el membrete
+        let plantelName = CONFIG.schoolName || "Edu-LM Portal Escolar";
+        let logoUrl = null;
+        try {
+            if (state && state.plantelId) {
+                const { data: pt } = await supabaseClient.from('planteles').select('nombre, logo_url').eq('id', state.plantelId).maybeSingle();
+                if (pt && pt.nombre) plantelName = pt.nombre;
+                if (pt && pt.logo_url) logoUrl = pt.logo_url;
+            }
+        } catch(e) {}
+
+        // 2. Cargar horario guardado (horarios_maestros)
+        const { data: slots, error: errSlots } = await supabaseClient.from('horarios_maestros')
+            .select('*, grupos(nombre)')
+            .eq('maestro_email', email)
+            .eq('plantel_id', state.plantelId);
+            
+        if(errSlots) throw errSlots;
+        
+        if(!slots || slots.length === 0) {
+            return alert("No tienes clases registradas en tu horario para imprimir.");
+        }
+        
+        // 3. Generar la cuadrícula
+        const timeToMinutes = (t) => {
+            if(!t) return 0;
+            const parts = t.split(':');
+            const h = parseInt(parts[0]) || 0;
+            const m = parseInt(parts[1]) || 0;
+            return h * 60 + m;
+        };
+        
+        const intervalsMap = {};
+        slots.forEach(s => {
+            const key = `${s.hora_inicio} - ${s.hora_fin}`;
+            intervalsMap[key] = { start: s.hora_inicio, end: s.hora_fin, startMin: timeToMinutes(s.hora_inicio) };
+        });
+        
+        const sortedIntervals = Object.values(intervalsMap).sort((a, b) => a.startMin - b.startMin);
+        const days = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes'];
+        
+        let tableRowsHtml = '';
+        sortedIntervals.forEach(interval => {
+            tableRowsHtml += `<tr style="height: 65px;">`;
+            tableRowsHtml += `<td style="border: 1px solid #cbd5e1; padding: 10px; font-size: 12px; font-weight: bold; text-align: center; background-color: #f8fafc; color: #1e293b;">${interval.start} - ${interval.end}</td>`;
+            
+            days.forEach(day => {
+                const match = slots.find(s => s.dia === day && s.hora_inicio === interval.start && s.hora_fin === interval.end);
+                
+                if (match) {
+                    const grpLabel = match.grupos ? match.grupos.nombre : (match.target_grado ? `Grado ${match.target_grado}` : 'Sin Grupo');
+                    tableRowsHtml += `
+                        <td style="border: 1px solid #cbd5e1; padding: 8px; font-size: 11px; text-align: center; background-color: #eff6ff; vertical-align: middle;">
+                            <div style="font-weight: bold; color: #1e3a8a; font-size: 12px;">${match.materia}</div>
+                            <div style="font-weight: 600; color: #475569; margin-top: 3px;">${grpLabel}</div>
+                        </td>
+                    `;
+                } else {
+                    tableRowsHtml += `<td style="border: 1px solid #cbd5e1; padding: 8px; background-color: #ffffff;"></td>`;
+                }
+            });
+            tableRowsHtml += `</tr>`;
+        });
+        
+        const currentYear = new Date().getFullYear();
+        const cicloEscolar = (new Date().getMonth() >= 7) ? `${currentYear} - ${currentYear + 1}` : `${currentYear - 1} - ${currentYear}`;
+        const fechaImpresion = new Date().toLocaleDateString('es-MX', { year:'numeric', month:'long', day:'numeric' });
+
+        // 4. Abrir ventana de impresión
+        const printWindow = window.open('', '_blank');
+        printWindow.document.write(`
+            <html>
+                <head>
+                    <title>Horario Semanal - ${name}</title>
+                    <style>
+                        body { font-family: 'Segoe UI', Arial, sans-serif; padding: 30px; color: #1e293b; line-height: 1.4; margin: 0; }
+                        .header { text-align: center; margin-bottom: 25px; border-bottom: 3px double #1e3a8a; padding-bottom: 15px; display: flex; flex-direction: column; align-items: center; }
+                        .logo-img { max-height: 70px; margin-bottom: 8px; object-fit: contain; }
+                        .school-name { font-size: 20px; font-weight: 800; color: #1e3a8a; text-transform: uppercase; margin: 0; }
+                        .doc-title { font-size: 15px; font-weight: 700; color: #475569; text-transform: uppercase; margin: 4px 0 0 0; letter-spacing: 1px; }
+                        
+                        .meta-container { display: flex; justify-content: space-between; background: #f8fafc; border: 1px solid #e2e8f0; padding: 15px; border-radius: 8px; margin-bottom: 25px; font-size: 13px; }
+                        .meta-column { display: flex; flex-direction: column; gap: 4px; }
+                        .meta-item strong { color: #1e3a8a; }
+                        
+                        table { width: 100%; border-collapse: collapse; margin-bottom: 40px; }
+                        th { border: 1px solid #94a3b8; padding: 10px; font-size: 12px; background-color: #f1f5f9; font-weight: bold; text-align: center; text-transform: uppercase; color: #334155; }
+                        
+                        .signatures { display: flex; justify-content: space-around; margin-top: 60px; page-break-inside: avoid; }
+                        .signature-box { text-align: center; width: 220px; }
+                        .signature-line { border-bottom: 1px solid #1e293b; height: 50px; margin-bottom: 8px; }
+                        .signature-title { font-size: 11px; font-weight: bold; color: #1e293b; text-transform: uppercase; }
+                        
+                        .footer { margin-top: 40px; font-size: 10px; color: #64748b; text-align: center; border-top: 1px solid #e2e8f0; padding-top: 12px; }
+                        
+                        @media print {
+                            body { padding: 0; margin: 10px; }
+                            button { display: none; }
+                            @page { size: landscape; margin: 1cm; }
+                        }
+                    </style>
+                </head>
+                <body>
+                    <div class="header">
+                        ${logoUrl ? `<img class="logo-img" src="${logoUrl}">` : ''}
+                        <div class="school-name">${plantelName}</div>
+                        <div class="doc-title">Horario Semanal de Clases del Docente</div>
+                    </div>
+                    
+                    <div class="meta-container">
+                        <div class="meta-column">
+                            <div class="meta-item"><strong>Docente:</strong> ${name}</div>
+                            <div class="meta-item"><strong>Email:</strong> ${email}</div>
+                        </div>
+                        <div class="meta-column" style="text-align: right;">
+                            <div class="meta-item"><strong>Ciclo Escolar:</strong> ${cicloEscolar}</div>
+                            <div class="meta-item"><strong>Fecha Impresión:</strong> ${fechaImpresion}</div>
+                        </div>
+                    </div>
+                    
+                    <table>
+                        <thead>
+                            <tr>
+                                <th style="width: 120px;">Hora</th>
+                                <th>Lunes</th>
+                                <th>Martes</th>
+                                <th>Miércoles</th>
+                                <th>Jueves</th>
+                                <th>Viernes</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${tableRowsHtml}
+                        </tbody>
+                    </table>
+                    
+                    <div class="signatures">
+                        <div class="signature-box">
+                            <div class="signature-line"></div>
+                            <div class="signature-title">Firma del Docente</div>
+                        </div>
+                        <div class="signature-box">
+                            <div class="signature-line"></div>
+                            <div class="signature-title">Sello y Firma de Dirección</div>
+                        </div>
+                    </div>
+                    
+                    <div class="footer">
+                        Este documento es un comprobante oficial de asignación de horario escolar generado por el sistema Edu-LM.
+                    </div>
+                    
+                    <script>
+                        window.onload = function() {
+                            window.print();
+                            setTimeout(function() { window.close(); }, 500);
+                        };
+                    </script>
+                </body>
+            </html>
+        `);
+        printWindow.document.close();
+    } catch(e) {
+        console.error(e);
+        alert("Error al generar vista de impresión: " + e.message);
     }
 };
 
