@@ -12662,9 +12662,76 @@ window.guardarHorarioDocente = async () => {
     
     const orden_hora = parseInt(ordenStr) || 1;
     
-    window.showToast("Guardando horario de docente...", "info");
+    const timeToMinutes = (t) => {
+        if(!t) return 0;
+        const parts = t.split(':');
+        const h = parseInt(parts[0]) || 0;
+        const m = parseInt(parts[1]) || 0;
+        return h * 60 + m;
+    };
+    
+    const mStart = timeToMinutes(hora_inicio);
+    const mEnd = timeToMinutes(hora_fin);
+    
+    if (mStart >= mEnd) {
+        return alert("La hora de inicio debe ser anterior a la hora de fin.");
+    }
+    
+    window.showToast("Validando empalmes...", "info");
     
     try {
+        // Consultar todos los horarios existentes para el día seleccionado en el mismo plantel
+        const { data: existingSlots, error: errFetch } = await supabaseClient.from('horarios_maestros')
+            .select('*, grupos(nombre)')
+            .eq('dia', dia)
+            .eq('plantel_id', state.plantelId);
+            
+        if (errFetch) throw errFetch;
+        
+        // Revisar conflictos
+        let conflictTeacher = null;
+        let conflictGroup = null;
+        
+        for (const s of (existingSlots || [])) {
+            const sStart = timeToMinutes(s.hora_inicio);
+            const sEnd = timeToMinutes(s.hora_fin);
+            
+            // Hay traslape si coinciden en orden de hora o si se empalman los rangos de tiempo
+            const timeOverlap = (mStart < sEnd && mEnd > sStart) || (parseInt(s.orden_hora) === orden_hora);
+            
+            if (timeOverlap) {
+                // 1. Conflicto para el maestro
+                if (s.maestro_email === email) {
+                    conflictTeacher = s;
+                    break;
+                }
+                
+                // 2. Conflicto para el grupo (si es el mismo grupo)
+                if (asig.grupo_id && s.grupo_id && s.grupo_id === asig.grupo_id) {
+                    conflictGroup = s;
+                    break;
+                }
+                
+                // 3. Conflicto para el grado (si es el mismo grado de taller/tecnología)
+                if (asig.target_grado && s.target_grado && s.target_grado === asig.target_grado) {
+                    conflictGroup = s;
+                    break;
+                }
+            }
+        }
+        
+        if (conflictTeacher) {
+            const grp = conflictTeacher.grupos ? conflictTeacher.grupos.nombre : (conflictTeacher.target_grado ? `Grado ${conflictTeacher.target_grado}` : 'Sin Grupo');
+            return alert(`⚠️ EMPALME DE DOCENTE:\nEl docente ya tiene asignada la materia "${conflictTeacher.materia}" para "${grp}" el día ${dia} en el horario ${conflictTeacher.hora_inicio} - ${conflictTeacher.hora_fin} (Sesión ${conflictTeacher.orden_hora}°).\nPor favor, verifica los horarios.`);
+        }
+        
+        if (conflictGroup) {
+            const grpName = conflictGroup.grupos ? conflictGroup.grupos.nombre : `Grado ${conflictGroup.target_grado}`;
+            return alert(`⚠️ EMPALME DE GRUPO / GRADO:\nEl grupo/grado "${grpName}" ya tiene ocupado este horario con la materia "${conflictGroup.materia}" dictada por el docente (${conflictGroup.maestro_email}) el día ${dia} de ${conflictGroup.hora_inicio} a ${conflictGroup.hora_fin} (Sesión ${conflictGroup.orden_hora}°).\nPor favor, asigna otra hora.`);
+        }
+        
+        window.showToast("Guardando horario de docente...", "info");
+        
         const { error } = await supabaseClient.from('horarios_maestros').insert([{
             plantel_id: state.plantelId,
             maestro_email: email,
