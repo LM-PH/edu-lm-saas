@@ -845,6 +845,7 @@ function renderSidebar() {
       { name: 'Actividades', path: '/maestro/actividades', icon: 'fa-clipboard-list' },
       { name: 'Listas y Seguimiento', path: '/maestro/listas', icon: 'fa-list-check' },
       { name: 'Encuadre', path: '/maestro/encuadre', icon: 'fa-sliders' },
+      { name: 'Horario de Clases', path: '/maestro/horario', icon: 'fa-calendar-days' },
       { name: 'Subir Calificaciones', path: '/maestro/calificaciones', icon: 'fa-cloud-arrow-up' },
       { name: 'Aula de Medios', path: '/maestro/aula-medios', icon: 'fa-desktop' },
       { name: 'Bitácora de Maestro', path: '/maestro/bitacora', icon: 'fa-book-journal-whills' },
@@ -854,6 +855,7 @@ function renderSidebar() {
     apoyo: [
       { name: 'Focos Rojos', path: '/apoyo/dashboard', icon: 'fa-triangle-exclamation' },
       { name: 'Riesgo Académico', path: '/apoyo/riesgo', icon: 'fa-user-graduate' },
+      { name: 'Horarios de Profesores', path: '/apoyo/horarios', icon: 'fa-calendar-days' },
       { name: 'Reportes Escolares', path: '/apoyo/reportes', icon: 'fa-file-signature' },
       { name: 'Expediente Salud', path: '/apoyo/salud', icon: 'fa-notes-medical' },
       { name: 'Estudio Biopsicosocial', path: '/apoyo/psicosocial', icon: 'fa-brain' },
@@ -5488,12 +5490,14 @@ async function renderPage(path) {
     case '/biblioteca/bitacora': return renderBibliotecaBitacora();
     case '/maestro/listas': return renderMaestroListas();
     case '/maestro/encuadre': return renderMaestroEncuadre();
+    case '/maestro/horario': return renderMaestroHorario();
     case '/maestro/calificaciones': return renderMaestroCalificaciones();
     case '/maestro/bitacora': return renderMaestroBitacora();
     case '/maestro/reportes': return renderApoyoReportes();
     case '/maestro/comunicados': return renderPersonalComunicados('Maestros');
     case '/apoyo/dashboard': return renderApoyoDashboard();
     case '/apoyo/riesgo': return renderApoyoRiesgoAcademico();
+    case '/apoyo/horarios': return renderApoyoHorarios();
     case '/apoyo/reportes': return renderApoyoReportes();
     case '/apoyo/salud': return renderApoyoSalud();
     case '/apoyo/psicosocial': return renderApoyoPsicosocial();
@@ -12366,50 +12370,344 @@ window.renderAdminHorarios = () => {
     return `
         <div class="page-container">
             <h2 class="page-title"><i class="fa-solid fa-calendar-days"></i> Gestión de Horarios</h2>
-            <p class="page-subtitle">Sube los horarios en PDF y asígnalos a grados o grupos específicos.</p>
+            <p class="page-subtitle">Sube los horarios en PDF para alumnos o gestiona los horarios estructurados de los profesores.</p>
 
-            <div style="display:grid; grid-template-columns: 1fr 1fr; gap:24px; margin-top:30px;">
-                <!-- Formulario -->
-                <div class="card">
-                    <h3 style="margin-top:0"><i class="fa-solid fa-cloud-arrow-up"></i> Nuevo Horario</h3>
-                    <div class="form-group">
-                        <label>Nombre del Horario (Ej: 1°A Matutino)</label>
-                        <input type="text" id="horarioNombre" class="form-input" placeholder="Nombre descriptivo">
+            <!-- Selector de Pestañas (Tabs) -->
+            <div style="display:flex; gap:10px; margin-top:20px; border-bottom:2px solid var(--border); padding-bottom:10px; margin-bottom:20px;">
+                <button id="tabHorariosAlumnos" class="btn btn-trimestre active" onclick="window.switchTabHorarios('alumnos')">
+                    <i class="fa-solid fa-graduation-cap"></i> Horarios de Alumnos (PDF)
+                </button>
+                <button id="tabHorariosDocentes" class="btn btn-trimestre" onclick="window.switchTabHorarios('docentes')">
+                    <i class="fa-solid fa-chalkboard-user"></i> Horarios de Docentes
+                </button>
+            </div>
+
+            <!-- Tab 1: Alumnos (PDF) -->
+            <div id="seccionHorariosAlumnos" style="display:block;">
+                <div style="display:grid; grid-template-columns: 1fr 1fr; gap:24px;">
+                    <!-- Formulario -->
+                    <div class="card">
+                        <h3 style="margin-top:0"><i class="fa-solid fa-cloud-arrow-up"></i> Nuevo Horario (PDF)</h3>
+                        <div class="form-group">
+                            <label class="form-label">Nombre del Horario (Ej: 1°A Matutino)</label>
+                            <input type="text" id="horarioNombre" class="form-input" placeholder="Nombre descriptivo">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Asignar a Grupo (Opcional)</label>
+                            <select id="horarioGrupoId" class="form-select">
+                                <option value="">-- Todos los Grupos --</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Grado (Opcional)</label>
+                            <select id="horarioGrado" class="form-select">
+                                <option value="">-- Todos los Grados --</option>
+                                <option value="1">1° Grado</option>
+                                <option value="2">2° Grado</option>
+                                <option value="3">3° Grado</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Archivo PDF</label>
+                            <input type="file" id="horarioFile" class="form-input" accept=".pdf">
+                        </div>
+                        <button class="btn btn-primary btn-block" onclick="window.guardarHorario()">
+                            <i class="fa-solid fa-save"></i> Guardar y Subir PDF
+                        </button>
                     </div>
-                    <div class="form-group">
-                        <label>Asignar a Grupo (Opcional)</label>
-                        <select id="horarioGrupoId" class="form-input">
-                            <option value="">-- Todos los Grupos --</option>
-                        </select>
+
+                    <!-- Lista de Horarios -->
+                    <div class="card">
+                        <h3 style="margin-top:0"><i class="fa-solid fa-table-list"></i> Horarios PDF Registrados</h3>
+                        <div id="listaHorariosContenedor" style="display:flex; flex-direction:column; gap:12px;">
+                            <p style="text-align:center; opacity:0.5;">Cargando horarios...</p>
+                        </div>
                     </div>
-                    <div class="form-group">
-                        <label>Grado (Opcional)</label>
-                        <select id="horarioGrado" class="form-input">
-                            <option value="">-- Todos los Grados --</option>
-                            <option value="1">1° Grado</option>
-                            <option value="2">2° Grado</option>
-                            <option value="3">3° Grado</option>
-                        </select>
-                    </div>
-                    <div class="form-group">
-                        <label>Archivo PDF</label>
-                        <input type="file" id="horarioFile" class="form-input" accept=".pdf">
-                    </div>
-                    <button class="btn btn-primary btn-block" onclick="window.guardarHorario()">
-                        <i class="fa-solid fa-save"></i> Guardar y Subir
-                    </button>
                 </div>
+            </div>
 
-                <!-- Lista de Horarios -->
-                <div class="card">
-                    <h3 style="margin-top:0"><i class="fa-solid fa-table-list"></i> Horarios Registrados</h3>
-                    <div id="listaHorariosContenedor" style="display:flex; flex-direction:column; gap:12px;">
-                        <p style="text-align:center; opacity:0.5;">Cargando horarios...</p>
+            <!-- Tab 2: Docentes -->
+            <div id="seccionHorariosDocentes" style="display:none;">
+                <div style="display:grid; grid-template-columns: 1fr 1.2fr; gap:24px;">
+                    <!-- Formulario de Horarios Docentes -->
+                    <div class="card">
+                        <h3 style="margin-top:0"><i class="fa-solid fa-plus"></i> Asignar Clase a Horario</h3>
+                        
+                        <div class="form-group">
+                            <label class="form-label">Seleccionar Docente</label>
+                            <select id="selDocenteHorario" class="form-select" onchange="window.cargarAsignacionesYHorarioDocente()">
+                                <option value="">-- Seleccione un Docente --</option>
+                            </select>
+                        </div>
+                        
+                        <div id="formDetalleHorarioDocente" style="display:none;">
+                            <div class="form-group">
+                                <label class="form-label">Materia y Grupo Asignado</label>
+                                <select id="selAsignacionDocente" class="form-select">
+                                    <option value="">-- Seleccione una Asignación --</option>
+                                </select>
+                            </div>
+                            
+                            <div class="form-group">
+                                <label class="form-label">Día de la Semana</label>
+                                <select id="selDiaDocente" class="form-select">
+                                    <option value="Lunes">Lunes</option>
+                                    <option value="Martes">Martes</option>
+                                    <option value="Miércoles">Miércoles</option>
+                                    <option value="Jueves">Jueves</option>
+                                    <option value="Viernes">Viernes</option>
+                                </select>
+                            </div>
+
+                            <div style="display:grid; grid-template-columns: 1fr 1fr; gap:12px;">
+                                <div class="form-group">
+                                    <label class="form-label">Hora de Inicio</label>
+                                    <input type="text" id="timeInicioDocente" class="form-input" placeholder="Ej: 07:00">
+                                </div>
+                                <div class="form-group">
+                                    <label class="form-label">Hora de Fin</label>
+                                    <input type="text" id="timeFinDocente" class="form-input" placeholder="Ej: 07:50">
+                                </div>
+                            </div>
+                            
+                            <div class="form-group">
+                                <label class="form-label">Orden / Sesión (Ej. 1 para primera clase, 2 para segunda, etc.)</label>
+                                <input type="number" id="numOrdenDocente" class="form-input" value="1" min="1">
+                            </div>
+                            
+                            <button class="btn btn-primary btn-block" onclick="window.guardarHorarioDocente()">
+                                <i class="fa-solid fa-save"></i> Guardar Bloque Horario
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <!-- Lista y Vista de Horario Semanal Docente -->
+                    <div class="card">
+                        <h3 style="margin-top:0"><i class="fa-solid fa-calendar-week"></i> Horario Semanal del Docente</h3>
+                        <div id="vistaHorarioDocenteContenedor" style="max-height: 550px; overflow-y: auto; padding-right: 6px;">
+                            <p style="text-align:center; opacity:0.5; padding:20px;">Selecciona un docente para ver y gestionar su horario.</p>
+                        </div>
                     </div>
                 </div>
             </div>
         </div>
     `;
+};
+
+window.switchTabHorarios = (tab) => {
+    const secAlu = document.getElementById('seccionHorariosAlumnos');
+    const secDoc = document.getElementById('seccionHorariosDocentes');
+    const btnAlu = document.getElementById('tabHorariosAlumnos');
+    const btnDoc = document.getElementById('tabHorariosDocentes');
+
+    if (tab === 'alumnos') {
+        if(secAlu) secAlu.style.display = 'block';
+        if(secDoc) secDoc.style.display = 'none';
+        if(btnAlu) btnAlu.classList.add('active');
+        if(btnDoc) btnDoc.classList.remove('active');
+        window.loadHorariosAdmin();
+    } else {
+        if(secAlu) secAlu.style.display = 'none';
+        if(secDoc) secDoc.style.display = 'block';
+        if(btnAlu) btnAlu.classList.remove('active');
+        if(btnDoc) btnDoc.classList.add('active');
+        window.loadDocentesSelect();
+    }
+};
+
+window.loadDocentesSelect = async () => {
+    try {
+        const { data: docentes, error } = await supabaseClient.from('perfiles_permitidos')
+            .select('email, nombre')
+            .eq('rol', 'maestro')
+            .eq('plantel_id', state.plantelId)
+            .order('nombre');
+        
+        if (error) throw error;
+        
+        const sel = document.getElementById('selDocenteHorario');
+        if(sel) {
+            sel.innerHTML = '<option value="">-- Seleccione un Docente --</option>' +
+                (docentes || []).map(d => `<option value="${d.email}">${d.nombre || d.email} (${d.email})</option>`).join('');
+        }
+    } catch(e) {
+        console.error("Error loading docentes:", e);
+    }
+};
+
+window.cargarAsignacionesYHorarioDocente = async () => {
+    const email = document.getElementById('selDocenteHorario')?.value;
+    const formDetalle = document.getElementById('formDetalleHorarioDocente');
+    const cont = document.getElementById('vistaHorarioDocenteContenedor');
+    
+    if(!email) {
+        if(formDetalle) formDetalle.style.display = 'none';
+        if(cont) cont.innerHTML = '<p style="text-align:center; opacity:0.5; padding:20px;">Selecciona un docente para ver y gestionar su horario.</p>';
+        return;
+    }
+    
+    if(formDetalle) formDetalle.style.display = 'block';
+    if(cont) cont.innerHTML = '<p style="text-align:center; opacity:0.5; padding:20px;"><i class="fa-solid fa-spinner fa-spin"></i> Cargando horario...</p>';
+    
+    try {
+        // 1. Cargar vinculaciones (asignaciones_maestros)
+        const { data: asigs, error: errAsig } = await supabaseClient.from('asignaciones_maestros')
+            .select('id, materia, grupo_id, target_grado, grupos(nombre)')
+            .eq('docente_email', email)
+            .eq('plantel_id', state.plantelId);
+            
+        if(errAsig) throw errAsig;
+        
+        window._lastAsignacionesDocente = asigs || [];
+        
+        const selAsig = document.getElementById('selAsignacionDocente');
+        if(selAsig) {
+            if(asigs.length === 0) {
+                selAsig.innerHTML = '<option value="">-- Sin asignaciones cargadas --</option>';
+            } else {
+                selAsig.innerHTML = '<option value="">-- Seleccione una Asignación --</option>' +
+                    asigs.map((a, idx) => {
+                        const grpLabel = a.grupos ? a.grupos.nombre : (a.target_grado ? `Grado ${a.target_grado}` : 'Sin Grupo');
+                        return `<option value="${idx}">${a.materia} - ${grpLabel}</option>`;
+                    }).join('');
+            }
+        }
+        
+        // 2. Cargar horario guardado (horarios_maestros)
+        const { data: slots, error: errSlots } = await supabaseClient.from('horarios_maestros')
+            .select('*, grupos(nombre)')
+            .eq('maestro_email', email)
+            .eq('plantel_id', state.plantelId);
+            
+        if(errSlots) throw errSlots;
+        
+        // Ordenar slots por día y luego por orden
+        const dayOrder = { 'Lunes': 1, 'Martes': 2, 'Miércoles': 3, 'Jueves': 4, 'Viernes': 5 };
+        slots.sort((a, b) => {
+            const valA = (dayOrder[a.dia] || 9) * 100 + (parseInt(a.orden_hora) || 0);
+            const valB = (dayOrder[b.dia] || 9) * 100 + (parseInt(b.orden_hora) || 0);
+            return valA - valB;
+        });
+        
+        // Group by day
+        const grouped = { 'Lunes': [], 'Martes': [], 'Miércoles': [], 'Jueves': [], 'Viernes': [] };
+        slots.forEach(s => {
+            if(grouped[s.dia]) grouped[s.dia].push(s);
+        });
+        
+        let html = '';
+        Object.keys(grouped).forEach(day => {
+            const daySlots = grouped[day];
+            html += `
+                <div style="margin-bottom:20px; background: #fafafa; border:1px solid #eaeaea; border-radius:12px; padding:12px 16px;">
+                    <div style="font-weight:700; color:var(--primary); padding-bottom:6px; margin-bottom:10px; display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid #eee;">
+                        <span><i class="fa-solid fa-calendar-day"></i> ${day}</span>
+                        <span class="badge" style="background:var(--primary)15; color:var(--primary); font-size:0.75rem; padding:2px 8px; border-radius:12px;">${daySlots.length} clase(s)</span>
+                    </div>
+            `;
+            
+            if(daySlots.length === 0) {
+                html += `<p style="font-size:0.85rem; color:var(--text-muted); opacity:0.5; padding:4px 10px; font-style:italic;">Sin clases programadas este día</p>`;
+            } else {
+                html += daySlots.map(s => {
+                    const grpLabel = s.grupos ? s.grupos.nombre : (s.target_grado ? `Grado ${s.target_grado}` : 'Sin Grupo');
+                    return `
+                        <div style="display:flex; justify-content:space-between; align-items:center; padding:10px 14px; background:white; border:1px solid var(--border); border-radius:8px; margin-bottom:8px;">
+                            <div>
+                                <span style="font-weight:700; color:var(--text-main); font-size:0.9rem;"><i class="fa-regular fa-clock" style="margin-right:6px; opacity:0.6;"></i> ${s.hora_inicio} - ${s.hora_fin}</span>
+                                <div style="font-size:0.85rem; color:var(--text-muted); margin-top:4px;">
+                                    <strong>${s.materia}</strong> <span style="color:var(--primary)">(${grpLabel})</span>
+                                </div>
+                                <div style="font-size:0.7rem; color:var(--text-muted); opacity:0.7; margin-top:2px;">
+                                    Orden: ${s.orden_hora}° sesión
+                                </div>
+                            </div>
+                            <button class="btn btn-xs btn-outline" style="color:var(--danger); border-color:#fee2e2; background:none; padding:6px 10px; height:32px;" onclick="window.eliminarBloqueHorarioDocente('${s.id}')" title="Eliminar bloque">
+                                <i class="fa-solid fa-trash-can"></i>
+                            </button>
+                        </div>
+                    `;
+                }).join('');
+            }
+            
+            html += `</div>`;
+        });
+        
+        cont.innerHTML = html;
+        
+    } catch(e) {
+        console.error("Error loading schedule:", e);
+        cont.innerHTML = `<p style="color:var(--danger)">Error al cargar horario: ${e.message}</p>`;
+    }
+};
+
+window.guardarHorarioDocente = async () => {
+    const email = document.getElementById('selDocenteHorario')?.value;
+    const asigIdxStr = document.getElementById('selAsignacionDocente')?.value;
+    const dia = document.getElementById('selDiaDocente')?.value;
+    const hora_inicio = document.getElementById('timeInicioDocente')?.value.trim();
+    const hora_fin = document.getElementById('timeFinDocente')?.value.trim();
+    const ordenStr = document.getElementById('numOrdenDocente')?.value;
+    
+    if(!email || !asigIdxStr || !dia || !hora_inicio || !hora_fin) {
+        return alert("Por favor completa todos los campos del formulario.");
+    }
+    
+    const idx = parseInt(asigIdxStr);
+    const asig = window._lastAsignacionesDocente ? window._lastAsignacionesDocente[idx] : null;
+    
+    if(!asig) {
+        return alert("Error al recuperar la información de la asignación seleccionada.");
+    }
+    
+    const orden_hora = parseInt(ordenStr) || 1;
+    
+    window.showToast("Guardando horario de docente...", "info");
+    
+    try {
+        const { error } = await supabaseClient.from('horarios_maestros').insert([{
+            plantel_id: state.plantelId,
+            maestro_email: email,
+            materia: asig.materia,
+            grupo_id: asig.grupo_id || null,
+            target_grado: asig.target_grado || null,
+            dia: dia,
+            hora_inicio: hora_inicio,
+            hora_fin: hora_fin,
+            orden_hora: orden_hora
+        }]);
+        
+        if (error) throw error;
+        
+        window.showToast("Bloque de horario guardado correctamente.", "success");
+        
+        // Reset values
+        document.getElementById('timeInicioDocente').value = '';
+        document.getElementById('timeFinDocente').value = '';
+        document.getElementById('numOrdenDocente').value = '1';
+        
+        // Reload list
+        window.cargarAsignacionesYHorarioDocente();
+        
+    } catch(e) {
+        console.error(e);
+        alert("Error al guardar bloque de horario: " + e.message);
+    }
+};
+
+window.eliminarBloqueHorarioDocente = async (slotId) => {
+    if(!confirm("¿Deseas eliminar este bloque de horario?")) return;
+    
+    try {
+        const { error } = await supabaseClient.from('horarios_maestros').delete().eq('id', slotId);
+        if(error) throw error;
+        
+        window.showToast("Bloque de horario eliminado.", "success");
+        window.cargarAsignacionesYHorarioDocente();
+    } catch(e) {
+        console.error(e);
+        alert("Error al eliminar: " + e.message);
+    }
 };
 
 window.loadHorariosAdmin = async () => {
@@ -12605,6 +12903,280 @@ window.loadMiHorario = async () => {
     } catch(e) {
         console.error(e);
         cont.innerHTML = '<p>Error al cargar el horario.</p>';
+    }
+};
+
+window.renderMaestroHorario = () => {
+    setTimeout(window.loadMaestroHorario, 100);
+    return `
+        <div class="page-container">
+            <div class="page-header">
+                <h2 class="page-title"><i class="fa-solid fa-calendar-days text-primary"></i> Horario de Clases</h2>
+                <p class="page-subtitle">Visualiza la programación semanal de tus clases asignadas.</p>
+            </div>
+            <div class="card" style="margin-top:20px;">
+                <div id="maestroHorarioContenedor">
+                    <p style="text-align:center; opacity:0.5; padding:40px;"><i class="fa-solid fa-spinner fa-spin"></i> Cargando tu horario...</p>
+                </div>
+            </div>
+        </div>
+    `;
+};
+
+window.loadMaestroHorario = async () => {
+    const cont = document.getElementById('maestroHorarioContenedor');
+    if(!cont) return;
+    try {
+        const uRes = await supabaseClient.auth.getUser();
+        const email = uRes.data.user?.email;
+        if (!email) {
+            cont.innerHTML = '<p style="text-align:center; padding:20px; color:var(--danger)">Sesión no válida.</p>';
+            return;
+        }
+
+        const { data: slots, error } = await supabaseClient.from('horarios_maestros')
+            .select('*, grupos(nombre)')
+            .eq('maestro_email', email)
+            .eq('plantel_id', state.plantelId);
+            
+        if(error) throw error;
+        
+        if(!slots || slots.length === 0) {
+            cont.innerHTML = `
+                <div style="text-align:center; padding:60px 20px; opacity:0.4;">
+                    <i class="fa-solid fa-calendar-xmark fa-3x" style="color:var(--primary); opacity:0.5; margin-bottom:12px;"></i>
+                    <p style="margin-top:15px; font-weight:600;">No tienes clases programadas en tu horario aún.</p>
+                </div>
+            `;
+            return;
+        }
+        
+        // Ordenar slots por día y orden
+        const dayOrder = { 'Lunes': 1, 'Martes': 2, 'Miércoles': 3, 'Jueves': 4, 'Viernes': 5 };
+        slots.sort((a, b) => {
+            const valA = (dayOrder[a.dia] || 9) * 100 + (parseInt(a.orden_hora) || 0);
+            const valB = (dayOrder[b.dia] || 9) * 100 + (parseInt(b.orden_hora) || 0);
+            return valA - valB;
+        });
+        
+        // Agrupar por día
+        const grouped = { 'Lunes': [], 'Martes': [], 'Miércoles': [], 'Jueves': [], 'Viernes': [] };
+        slots.forEach(s => {
+            if(grouped[s.dia]) grouped[s.dia].push(s);
+        });
+        
+        let html = '<div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap:20px;">';
+        Object.keys(grouped).forEach(day => {
+            const daySlots = grouped[day];
+            html += `
+                <div class="card" style="padding:16px; background:#f8fafc; border:1px solid var(--border); box-shadow:none; border-radius:12px;">
+                    <h3 style="margin-top:0; color:var(--primary); font-size:1.1rem; border-bottom:2px solid var(--border); padding-bottom:6px; margin-bottom:12px; display:flex; justify-content:space-between; align-items:center;">
+                        <span><i class="fa-solid fa-calendar-day"></i> ${day}</span>
+                        <span style="font-size:0.75rem; background:var(--primary); color:white; padding:2px 8px; border-radius:12px; font-weight:700;">${daySlots.length}</span>
+                    </h3>
+            `;
+            
+            if(daySlots.length === 0) {
+                html += `<p style="font-size:0.85rem; color:var(--text-muted); opacity:0.5; padding:10px 0; font-style:italic; text-align:center;">Sin clases hoy</p>`;
+            } else {
+                html += daySlots.map(s => {
+                    const grpLabel = s.grupos ? s.grupos.nombre : (s.target_grado ? `Grado ${s.target_grado}` : 'Sin Grupo');
+                    return `
+                        <div style="background:white; border:1px solid var(--border); padding:10px 12px; border-radius:8px; margin-bottom:8px; border-left:4px solid var(--primary-light);">
+                            <div style="font-weight:700; font-size:0.85rem; color:var(--text-main);"><i class="fa-regular fa-clock"></i> ${s.hora_inicio} - ${s.hora_fin}</div>
+                            <div style="font-weight:600; font-size:0.95rem; margin-top:4px; color:var(--primary);">${s.materia}</div>
+                            <div style="font-size:0.8rem; color:var(--text-muted); margin-top:2px;">Grupo/Grado: <strong>${grpLabel}</strong></div>
+                        </div>
+                    `;
+                }).join('');
+            }
+            
+            html += `</div>`;
+        });
+        html += '</div>';
+        
+        cont.innerHTML = html;
+        
+    } catch(e) {
+        console.error(e);
+        cont.innerHTML = `<p style="color:var(--danger)">Error al cargar horario: ${e.message}</p>`;
+    }
+};
+
+window.renderApoyoHorarios = () => {
+    setTimeout(window.loadApoyoHorarios, 100);
+    return `
+        <div class="page-container">
+            <div class="page-header">
+                <h2 class="page-title"><i class="fa-solid fa-calendar-days text-primary"></i> Consulta de Horarios de Profesores</h2>
+                <p class="page-subtitle">Busca un docente para ver en qué salón, grupo y horario se encuentra.</p>
+            </div>
+            
+            <div style="display:grid; grid-template-columns: 1fr 2fr; gap:24px; margin-top:20px;">
+                <!-- Lista/Buscador de Profesores -->
+                <div class="card" style="max-height: 600px; display:flex; flex-direction:column; gap:16px;">
+                    <h3 style="margin-top:0"><i class="fa-solid fa-users"></i> Docentes</h3>
+                    <div class="form-group" style="margin-bottom:0;">
+                        <input type="text" id="searchApoyoDocente" class="form-input" placeholder="Buscar por nombre..." oninput="window.filtrarApoyoDocentesList(this.value)">
+                    </div>
+                    <div id="listaApoyoDocentesContenedor" style="flex:1; overflow-y:auto; display:flex; flex-direction:column; gap:8px; padding-right:4px;">
+                        <p style="text-align:center; opacity:0.5; padding:20px;">Cargando lista...</p>
+                    </div>
+                </div>
+                
+                <!-- Detalle del Horario -->
+                <div class="card" style="min-height: 400px; overflow-y:auto;">
+                    <div id="detalleApoyoHorarioContenedor">
+                        <div style="text-align:center; padding:80px 20px; opacity:0.4;">
+                            <i class="fa-solid fa-calendar-check fa-4x" style="color:var(--primary); opacity:0.5; margin-bottom:12px;"></i>
+                            <p style="margin-top:15px; font-weight:600; font-size:1.1rem;">Selecciona un docente de la lista para ver su horario.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+};
+
+window.loadApoyoHorarios = async () => {
+    try {
+        const { data: docentes, error } = await supabaseClient.from('perfiles_permitidos')
+            .select('email, nombre')
+            .eq('rol', 'maestro')
+            .eq('plantel_id', state.plantelId)
+            .order('nombre');
+            
+        if (error) throw error;
+        
+        window._apoyoDocentesList = docentes || [];
+        window.filtrarApoyoDocentesList('');
+    } catch(e) {
+        console.error(e);
+        const cont = document.getElementById('listaApoyoDocentesContenedor');
+        if(cont) cont.innerHTML = `<p style="color:var(--danger)">Error al cargar docentes.</p>`;
+    }
+};
+
+window.filtrarApoyoDocentesList = (query) => {
+    const cont = document.getElementById('listaApoyoDocentesContenedor');
+    if(!cont || !window._apoyoDocentesList) return;
+    
+    const term = query.toLowerCase().trim();
+    const filtered = window._apoyoDocentesList.filter(d => 
+        (d.nombre || '').toLowerCase().includes(term) || 
+        d.email.toLowerCase().includes(term)
+    );
+    
+    if(filtered.length === 0) {
+        cont.innerHTML = '<p style="text-align:center; opacity:0.5; padding:20px;">No se encontraron docentes.</p>';
+        return;
+    }
+    
+    cont.innerHTML = filtered.map(d => `
+        <div class="docente-item-apoyo" style="padding:12px; border:1px solid var(--border); border-radius:10px; cursor:pointer; transition:var(--transition); background:white;" onclick="window.seleccionarDocenteApoyo('${d.email}', '${d.nombre || d.email}')" id="docente-item-${d.email.replace(/@|\./g,'')}">
+            <div style="font-weight:700; color:var(--text-main); font-size:0.95rem;">${d.nombre || 'Sin nombre'}</div>
+            <div style="font-size:0.75rem; color:var(--text-muted); font-family:monospace; margin-top:2px;">${d.email}</div>
+        </div>
+    `).join('');
+};
+
+window.seleccionarDocenteApoyo = async (email, name) => {
+    // Deseleccionar anteriores
+    const items = document.querySelectorAll('.docente-item-apoyo');
+    items.forEach(el => {
+        el.style.borderColor = 'var(--border)';
+        el.style.background = 'white';
+        el.style.boxShadow = 'none';
+    });
+    
+    // Seleccionar actual
+    const item = document.getElementById(`docente-item-${email.replace(/@|\./g,'')}`);
+    if(item) {
+        item.style.borderColor = 'var(--primary-light)';
+        item.style.background = 'var(--primary)05';
+        item.style.boxShadow = 'var(--shadow-sm)';
+    }
+    
+    const cont = document.getElementById('detalleApoyoHorarioContenedor');
+    if(!cont) return;
+    
+    cont.innerHTML = `<p style="text-align:center; opacity:0.5; padding:40px;"><i class="fa-solid fa-spinner fa-spin"></i> Cargando horario de ${name}...</p>`;
+    
+    try {
+        const { data: slots, error } = await supabaseClient.from('horarios_maestros')
+            .select('*, grupos(nombre)')
+            .eq('maestro_email', email)
+            .eq('plantel_id', state.plantelId);
+            
+        if(error) throw error;
+        
+        if(!slots || slots.length === 0) {
+            cont.innerHTML = `
+                <div style="text-align:center; padding:60px 20px; opacity:0.4;">
+                    <i class="fa-solid fa-calendar-xmark fa-3x" style="color:var(--primary); opacity:0.5; margin-bottom:12px;"></i>
+                    <p style="margin-top:15px; font-weight:600; font-size:1.1rem;">${name} no tiene clases programadas en su horario aún.</p>
+                </div>
+            `;
+            return;
+        }
+        
+        // Ordenar slots
+        const dayOrder = { 'Lunes': 1, 'Martes': 2, 'Miércoles': 3, 'Jueves': 4, 'Viernes': 5 };
+        slots.sort((a, b) => {
+            const valA = (dayOrder[a.dia] || 9) * 100 + (parseInt(a.orden_hora) || 0);
+            const valB = (dayOrder[b.dia] || 9) * 100 + (parseInt(b.orden_hora) || 0);
+            return valA - valB;
+        });
+        
+        // Agrupar por día
+        const grouped = { 'Lunes': [], 'Martes': [], 'Miércoles': [], 'Jueves': [], 'Viernes': [] };
+        slots.forEach(s => {
+            if(grouped[s.dia]) grouped[s.dia].push(s);
+        });
+        
+        let html = `
+            <div style="margin-bottom:20px; display:flex; justify-content:space-between; align-items:center; border-bottom: 2px solid var(--border); padding-bottom: 8px;">
+                <h3 style="margin:0; font-size:1.25rem;"><i class="fa-solid fa-user-tie"></i> Horario: <strong>${name}</strong></h3>
+                <span style="font-size:0.85rem; background:var(--primary); color:white; padding:4px 12px; border-radius:12px; font-weight:700;">${slots.length} clase(s)</span>
+            </div>
+            <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap:16px;">
+        `;
+        
+        Object.keys(grouped).forEach(day => {
+            const daySlots = grouped[day];
+            html += `
+                <div style="background:#f8fafc; border:1px solid var(--border); border-radius:12px; padding:12px; box-shadow:none;">
+                    <h4 style="margin-top:0; color:var(--primary); font-size:1rem; border-bottom:1px solid #e2e8f0; padding-bottom:6px; margin-bottom:10px; display:flex; justify-content:space-between;">
+                        <span>${day}</span>
+                        <span style="font-size:0.75rem; opacity:0.7;">(${daySlots.length})</span>
+                    </h4>
+            `;
+            
+            if(daySlots.length === 0) {
+                html += `<p style="font-size:0.8rem; color:var(--text-muted); opacity:0.5; padding:6px 0; font-style:italic; text-align:center;">Sin clases</p>`;
+            } else {
+                html += daySlots.map(s => {
+                    const grpLabel = s.grupos ? s.grupos.nombre : (s.target_grado ? `Grado ${s.target_grado}` : 'Sin Grupo');
+                    return `
+                        <div style="background:white; border:1px solid var(--border); padding:8px 10px; border-radius:8px; margin-bottom:6px; border-left:3px solid var(--primary-light);">
+                            <div style="font-weight:700; font-size:0.8rem; color:var(--text-main);"><i class="fa-regular fa-clock" style="font-size:0.75rem;"></i> ${s.hora_inicio} - ${s.hora_fin}</div>
+                            <div style="font-weight:600; font-size:0.85rem; margin-top:2px; color:var(--primary);">${s.materia}</div>
+                            <div style="font-size:0.75rem; color:var(--text-muted); margin-top:2px;">Grupo/Grado: <strong>${grpLabel}</strong></div>
+                        </div>
+                    `;
+                }).join('');
+            }
+            
+            html += `</div>`;
+        });
+        
+        html += '</div>';
+        
+        cont.innerHTML = html;
+        
+    } catch(e) {
+        console.error(e);
+        cont.innerHTML = `<p style="color:var(--danger)">Error al cargar horario del docente: ${e.message}</p>`;
     }
 };
 

@@ -509,6 +509,36 @@ CREATE POLICY "Admin_manage_periodos" ON public.periodos_calificaciones
 INSERT INTO public.periodos_calificaciones (trimestre) VALUES (1), (2), (3), (4)
 ON CONFLICT (trimestre) DO NOTHING;
 
+-- 21. TABLA HORARIOS DE MAESTROS
+CREATE TABLE IF NOT EXISTS public.horarios_maestros (
+    id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+    plantel_id uuid NOT NULL,
+    maestro_email text NOT NULL,
+    materia text NOT NULL,
+    grupo_id uuid REFERENCES public.grupos(id) ON DELETE CASCADE,
+    target_grado text,
+    dia text NOT NULL,
+    hora_inicio text NOT NULL,
+    hora_fin text NOT NULL,
+    orden_hora int DEFAULT 1,
+    created_at timestamp with time zone DEFAULT now()
+);
+
+ALTER TABLE public.horarios_maestros ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Read Horarios Maestros" ON public.horarios_maestros
+FOR SELECT TO authenticated USING (
+    (maestro_email = (auth.jwt() ->> 'email'::text)) OR
+    ((SELECT rol FROM public.perfiles WHERE id = auth.uid()) IN ('admin', 'directivo', 'apoyo'))
+);
+
+CREATE POLICY "Manage Horarios Maestros" ON public.horarios_maestros
+FOR ALL TO authenticated USING (
+    (SELECT rol FROM public.perfiles WHERE id = auth.uid()) IN ('admin', 'directivo')
+) WITH CHECK (
+    (SELECT rol FROM public.perfiles WHERE id = auth.uid()) IN ('admin', 'directivo')
+);
+
 -- =======================================================
 -- 🛡️ ESCUDO DE SEGURIDAD MULTI-TENANT (FIREWALL RESTRICTIVO)
 -- =======================================================
@@ -529,7 +559,7 @@ DECLARE
         'tramites', 'actividades_maestro', 'alumnos', 'asignaciones_maestros', 
         'citatorios', 'grupos', 'materias', 'perfiles_permitidos', 'reportes_conducta', 
         'seguimientos_sociales', 'periodos_calificaciones', 'estudios_psicosociales',
-        'cuestionarios_psicosociales'
+        'cuestionarios_psicosociales', 'horarios_maestros'
     ];
 BEGIN
     FOR t_name IN SELECT unnest(tables_list)
