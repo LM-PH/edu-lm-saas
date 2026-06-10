@@ -13365,13 +13365,25 @@ window.filtrarApoyoDocentesList = (query) => {
     if(!cont || !window._apoyoDocentesList) return;
     
     const term = query.toLowerCase().trim();
+    
+    // Si la búsqueda está vacía, no mostrar ningún nombre (ocultar por defecto)
+    if (term === '') {
+        cont.innerHTML = `
+            <div style="text-align:center; padding:40px 10px; opacity:0.5; color:var(--text-muted);">
+                <i class="fa-solid fa-magnifying-glass fa-2x" style="margin-bottom:8px;"></i>
+                <p style="font-size:0.85rem; margin:0;">Escribe el nombre del docente para buscar...</p>
+            </div>
+        `;
+        return;
+    }
+    
     const filtered = window._apoyoDocentesList.filter(d => 
         (d.nombre || '').toLowerCase().includes(term) || 
         d.email.toLowerCase().includes(term)
     );
     
     if(filtered.length === 0) {
-        cont.innerHTML = '<p style="text-align:center; opacity:0.5; padding:20px;">No se encontraron docentes.</p>';
+        cont.innerHTML = '<p style="text-align:center; opacity:0.5; padding:20px; font-size:0.85rem;">No se encontraron docentes.</p>';
         return;
     }
     
