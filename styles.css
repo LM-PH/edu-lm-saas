@@ -1171,3 +1171,16 @@ body {
     max-height: 400px; /* Suficiente para la lista */
     opacity: 1;
 }
+
+/* Flatpickr Customization */
+.flatpickr-day.has-comunicado::after {
+  content: '';
+  position: absolute;
+  bottom: 2px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 5px;
+  height: 5px;
+  background-color: var(--danger);
+  border-radius: 50%;
+}

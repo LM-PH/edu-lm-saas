@@ -1931,7 +1931,10 @@ function renderAdminMaestros() {
 }
 
 function renderAdminComunicados() {
-  setTimeout(() => { if(window.loadComunicadosAdmin) window.loadComunicadosAdmin(); }, 100);
+  setTimeout(() => { 
+      if(window.loadComunicadosAdmin) window.loadComunicadosAdmin(); 
+      if(window.initFlatpickrAdmin) window.initFlatpickrAdmin();
+  }, 100);
   return `
     <div class="page-header">
       <h2 class="page-title">Comunicados y Anuncios Oficiales</h2>
@@ -4617,6 +4620,7 @@ function renderApoyoTSEscaner() {
 function renderDirectivoComunicados() {
   setTimeout(() => {
     if(window.loadComunicadosAdmin) window.loadComunicadosAdmin();
+    if(window.initFlatpickrAdmin) window.initFlatpickrAdmin();
   }, 100);
   return `
     <div class="page-header">
@@ -4673,7 +4677,10 @@ function renderDirectivoComunicados() {
 
 function renderPersonalComunicados(rolVisita) {
   const hoyStr = new Date().toLocaleDateString('en-CA');
-  setTimeout(() => { if(window.loadTimelinePersonal) window.loadTimelinePersonal(hoyStr); }, 100);
+  setTimeout(() => { 
+      if(window.loadTimelinePersonal) window.loadTimelinePersonal(hoyStr); 
+      if(window.initFlatpickrAvisos) window.initFlatpickrAvisos(false);
+  }, 100);
   return `
     <div class="page-header">
       <h2 class="page-title">Avisos y Comunicados Oficiales</h2>
@@ -4783,7 +4790,10 @@ window.loadCredencialAlumno = async () => {
 };
 
 function renderAlumnoTimeline() {
-  setTimeout(() => { if(window.loadTimelineAlumno) window.loadTimelineAlumno(); }, 100);
+  setTimeout(() => { 
+      if(window.loadTimelineAlumno) window.loadTimelineAlumno(); 
+      if(window.initFlatpickrAvisos) window.initFlatpickrAvisos(true);
+  }, 100);
   return `
     <div class="mobile-app" style="background:var(--page-bg)">
       <div class="mobile-header" style="background:var(--primary); color:white; padding:20px;">
@@ -15046,4 +15056,85 @@ window.enviarRespuestasPsicosocial = async (e) => {
         console.error(err);
         window.showToast('Hubo un error al guardar.', 'error');
     }
+};
+
+// ---- FLATPICKR COMUNICADOS ----
+window.initFlatpickrAdmin = async () => {
+    const el = document.getElementById('filtroFechaComAdmin');
+    if(!el) return;
+    
+    // Obtener fechas con comunicados
+    const { data } = await supabaseClient.from('comunicados').select('fecha').eq('plantel_id', state.plantelId);
+    let datesWithComs = [];
+    if(data) datesWithComs = [...new Set(data.map(d => d.fecha))];
+
+    flatpickr(el, {
+        locale: "es",
+        onChange: function(selectedDates, dateStr, instance) {
+            if(window.loadComunicadosAdmin) window.loadComunicadosAdmin(dateStr);
+        },
+        onDayCreate: function(dObj, dStr, fp, dayElem) {
+            const localDate = dayElem.dateObj;
+            // format localized to en-CA -> YYYY-MM-DD
+            const y = localDate.getFullYear();
+            const m = String(localDate.getMonth() + 1).padStart(2, '0');
+            const d = String(localDate.getDate()).padStart(2, '0');
+            const dateStrCheck = `${y}-${m}-${d}`;
+            if (datesWithComs.includes(dateStrCheck)) {
+                dayElem.classList.add("has-comunicado");
+            }
+        }
+    });
+};
+
+window.initFlatpickrAvisos = async (isAlumno = false) => {
+    const el = document.getElementById('filtroFechaAvisos');
+    if(!el) return;
+    
+    let audArr = [];
+    if(isAlumno) {
+        audArr = ['General', 'Alumnos'];
+    } else {
+        audArr = ['General', 'Personal'];
+        if(state.path === '/maestro/comunicados') audArr.push('Maestros');
+    }
+
+    // Para alumno puede haber comunicados dirigidos a su ID específico y Grupo, pero esto complica la consulta de fechas generales.
+    // Usaremos las fechas generales y por audiencia para simplificar el calendario.
+    let query = supabaseClient.from('comunicados').select('fecha').eq('plantel_id', state.plantelId);
+    
+    // Para alumno agregamos la busqueda de su grupo y de su usuario, de forma opcional o con in
+    if(isAlumno && state.user && window.currentUserDetails) {
+        const uId = state.user.id;
+        const gId = window.currentUserDetails.grupo_id;
+        if(gId) audArr.push('Grupo_' + gId);
+        audArr.push('Alumno_' + uId);
+    }
+    
+    query = query.in('audiencia', audArr);
+    
+    const { data } = await query;
+    let datesWithComs = [];
+    if(data) datesWithComs = [...new Set(data.map(d => d.fecha))];
+
+    flatpickr(el, {
+        locale: "es",
+        onChange: function(selectedDates, dateStr, instance) {
+            if(isAlumno) {
+                if(window.loadTimelineAlumno) window.loadTimelineAlumno(true, dateStr);
+            } else {
+                if(window.loadTimelinePersonal) window.loadTimelinePersonal(dateStr);
+            }
+        },
+        onDayCreate: function(dObj, dStr, fp, dayElem) {
+            const localDate = dayElem.dateObj;
+            const y = localDate.getFullYear();
+            const m = String(localDate.getMonth() + 1).padStart(2, '0');
+            const d = String(localDate.getDate()).padStart(2, '0');
+            const dateStrCheck = `${y}-${m}-${d}`;
+            if (datesWithComs.includes(dateStrCheck)) {
+                dayElem.classList.add("has-comunicado");
+            }
+        }
+    });
 };
