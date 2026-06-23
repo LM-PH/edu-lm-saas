@@ -15064,9 +15064,9 @@ window.initFlatpickrAdmin = async () => {
     if(!el) return;
     
     // Obtener fechas con comunicados
-    const { data } = await supabaseClient.from('comunicados').select('fecha').eq('plantel_id', state.plantelId);
+    const { data } = await supabaseClient.from('comunicados').select('fecha_envio').eq('plantel_id', state.plantelId);
     let datesWithComs = [];
-    if(data) datesWithComs = [...new Set(data.map(d => d.fecha))];
+    if(data) datesWithComs = [...new Set(data.map(d => d.fecha_envio ? new Date(d.fecha_envio).toLocaleDateString('en-CA') : ''))];
 
     flatpickr(el, {
         locale: "es",
@@ -15101,7 +15101,7 @@ window.initFlatpickrAvisos = async (isAlumno = false) => {
 
     // Para alumno puede haber comunicados dirigidos a su ID específico y Grupo, pero esto complica la consulta de fechas generales.
     // Usaremos las fechas generales y por audiencia para simplificar el calendario.
-    let query = supabaseClient.from('comunicados').select('fecha').eq('plantel_id', state.plantelId);
+    let query = supabaseClient.from('comunicados').select('fecha_envio').eq('plantel_id', state.plantelId);
     
     // Para alumno agregamos la busqueda de su grupo y de su usuario, de forma opcional o con in
     if(isAlumno && state.user && window.currentUserDetails) {
@@ -15115,7 +15115,7 @@ window.initFlatpickrAvisos = async (isAlumno = false) => {
     
     const { data } = await query;
     let datesWithComs = [];
-    if(data) datesWithComs = [...new Set(data.map(d => d.fecha))];
+    if(data) datesWithComs = [...new Set(data.map(d => d.fecha_envio ? new Date(d.fecha_envio).toLocaleDateString('en-CA') : ''))];
 
     flatpickr(el, {
         locale: "es",
