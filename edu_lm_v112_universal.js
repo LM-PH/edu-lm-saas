@@ -3378,7 +3378,7 @@ window.guardarCitatorio = async () => {
         await supabaseClient.from('comunicados').insert([{
             autor_id: u.data.user.id,
             titulo: '📩 Tienes un Citatorio Pendiente de Firma',
-            mensaje: `El área de Trabajo Social solicita tu presencia y la de tu padre/tutor.\nMotivo: ${motivo.substring(0, 50)}...\n\nPor favor, entra a tu perfil para firmar de enterado.`,
+            mensaje: `El área de Trabajo Social solicita tu presencia y la de tu padre/tutor.\nMotivo: ${motivo.substring(0, 50)}...\n\nSube a la parte superior de esta misma pantalla (Línea de Tiempo) para ver el documento oficial y firmarlo en el recuadro naranja.`,
             audiencia: `Alumno_${aid}`,
             tipo: 'General',
             plantel_id: state.plantelId
