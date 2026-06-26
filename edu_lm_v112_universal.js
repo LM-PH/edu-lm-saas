@@ -9558,6 +9558,12 @@ window.registrarAsistenciaEntrada = async (qrText) => {
         const uRes = await supabaseClient.auth.getUser();
         const fechaHoy = new Date().toLocaleDateString('en-CA');
         
+        window._scannedEntrada = window._scannedEntrada || new Set();
+        if(window._scannedEntrada.has(alu.id)) {
+            window.showToast("El alumno ya tiene registro de entrada hoy.", "warning");
+            return;
+        }
+        
         // Verificar registro previo hoy
         const { data: existing } = await supabaseClient.from('accesos_plantel')
             .select('id')
@@ -9567,9 +9573,12 @@ window.registrarAsistenciaEntrada = async (qrText) => {
             .maybeSingle();
             
         if(existing) {
+            window._scannedEntrada.add(alu.id);
             window.showToast("El alumno ya tiene registro de entrada hoy.", "warning");
             return;
         }
+        
+        window._scannedEntrada.add(alu.id);
         
         // 2. Registrar el acceso con el ID encontrado
         const { error } = await supabaseClient.from('accesos_plantel').insert([{
@@ -9583,9 +9592,22 @@ window.registrarAsistenciaEntrada = async (qrText) => {
 
         if(error) {
             console.error(">>> ERROR REGISTRO QR:", error);
+            window._scannedEntrada.delete(alu.id);
             window.showToast("Error BD: " + error.message, "error");
             return;
         }
+
+        // --- ENVIAR NOTIFICACIÓN DE ENTRADA ---
+        const horaFormato = new Date().toLocaleTimeString('en-GB');
+        const { error: comErr } = await supabaseClient.from('comunicados').insert([{
+            autor_id: uRes.data.user?.id,
+            titulo: "Registro de Entrada del Plantel",
+            mensaje: `Estimado padre de familia/tutor: \nTu hijo(a) ${alu.nombre} ha registrado su entrada al plantel el día de hoy a las ${horaFormato}.`,
+            audiencia: `Alumno_${alu.id}`,
+            plantel_id: state.plantelId
+        }]);
+        if(comErr) console.error("Error al notificar entrada:", comErr);
+        // ----------------------------------------
 
         // 3. Verificar estatus escolar (Reportes pendientes)
         const { count: pend } = await supabaseClient.from('reportes_conducta')
@@ -9712,6 +9734,12 @@ window.registrarAsistenciaTS = async (qrText) => {
         const fechaHoy = new Date().toLocaleDateString('en-CA');
         const horaActual = new Date().toLocaleTimeString('en-GB');
         
+        window._scannedSalida = window._scannedSalida || new Set();
+        if(window._scannedSalida.has(alu.id)) {
+            window.showToast("El alumno ya tiene registro de salida hoy.", "warning");
+            return;
+        }
+        
         // Verificar registro previo hoy
         const { data: existing } = await supabaseClient.from('accesos_plantel')
             .select('id')
@@ -9721,9 +9749,12 @@ window.registrarAsistenciaTS = async (qrText) => {
             .maybeSingle();
             
         if(existing) {
+            window._scannedSalida.add(alu.id);
             window.showToast("El alumno ya tiene registro de salida hoy.", "warning");
             return;
         }
+        
+        window._scannedSalida.add(alu.id);
         
         const { error } = await supabaseClient.from('accesos_plantel').insert([{
             alumno_id: alu.id,
