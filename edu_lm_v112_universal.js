@@ -9556,6 +9556,20 @@ window.registrarAsistenciaEntrada = async (qrText) => {
         }
 
         const uRes = await supabaseClient.auth.getUser();
+        const fechaHoy = new Date().toLocaleDateString('en-CA');
+        
+        // Verificar registro previo hoy
+        const { data: existing } = await supabaseClient.from('accesos_plantel')
+            .select('id')
+            .eq('alumno_id', alu.id)
+            .eq('fecha', fechaHoy)
+            .in('estado', ['Asistencia', 'Retardo'])
+            .maybeSingle();
+            
+        if(existing) {
+            window.showToast("El alumno ya tiene registro de entrada hoy.", "warning");
+            return;
+        }
         
         // 2. Registrar el acceso con el ID encontrado
         const { error } = await supabaseClient.from('accesos_plantel').insert([{
@@ -9697,6 +9711,19 @@ window.registrarAsistenciaTS = async (qrText) => {
         const uRes = await supabaseClient.auth.getUser();
         const fechaHoy = new Date().toLocaleDateString('en-CA');
         const horaActual = new Date().toLocaleTimeString('en-GB');
+        
+        // Verificar registro previo hoy
+        const { data: existing } = await supabaseClient.from('accesos_plantel')
+            .select('id')
+            .eq('alumno_id', alu.id)
+            .eq('fecha', fechaHoy)
+            .eq('estado', 'Salida')
+            .maybeSingle();
+            
+        if(existing) {
+            window.showToast("El alumno ya tiene registro de salida hoy.", "warning");
+            return;
+        }
         
         const { error } = await supabaseClient.from('accesos_plantel').insert([{
             alumno_id: alu.id,
