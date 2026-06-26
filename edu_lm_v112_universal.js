@@ -2628,11 +2628,12 @@ function renderApoyoDashboard() {
                   <th style="padding:15px;">Estudiante</th>
                   <th style="padding:15px; text-align:center;">Reportes</th>
                   <th style="padding:15px; text-align:center;">Estado</th>
+                  <th style="padding:15px; text-align:center;">Citatorio</th>
                   <th style="padding:15px; text-align:right;">Acciones</th>
                 </tr>
               </thead>
               <tbody id="focosRojosContenedor">
-                 <tr><td colspan="4" style="text-align:center; padding:40px; color:var(--text-muted)">Cargando expedientes...</td></tr>
+                 <tr><td colspan="5" style="text-align:center; padding:40px; color:var(--text-muted)">Cargando expedientes...</td></tr>
               </tbody>
             </table>
         </div>
@@ -3044,15 +3045,41 @@ window.loadFocosRojos = async () => {
             if(r.gravedad === 'Grave') conteo[aid].graves++;
         });
 
+        // Fetch citatorios for these students to show status in the table
+        const aluIds = Object.keys(conteo);
+        if(aluIds.length > 0) {
+            const { data: citatoriosData } = await supabaseClient
+                .from('citatorios')
+                .select('alumno_id, estado, firma_enterado')
+                .in('alumno_id', aluIds)
+                .neq('estado', 'atendido');
+            
+            if(citatoriosData) {
+                citatoriosData.forEach(cit => {
+                    if(conteo[cit.alumno_id]) {
+                        // Si hay varios, priorizamos el pendiente, pero si está enterado lo mostramos
+                        if (!conteo[cit.alumno_id].citatorio || conteo[cit.alumno_id].citatorio === 'Firmado') {
+                            conteo[cit.alumno_id].citatorio = cit.estado === 'enterado' ? 'Firmado' : 'Pendiente';
+                        }
+                    }
+                });
+            }
+        }
+
         // Mostramos si tiene al menos 1 reporte activo
         const focos = Object.entries(conteo).map(([id, info]) => ({ id, ...info })).filter(f => f.count >= 1);
         
         if(focos.length === 0) {
-            cont.innerHTML = '<tr><td colspan="4" style="text-align:center; padding:40px; color:var(--text-muted)">No hay alumnos con reportes activos.</td></tr>';
+            cont.innerHTML = '<tr><td colspan="5" style="text-align:center; padding:40px; color:var(--text-muted)">No hay alumnos con reportes activos.</td></tr>';
             return;
         }
 
-        cont.innerHTML = focos.map(f => `
+        cont.innerHTML = focos.map(f => {
+            let citBadge = '<span style="color:var(--text-muted); font-size:0.8rem;">Ninguno</span>';
+            if(f.citatorio === 'Firmado') citBadge = '<span class="badge" style="background:#22c55e; color:white; font-size:0.7rem; padding:4px 8px;"><i class="fa-solid fa-check"></i> Enterado</span>';
+            if(f.citatorio === 'Pendiente') citBadge = '<span class="badge" style="background:#f97316; color:white; font-size:0.7rem; padding:4px 8px;"><i class="fa-solid fa-clock"></i> No Enterado</span>';
+
+            return `
             <tr>
               <td style="padding:15px;"><b>${f.nombre}</b><br><small style="color:var(--text-muted)">${f.matricula} - ${f.grupo}</small></td>
               <td style="padding:15px; text-align:center;">
@@ -3060,11 +3087,13 @@ window.loadFocosRojos = async () => {
                  <small style="color:var(--danger)">${f.graves} Graves</small>
               </td>
               <td style="padding:15px; text-align:center;"><span class="badge" style="background:${f.graves >= 1 ? '#fff3e0' : '#e8f5e9'}; color:${f.graves >= 1 ? '#e65100' : '#2e7d32'};">${f.graves >= 1 ? 'Crítico' : 'Seguimiento'}</span></td>
+              <td style="padding:15px; text-align:center;">${citBadge}</td>
               <td style="padding:15px; text-align:right; display:flex; gap:8px; justify-content:flex-end;">
                   <button class="btn btn-outline btn-xs" style="border-color:var(--primary); color:var(--primary)" onclick="window.showAlumnoExpediente('${f.id}')">Ver Expediente</button>
                   <button class="btn btn-xs" style="background:var(--success); color:white; border:none;" onclick="window.abrirModalAtencionFoco('${f.id}', '${f.nombre}')">Atender</button>
               </td>
-            </tr>`).join('');
+            </tr>`;
+        }).join('');
     } catch(e) { console.error("Focos Rojos Error:", e); }
 };
 
