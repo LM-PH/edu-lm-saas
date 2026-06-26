@@ -2728,9 +2728,16 @@ function renderApoyoReportes() {
                     <h3 style="margin-bottom:4px;"><i class="fa-solid fa-envelope-open-text text-warning"></i> Citatorios de Padres</h3>
                     <p style="font-size:0.85rem; color:var(--text-muted);">Seguimiento de firmas y atención a tutores.</p>
                 </div>
-                <button class="btn btn-outline btn-sm" onclick="window.loadCitatoriosApoyo()">
-                    <i class="fa-solid fa-sync"></i> Actualizar
-                </button>
+                <div style="display:flex; gap:10px; align-items:center;">
+                    <select id="filtroFirmaCitatorio" class="form-input" style="max-width:180px; font-size:0.8rem; padding:6px 12px; margin:0;" onchange="window.loadCitatoriosApoyo()">
+                        <option value="activos">Todos (Vigentes)</option>
+                        <option value="pendientes">No Enterado (Sin firma)</option>
+                        <option value="enterados">Enterado (Firmados)</option>
+                    </select>
+                    <button class="btn btn-outline btn-sm" onclick="window.loadCitatoriosApoyo()">
+                        <i class="fa-solid fa-sync"></i> Actualizar
+                    </button>
+                </div>
             </div>
             <div id="contenedorCitatoriosApoyo" style="display:grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap:20px;">
                 <div style="text-align:center; padding:30px; color:var(--text-muted); grid-column:1/-1;"><i class="fa-solid fa-spinner fa-spin"></i> Cargando citatorios...</div>
@@ -3386,13 +3393,23 @@ window.loadCitatoriosApoyo = async () => {
     const cont = document.getElementById('contenedorCitatoriosApoyo');
     if(!cont) return;
     try {
-        const { data, error } = await supabaseClient
+        let query = supabaseClient
             .from('citatorios')
             .select('*, alumnos(nombre, matricula)')
             .eq('plantel_id', state.plantelId)
             .neq('estado', 'atendido')
             .order('creado_en', { ascending: false });
 
+        const selectFiltro = document.getElementById('filtroFirmaCitatorio');
+        if (selectFiltro) {
+            if (selectFiltro.value === 'pendientes') {
+                query = query.neq('estado', 'enterado');
+            } else if (selectFiltro.value === 'enterados') {
+                query = query.eq('estado', 'enterado');
+            }
+        }
+
+        const { data, error } = await query;
         if(error) throw error;
 
         if(!data || data.length === 0) {
