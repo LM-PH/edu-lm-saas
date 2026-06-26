@@ -7304,7 +7304,7 @@ window.loadTimelinePersonal = async (selectedDate) => {
         if (userRole === 'maestro' || userRole === 'docente') {
             audArr.push('Maestros', 'Personal');
         } else if (userRole === 'apoyo' || userRole === 'biblioteca') {
-            audArr.push('Personal', 'Maestros', 'Alumnos');
+            audArr.push('Personal');
         } else if (userRole === 'alumno' || userRole === 'estudiante') {
             audArr.push('Alumnos');
         } else if (userRole === 'directivo' || userRole === 'admin' || userRole === 'administrativo') {
@@ -15266,7 +15266,7 @@ window.initFlatpickrAvisos = async (isAlumno = false) => {
         if (userRole === 'maestro' || userRole === 'docente') {
             audArr.push('Maestros', 'Personal');
         } else if (userRole === 'apoyo' || userRole === 'biblioteca') {
-            audArr.push('Personal', 'Maestros', 'Alumnos');
+            audArr.push('Personal');
         } else if (userRole === 'directivo' || userRole === 'admin' || userRole === 'administrativo') {
             audArr.push('Maestros', 'Personal', 'Alumnos');
         }
