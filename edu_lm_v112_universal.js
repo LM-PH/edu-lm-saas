@@ -6914,6 +6914,7 @@ window.loadCitatoriosAlumno = async (alumnoId) => {
             .select('*')
             .eq('alumno_id', alumnoId)
             .neq('estado', 'atendido')
+            .neq('estado', 'enterado')
             .order('creado_en', { ascending: false });
 
         if(error) throw error;
