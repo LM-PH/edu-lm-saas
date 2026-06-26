@@ -2010,8 +2010,9 @@ window.loadComunicadosAdmin = async (fechaFiltro = null) => {
         }
 
         if(fechaFiltro) {
-            const desde = fechaFiltro + 'T00:00:00';
-            const hasta = fechaFiltro + 'T23:59:59';
+            // Ensure the date is checked covering the whole UTC day for that local date.
+            const desde = new Date(`${fechaFiltro}T00:00:00`).toISOString();
+            const hasta = new Date(`${fechaFiltro}T23:59:59.999`).toISOString();
             query = query.gte('fecha_envio', desde).lte('fecha_envio', hasta);
         }
 
@@ -7284,12 +7285,9 @@ window.loadTimelinePersonal = async (selectedDate) => {
     // Si no viene fecha, usar hoy
     const targetDate = selectedDate || new Date().toLocaleDateString('en-CA');
     
-    // Rango de fecha con offset de zona horaria local (evita problemas UTC)
-    const tzOffset = new Date().getTimezoneOffset() * 60000;
-    const localStart = new Date(`${targetDate}T00:00:00`);
-    const localEnd = new Date(`${targetDate}T23:59:59`);
-    const startOfDay = new Date(localStart.getTime() - tzOffset).toISOString();
-    const endOfDay = new Date(localEnd.getTime() - tzOffset).toISOString();
+    // Ensure the date is checked covering the whole UTC day for that local date.
+    const startOfDay = new Date(`${targetDate}T00:00:00`).toISOString();
+    const endOfDay = new Date(`${targetDate}T23:59:59.999`).toISOString();
 
     cont.innerHTML = '<div style="padding:40px; text-align:center;"><i class="fa-solid fa-spinner fa-spin fa-2x"></i><p style="color:var(--text-muted); margin-top:10px;">Actualizando cronología...</p></div>';
     
@@ -9450,8 +9448,8 @@ window.finalizarSesionAsistencia = async () => {
         const { data: todos } = await queryAl;
         let queryReg = supabaseClient.from('asistencias')
             .select('alumno_id, estado, materia')
-            .gte('creado_en', hoy + 'T00:00:00')
-            .lte('creado_en', hoy + 'T23:59:59')
+            .gte('creado_en', new Date(`${hoy}T00:00:00`).toISOString())
+            .lte('creado_en', new Date(`${hoy}T23:59:59.999`).toISOString())
             .eq('plantel_id', state.plantelId);
             
         if(grupoId.startsWith('grado:')) {
@@ -14465,8 +14463,8 @@ window.loadHistorialBiblioteca = async (fecha) => {
     if(!cont) return;
     try {
         cont.innerHTML = '<div style="text-align:center; padding:20px; color:var(--text-muted);"><i class="fa-solid fa-spinner fa-spin"></i> Cargando...</div>';
-        const start = fecha + "T00:00:00.000Z";
-        const end = fecha + "T23:59:59.999Z";
+        const start = new Date(`${fecha}T00:00:00`).toISOString();
+        const end = new Date(`${fecha}T23:59:59.999`).toISOString();
         
         const { data, error } = await supabaseClient.from('biblioteca_prestamos')
             .select('*, alumnos(nombre, grupos(nombre))')
