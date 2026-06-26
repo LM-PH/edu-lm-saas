@@ -15186,12 +15186,21 @@ window.initFlatpickrAvisos = async (isAlumno = false) => {
     // Usaremos las fechas generales y por audiencia para simplificar el calendario.
     let query = supabaseClient.from('comunicados').select('fecha_envio').eq('plantel_id', state.plantelId);
     
-    // Para alumno agregamos la busqueda de su grupo y de su usuario, de forma opcional o con in
-    if(isAlumno && state.user && window.currentUserDetails) {
-        const uId = state.user.id;
-        const gId = window.currentUserDetails.grupo_id;
-        if(gId) audArr.push('Grupo_' + gId);
-        audArr.push('Alumno_' + uId);
+    // Para alumno agregamos la busqueda de su grupo y de su usuario real (alumno_id)
+    if(isAlumno) {
+        const u = await supabaseClient.auth.getUser();
+        if(u.data?.user) {
+            const { data: al } = await supabaseClient
+                .from('alumnos')
+                .select('id, grupo_id')
+                .or(`contacto_email.eq.${u.data.user.email},perfil_id.eq.${u.data.user.id}`)
+                .maybeSingle();
+
+            if(al) {
+                audArr.push('Alumno_' + al.id);
+                if(al.grupo_id) audArr.push('Grupo_' + al.grupo_id);
+            }
+        }
     }
     
     query = query.in('audiencia', audArr);
