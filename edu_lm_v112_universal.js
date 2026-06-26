@@ -9579,8 +9579,14 @@ window.registrarAsistenciaEntrada = async (qrText) => {
             .eq('alumno_id', alu.id)
             .eq('resuelto', false);
 
+        // 4. Verificar citatorios pendientes
+        const { count: citatoriosPend } = await supabaseClient.from('citatorios')
+            .select('*', { count: 'exact', head: true })
+            .eq('alumno_id', alu.id)
+            .neq('estado', 'atendido');
+
         if(window.triggerScanSuccess) {
-            window.triggerScanSuccess(alu.nombre, estadoPortal, pend || 0);
+            window.triggerScanSuccess(alu.nombre, estadoPortal, pend || 0, citatoriosPend || 0);
         }
 
         const audio = new Audio('https://assets.mixkit.co/active_storage/sfx/766/766-preview.mp3');
@@ -9975,17 +9981,32 @@ window.showExpedienteLateral = () => {
    document.getElementById('expedienteDrawer').style.display = 'block';
 };
 
-window.triggerScanSuccess = (nombre = "Alumno", estado = "Asistencia", reportesPendientes = 0) => {
+window.triggerScanSuccess = (nombre = "Alumno", estado = "Asistencia", reportesPendientes = 0, citatoriosPendientes = 0) => {
     // 1. Feedback visual para Prefectura
     const feedback = document.getElementById('pref-feedback');
     if(feedback) {
-        const esCompleto = reportesPendientes === 0;
-        const color = esCompleto ? 'var(--success)' : 'var(--warning)';
-        const icon = esCompleto ? 'fa-circle-check' : 'fa-triangle-exclamation';
-        const txtStatus = esCompleto ? 'PASE DE LISTA: COMPLETO ✅' : `PASE INCOMPLETO: ${reportesPendientes} REPORTES ⚠️`;
+        let color = 'var(--success)';
+        let icon = 'fa-circle-check';
+        let txtStatus = 'PASE DE LISTA: COMPLETO ✅';
+        let textColor = 'white';
+        let borderColor = 'transparent';
+        
+        if (citatoriosPendientes > 0) {
+            color = 'var(--danger)';
+            icon = 'fa-triangle-exclamation fa-bounce';
+            txtStatus = '¡ALERTA! CITATORIO PENDIENTE 🚨';
+            textColor = 'white';
+            borderColor = '#dc2626';
+        } else if (reportesPendientes > 0) {
+            color = 'var(--warning)';
+            icon = 'fa-triangle-exclamation';
+            txtStatus = `PASE INCOMPLETO: ${reportesPendientes} REPORTES ⚠️`;
+            textColor = '#92400e';
+            borderColor = '#f59e0b';
+        }
         
         feedback.innerHTML = `
-            <div class="card shadow-md animate-pulse" style="background:${color}; color:${esCompleto?'white':'#92400e'}; padding:18px; border-radius:20px; display:flex; align-items:center; gap:20px; margin-bottom:10px; border:2px solid ${esCompleto?'transparent':'#f59e0b'};">
+            <div class="card shadow-md animate-pulse" style="background:${color}; color:${textColor}; padding:18px; border-radius:20px; display:flex; align-items:center; gap:20px; margin-bottom:10px; border:2px solid ${borderColor};">
                 <i class="fa-solid ${icon}" style="font-size:2.5rem;"></i>
                 <div style="text-align:left;">
                     <div style="font-size:0.75rem; opacity:0.9; font-weight:800; letter-spacing:1px;">${txtStatus}</div>
@@ -9995,17 +10016,21 @@ window.triggerScanSuccess = (nombre = "Alumno", estado = "Asistencia", reportesP
             </div>
         `;
         clearTimeout(window._prefFeedbackTimeout);
-        window._prefFeedbackTimeout = setTimeout(() => { if(feedback) feedback.innerHTML = ''; }, 4000);
+        window._prefFeedbackTimeout = setTimeout(() => { if(feedback) feedback.innerHTML = ''; }, citatoriosPendientes > 0 ? 6000 : 4000);
     }
 
     // 2. Notificaciones flotantes (Toast)
     const stack = document.getElementById('notifStack');
-    const text = `${nombre} [${estado}] ${reportesPendientes > 0 ? '(Reportes!)' : ''}`;
+    let extraText = '';
+    if(citatoriosPendientes > 0) extraText = '(¡CITATORIO!)';
+    else if(reportesPendientes > 0) extraText = '(Reportes!)';
+    const text = `${nombre} [${estado}] ${extraText}`;
+    
     if(stack) {
         const el = document.createElement('div');
         el.className = 'scan-success';
-        el.style.cssText = "background:var(--success); color:white; padding:8px 12px; border-radius:8px; margin-bottom:5px; animation: slideIn 0.3s ease-out;";
-        el.innerHTML = '<i class="fa-solid fa-circle-check"></i> ' + text;
+        el.style.cssText = `background:${citatoriosPendientes > 0 ? 'var(--danger)' : 'var(--success)'}; color:white; padding:8px 12px; border-radius:8px; margin-bottom:5px; animation: slideIn 0.3s ease-out;`;
+        el.innerHTML = '<i class="fa-solid ' + (citatoriosPendientes > 0 ? 'fa-triangle-exclamation' : 'fa-circle-check') + '"></i> ' + text;
         stack.appendChild(el);
         if(stack.children.length > 5) stack.removeChild(stack.firstChild);
         setTimeout(() => {
