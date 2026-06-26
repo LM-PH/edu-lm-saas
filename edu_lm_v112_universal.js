@@ -82,7 +82,9 @@ window._stopFirmaQRScanner = () => {
 };
 
 window.navigate = (path) => {
-  window._stopFirmaQRScanner();
+  if(window._stopFirmaQRScanner) window._stopFirmaQRScanner();
+  if(window.stopPrefScanner) window.stopPrefScanner();
+  if(window.stopTSScanner) window.stopTSScanner();
   state.path = path;
   if(document.body.classList.contains('sidebar-open')) {
       document.body.classList.remove('sidebar-open');
