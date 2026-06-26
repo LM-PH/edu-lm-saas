@@ -6718,7 +6718,7 @@ window.firmarEncuadre = async (encuadre_id, alumno_id) => {
     }
 };
 
-window.loadTimelineAlumno = async (mostrarHistorial = false) => {
+window.loadTimelineAlumno = async (mostrarHistorial = false, selectedDateStr = null) => {
     const cont = document.getElementById('timelineAlumnoContenedor');
     if(!cont) return;
     
@@ -6747,17 +6747,17 @@ window.loadTimelineAlumno = async (mostrarHistorial = false) => {
         const vistosIds = vistos ? vistos.map(v => v.comunicado_id) : [];
 
         console.log(">>> [TIMELINE] Buscando comunicados para audiencia:", audArr);
-        let query = supabaseClient.from('comunicados').select('*').in('audiencia', audArr).eq('plantel_id', state.plantelId);
+        let query = supabaseClient.from('comunicados').select('*').in('audiencia', audArr).eq('plantel_id', state.plantelId).order('fecha_envio', { ascending: false });
         if(al && al.creado_en) {
             query = query.gte('fecha_envio', al.creado_en);
         }
 
         if(mostrarHistorial) {
-            const fecha = document.getElementById('filtroFechaAvisos').value;
+            const fecha = selectedDateStr || document.getElementById('filtroFechaAvisos').value;
             if(fecha) {
-                query = query.gte('fecha_envio', `${fecha} 00:00:00`).lte('fecha_envio', `${fecha} 23:59:59`);
-                // Nota: Si la fecha seleccionada es ANTERIOR a la inscripción, 
-                // el gte(al.creado_en) hará que no salga nada, lo cual es correcto.
+                // Ensure the date is checked covering the whole UTC day for that local date.
+                // Or simply since it is stored as TIMESTAMPTZ, we can check a range based on local time.
+                query = query.gte('fecha_envio', `${fecha}T00:00:00.000`).lte('fecha_envio', `${fecha}T23:59:59.999`);
             }
         } else {
             query = query.limit(20);
