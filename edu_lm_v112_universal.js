@@ -3304,7 +3304,7 @@ window.guardarReporteApoyo = async () => {
             await supabaseClient.from('comunicados').insert([{
                 autor_id: u.data.user.id,
                 titulo: `🚨 CITATORIO URGENTE: Seguimiento Conductual`,
-                mensaje: `Estimado alumno y padre de familia/tutor:\n\nSe ha detectado una acumulación crítica de ${gravesCount} reportes graves sin atender. ES REQUISITO INDISPENSABLE presentarse en el área de Trabajo Social para una junta de seguimiento y firma de compromisos.\n\nEl acceso al portal podría verse limitado si no se atiende este citatorio.`,
+                mensaje: `Estimado alumno y padre de familia/tutor:\n\nSe ha detectado una acumulación crítica de ${gravesCount} reportes graves sin atender. ES REQUISITO INDISPENSABLE presentarse en el área de Trabajo Social para una junta de seguimiento y firma de compromisos.\n\nEl acceso al plantel podría verse limitado si no se atiende este citatorio.`,
                 audiencia: `Alumno_${aid}`,
                 tipo: 'General',
                 plantel_id: state.plantelId
