@@ -2629,6 +2629,7 @@ function renderApoyoDashboard() {
                   <th style="padding:15px; text-align:center;">Reportes</th>
                   <th style="padding:15px; text-align:center;">Estado</th>
                   <th style="padding:15px; text-align:center;">Citatorio</th>
+                  <th style="padding:15px; text-align:center;">Cit. Conductual</th>
                   <th style="padding:15px; text-align:right;">Acciones</th>
                 </tr>
               </thead>
@@ -3050,16 +3051,17 @@ window.loadFocosRojos = async () => {
         if(aluIds.length > 0) {
             const { data: citatoriosData } = await supabaseClient
                 .from('citatorios')
-                .select('alumno_id, estado, firma_enterado')
+                .select('alumno_id, estado, firma_enterado, tipo')
                 .in('alumno_id', aluIds)
                 .neq('estado', 'atendido');
             
             if(citatoriosData) {
                 citatoriosData.forEach(cit => {
                     if(conteo[cit.alumno_id]) {
+                        const key = cit.tipo === 'Conductual' ? 'citatorioConductual' : 'citatorioGeneral';
                         // Si hay varios, priorizamos el pendiente, pero si está enterado lo mostramos
-                        if (!conteo[cit.alumno_id].citatorio || conteo[cit.alumno_id].citatorio === 'Firmado') {
-                            conteo[cit.alumno_id].citatorio = cit.estado === 'enterado' ? 'Firmado' : 'Pendiente';
+                        if (!conteo[cit.alumno_id][key] || conteo[cit.alumno_id][key] === 'Firmado') {
+                            conteo[cit.alumno_id][key] = cit.estado === 'enterado' ? 'Firmado' : 'Pendiente';
                         }
                     }
                 });
@@ -3075,9 +3077,13 @@ window.loadFocosRojos = async () => {
         }
 
         cont.innerHTML = focos.map(f => {
-            let citBadge = '<span style="color:var(--text-muted); font-size:0.8rem;">Ninguno</span>';
-            if(f.citatorio === 'Firmado') citBadge = '<span class="badge" style="background:#22c55e; color:white; font-size:0.7rem; padding:4px 8px;"><i class="fa-solid fa-check"></i> Enterado</span>';
-            if(f.citatorio === 'Pendiente') citBadge = '<span class="badge" style="background:#f97316; color:white; font-size:0.7rem; padding:4px 8px;"><i class="fa-solid fa-clock"></i> No Enterado</span>';
+            let citGenBadge = '<span style="color:var(--text-muted); font-size:0.8rem;">Ninguno</span>';
+            if(f.citatorioGeneral === 'Firmado') citGenBadge = '<span class="badge" style="background:#22c55e; color:white; font-size:0.7rem; padding:4px 8px;"><i class="fa-solid fa-check"></i> Enterado</span>';
+            if(f.citatorioGeneral === 'Pendiente') citGenBadge = '<span class="badge" style="background:#f97316; color:white; font-size:0.7rem; padding:4px 8px;"><i class="fa-solid fa-clock"></i> No Enterado</span>';
+
+            let citCondBadge = '<span style="color:var(--text-muted); font-size:0.8rem;">Ninguno</span>';
+            if(f.citatorioConductual === 'Firmado') citCondBadge = '<span class="badge" style="background:#22c55e; color:white; font-size:0.7rem; padding:4px 8px;"><i class="fa-solid fa-check"></i> Enterado</span>';
+            if(f.citatorioConductual === 'Pendiente') citCondBadge = '<span class="badge" style="background:#f97316; color:white; font-size:0.7rem; padding:4px 8px;"><i class="fa-solid fa-clock"></i> No Enterado</span>';
 
             return `
             <tr>
@@ -3087,7 +3093,8 @@ window.loadFocosRojos = async () => {
                  <small style="color:var(--danger)">${f.graves} Graves</small>
               </td>
               <td style="padding:15px; text-align:center;"><span class="badge" style="background:${f.graves >= 1 ? '#fff3e0' : '#e8f5e9'}; color:${f.graves >= 1 ? '#e65100' : '#2e7d32'};">${f.graves >= 1 ? 'Crítico' : 'Seguimiento'}</span></td>
-              <td style="padding:15px; text-align:center;">${citBadge}</td>
+              <td style="padding:15px; text-align:center;">${citGenBadge}</td>
+              <td style="padding:15px; text-align:center;">${citCondBadge}</td>
               <td style="padding:15px; text-align:right; display:flex; gap:8px; justify-content:flex-end;">
                   <button class="btn btn-outline btn-xs" style="border-color:var(--primary); color:var(--primary)" onclick="window.showAlumnoExpediente('${f.id}')">Ver Expediente</button>
                   <button class="btn btn-xs" style="background:var(--success); color:white; border:none;" onclick="window.abrirModalAtencionFoco('${f.id}', '${f.nombre}')">Atender</button>
@@ -3300,15 +3307,26 @@ window.guardarReporteApoyo = async () => {
             .eq('resuelto', false);
 
         if(gravesCount >= 3) {
-            // Enviar citatorio formal automático
+            // Enviar citatorio formal automático a LINEA DE TIEMPO
             await supabaseClient.from('comunicados').insert([{
                 autor_id: u.data.user.id,
                 titulo: `🚨 CITATORIO URGENTE: Seguimiento Conductual`,
-                mensaje: `Estimado alumno y padre de familia/tutor:\n\nSe ha detectado una acumulación crítica de ${gravesCount} reportes graves sin atender. ES REQUISITO INDISPENSABLE presentarse en el área de Trabajo Social para una junta de seguimiento y firma de compromisos.\n\nEl acceso al plantel podría verse limitado si no se atiende este citatorio.`,
+                mensaje: `Estimado alumno y padre de familia/tutor:\n\nSe ha detectado una acumulación crítica de ${gravesCount} reportes graves sin atender. ES REQUISITO INDISPENSABLE presentarse en el área de Trabajo Social para una junta de seguimiento y firma de compromisos.\n\nEl acceso al plantel podría verse limitado si no se atiende este citatorio.\n\nSube a la parte superior de esta pantalla (Línea de Tiempo) para ver el documento oficial y firmarlo en el recuadro naranja.`,
                 audiencia: `Alumno_${aid}`,
                 tipo: 'General',
                 plantel_id: state.plantelId
             }]);
+            
+            // CREAR EN LA TABLA OFICIAL PARA RECABAR FIRMA
+            await supabaseClient.from('citatorios').insert([{
+                id: crypto.randomUUID(),
+                alumno_id: aid,
+                emisor_id: u.data.user.id,
+                motivo: `Acumulación crítica de ${gravesCount} reportes graves sin atender. (Citatorio Conductual URGENTE)`,
+                tipo: 'Conductual',
+                plantel_id: state.plantelId
+            }]);
+            
             window.showToast("Citatorio automático enviado por acumulación de reportes", "warning");
         } else if(sev === 'Grave' || cat === 'Conducta') {
             await supabaseClient.from('comunicados').insert([{
@@ -6935,9 +6953,12 @@ window.loadCitatoriosAlumno = async (alumnoId) => {
                         return `
                             <div style="background:white; border:1px solid #fed7aa; padding:14px; border-radius:12px; box-shadow:var(--shadow-sm);">
                                 <div style="display:flex; justify-content:space-between; margin-bottom:8px; align-items:center;">
-                                    <span class="badge" style="background:${isEnterado ? '#22c55e' : '#f97316'}; color:white; font-size:0.6rem; padding:2px 8px;">
-                                        ${isEnterado ? '<i class="fa-solid fa-check"></i> ENTERADO' : '<i class="fa-solid fa-clock"></i> POR FIRMAR'}
-                                    </span>
+                                    <div style="display:flex; align-items:center;">
+                                        <span class="badge" style="background:${isEnterado ? '#22c55e' : '#f97316'}; color:white; font-size:0.6rem; padding:2px 8px;">
+                                            ${isEnterado ? '<i class="fa-solid fa-check"></i> ENTERADO' : '<i class="fa-solid fa-clock"></i> POR FIRMAR'}
+                                        </span>
+                                        ${c.tipo === 'Conductual' ? '<span class="badge" style="background:#ef4444; color:white; font-size:0.6rem; padding:2px 8px; margin-left:5px;"><i class="fa-solid fa-triangle-exclamation"></i> CONDUCTUAL URGENTE</span>' : ''}
+                                    </div>
                                     <small style="color:var(--text-muted); font-size:0.7rem;">${new Date(c.creado_en).toLocaleDateString()}</small>
                                 </div>
                                 <p style="font-size:0.85rem; margin:0 0 10px 0; color:var(--text-main); line-height:1.4;"><b>Motivo:</b> ${c.motivo}</p>
