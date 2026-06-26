@@ -15213,6 +15213,7 @@ window.initFlatpickrAvisos = async (isAlumno = false) => {
 
     flatpickr(el, {
         locale: "es",
+        disableMobile: "true",
         onChange: function(selectedDates, dateStr, instance) {
             if(isAlumno) {
                 if(window.loadTimelineAlumno) window.loadTimelineAlumno(true, dateStr);
@@ -15232,3 +15233,29 @@ window.initFlatpickrAvisos = async (isAlumno = false) => {
         }
     });
 };
+
+// Pull to refresh manual para webviews
+let _ptrStart = { x: 0, y: 0 };
+document.addEventListener("touchstart", function(e) {
+    if (window.scrollY === 0) {
+        _ptrStart.x = e.touches[0].clientX;
+        _ptrStart.y = e.touches[0].clientY;
+    }
+}, {passive: true});
+
+document.addEventListener("touchend", function(e) {
+    if (window.scrollY === 0 && _ptrStart.y > 0) {
+        let currentY = e.changedTouches[0].clientY;
+        let currentX = e.changedTouches[0].clientX;
+        let yDiff = currentY - _ptrStart.y;
+        let xDiff = Math.abs(currentX - _ptrStart.x);
+        
+        // Si arrastró hacia abajo más de 120px y no demasiado a los lados
+        if (yDiff > 120 && xDiff < 60) {
+            window.showToast("Actualizando...", "info");
+            setTimeout(() => window.location.reload(), 600);
+        }
+    }
+    _ptrStart.y = 0;
+}, {passive: true});
+
