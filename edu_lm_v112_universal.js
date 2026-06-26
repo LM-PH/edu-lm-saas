@@ -6730,13 +6730,14 @@ window.loadTimelineAlumno = async (mostrarHistorial = false, selectedDateStr = n
         
         const { data: al } = await supabaseClient
             .from('alumnos')
-            .select('id, creado_en')
+            .select('id, creado_en, grupo_id')
             .or(`contacto_email.eq.${u.data.user.email},perfil_id.eq.${u.data.user.id}`)
             .maybeSingle();
 
         if(al) {
             console.log(">>> [TIMELINE] Alumno detectado:", al.id, "| Inscrito en:", al.creado_en);
             audArr.push('Alumno_' + al.id);
+            if(al.grupo_id) audArr.push('Grupo_' + al.grupo_id);
             if(window.loadCitatoriosAlumno) window.loadCitatoriosAlumno(al.id);
         } else {
             console.warn(">>> [TIMELINE] No se encontró vínculo de Alumno para el usuario logueado.");
@@ -6756,8 +6757,9 @@ window.loadTimelineAlumno = async (mostrarHistorial = false, selectedDateStr = n
             const fecha = selectedDateStr || document.getElementById('filtroFechaAvisos').value;
             if(fecha) {
                 // Ensure the date is checked covering the whole UTC day for that local date.
-                // Or simply since it is stored as TIMESTAMPTZ, we can check a range based on local time.
-                query = query.gte('fecha_envio', `${fecha}T00:00:00.000`).lte('fecha_envio', `${fecha}T23:59:59.999`);
+                const localStart = new Date(`${fecha}T00:00:00`).toISOString();
+                const localEnd = new Date(`${fecha}T23:59:59.999`).toISOString();
+                query = query.gte('fecha_envio', localStart).lte('fecha_envio', localEnd);
             }
         } else {
             query = query.limit(20);
