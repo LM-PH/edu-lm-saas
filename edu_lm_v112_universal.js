@@ -15243,26 +15243,17 @@ window.initFlatpickrAvisos = async (isAlumno = false) => {
     const el = document.getElementById('filtroFechaAvisos');
     if(!el) return;
     
+    const uRes = await supabaseClient.auth.getUser();
+    const userRole = state.role || '';
+    
     let audArr = [];
     if(isAlumno) {
         audArr = ['General', 'Alumnos'];
-    } else {
-        audArr = ['General', 'Personal'];
-        if(state.path === '/maestro/comunicados') audArr.push('Maestros');
-    }
-
-    // Para alumno puede haber comunicados dirigidos a su ID específico y Grupo, pero esto complica la consulta de fechas generales.
-    // Usaremos las fechas generales y por audiencia para simplificar el calendario.
-    let query = supabaseClient.from('comunicados').select('fecha_envio').eq('plantel_id', state.plantelId);
-    
-    // Para alumno agregamos la busqueda de su grupo y de su usuario real (alumno_id)
-    if(isAlumno) {
-        const u = await supabaseClient.auth.getUser();
-        if(u.data?.user) {
+        if(uRes.data?.user) {
             const { data: al } = await supabaseClient
                 .from('alumnos')
                 .select('id, grupo_id')
-                .or(`contacto_email.eq.${u.data.user.email},perfil_id.eq.${u.data.user.id}`)
+                .or(`contacto_email.eq.${uRes.data.user.email},perfil_id.eq.${uRes.data.user.id}`)
                 .maybeSingle();
 
             if(al) {
@@ -15270,7 +15261,18 @@ window.initFlatpickrAvisos = async (isAlumno = false) => {
                 if(al.grupo_id) audArr.push('Grupo_' + al.grupo_id);
             }
         }
+    } else {
+        audArr = ['Todos', 'General'];
+        if (userRole === 'maestro' || userRole === 'docente') {
+            audArr.push('Maestros', 'Personal');
+        } else if (userRole === 'apoyo' || userRole === 'biblioteca') {
+            audArr.push('Personal');
+        } else if (userRole === 'directivo' || userRole === 'admin' || userRole === 'administrativo') {
+            audArr.push('Maestros', 'Personal', 'Alumnos');
+        }
     }
+    
+    let query = supabaseClient.from('comunicados').select('fecha_envio').eq('plantel_id', state.plantelId);
     
     query = query.in('audiencia', audArr);
     
