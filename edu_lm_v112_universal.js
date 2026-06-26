@@ -1587,6 +1587,7 @@ function renderAdminCalificaciones() {
                 <option value="Trimestre 1">Trimestre 1</option>
                 <option value="Trimestre 2">Trimestre 2</option>
                 <option value="Trimestre 3">Trimestre 3</option>
+                <option value="Calificación Final">Calificación Final</option>
             </select>
          </div>
          <div class="form-group">
@@ -6555,36 +6556,52 @@ window.descargarBoletaPDF = async (aluId, nombre, matricula) => {
                 th.style.textTransform = "uppercase";
             });
             
-            return `<div class="trim-title">EVALUACIÓN DEL TRIMESTRE ${table.dataset.trimestre}</div>${t.outerHTML}`;
+            const trim = table.dataset.trimestre;
+            const displayTrim = trim == '4' ? 'CALIFICACIÓN FINAL' : `EVALUACIÓN DEL TRIMESTRE ${trim}`;
+            return `<div class="trim-title">${displayTrim}</div>${t.outerHTML}`;
         }).join('');
 
         // 3. Buscar si existe una firma digital en firmas_boleta
-        let firmaTutorHtml = `
-            <div class="signature-line"></div>
-            <div class="signature-title">Padre de Familia o Tutor</div>
-            <div style="font-size:11px; margin-top:5px; color:#555;">Firma de Enterado</div>
-        `;
-        try {
-            const { data: firma } = await supabaseClient.from('firmas_boleta')
-                .select('nombre_tutor, fecha_firma')
-                .eq('alumno_id', aluId)
-                .order('fecha_firma', { ascending: false })
-                .limit(1)
-                .maybeSingle();
-            
-            if(firma) {
-                const fechaFormat = new Date(firma.fecha_firma).toLocaleDateString('es-MX', { year:'numeric', month:'short', day:'numeric' });
-                firmaTutorHtml = `
-                    <div class="signature-line" style="display:flex; align-items:flex-end; justify-content:center; padding-bottom:4px;">
-                        <span style="font-family:'Courier New', monospace; font-size:15px; font-weight:bold; color:#1e3a8a; font-style:italic;">${firma.nombre_tutor}</span>
+        let firmaTutorHtml = `<div style="display:flex; justify-content:space-around; align-items:flex-end; text-align:center; width:100%; margin-top:40px; gap:20px;">`;
+        
+        const renderFirmaBox = (numTrimestre, nombre, fecha) => {
+            if(nombre) {
+                const fechaFormat = new Date(fecha).toLocaleDateString('es-MX', { year:'numeric', month:'short', day:'numeric' });
+                return `
+                <div style="flex:1;">
+                    <div class="signature-line" style="display:flex; align-items:flex-end; justify-content:center; padding-bottom:4px; height:40px;">
+                        <span style="font-family:'Courier New', monospace; font-size:14px; font-weight:bold; color:#1e3a8a; font-style:italic;">${nombre}</span>
                     </div>
-                    <div class="signature-title">Padre de Familia o Tutor</div>
-                    <div style="font-size:11px; margin-top:5px; color:#059669; font-weight:bold;">
-                        <span style="font-family:sans-serif;">✔ Firmado digitalmente el ${fechaFormat}</span>
-                    </div>
-                `;
+                    <div class="signature-title" style="font-size:11px;">Padre o Tutor (T${numTrimestre})</div>
+                    <div style="font-size:10px; margin-top:5px; color:#059669; font-weight:bold;">✔ Firmado el ${fechaFormat}</div>
+                </div>`;
+            } else {
+                return `
+                <div style="flex:1;">
+                    <div class="signature-line" style="height:40px;"></div>
+                    <div class="signature-title" style="font-size:11px;">Padre o Tutor (T${numTrimestre})</div>
+                    <div style="font-size:10px; margin-top:5px; color:#555;">Firma de Enterado</div>
+                </div>`;
             }
-        } catch(e) { console.warn('Error fetching firma:', e); }
+        };
+
+        try {
+            const { data: firmas } = await supabaseClient.from('firmas_boleta')
+                .select('nombre_tutor, fecha_firma, trimestre')
+                .eq('alumno_id', aluId);
+            
+            let f1 = null, f2 = null, f3 = null;
+            if(firmas) {
+                f1 = firmas.find(f => f.trimestre === 'Trimestre 1' || f.trimestre === '1');
+                f2 = firmas.find(f => f.trimestre === 'Trimestre 2' || f.trimestre === '2');
+                f3 = firmas.find(f => f.trimestre === 'Trimestre 3' || f.trimestre === '3' || f.trimestre === '4' || f.trimestre === 'Calificación Final');
+            }
+            
+            firmaTutorHtml += renderFirmaBox(1, f1?.nombre_tutor, f1?.fecha_firma);
+            firmaTutorHtml += renderFirmaBox(2, f2?.nombre_tutor, f2?.fecha_firma);
+            firmaTutorHtml += renderFirmaBox(3, f3?.nombre_tutor, f3?.fecha_firma);
+            firmaTutorHtml += '</div>';
+        } catch(e) { console.warn('Error fetching firmas:', e); }
 
         let plantelName = CONFIG.schoolName;
         let plantelLogo = null;
@@ -10669,11 +10686,14 @@ window.cargarSabanaGrupo = async () => {
         
         const studentIds = resAlums.data.map(a => a.id);
         
-        // Obtenemos calificaciones para estos alumnos en este trimestre
+        // Obtenemos calificaciones para estos alumnos en este trimestre (o en los 3 si es final)
+        const isFinal = trimRaw === 'Calificación Final';
+        const trimFilter = isFinal ? [1, 2, 3] : [trim];
+        
         const { data: califs, error } = await supabaseClient.from('calificaciones')
-           .select('alumno_id, calificacion, materia_nombre, materia_id(nombre)')
+           .select('alumno_id, calificacion, trimestre, materia_nombre, materia_id(nombre)')
            .in('alumno_id', studentIds)
-           .eq('trimestre', trim);
+           .in('trimestre', trimFilter);
            
         if(error) {
            console.error(error);
@@ -10681,80 +10701,112 @@ window.cargarSabanaGrupo = async () => {
            return;
         }
         
-        // Mapear alumnos
         let htmlRows = '';
-        
-        // 4. Agrupar Materias (v122: Unificar todas las tecnologías en una sola columna "Tecnología")
         const matSet = new Set();
         califs.forEach(c => {
             let mName = c.materia_nombre || (c.materia_id ? c.materia_id.nombre : 'Sin Nombre');
-            // Si el nombre contiene tecnología, lo tratamos como "Tecnología" para la UI
-            if(/tecnología|tecnologia/gi.test(mName)) {
-                matSet.add('Tecnología');
-            } else {
-                matSet.add(mName);
-            }
+            if(/tecnología|tecnologia/gi.test(mName)) matSet.add('Tecnología');
+            else matSet.add(mName);
         });
         const materiasObj = Array.from(matSet);
 
-        
         if (materiasObj.length === 0) {
-            hold.innerHTML = '<div style="color:var(--text-muted); font-size:0.9rem;">Los maestros de este grupo aún no han enviado sus actas de calificación para este trimestre.</div>';
+            hold.innerHTML = '<div style="color:var(--text-muted); font-size:0.9rem;">Los maestros de este grupo aún no han enviado sus actas de calificación.</div>';
             return;
         }
 
         resAlums.data.forEach(al => {
-            // Fill grades for student
             const misC = califs.filter(c => c.alumno_id === al.id);
             let cols = '';
-            let sump = 0;
-            let matN = 0;
+            let generalSum = 0;
+            let generalCount = 0;
             
             materiasObj.forEach(mName => {
-                let cx;
-                if(mName === 'Tecnología') {
-                    // Buscar cualquier calificación que tenga "tecnología" en su nombre
-                    cx = misC.find(x => /tecnología|tecnologia/gi.test(x.materia_nombre || (x.materia_id?.nombre)));
-                } else {
-                    cx = misC.find(x => (x.materia_nombre === mName) || (x.materia_id && x.materia_id.nombre === mName));
-                }
+                let subjectCalifs = misC.filter(x => {
+                    if (mName === 'Tecnología') return /tecnología|tecnologia/gi.test(x.materia_nombre || (x.materia_id?.nombre));
+                    return (x.materia_nombre === mName) || (x.materia_id && x.materia_id.nombre === mName);
+                });
 
-                if(cx) {
-                    // v122: Guardar el taller original en un atributo de datos para que la exportación y notif lo usen
-                    const tallerFull = cx.materia_nombre || (cx.materia_id?.nombre) || '';
-                    cols += `<td style="color:var(--text-main)" data-full-materia="${tallerFull}">${cx.calificacion}</td>`;
-                    sump += Number(cx.calificacion);
-                    matN++;
+                if (isFinal) {
+                    const getGrade = (t) => {
+                        const cx = subjectCalifs.find(x => x.trimestre === t);
+                        return cx ? Number(cx.calificacion) : null;
+                    };
+                    const t1 = getGrade(1);
+                    const t2 = getGrade(2);
+                    const t3 = getGrade(3);
+                    let sum = 0; let count = 0;
+                    if(t1 !== null) { sum += t1; count++; }
+                    if(t2 !== null) { sum += t2; count++; }
+                    if(t3 !== null) { sum += t3; count++; }
+                    const subjectAvg = count > 0 ? (sum / count).toFixed(1) : '-';
+                    if (count > 0) { generalSum += Number(subjectAvg); generalCount++; }
+
+                    cols += `<td style="font-size:0.85rem; color:var(--text-muted);">${t1 !== null ? t1 : '-'}</td>
+                             <td style="font-size:0.85rem; color:var(--text-muted);">${t2 !== null ? t2 : '-'}</td>
+                             <td style="font-size:0.85rem; color:var(--text-muted);">${t3 !== null ? t3 : '-'}</td>
+                             <td style="color:var(--text-main); font-weight:bold; background:var(--surface-hover);">${subjectAvg}</td>`;
                 } else {
-                    cols += `<td style="color:var(--text-muted)">-</td>`;
+                    const cx = subjectCalifs.find(x => x.trimestre === trim);
+                    if(cx) {
+                        const tallerFull = cx.materia_nombre || (cx.materia_id?.nombre) || '';
+                        cols += `<td style="color:var(--text-main)" data-full-materia="${tallerFull}">${cx.calificacion}</td>`;
+                        generalSum += Number(cx.calificacion);
+                        generalCount++;
+                    } else {
+                        cols += `<td style="color:var(--text-muted)">-</td>`;
+                    }
                 }
             });
 
-            
-            const promX = matN > 0 ? (sump/matN).toFixed(1) : '-';
-            
+            const promX = generalCount > 0 ? (generalSum/generalCount).toFixed(1) : '-';
             htmlRows += `
                <tr>
-                 <td style="text-align:left; font-weight:bold;">${al.nombre}</td>
+                 <td style="text-align:left; font-weight:bold; position:sticky; left:0; background:white; z-index:1; border-right:1px solid var(--border);">${al.nombre}</td>
                  ${cols}
-                 <td style="background:var(--surface-hover); font-weight:bold; color:var(--primary); font-size:1.1rem;">${promX}</td>
+                 <td style="background:var(--primary); font-weight:bold; color:white; font-size:1.1rem; position:sticky; right:0; z-index:1;">${promX}</td>
                </tr>
             `;
         });
         
-         hold.innerHTML = `
-          <table id="tablaSabanaActual" class="risk-table" style="width:100%; text-align:center;">
-            <thead>
+        let theadHtml = '';
+        if (isFinal) {
+            theadHtml = `
                <tr>
-                 <th style="text-align:left;">Estudiante</th>
-                 ${materiasObj.map(m => `<th>${m}</th>`).join('')}
-                 <th style="background:var(--surface-hover); color:var(--primary)">Promedio</th>
+                 <th rowspan="2" style="text-align:left; position:sticky; left:0; background:#f1f5f9; z-index:2; border-right:1px solid var(--border);">Estudiante</th>
+                 ${materiasObj.map(m => `<th colspan="4" style="border-left:2px solid var(--border);">${m}</th>`).join('')}
+                 <th rowspan="2" style="background:var(--primary); color:white; position:sticky; right:0; z-index:2;">Promedio Final</th>
                </tr>
-            </thead>
-            <tbody>
-               ${htmlRows}
-            </tbody>
-          </table>
+               <tr>
+                 ${materiasObj.map(m => `
+                    <th style="font-size:0.75rem; font-weight:normal; border-left:2px solid var(--border);">T1</th>
+                    <th style="font-size:0.75rem; font-weight:normal;">T2</th>
+                    <th style="font-size:0.75rem; font-weight:normal;">T3</th>
+                    <th style="font-size:0.8rem; font-weight:bold; background:var(--surface-hover);">Fin</th>
+                 `).join('')}
+               </tr>
+            `;
+        } else {
+            theadHtml = `
+               <tr>
+                 <th style="text-align:left; position:sticky; left:0; background:#f1f5f9; z-index:2; border-right:1px solid var(--border);">Estudiante</th>
+                 ${materiasObj.map(m => `<th>${m}</th>`).join('')}
+                 <th style="background:var(--primary); color:white; position:sticky; right:0; z-index:2;">Promedio</th>
+               </tr>
+            `;
+        }
+        
+         hold.innerHTML = `
+          <div style="overflow-x:auto; border:1px solid var(--border); border-radius:8px;">
+              <table id="tablaSabanaActual" class="risk-table" style="width:100%; text-align:center; min-width:800px; border-collapse:separate; border-spacing:0;">
+                <thead>
+                   ${theadHtml}
+                </thead>
+                <tbody>
+                   ${htmlRows}
+                </tbody>
+              </table>
+          </div>
         `;
         
         // Mostrar botón de notificación si hay datos
@@ -13837,8 +13889,9 @@ window.descargarBoletaAdminPDF = async (alumnoId, nombre, matricula) => {
             const promedio = (suma / materias.length).toFixed(1);
             rows += `<tr><td style="border: 1px solid #000; padding: 8px 10px; font-size: 12px; text-align: right; font-weight: bold; background-color: #f8fafc;">PROMEDIO</td><td style="border: 1px solid #000; padding: 8px 10px; font-size: 12px; text-align: center; font-weight: bold; background-color: #f8fafc;">${promedio}</td></tr>`;
 
+            const displayTrim = trim == '4' ? 'CALIFICACIÓN FINAL' : `EVALUACIÓN DEL TRIMESTRE ${trim}`;
             gradesHtml += `
-            <div class="trim-title">EVALUACIÓN DEL TRIMESTRE ${trim}</div>
+            <div class="trim-title">${displayTrim}</div>
             <table style="width: 100%; border-collapse: collapse; margin-bottom: 30px;">
                 <thead>
                     <tr>
@@ -13855,32 +13908,46 @@ window.descargarBoletaAdminPDF = async (alumnoId, nombre, matricula) => {
         const currentYear = new Date().getFullYear();
         const cicloEscolar = (new Date().getMonth() >= 7) ? `${currentYear} - ${currentYear + 1}` : `${currentYear - 1} - ${currentYear}`;
         
-        let firmaTutorHtml = `
-            <div class="signature-line"></div>
-            <div class="signature-title">Padre de Familia o Tutor</div>
-            <div style="font-size:11px; margin-top:5px; color:#555;">Firma de Enterado</div>
-        `;
-        try {
-            const { data: firma } = await supabaseClient.from('firmas_boleta')
-                .select('nombre_tutor, fecha_firma')
-                .eq('alumno_id', alumnoId)
-                .order('fecha_firma', { ascending: false })
-                .limit(1)
-                .maybeSingle();
-            
-            if(firma) {
-                const fechaFormat = new Date(firma.fecha_firma).toLocaleDateString('es-MX', { year:'numeric', month:'short', day:'numeric' });
-                firmaTutorHtml = `
-                    <div class="signature-line" style="display:flex; align-items:flex-end; justify-content:center; padding-bottom:4px;">
-                        <span style="font-family:'Courier New', monospace; font-size:15px; font-weight:bold; color:#1e3a8a; font-style:italic;">${firma.nombre_tutor}</span>
+        let firmaTutorHtml = `<div style="display:flex; justify-content:space-around; align-items:flex-end; text-align:center; width:100%; margin-top:40px; gap:20px;">`;
+        
+        const renderFirmaBox = (numTrimestre, nombre, fecha) => {
+            if(nombre) {
+                const fechaFormat = new Date(fecha).toLocaleDateString('es-MX', { year:'numeric', month:'short', day:'numeric' });
+                return `
+                <div style="flex:1;">
+                    <div class="signature-line" style="display:flex; align-items:flex-end; justify-content:center; padding-bottom:4px; height:40px;">
+                        <span style="font-family:'Courier New', monospace; font-size:14px; font-weight:bold; color:#1e3a8a; font-style:italic;">${nombre}</span>
                     </div>
-                    <div class="signature-title">Padre de Familia o Tutor</div>
-                    <div style="font-size:11px; margin-top:5px; color:#059669; font-weight:bold;">
-                        <span style="font-family:sans-serif;">✔ Firmado digitalmente el ${fechaFormat}</span>
-                    </div>
-                `;
+                    <div class="signature-title" style="font-size:11px;">Padre o Tutor (T${numTrimestre})</div>
+                    <div style="font-size:10px; margin-top:5px; color:#059669; font-weight:bold;">✔ Firmado el ${fechaFormat}</div>
+                </div>`;
+            } else {
+                return `
+                <div style="flex:1;">
+                    <div class="signature-line" style="height:40px;"></div>
+                    <div class="signature-title" style="font-size:11px;">Padre o Tutor (T${numTrimestre})</div>
+                    <div style="font-size:10px; margin-top:5px; color:#555;">Firma de Enterado</div>
+                </div>`;
             }
-        } catch(e) { console.warn('Error fetching firma:', e); }
+        };
+
+        try {
+            const { data: firmas } = await supabaseClient.from('firmas_boleta')
+                .select('nombre_tutor, fecha_firma, trimestre')
+                .eq('alumno_id', alumnoId);
+            
+            let f1 = null, f2 = null, f3 = null;
+            if(firmas) {
+                f1 = firmas.find(f => f.trimestre === 'Trimestre 1' || f.trimestre === '1');
+                f2 = firmas.find(f => f.trimestre === 'Trimestre 2' || f.trimestre === '2');
+                f3 = firmas.find(f => f.trimestre === 'Trimestre 3' || f.trimestre === '3' || f.trimestre === '4' || f.trimestre === 'Calificación Final');
+            }
+            
+            firmaTutorHtml += renderFirmaBox(1, f1?.nombre_tutor, f1?.fecha_firma);
+            firmaTutorHtml += renderFirmaBox(2, f2?.nombre_tutor, f2?.fecha_firma);
+            firmaTutorHtml += renderFirmaBox(3, f3?.nombre_tutor, f3?.fecha_firma);
+            firmaTutorHtml += '</div>';
+        } catch(e) { console.warn('Error fetching firmas:', e); }
 
         let plantelName = CONFIG.schoolName;
         let plantelLogo = null;
