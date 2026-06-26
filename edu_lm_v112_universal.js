@@ -6313,10 +6313,7 @@ window.loadBoletasAlumno = async () => {
                    t.includes('BOLETA') || 
                    t.includes('EXCELENCIA') || 
                    t.includes('CALIFICACIONES') ||
-                   t.includes('ADVERTENCIA') ||
-                   t.includes('MEJORA') ||
-                   t.includes('REPORTE') ||
-                   t.includes('CITATORIO');
+                   t.includes('MEJORA');
         }).slice(0, 5); // Tomamos los 5 más recientes
 
         // 3. NUEVO: Buscar boletas en el bucket de Expediente Digital (PDFs)
