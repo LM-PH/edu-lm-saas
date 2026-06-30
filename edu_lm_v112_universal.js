@@ -4649,6 +4649,44 @@ function renderApoyoTSEscaner() {
             <button class="btn btn-info" onclick="window.toggleCameraModeTS()" style="border-radius:30px; padding:10px 25px;">
                 <i class="fa-solid fa-camera-rotate"></i> Girar Cámara
             </button>
+            <button class="btn btn-warning" onclick="document.getElementById('modalSalidaAnticipada').style.display='block'" style="border-radius:30px; padding:10px 25px;">
+                <i class="fa-solid fa-clock"></i> Salida Anticipada
+            </button>
+        </div>
+    </div>
+
+    <!-- Modal Salida Anticipada -->
+    <div id="modalSalidaAnticipada" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); z-index:9999; backdrop-filter:blur(4px);">
+        <div style="background:white; width:90%; max-width:400px; margin:50px auto; border-radius:15px; padding:20px; box-shadow:0 10px 25px rgba(0,0,0,0.2); position:relative;">
+            <button onclick="document.getElementById('modalSalidaAnticipada').style.display='none'" style="position:absolute; top:15px; right:15px; border:none; background:none; font-size:1.5rem; cursor:pointer; color:var(--text-muted)">&times;</button>
+            <h3 style="margin-top:0; color:var(--warning);"><i class="fa-solid fa-person-walking-arrow-right"></i> Salida Anticipada</h3>
+            <p style="font-size:0.85rem; color:var(--text-muted); margin-bottom:15px;">Registre salidas por enfermedad o permiso, indicando quién recoge al alumno.</p>
+            
+            <div class="form-group" style="margin-bottom:12px; text-align:left;">
+                <label class="form-label">Matrícula del Alumno</label>
+                <input type="text" id="inSalidaAntMatricula" class="form-control" placeholder="Ej. 2026001">
+            </div>
+            
+            <div class="form-group" style="margin-bottom:12px; text-align:left;">
+                <label class="form-label">Motivo de Salida</label>
+                <select id="selSalidaAntMotivo" class="form-control">
+                    <option value="Enfermedad">Enfermedad</option>
+                    <option value="Cita Médica">Cita Médica</option>
+                    <option value="Permiso Personal">Permiso Personal</option>
+                    <option value="Emergencia Familiar">Emergencia Familiar</option>
+                    <option value="Otro">Otro</option>
+                </select>
+            </div>
+            
+            <div class="form-group" style="margin-bottom:15px; text-align:left;">
+                <label class="form-label">Persona que recoge</label>
+                <input type="text" id="inSalidaAntRecoge" class="form-control" placeholder="Nombre completo">
+            </div>
+            
+            <div style="display:flex; gap:10px; margin-top:20px;">
+                <button class="btn btn-outline" style="flex:1; border-radius:10px;" onclick="document.getElementById('modalSalidaAnticipada').style.display='none'">Cancelar</button>
+                <button class="btn btn-warning" style="flex:1; border-radius:10px; color:white; font-weight:bold;" onclick="window.registrarSalidaAnticipada()" id="btnGuardarSalidaAnt">Registrar Salida</button>
+            </div>
         </div>
     </div>
     
@@ -9892,6 +9930,89 @@ window.registrarAsistenciaTS = async (qrText) => {
         }
     } catch(e) { 
         console.error("Error registro acceso TS:", e);
+    }
+};
+
+window.registrarSalidaAnticipada = async () => {
+    const matricula = document.getElementById('inSalidaAntMatricula').value.trim();
+    const motivo = document.getElementById('selSalidaAntMotivo').value;
+    const recoge = document.getElementById('inSalidaAntRecoge').value.trim();
+    
+    if(!matricula) return window.showToast("Ingresa la matrícula del alumno", "warning");
+    if(!recoge) return window.showToast("Ingresa el nombre de la persona que recoge al alumno", "warning");
+
+    const btn = document.getElementById('btnGuardarSalidaAnt');
+    const oldHtml = btn.innerHTML;
+    btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Guardando...';
+    btn.disabled = true;
+
+    try {
+        let { data: alu } = await supabaseClient.from('alumnos')
+            .select('id, nombre')
+            .eq('matricula', matricula)
+            .eq('plantel_id', state.plantelId)
+            .maybeSingle();
+
+        if(!alu) {
+            window.showToast("Alumno no encontrado con esa matrícula.", "warning");
+            btn.innerHTML = oldHtml;
+            btn.disabled = false;
+            return;
+        }
+
+        const uRes = await supabaseClient.auth.getUser();
+        const fechaHoy = new Date().toLocaleDateString('en-CA');
+        const horaActual = new Date().toLocaleTimeString('en-GB');
+
+        const { data: existing } = await supabaseClient.from('accesos_plantel')
+            .select('id')
+            .eq('alumno_id', alu.id)
+            .eq('fecha', fechaHoy)
+            .eq('estado', 'Salida')
+            .maybeSingle();
+
+        if(existing) {
+            window.showToast("El alumno ya tiene registro de salida hoy.", "warning");
+            btn.innerHTML = oldHtml;
+            btn.disabled = false;
+            return;
+        }
+
+        const { error } = await supabaseClient.from('accesos_plantel').insert([{
+            alumno_id: alu.id,
+            estado: 'Salida',
+            registrador_id: uRes.data.user?.id,
+            fecha: fechaHoy,
+            hora: horaActual,
+            plantel_id: state.plantelId
+        }]);
+        if(error) throw error;
+
+        const { error: comErr } = await supabaseClient.from('comunicados').insert([{
+            autor_id: uRes.data.user?.id,
+            titulo: "Aviso de Salida Anticipada",
+            mensaje: `Estimado padre de familia/tutor:\nTu hijo(a) ${alu.nombre} ha registrado una salida anticipada del plantel hoy a las ${horaActual}.\n\nMotivo: ${motivo}\nRecogido por: ${recoge}`,
+            audiencia: `Alumno_${alu.id}`,
+            plantel_id: state.plantelId
+        }]);
+        if(comErr) console.error("Error al notificar salida anticipada:", comErr);
+
+        window.showToast(`Salida anticipada de ${alu.nombre} registrada correctamente.`, "success");
+        document.getElementById('modalSalidaAnticipada').style.display = 'none';
+        
+        document.getElementById('inSalidaAntMatricula').value = '';
+        document.getElementById('inSalidaAntRecoge').value = '';
+        
+        if(state.path === '/apoyo/ts_escaner') {
+            window.loadResumenSalida();
+            window.loadAsistenciasApoyo();
+        }
+    } catch(e) {
+        console.error(e);
+        window.showToast("Error al registrar salida: " + e.message, "error");
+    } finally {
+        btn.innerHTML = oldHtml;
+        btn.disabled = false;
     }
 };
 
