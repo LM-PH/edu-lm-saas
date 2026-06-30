@@ -4649,8 +4649,8 @@ function renderApoyoTSEscaner() {
             <button class="btn btn-info" onclick="window.toggleCameraModeTS()" style="border-radius:30px; padding:10px 25px;">
                 <i class="fa-solid fa-camera-rotate"></i> Girar Cámara
             </button>
-            <button class="btn btn-warning" onclick="document.getElementById('modalSalidaAnticipada').style.display='block'" style="border-radius:30px; padding:10px 25px;">
-                <i class="fa-solid fa-clock"></i> Salida Anticipada
+            <button id="btnModoAnticipada" class="btn btn-warning" onclick="window.activarModoAnticipada()" style="border-radius:30px; padding:10px 25px;">
+                <i class="fa-solid fa-clock"></i> Modo Salida Anticipada
             </button>
         </div>
     </div>
@@ -4662,10 +4662,12 @@ function renderApoyoTSEscaner() {
             <h3 style="margin-top:0; color:var(--warning);"><i class="fa-solid fa-person-walking-arrow-right"></i> Salida Anticipada</h3>
             <p style="font-size:0.85rem; color:var(--text-muted); margin-bottom:15px;">Registre salidas por enfermedad o permiso, indicando quién recoge al alumno.</p>
             
-            <div class="form-group" style="margin-bottom:12px; text-align:left;">
-                <label class="form-label">Matrícula del Alumno</label>
-                <input type="text" id="inSalidaAntMatricula" class="form-control" placeholder="Ej. 2026001">
+            <div style="margin-bottom:15px; text-align:center; padding:10px; background:#fffbeb; border-radius:10px; border:1px solid #fde68a;">
+                <div style="font-size:0.75rem; color:var(--text-muted); text-transform:uppercase; letter-spacing:1px;">Alumno Escaneado</div>
+                <div id="txtNombreAnticipada" style="font-size:1.1rem; font-weight:800; color:#92400e;">Cargando...</div>
             </div>
+
+            <input type="hidden" id="inSalidaAntMatricula">
             
             <div class="form-group" style="margin-bottom:12px; text-align:left;">
                 <label class="form-label">Motivo de Salida</label>
@@ -9803,6 +9805,12 @@ window.startTSScanner = async (mode = 'metralleta') => {
                         window.registrarAsistenciaTS(decodedText.trim());
                         setTimeout(() => { window._lastScanned = null; }, 3000);
                     }
+                } else if(window.tsScanMode === 'anticipada') {
+                    if(window._lastScanned !== decodedText) {
+                        window._lastScanned = decodedText;
+                        window.prepararSalidaAnticipada(decodedText.trim());
+                        setTimeout(() => { window._lastScanned = null; }, 3000);
+                    }
                 } else {
                     window.registrarAsistenciaTS(decodedText.trim());
                     window.stopTSScanner();
@@ -9931,6 +9939,60 @@ window.registrarAsistenciaTS = async (qrText) => {
     } catch(e) { 
         console.error("Error registro acceso TS:", e);
     }
+};
+
+window.activarModoAnticipada = () => {
+    if(window.tsScanMode === 'anticipada') {
+        window.tsScanMode = 'metralleta';
+        const btn = document.getElementById('btnModoAnticipada');
+        if(btn) {
+            btn.innerHTML = '<i class="fa-solid fa-clock"></i> Modo Salida Anticipada';
+            btn.classList.replace('btn-danger', 'btn-warning');
+        }
+        window.showToast("Modo normal de escaneo reactivado", "info");
+    } else {
+        window.tsScanMode = 'anticipada';
+        const btn = document.getElementById('btnModoAnticipada');
+        if(btn) {
+            btn.innerHTML = '<i class="fa-solid fa-qrcode"></i> Cancelar Modo Anticipada';
+            btn.classList.replace('btn-warning', 'btn-danger');
+        }
+        window.showToast("MODO ANTICIPADA: Escanea un código QR para registrar la salida.", "warning");
+    }
+};
+
+window.prepararSalidaAnticipada = async (qrText) => {
+    document.getElementById('inSalidaAntMatricula').value = qrText;
+    document.getElementById('txtNombreAnticipada').innerText = "Buscando alumno...";
+    document.getElementById('modalSalidaAnticipada').style.display = 'block';
+    
+    try {
+        let { data: alu } = await supabaseClient.from('alumnos')
+            .select('nombre')
+            .eq('matricula', qrText)
+            .eq('plantel_id', state.plantelId)
+            .maybeSingle();
+
+        if(!alu && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(qrText)) {
+            const { data: aluId } = await supabaseClient.from('alumnos')
+                .select('nombre')
+                .eq('id', qrText)
+                .eq('plantel_id', state.plantelId)
+                .maybeSingle();
+            alu = aluId;
+        }
+
+        if(alu) {
+            document.getElementById('txtNombreAnticipada').innerText = alu.nombre;
+        } else {
+            document.getElementById('txtNombreAnticipada').innerText = "Matrícula: " + qrText;
+        }
+    } catch(e) {
+        document.getElementById('txtNombreAnticipada').innerText = "Matrícula: " + qrText;
+    }
+    
+    // Regresar a modo normal para el siguiente escaneo (opcional, pero evita que queden trabados en modo anticipada por error)
+    window.activarModoAnticipada(); 
 };
 
 window.registrarSalidaAnticipada = async () => {
