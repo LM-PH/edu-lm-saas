@@ -5751,13 +5751,31 @@ async function renderMasterGestionPerfiles() {
         
         if(error) throw error;
 
+        const { data: alumnosData } = await supabaseClient.from('alumnos')
+            .select('contacto_email, grupos(nombre)')
+            .eq('plantel_id', state.plantelId);
+            
+        const grupoMap = {};
+        const availableGroups = new Set();
+        if (alumnosData) {
+            alumnosData.forEach(a => {
+                if (a.contacto_email) {
+                    const gName = a.grupos?.nombre || 'Sin Grupo';
+                    grupoMap[a.contacto_email] = gName;
+                    availableGroups.add(gName);
+                }
+            });
+        }
+
         const categorized = {
-            alumno: users.filter(u => u.rol === 'alumno'),
+            alumno: users.filter(u => u.rol === 'alumno').map(u => ({ ...u, grupo: grupoMap[u.email] || 'Sin Grupo' })),
             maestro: users.filter(u => u.rol === 'maestro'),
             apoyo: users.filter(u => u.rol === 'apoyo'),
             admin: users.filter(u => ['admin', 'administrativo', 'directivo'].includes(u.rol)),
             biblioteca: users.filter(u => u.rol === 'biblioteca')
         };
+        
+        categorized.alumno.forEach(u => availableGroups.add(u.grupo));
 
         const renderUserRow = (u) => `
             <div class="card shadow-sm" style="display:flex; flex-direction:column; gap:10px; padding:16px; border:1px solid #edf2f7; border-radius:12px;">
@@ -5767,7 +5785,7 @@ async function renderMasterGestionPerfiles() {
                     </div>
                     <div style="flex:1; overflow:hidden;">
                         <div style="font-weight:600; font-size:0.95rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${u.nombre || 'Sin nombre'}</div>
-                        <div style="font-size:0.7rem; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.05em;">${u.rol}</div>
+                        <div style="font-size:0.7rem; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.05em;">${u.rol} ${u.grupo ? `• Grupo: ${u.grupo}` : ''}</div>
                     </div>
                     <div style="display:flex; gap:6px;">
                         <button class="btn btn-outline btn-xs" style="padding:6px 10px; border-color:var(--danger); color:var(--danger);" onclick="window.eliminarPersonaMaster('${u.id}', '${u.email}', '${u.nombre}', '${u.rol}')" title="Eliminar Registro"><i class="fa-solid fa-trash"></i> Eliminar</button>
@@ -5808,7 +5826,59 @@ async function renderMasterGestionPerfiles() {
                 </div>
             </div>
             
-            ${renderSection('Padrón de Alumnos', categorized.alumno, 'fa-user-graduate', '#3b82f6')}
+        const gruposHtml = Array.from(availableGroups).sort().map(g => `<option value="${g}">${g}</option>`).join('');
+
+        const renderAlumnosSection = () => {
+            const itemsHtml = categorized.alumno.map(u => {
+                return `<div class="alumno-master-card" data-grupo="${u.grupo}" style="display:none;">${renderUserRow(u)}</div>`;
+            }).join('');
+            
+            return `
+            <div style="margin-bottom:40px;">
+                <div style="display:flex; align-items:center; gap:10px; margin-bottom:18px; border-bottom:2px solid #3b82f622; padding-bottom:8px;">
+                    <div style="width:36px; height:36px; border-radius:10px; background:#3b82f6; color:white; display:flex; align-items:center; justify-content:center; font-size:1.2rem;">
+                        <i class="fa-solid fa-user-graduate"></i>
+                    </div>
+                    <h3 style="margin:0; font-weight:800; color:#1e293b;">Padrón de Alumnos <span style="font-size:0.9rem; font-weight:400; color:var(--text-muted); margin-left:8px;">(${categorized.alumno.length})</span></h3>
+                </div>
+                
+                <div style="margin-bottom:16px; background:#f8fafc; padding:12px; border-radius:12px; border:1px solid #e2e8f0; display:flex; gap:12px; align-items:center;">
+                    <label style="font-size:0.85rem; font-weight:bold; color:var(--text-muted);">Filtrar y Mostrar por Grupo:</label>
+                    <select class="form-select" style="max-width:250px; border-color:#3b82f6;" onchange="
+                        const g = this.value; 
+                        document.querySelectorAll('.alumno-master-card').forEach(el => {
+                            if(g === 'ALL') { el.style.display = 'block'; }
+                            else if(g === '') { el.style.display = 'none'; }
+                            else { el.style.display = (el.dataset.grupo === g) ? 'block' : 'none'; }
+                        });
+                    ">
+                        <option value="">-- Ocultos (Selecciona un grupo) --</option>
+                        <option value="ALL">Mostrar Todos (Saturar vista)</option>
+                        ${gruposHtml}
+                    </select>
+                </div>
+
+                <div style="display:grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap:16px;">
+                    ${itemsHtml}
+                    ${categorized.alumno.length === 0 ? `<div style="grid-column: 1/-1; padding:20px; text-align:center; background:#f8fafc; border-radius:12px; color:var(--text-muted); border:1px dashed #cbd5e1;">Ningún alumno registrado.</div>` : ''}
+                </div>
+            </div>`;
+        };
+
+        return `
+            <div class="page-header" style="background: linear-gradient(135deg, #1e293b 0%, #334155 100%); color:white; padding:32px; border-radius:24px; margin-bottom:32px; box-shadow:0 10px 25px -5px rgba(0,0,0,0.1);">
+                <div style="display:flex; justify-content:space-between; align-items:center;">
+                    <div>
+                        <h2 class="page-title" style="color:white; margin:0 0 4px 0;">Gestión de Credenciales: ${CONFIG.schoolName}</h2>
+                        <p style="margin:0; opacity:0.8; font-size:0.95rem;"><i class="fa-solid fa-fingerprint"></i> Has iniciado sesión como controlador global en esta sede.</p>
+                    </div>
+                    <button class="btn" style="background:rgba(255,255,255,0.1); border:1px solid rgba(255,255,255,0.2); color:white;" onclick="window.navigate('/master/saas')">
+                        <i class="fa-solid fa-rotate-left"></i> Volver a Planteles
+                    </button>
+                </div>
+            </div>
+            
+            ${renderAlumnosSection()}
             ${renderSection('Cuerpo de Maestros', categorized.maestro, 'fa-chalkboard-user', '#8b5cf6')}
             ${renderSection('Personal de Apoyo', categorized.apoyo, 'fa-hand-holding-medical', '#10b981')}
             ${renderSection('Equipo Administrativo', categorized.admin, 'fa-user-tie', '#f59e0b')}
