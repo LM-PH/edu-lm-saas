@@ -11960,16 +11960,19 @@ window.loadSelectsMaestros = async () => {
 
         // 5. CARGAR GRUPOS DEL PLANTEL
         const { data: grupos } = await supabaseClient.from('grupos').select('id, nombre').eq('plantel_id', currentP).order('nombre');
+        
+        // Deduplicar grupos para toda la UI (tanto el Select como las tarjetas)
+        const uniqueGroupsMap = new Map();
+        (grupos || []).forEach(g => {
+            if(!uniqueGroupsMap.has(g.nombre)) uniqueGroupsMap.set(g.nombre, g);
+        });
+        const uniqueGroups = Array.from(uniqueGroupsMap.values());
+
         const sGr = document.getElementById('selAsigGrupoBase');
-        if(sGr) sGr.innerHTML = '<option value="">Elige Grupo...</option>' + (grupos || []).map(g => `<option value="${g.id}">${g.nombre}</option>`).join('');
+        if(sGr) sGr.innerHTML = '<option value="">Elige Grupo...</option>' + uniqueGroups.map(g => `<option value="${g.id}">${g.nombre}</option>`).join('');
 
         const divGrupos = document.getElementById('gruposCreados');
         if(divGrupos) {
-            const uniqueGroupsMap = new Map();
-            (grupos || []).forEach(g => {
-                if(!uniqueGroupsMap.has(g.nombre)) uniqueGroupsMap.set(g.nombre, g);
-            });
-            const uniqueGroups = Array.from(uniqueGroupsMap.values());
             if(uniqueGroups.length === 0) {
                 divGrupos.innerHTML = '<p style="color:var(--text-muted); font-size:0.85rem; text-align:center;">No hay grupos generados aún.</p>';
             } else {
