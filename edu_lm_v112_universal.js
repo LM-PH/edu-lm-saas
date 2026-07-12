@@ -5714,10 +5714,18 @@ window.gestionarPlantelSaaS = (id, nombre) => {
 };
 
 window.eliminarPersonaMaster = async (idPermitido, email, nombre, rol = '') => {
-    if(!confirm(`⚠️ ¿Deseas ELIMINAR AHORA a "${nombre}" (${email}) del plantel?\nEsta acción revocará su acceso.`)) return;
+    if(!confirm(`⚠️ ¿Deseas ELIMINAR AHORA a "${nombre}" (${email}) del plantel?\nEsta acción revocará su acceso y eliminará sus datos.`)) return;
     try {
         if (rol === 'alumno') {
-            await supabaseClient.from('alumnos').delete().eq('contacto_email', email).eq('plantel_id', state.plantelId);
+            const { data: aluEmail } = await supabaseClient.from('alumnos').select('id').eq('contacto_email', email);
+            if (aluEmail && aluEmail.length > 0) {
+                await supabaseClient.from('alumnos').delete().in('id', aluEmail.map(a => a.id));
+            } else {
+                const { data: aluNom } = await supabaseClient.from('alumnos').select('id').eq('nombre', nombre).eq('plantel_id', state.plantelId);
+                if (aluNom && aluNom.length > 0) {
+                    await supabaseClient.from('alumnos').delete().in('id', aluNom.map(a => a.id));
+                }
+            }
         } else {
             await supabaseClient.from('asignaciones_maestros').delete().eq('docente_email', email).eq('plantel_id', state.plantelId);
         }
