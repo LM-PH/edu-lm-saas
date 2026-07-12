@@ -5799,18 +5799,20 @@ async function renderMasterGestionPerfiles() {
         `;
 
         const renderSection = (title, items, icon, color) => `
-            <div style="margin-bottom:40px;">
-                <div style="display:flex; align-items:center; gap:10px; margin-bottom:18px; border-bottom:2px solid ${color}22; padding-bottom:8px;">
-                    <div style="width:36px; height:36px; border-radius:10px; background:${color}; color:white; display:flex; align-items:center; justify-content:center; font-size:1.2rem;">
+            <details style="margin-bottom:24px; background:white; border-radius:16px; border:1px solid #edf2f7; padding:20px; box-shadow:0 4px 6px -1px rgba(0,0,0,0.05); transition:all 0.3s ease;">
+                <summary style="display:flex; align-items:center; gap:12px; cursor:pointer; list-style:none; outline:none; margin:-10px; padding:10px; border-radius:12px;" onmouseover="this.style.background='#f8fafc'" onmouseout="this.style.background='transparent'">
+                    <div style="width:40px; height:40px; border-radius:12px; background:${color}; color:white; display:flex; align-items:center; justify-content:center; font-size:1.2rem; flex-shrink:0;">
                         <i class="fa-solid ${icon}"></i>
                     </div>
-                    <h3 style="margin:0; font-weight:800; color:#1e293b;">${title} <span style="font-size:0.9rem; font-weight:400; color:var(--text-muted); margin-left:8px;">(${items.length})</span></h3>
-                </div>
-                <div style="display:grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap:16px;">
-                    ${items.length === 0 ? `<div style="grid-column: 1/-1; padding:20px; text-align:center; background:#f8fafc; border-radius:12px; color:var(--text-muted); border:1px dashed #cbd5e1;">Ningún registro en este apartado.</div>` : 
+                    <h3 style="margin:0; font-weight:800; color:#1e293b; flex:1;">${title} <span style="font-size:0.9rem; font-weight:500; color:var(--text-muted); margin-left:8px; background:#f1f5f9; padding:4px 10px; border-radius:20px;">${items.length} registros</span></h3>
+                    <div style="color:var(--text-muted); font-size:0.85rem; font-weight:600; background:#f1f5f9; padding:6px 14px; border-radius:20px; display:flex; align-items:center; gap:6px;"><i class="fa-solid fa-chevron-down"></i> Mostrar</div>
+                </summary>
+                
+                <div style="display:grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap:16px; margin-top:24px; border-top:2px dashed #e2e8f0; padding-top:24px;">
+                    ${items.length === 0 ? `<div style="grid-column: 1/-1; padding:30px; text-align:center; background:#f8fafc; border-radius:12px; color:var(--text-muted); border:1px dashed #cbd5e1; font-weight:500;">Ningún registro en este apartado.</div>` : 
                       items.map(u => renderUserRow(u)).join('')}
                 </div>
-            </div>
+            </details>
         `;
 
         const gruposHtml = Array.from(availableGroups).sort().map(g => `<option value="${g}">${g}</option>`).join('');
@@ -5821,35 +5823,38 @@ async function renderMasterGestionPerfiles() {
             }).join('');
             
             return `
-            <div style="margin-bottom:40px;">
-                <div style="display:flex; align-items:center; gap:10px; margin-bottom:18px; border-bottom:2px solid #3b82f622; padding-bottom:8px;">
-                    <div style="width:36px; height:36px; border-radius:10px; background:#3b82f6; color:white; display:flex; align-items:center; justify-content:center; font-size:1.2rem;">
+            <details style="margin-bottom:24px; background:white; border-radius:16px; border:1px solid #edf2f7; padding:20px; box-shadow:0 4px 6px -1px rgba(0,0,0,0.05); transition:all 0.3s ease;">
+                <summary style="display:flex; align-items:center; gap:12px; cursor:pointer; list-style:none; outline:none; margin:-10px; padding:10px; border-radius:12px;" onmouseover="this.style.background='#f8fafc'" onmouseout="this.style.background='transparent'">
+                    <div style="width:40px; height:40px; border-radius:12px; background:#3b82f6; color:white; display:flex; align-items:center; justify-content:center; font-size:1.2rem; flex-shrink:0;">
                         <i class="fa-solid fa-user-graduate"></i>
                     </div>
-                    <h3 style="margin:0; font-weight:800; color:#1e293b;">Padrón de Alumnos <span style="font-size:0.9rem; font-weight:400; color:var(--text-muted); margin-left:8px;">(${categorized.alumno.length})</span></h3>
-                </div>
+                    <h3 style="margin:0; font-weight:800; color:#1e293b; flex:1;">Padrón de Alumnos <span style="font-size:0.9rem; font-weight:500; color:var(--text-muted); margin-left:8px; background:#f1f5f9; padding:4px 10px; border-radius:20px;">${categorized.alumno.length} registros</span></h3>
+                    <div style="color:var(--text-muted); font-size:0.85rem; font-weight:600; background:#f1f5f9; padding:6px 14px; border-radius:20px; display:flex; align-items:center; gap:6px;"><i class="fa-solid fa-chevron-down"></i> Mostrar</div>
+                </summary>
                 
-                <div style="margin-bottom:16px; background:#f8fafc; padding:12px; border-radius:12px; border:1px solid #e2e8f0; display:flex; gap:12px; align-items:center;">
-                    <label style="font-size:0.85rem; font-weight:bold; color:var(--text-muted);">Filtrar y Mostrar por Grupo:</label>
-                    <select class="form-select" style="max-width:250px; border-color:#3b82f6;" onchange="
-                        const g = this.value; 
-                        document.querySelectorAll('.alumno-master-card').forEach(el => {
-                            if(g === 'ALL') { el.style.display = 'block'; }
-                            else if(g === '') { el.style.display = 'none'; }
-                            else { el.style.display = (el.dataset.grupo === g) ? 'block' : 'none'; }
-                        });
-                    ">
-                        <option value="">-- Ocultos (Selecciona un grupo) --</option>
-                        <option value="ALL">Mostrar Todos (Saturar vista)</option>
-                        ${gruposHtml}
-                    </select>
-                </div>
+                <div style="margin-top:24px; border-top:2px dashed #e2e8f0; padding-top:24px;">
+                    <div style="margin-bottom:16px; background:#f8fafc; padding:12px; border-radius:12px; border:1px solid #e2e8f0; display:flex; gap:12px; align-items:center;">
+                        <label style="font-size:0.85rem; font-weight:bold; color:var(--text-muted);">Filtrar y Mostrar por Grupo:</label>
+                        <select class="form-select" style="max-width:250px; border-color:#3b82f6;" onchange="
+                            const g = this.value; 
+                            document.querySelectorAll('.alumno-master-card').forEach(el => {
+                                if(g === 'ALL') { el.style.display = 'block'; }
+                                else if(g === '') { el.style.display = 'none'; }
+                                else { el.style.display = (el.dataset.grupo === g) ? 'block' : 'none'; }
+                            });
+                        ">
+                            <option value="">-- Ocultos (Selecciona un grupo) --</option>
+                            <option value="ALL">Mostrar Todos (Saturar vista)</option>
+                            ${gruposHtml}
+                        </select>
+                    </div>
 
-                <div style="display:grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap:16px;">
-                    ${itemsHtml}
-                    ${categorized.alumno.length === 0 ? `<div style="grid-column: 1/-1; padding:20px; text-align:center; background:#f8fafc; border-radius:12px; color:var(--text-muted); border:1px dashed #cbd5e1;">Ningún alumno registrado.</div>` : ''}
+                    <div style="display:grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap:16px;">
+                        ${itemsHtml}
+                        ${categorized.alumno.length === 0 ? `<div style="grid-column: 1/-1; padding:30px; text-align:center; background:#f8fafc; border-radius:12px; color:var(--text-muted); border:1px dashed #cbd5e1; font-weight:500;">Ningún alumno registrado.</div>` : ''}
+                    </div>
                 </div>
-            </div>`;
+            </details>`;
         };
 
         return `
