@@ -5813,19 +5813,6 @@ async function renderMasterGestionPerfiles() {
             </div>
         `;
 
-        return `
-            <div class="page-header" style="background: linear-gradient(135deg, #1e293b 0%, #334155 100%); color:white; padding:32px; border-radius:24px; margin-bottom:32px; box-shadow:0 10px 25px -5px rgba(0,0,0,0.1);">
-                <div style="display:flex; justify-content:space-between; align-items:center;">
-                    <div>
-                        <h2 class="page-title" style="color:white; margin:0 0 4px 0;">Gestión de Credenciales: ${CONFIG.schoolName}</h2>
-                        <p style="margin:0; opacity:0.8; font-size:0.95rem;"><i class="fa-solid fa-fingerprint"></i> Has iniciado sesión como controlador global en esta sede.</p>
-                    </div>
-                    <button class="btn" style="background:rgba(255,255,255,0.1); border:1px solid rgba(255,255,255,0.2); color:white;" onclick="window.navigate('/master/saas')">
-                        <i class="fa-solid fa-rotate-left"></i> Volver a Planteles
-                    </button>
-                </div>
-            </div>
-            
         const gruposHtml = Array.from(availableGroups).sort().map(g => `<option value="${g}">${g}</option>`).join('');
 
         const renderAlumnosSection = () => {
