@@ -6931,21 +6931,24 @@ window.handleFileSelect = (el, ev) => {
 };
 
 window.crearGrupoDrag = async () => {
-    const grado = document.getElementById('selGrado').value;
-    const letra = document.getElementById('selLetra').value;
-    const txt = `${grado.replace('°', '')}°${letra}`;
+    let grado = document.getElementById('selGrado').value || '';
+    let letra = document.getElementById('selLetra').value || '';
+    
+    const gNum = grado.replace(/[^0-9]/g, '');
+    const lStr = letra.replace(/[^a-zA-Z]/g, '').toUpperCase();
+    if (!gNum || !lStr) return alert("Por favor ingresa un grado (número) y una letra válidos.");
+    
+    const txt = `${gNum}°${lStr}`;
     
     try {
+        const { data: exist } = await supabaseClient.from('grupos').select('id').eq('nombre', txt);
+        if (exist && exist.length > 0) return alert(`El Grupo ${txt} ya existe. No se permiten grupos repetidos.`);
+        
         const { error } = await supabaseClient.from('grupos').insert([{ nombre: txt }]);
         if(error) throw error;
-        alert(`Grupo ${txt} creado con éxito en Base de Datos.`);
+        alert(`Grupo ${txt} creado con éxito.`);
         
-        // Actualizar la lista en UI (El div de grupos y el select de asignaciones)
         window.loadSelectsDocentes(); 
-        
-        const list = document.getElementById('gruposCreados');
-        const color = ['var(--primary)', 'var(--warning)', 'var(--danger)'][Math.floor(Math.random()*3)];
-        list.insertAdjacentHTML('beforeend', `<div class="materia-drag" style="border-left-color: ${color}"><i class="fa-solid fa-layer-group text-muted"></i> Grupo ${txt}</div>`);
     } catch(e) {
         alert(e.message);
     }

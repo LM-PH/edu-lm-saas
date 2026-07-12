@@ -9325,21 +9325,27 @@ window.handleFileSelect = (el, ev) => {
 };
 
 window.crearGrupoDrag = async () => {
-    const grado = document.getElementById('selGrado').value;
-    const letra = document.getElementById('selLetra').value;
-    const txt = `${grado.replace('°', '')}°${letra}`;
+    let grado = document.getElementById('selGrado').value || '';
+    let letra = document.getElementById('selLetra').value || '';
+    
+    const gNum = grado.replace(/[^0-9]/g, '');
+    const lStr = letra.replace(/[^a-zA-Z]/g, '').toUpperCase();
+    if (!gNum || !lStr) return alert("Por favor ingresa un grado (número) y una letra válidos.");
+    
+    const txt = `${gNum}°${lStr}`;
     
     try {
+        const { data: exist } = await supabaseClient.from('grupos').select('id').eq('nombre', txt).eq('plantel_id', state.plantelId);
+        if (exist && exist.length > 0) {
+            return alert(`El Grupo ${txt} ya existe. No se permiten grupos repetidos.`);
+        }
+        
         const { error } = await supabaseClient.from('grupos').insert([{ nombre: txt, plantel_id: state.plantelId }]);
         if(error) throw error;
-        alert(`Grupo ${txt} creado con éxito en Base de Datos.`);
+        alert(`Grupo ${txt} creado con éxito.`);
         
         // Actualizar la lista en UI (El div de grupos y el select de asignaciones)
         window.loadSelectsMaestros(); 
-        
-        const list = document.getElementById('gruposCreados');
-        const color = ['var(--primary)', 'var(--warning)', 'var(--danger)'][Math.floor(Math.random()*3)];
-        list.insertAdjacentHTML('beforeend', `<div class="materia-drag" style="border-left-color: ${color}"><i class="fa-solid fa-layer-group text-muted"></i> Grupo ${txt}</div>`);
     } catch(e) {
         alert(e.message);
     }
@@ -11815,10 +11821,18 @@ window.loadHistorialFirmas = async () => {
 
 /* --- RESTORATION OF MISSING UTILITIES --- */
 window.crearGrupoDrag = async () => {
-    const grado = document.getElementById('selGrado').value;
-    const letra = document.getElementById('selLetra').value;
-    const nombre = `${grado}${letra}`;
+    let grado = document.getElementById('selGrado').value || '';
+    let letra = document.getElementById('selLetra').value || '';
+    
+    const gNum = grado.replace(/[^0-9]/g, '');
+    const lStr = letra.replace(/[^a-zA-Z]/g, '').toUpperCase();
+    if (!gNum || !lStr) return alert("Por favor ingresa un grado (número) y una letra válidos.");
+    
+    const nombre = `${gNum}°${lStr}`;
     try {
+        const { data: exist } = await supabaseClient.from('grupos').select('id').eq('nombre', nombre).eq('plantel_id', state.plantelId);
+        if (exist && exist.length > 0) return alert(`El Grupo ${nombre} ya existe. No se permiten grupos repetidos.`);
+        
         const { error } = await supabaseClient.from('grupos').insert([{ nombre, plantel_id: state.plantelId }]);
         if(error) throw error;
         alert(`Grupo ${nombre} generado.`);
@@ -11948,6 +11962,22 @@ window.loadSelectsMaestros = async () => {
         const { data: grupos } = await supabaseClient.from('grupos').select('id, nombre').eq('plantel_id', currentP).order('nombre');
         const sGr = document.getElementById('selAsigGrupoBase');
         if(sGr) sGr.innerHTML = '<option value="">Elige Grupo...</option>' + (grupos || []).map(g => `<option value="${g.id}">${g.nombre}</option>`).join('');
+
+        const divGrupos = document.getElementById('gruposCreados');
+        if(divGrupos) {
+            const uniqueGroupsMap = new Map();
+            (grupos || []).forEach(g => {
+                if(!uniqueGroupsMap.has(g.nombre)) uniqueGroupsMap.set(g.nombre, g);
+            });
+            const uniqueGroups = Array.from(uniqueGroupsMap.values());
+            if(uniqueGroups.length === 0) {
+                divGrupos.innerHTML = '<p style="color:var(--text-muted); font-size:0.85rem; text-align:center;">No hay grupos generados aún.</p>';
+            } else {
+                divGrupos.innerHTML = uniqueGroups.map(g => {
+                    return `<div class="materia-drag" style="border-left:4px solid var(--primary); padding:8px; margin-bottom:6px; background:white; border-radius:4px; box-shadow:0 1px 3px rgba(0,0,0,0.1);"><i class="fa-solid fa-layer-group text-muted"></i> Grupo ${g.nombre}</div>`;
+                }).join('');
+            }
+        }
 
     } catch(e) { 
         console.error(">>> [v135 ERROR] Error de carga:", e);
