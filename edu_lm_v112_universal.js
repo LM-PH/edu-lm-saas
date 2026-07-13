@@ -1951,19 +1951,25 @@ window.descargarQRsAlumnosPDF = async () => {
     btn.disabled = true;
 
     try {
-        let query = supabaseClient.from('perfiles')
-            .select('id, nombre, matricula, grado, grupo')
-            .eq('rol', 'alumno')
-            .eq('plantel_id', state.plantelId)
+        const currentPlantelID = state.plantelId || 'general';
+        let query = supabaseClient.from('alumnos')
+            .select('id, nombre, matricula, grupos(nombre)')
+            .eq('plantel_id', currentPlantelID)
             .order('nombre', { ascending: true });
-        
-        if (grado) query = query.eq('grado', grado);
-        if (grupo) query = query.eq('grupo', grupo);
 
         const { data, error } = await query;
         if(error) throw error;
 
-        if(!data || data.length === 0) {
+        // Filtro por grado/grupo
+        const filteredData = (data || []).filter(s => {
+            const gName = (s.grupos?.nombre || '').toUpperCase();
+            let ok = true;
+            if(grado && !gName.startsWith(grado.toUpperCase())) ok = false;
+            if(grupo && !gName.endsWith(grupo.toUpperCase())) ok = false;
+            return ok;
+        });
+
+        if(filteredData.length === 0) {
             alert("No hay alumnos en el grado y grupo seleccionado.");
             btn.innerHTML = originalText;
             btn.disabled = false;
@@ -1983,10 +1989,10 @@ window.descargarQRsAlumnosPDF = async () => {
         let html = '';
         const itemsPerPage = 12;
         
-        for (let i = 0; i < data.length; i += itemsPerPage) {
-            const pageData = data.slice(i, i + itemsPerPage);
+        for (let i = 0; i < filteredData.length; i += itemsPerPage) {
+            const pageData = filteredData.slice(i, i + itemsPerPage);
             
-            html += `<div style="width: 210mm; height: 297mm; padding: 10mm; box-sizing: border-box; display: grid; grid-template-columns: repeat(3, 1fr); grid-template-rows: repeat(4, 1fr); gap: 10mm; ${i + itemsPerPage < data.length ? 'page-break-after: always;' : ''}">`;
+            html += `<div style="width: 210mm; height: 297mm; padding: 10mm; box-sizing: border-box; display: grid; grid-template-columns: repeat(3, 1fr); grid-template-rows: repeat(4, 1fr); gap: 10mm; ${i + itemsPerPage < filteredData.length ? 'page-break-after: always;' : ''}">`;
             
             for (let student of pageData) {
                 // Generate QR
@@ -2006,7 +2012,7 @@ window.descargarQRsAlumnosPDF = async () => {
                     <div style="margin-bottom: 5px; width: 130px; height: 130px; display: flex; justify-content: center; align-items: center;">
                         ${qrImg.replace('<img', '<img style="max-width:100%; max-height:100%;"')}
                     </div>
-                    <div style="font-size: 0.8rem; color: #555; font-weight: bold;">${student.grado} "${student.grupo}"</div>
+                    <div style="font-size: 0.8rem; color: #555; font-weight: bold;">${student.grupos?.nombre || 'S/G'}</div>
                     <div style="font-size: 0.75rem; color: #777;">Matrícula: ${student.matricula || 'N/A'}</div>
                 </div>
                 `;
