@@ -1976,17 +1976,7 @@ window.descargarQRsAlumnosPDF = async () => {
             return;
         }
 
-        // Crear contenedor temporal
-        const container = document.createElement('div');
-        container.style.width = '794px'; // A4 width at 96 DPI approx
-        container.style.backgroundColor = 'white';
-        container.style.color = 'black';
-        container.style.padding = '0';
-        container.style.position = 'absolute';
-        container.style.left = '-9999px';
-        document.body.appendChild(container);
-
-        let html = '';
+        let html = '<div style="width: 794px; background: white; color: black; font-family: sans-serif;">';
         const itemsPerPage = 12;
         
         for (let i = 0; i < filteredData.length; i += itemsPerPage) {
@@ -2021,20 +2011,18 @@ window.descargarQRsAlumnosPDF = async () => {
             html += `</div>`;
         }
         
-        container.innerHTML = html;
+        html += '</div>';
 
         // html2pdf
         const opt = {
             margin:       0,
             filename:     `QRs_Alumnos_${grado}_${grupo}.pdf`,
             image:        { type: 'jpeg', quality: 0.98 },
-            html2canvas:  { scale: 2, useCORS: true },
+            html2canvas:  { scale: 2, useCORS: true, logging: false },
             jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' }
         };
 
-        await html2pdf().set(opt).from(container).save();
-
-        document.body.removeChild(container);
+        await html2pdf().set(opt).from(html).save();
 
     } catch (err) {
         console.error(err);
