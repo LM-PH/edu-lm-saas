@@ -1903,7 +1903,7 @@ function renderAdminMaestros() {
             <button class="btn btn-sm btn-tab-personal ${window._activePersonalTab === 'alumno' ? 'active' : ''}" onclick="window.cambiarTabPersonal('alumno', this)" style="padding:6px 12px; font-size:0.8rem; font-weight:bold; border-radius:6px; background:${window._activePersonalTab === 'alumno' ? 'white' : 'transparent'}; border:${window._activePersonalTab === 'alumno' ? '1px solid var(--border)' : 'none'}; cursor:pointer; color:${window._activePersonalTab === 'alumno' ? 'var(--text-main)' : 'var(--text-muted)'}">Alumnos</button>
         </div>
 
-        <div id="subTabsAlumnos" style="display:none; gap:12px; align-items:center; margin-bottom:20px; background:var(--page-bg); padding:10px; border-radius:10px; border:1px solid var(--border);">
+        <div id="subTabsAlumnos" style="display:none; gap:12px; align-items:center; margin-bottom:20px; background:var(--page-bg); padding:10px; border-radius:10px; border:1px solid var(--border); flex-wrap:wrap;">
             <div style="font-size:0.8rem; font-weight:700; color:var(--text-muted);">Grado:</div>
             <select id="selGradoAlumnoTab" class="form-input" style="width:105px; font-size:0.8rem; padding:4px 8px; margin:0;" onchange="window.loadListasAdminPersonal()">
                 <option value="">Todos</option>
@@ -1912,6 +1912,9 @@ function renderAdminMaestros() {
             <select id="selGrupoAlumnoTab" class="form-input" style="width:105px; font-size:0.8rem; padding:4px 8px; margin:0;" onchange="window.loadListasAdminPersonal()">
                 <option value="">Todos</option>
             </select>
+            <button class="btn btn-primary btn-sm" onclick="window.descargarQRsAlumnosPDF()" style="margin-left:auto; display:flex; gap:6px; align-items:center;">
+                <i class="fa-solid fa-file-pdf"></i> Descargar QRs (PDF)
+            </button>
         </div>
         
         <div style="overflow-x:auto;">
@@ -1932,6 +1935,109 @@ function renderAdminMaestros() {
     </div>
   `;
 }
+
+window.descargarQRsAlumnosPDF = async () => {
+    const grado = document.getElementById('selGradoAlumnoTab').value;
+    const grupo = document.getElementById('selGrupoAlumnoTab').value;
+
+    if(!grado || !grupo) {
+        alert("Por favor selecciona un Grado y un Grupo para descargar los códigos QR.");
+        return;
+    }
+
+    const btn = document.querySelector('button[onclick="window.descargarQRsAlumnosPDF()"]');
+    const originalText = btn.innerHTML;
+    btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Generando PDF...';
+    btn.disabled = true;
+
+    try {
+        let query = supabaseClient.from('perfiles')
+            .select('id, nombre, matricula, grado, grupo')
+            .eq('rol', 'alumno')
+            .eq('plantel_id', state.plantelId)
+            .order('nombre', { ascending: true });
+        
+        if (grado) query = query.eq('grado', grado);
+        if (grupo) query = query.eq('grupo', grupo);
+
+        const { data, error } = await query;
+        if(error) throw error;
+
+        if(!data || data.length === 0) {
+            alert("No hay alumnos en el grado y grupo seleccionado.");
+            btn.innerHTML = originalText;
+            btn.disabled = false;
+            return;
+        }
+
+        // Crear contenedor temporal
+        const container = document.createElement('div');
+        container.style.width = '794px'; // A4 width at 96 DPI approx
+        container.style.backgroundColor = 'white';
+        container.style.color = 'black';
+        container.style.padding = '0';
+        container.style.position = 'absolute';
+        container.style.left = '-9999px';
+        document.body.appendChild(container);
+
+        let html = '';
+        const itemsPerPage = 12;
+        
+        for (let i = 0; i < data.length; i += itemsPerPage) {
+            const pageData = data.slice(i, i + itemsPerPage);
+            
+            html += `<div style="width: 210mm; height: 297mm; padding: 10mm; box-sizing: border-box; display: grid; grid-template-columns: repeat(3, 1fr); grid-template-rows: repeat(4, 1fr); gap: 10mm; ${i + itemsPerPage < data.length ? 'page-break-after: always;' : ''}">`;
+            
+            for (let student of pageData) {
+                // Generate QR
+                let qrImg = '';
+                if(window.qrcode) {
+                    let qr = qrcode(0, 'M');
+                    qr.addData(student.matricula || student.id);
+                    qr.make();
+                    qrImg = qr.createImgTag(5, 10);
+                } else {
+                    qrImg = `<img src="https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${student.matricula || student.id}" />`;
+                }
+                
+                html += `
+                <div style="border: 2px dashed #ccc; border-radius: 10px; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 10px; text-align: center; overflow: hidden; background: #fff;">
+                    <div style="font-size: 0.9rem; font-weight: bold; margin-bottom: 5px; height: 2.6rem; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; line-height: 1.3rem;">${student.nombre}</div>
+                    <div style="margin-bottom: 5px; width: 130px; height: 130px; display: flex; justify-content: center; align-items: center;">
+                        ${qrImg.replace('<img', '<img style="max-width:100%; max-height:100%;"')}
+                    </div>
+                    <div style="font-size: 0.8rem; color: #555; font-weight: bold;">${student.grado} "${student.grupo}"</div>
+                    <div style="font-size: 0.75rem; color: #777;">Matrícula: ${student.matricula || 'N/A'}</div>
+                </div>
+                `;
+            }
+            
+            html += `</div>`;
+        }
+        
+        container.innerHTML = html;
+
+        // html2pdf
+        const opt = {
+            margin:       0,
+            filename:     `QRs_Alumnos_${grado}_${grupo}.pdf`,
+            image:        { type: 'jpeg', quality: 0.98 },
+            html2canvas:  { scale: 2, useCORS: true },
+            jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' }
+        };
+
+        await html2pdf().set(opt).from(container).save();
+
+        document.body.removeChild(container);
+
+    } catch (err) {
+        console.error(err);
+        alert("Error al generar PDF: " + err.message);
+    } finally {
+        btn.innerHTML = originalText;
+        btn.disabled = false;
+    }
+};
 
 function renderAdminComunicados() {
   setTimeout(() => { 
