@@ -1982,7 +1982,7 @@ window.descargarQRsAlumnosPDF = async () => {
         for (let i = 0; i < filteredData.length; i += itemsPerPage) {
             const pageData = filteredData.slice(i, i + itemsPerPage);
             
-            html += `<div style="width: 210mm; height: 297mm; padding: 10mm; box-sizing: border-box; display: grid; grid-template-columns: repeat(3, 1fr); grid-template-rows: repeat(4, 1fr); gap: 10mm; ${i + itemsPerPage < filteredData.length ? 'page-break-after: always;' : ''}">`;
+            html += `<div style="width: 210mm; height: 295mm; padding: 10mm; box-sizing: border-box; display: grid; grid-template-columns: repeat(3, 1fr); grid-template-rows: repeat(4, 1fr); gap: 10mm; overflow: hidden; ${i + itemsPerPage < filteredData.length ? 'page-break-after: always;' : ''}">`;
             
             for (let student of pageData) {
                 // Generate QR
@@ -1991,19 +1991,19 @@ window.descargarQRsAlumnosPDF = async () => {
                     let qr = qrcode(0, 'M');
                     qr.addData(student.matricula || student.id);
                     qr.make();
-                    qrImg = qr.createImgTag(5, 10);
+                    qrImg = qr.createImgTag(8, 0); // Mayor tamaño, sin margen extra en la librería
                 } else {
-                    qrImg = `<img src="https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${student.matricula || student.id}" />`;
+                    qrImg = `<img src="https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${student.matricula || student.id}" />`;
                 }
                 
                 html += `
                 <div style="border: 2px dashed #ccc; border-radius: 10px; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 10px; text-align: center; overflow: hidden; background: #fff;">
-                    <div style="font-size: 0.9rem; font-weight: bold; margin-bottom: 5px; height: 2.6rem; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; line-height: 1.3rem;">${student.nombre}</div>
-                    <div style="margin-bottom: 5px; width: 130px; height: 130px; display: flex; justify-content: center; align-items: center;">
-                        ${qrImg.replace('<img', '<img style="max-width:100%; max-height:100%;"')}
+                    <div style="font-size: 1.1rem; font-weight: bold; margin-bottom: 8px; height: 2.8rem; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; line-height: 1.4rem;">${student.nombre}</div>
+                    <div style="margin-bottom: 8px; width: 180px; height: 180px; display: flex; justify-content: center; align-items: center;">
+                        ${qrImg.replace('<img', '<img style="width:100%; height:100%; object-fit: contain;"')}
                     </div>
-                    <div style="font-size: 0.8rem; color: #555; font-weight: bold;">${student.grupos?.nombre || 'S/G'}</div>
-                    <div style="font-size: 0.75rem; color: #777;">Matrícula: ${student.matricula || 'N/A'}</div>
+                    <div style="font-size: 0.95rem; color: #555; font-weight: bold;">${student.grupos?.nombre || 'S/G'}</div>
+                    <div style="font-size: 0.85rem; color: #777;">Matrícula: ${student.matricula || 'N/A'}</div>
                 </div>
                 `;
             }
