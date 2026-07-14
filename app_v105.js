@@ -4334,7 +4334,7 @@ window.imprimirApoyoBitacora = async () => {
                 </head>
                 <body>
                     <div class="header">
-                        ${schoolLogo ? \`<img src="\${schoolLogo}" class="logo-img" alt="Logo">\` : ''}
+                        ${schoolLogo ? `<img src="${schoolLogo}" class="logo-img" alt="Logo">` : ''}
                         <h2>${schoolName}</h2>
                         <h1>REPORTE DE BITÁCORA - MIS HECHOS</h1>
                         <p>HECHOS DEL DÍA</p>
