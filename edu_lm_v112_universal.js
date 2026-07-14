@@ -6232,6 +6232,7 @@ window.imprimirApoyoBitacora = async () => {
             .from('bitacora_maestro')
             .select('*')
             .eq('fecha_referencia', fecha)
+            .eq('plantel_id', state.plantelId)
             .order('creado_en', {ascending: true});
             
         if (state.role === 'apoyo') {
@@ -6345,6 +6346,7 @@ window.loadApoyoBitacora = async (fechaSeleccionada) => {
             .from('bitacora_maestro')
             .select('*')
             .eq('fecha_referencia', fecha)
+            .eq('plantel_id', state.plantelId)
             .order('creado_en', {ascending: false});
 
         if (state.role === 'apoyo') {
