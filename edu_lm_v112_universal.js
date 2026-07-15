@@ -15015,9 +15015,14 @@ function renderBibliotecaHistorial() {
   const today = new Date().toLocaleDateString('en-CA');
   setTimeout(() => { if(window.loadHistorialBiblioteca) window.loadHistorialBiblioteca(today); }, 100);
   return `
-    <div class="page-header">
-      <h2 class="page-title"><i class="fa-solid fa-calendar-days"></i> Historial de Préstamos</h2>
-      <p class="page-subtitle">Consulta qué materiales se prestaron y devolvieron en fechas anteriores.</p>
+    <div class="page-header" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:15px;">
+      <div>
+        <h2 class="page-title"><i class="fa-solid fa-calendar-days"></i> Historial de Préstamos</h2>
+        <p class="page-subtitle">Consulta qué materiales se prestaron y devolvieron en fechas anteriores.</p>
+      </div>
+      <button class="btn btn-outline" style="border-color:var(--primary); color:var(--primary); display:flex; align-items:center; gap:8px;" onclick="window.imprimirHistorialBiblioteca()">
+          <i class="fa-solid fa-print"></i> Imprimir Historial
+      </button>
     </div>
     <div class="card" style="max-width:800px; margin:0 auto;">
        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px; border-bottom:1px solid var(--border); padding-bottom:16px; flex-wrap:wrap; gap:15px;">
@@ -15033,6 +15038,124 @@ function renderBibliotecaHistorial() {
     </div>
   `;
 }
+
+window.imprimirHistorialBiblioteca = async () => {
+    const fecha = document.getElementById('fechaHistorialBib')?.value || new Date().toLocaleDateString('en-CA');
+    try {
+        const start = new Date(`${fecha}T00:00:00`).toISOString();
+        const end = new Date(`${fecha}T23:59:59.999`).toISOString();
+        
+        const { data, error } = await supabaseClient.from('biblioteca_prestamos')
+            .select('*, alumnos(nombre, matricula, grupos(nombre))')
+            .eq('plantel_id', state.plantelId)
+            .gte('fecha_prestamo', start)
+            .lte('fecha_prestamo', end)
+            .order('fecha_prestamo', { ascending: false });
+            
+        if(error) throw error;
+        
+        if(!data || data.length === 0) {
+            return alert("No se registraron préstamos en esta fecha.");
+        }
+
+        const { data: plantelData } = await supabaseClient.from('planteles').select('nombre, logo_url').eq('id', state.plantelId).single();
+        const schoolName = plantelData?.nombre || 'Plantel Escolar';
+        const schoolLogo = plantelData?.logo_url || '';
+        
+        const printWindow = window.open('', '_blank');
+        const fechaImpresion = new Date().toLocaleDateString();
+
+        const registrosHtml = data.map(p => {
+            const fPrestamo = new Date(p.fecha_prestamo).toLocaleString([], {hour:'2-digit', minute:'2-digit'});
+            const estado = p.devuelto ? `Devuelto` : `PENDIENTE NO DEVUELTO`;
+            
+            return `
+            <div class="item-box ${p.devuelto ? 'success' : 'grave'}">
+                <div class="item-header">
+                    <strong>Recurso: ${p.recurso} (${p.tipo})</strong>
+                    <span>Hora: ${fPrestamo}</span>
+                </div>
+                <p><strong>Alumno:</strong> ${p.alumnos?.nombre || 'S/D'} | <strong>Matrícula:</strong> ${p.alumnos?.matricula || 'S/D'} | <strong>Grupo:</strong> ${p.alumnos?.grupos?.nombre || 'S/G'}</p>
+                <p><strong>Condición Inicial:</strong> ${p.condicion_entrega || 'Buena'}</p>
+                <div class="text-muted" style="margin-top: 10px;">
+                    <strong>Estado:</strong> ${estado}
+                    ${p.condicion_devolucion ? `| <strong>Observación devolución:</strong> ${p.condicion_devolucion}` : ''}
+                </div>
+            </div>`;
+        }).join('');
+
+        printWindow.document.write(`
+            <html>
+                <head>
+                    <title>Historial de Préstamos - Biblioteca</title>
+                    <style>
+                        body { font-family: 'Segoe UI', Arial, sans-serif; padding: 40px; color: #333; line-height: 1.5; }
+                        .header { text-align: center; margin-bottom: 30px; border-bottom: 2px solid #1e40af; padding-bottom: 15px; }
+                        .logo-img { max-height: 80px; margin-bottom: 10px; object-fit: contain; }
+                        .header h2 { font-size: 28px; margin: 0 0 5px 0; color: #000; text-transform: uppercase; }
+                        .header h1 { margin: 0; color: #1e40af; font-size: 20px; text-transform: uppercase; }
+                        .header p { margin: 5px 0; font-size: 14px; color: #555; font-weight: bold; }
+                        .info-box { background: #f8fafc; border: 1px solid #e2e8f0; padding: 20px; border-radius: 8px; margin-bottom: 30px; display: flex; justify-content: space-between; font-size: 14px; }
+                        .section-title { font-size: 18px; color: #1e40af; border-bottom: 2px solid #cbd5e1; padding-bottom: 5px; margin-top: 20px; margin-bottom: 15px; text-transform: uppercase; }
+                        .item-box { border: 1px solid #cbd5e1; padding: 12px; border-radius: 6px; margin-bottom: 15px; page-break-inside: avoid; }
+                        .item-box.grave { border-left: 4px solid #ef4444; background: #fffdf7; }
+                        .item-box.success { border-left: 4px solid #10b981; background: #f0fdf4; }
+                        .item-header { display: flex; justify-content: space-between; margin-bottom: 8px; font-size: 13px; }
+                        .item-box p { margin: 4px 0; font-size: 14px; }
+                        .text-muted { color: #64748b; font-size: 13px; }
+                        .footer-signatures { display: flex; justify-content: space-around; margin-top: 60px; page-break-inside: avoid; }
+                        .sig-line { border-top: 1px solid #000; width: 200px; text-align: center; padding-top: 5px; font-size: 12px; }
+                        @media print {
+                            @page { margin: 2cm; }
+                            body { padding: 0; }
+                        }
+                    </style>
+                </head>
+                <body>
+                    <div class="header">
+                        ${schoolLogo ? `<img src="${schoolLogo}" class="logo-img" alt="Logo">` : ''}
+                        <h2>${schoolName}</h2>
+                        <h1>REPORTE DE BIBLIOTECA</h1>
+                        <p>HISTORIAL DE PRÉSTAMOS</p>
+                    </div>
+                    
+                    <div class="info-box">
+                        <div>
+                            <strong>Fecha de Reporte:</strong> ${fecha}<br>
+                            <strong>Responsable:</strong> ${state.userName || state.user?.email || 'Biblioteca'}
+                        </div>
+                        <div style="text-align:right;">
+                            <strong>Fecha de Impresión:</strong> ${fechaImpresion}
+                        </div>
+                    </div>
+
+                    <div class="section-title">Registro de Movimientos</div>
+                    ${registrosHtml}
+
+                    <div class="footer-signatures">
+                        <div class="sig-line">
+                            <strong>${state.userName || state.user?.email || 'Biblioteca'}</strong><br>
+                            Firma Responsable
+                        </div>
+                    </div>
+
+                    <script>
+                        window.onload = () => {
+                            setTimeout(() => {
+                                window.print();
+                                window.close();
+                            }, 500);
+                        };
+                    </script>
+                </body>
+            </html>
+        `);
+        printWindow.document.close();
+    } catch(e) {
+        console.error(e);
+        alert("Error al imprimir el historial de biblioteca: " + e.message);
+    }
+};
 
 window.loadHistorialBiblioteca = async (fecha) => {
     const cont = document.getElementById('contenedorHistorialBib');
