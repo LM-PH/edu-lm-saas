@@ -478,7 +478,7 @@ window.previewSetupLogo = (event) => {
             const canvas = document.createElement('canvas');
             let width = img.width;
             let height = img.height;
-            const maxSize = 300;
+            const maxSize = 120; // 🛑 Ultra compresión para evitar que la BD la rechace
 
             if (width > height) {
                 if (width > maxSize) {
@@ -497,8 +497,8 @@ window.previewSetupLogo = (event) => {
             const ctx = canvas.getContext('2d');
             ctx.drawImage(img, 0, 0, width, height);
             
-            // Compresión a JPEG calidad 0.8
-            const dataUrl = canvas.toDataURL('image/jpeg', 0.8);
+            // Compresión a JPEG calidad 0.5 (peso mosca)
+            const dataUrl = canvas.toDataURL('image/jpeg', 0.5);
             
             document.getElementById('setupLogoPreview').src = dataUrl;
             document.getElementById('setupLogoPreview').style.display = 'block';
