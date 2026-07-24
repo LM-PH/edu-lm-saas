@@ -597,13 +597,7 @@ window.realizarSetupInicial = async () => {
             return;
         }
 
-        // 4. Asegurar que el perfil tenga el plantel correcto
-        const userId = (await supabaseClient.auth.getUser()).data.user?.id;
-        if (userId && prepData && prepData.plantel_id) {
-            await supabaseClient.from('perfiles').upsert({
-                id: userId, nombre: dir, rol: 'directivo', plantel_id: prepData.plantel_id
-            }, { onConflict: 'id' });
-        }
+        // 4. El perfil ya fue creado por el backend en el RPC.
 
         window.showToast("¡Plantel registrado con éxito!", "success");
         setTimeout(() => { window.location.reload(); }, 1000);
