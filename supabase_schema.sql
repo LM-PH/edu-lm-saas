@@ -125,6 +125,7 @@ create table public.alumnos (
   sexo varchar(20),
   estatura numeric(4,2),
   peso numeric(5,2),
+  talla_zapato text,
   grupo_id uuid references public.grupos(id),
   grado text,
   taller text,
