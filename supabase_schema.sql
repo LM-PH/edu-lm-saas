@@ -711,3 +711,127 @@ EXCEPTION WHEN OTHERS THEN
   );
 END;
 $$;
+
+-- =======================================================
+-- TABLAS DEL MÓDULO DE DISCIPLINA Y TRABAJO SOCIAL
+-- =======================================================
+
+CREATE TABLE IF NOT EXISTS public.citatorios (
+    id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+    alumno_id uuid REFERENCES public.alumnos(id) ON DELETE CASCADE,
+    emisor_id uuid REFERENCES public.perfiles(id) ON DELETE CASCADE,
+    motivo text NOT NULL,
+    tipo text NOT NULL,
+    estado text DEFAULT 'pendiente',
+    fecha timestamp with time zone DEFAULT now(),
+    plantel_id uuid REFERENCES public.planteles(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS public.seguimientos_sociales (
+    id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+    alumno_id uuid REFERENCES public.alumnos(id) ON DELETE CASCADE,
+    perfil_id uuid REFERENCES public.perfiles(id) ON DELETE CASCADE,
+    asunto text NOT NULL,
+    detalle text,
+    estado text,
+    fecha timestamp with time zone DEFAULT now(),
+    plantel_id uuid REFERENCES public.planteles(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS public.intervenciones_conducta (
+    id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+    alumno_id uuid REFERENCES public.alumnos(id) ON DELETE CASCADE,
+    maestro_id uuid REFERENCES public.perfiles(id) ON DELETE CASCADE,
+    procedimiento text NOT NULL,
+    compromisos text,
+    fecha timestamp with time zone DEFAULT now(),
+    plantel_id uuid REFERENCES public.planteles(id) ON DELETE CASCADE
+);
+
+-- Habilitar RLS en las nuevas tablas
+ALTER TABLE public.citatorios ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.seguimientos_sociales ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.intervenciones_conducta ENABLE ROW LEVEL SECURITY;
+
+-- Aplicar Escudo Multi-Tenant a las nuevas tablas
+DO $$ 
+DECLARE
+    t_name text;
+    tables_list text[] := ARRAY[
+        'citatorios', 'seguimientos_sociales', 'intervenciones_conducta'
+    ];
+BEGIN
+    FOR t_name IN SELECT unnest(tables_list)
+    LOOP
+        EXECUTE format('DROP POLICY IF EXISTS "Multi-Tenant Aislamiento Estricto" ON public.%I;', t_name);
+        EXECUTE format('
+            CREATE POLICY "Multi-Tenant Aislamiento Estricto" 
+            ON public.%I 
+            AS RESTRICTIVE
+            FOR ALL 
+            TO authenticated 
+            USING (
+                plantel_id = public.get_my_plantel_id() 
+                OR public.es_el_master() = TRUE
+            )
+            WITH CHECK (
+                plantel_id = public.get_my_plantel_id() 
+                OR public.es_el_master() = TRUE
+            );
+        ', t_name);
+    END LOOP;
+END $$;
+
+
+-- =======================================================
+-- FUNCIÓN PARA CREACIÓN SEGURA DE PERSONAL
+-- (Comunicación directa con auth.users sin exponer llaves)
+-- =======================================================
+CREATE EXTENSION IF NOT EXISTS pgcrypto;
+
+CREATE OR REPLACE FUNCTION public.crear_usuario_admin(
+  p_email text, 
+  p_password text, 
+  p_nombre text, 
+  p_rol text, 
+  p_plantel_id uuid
+)
+RETURNS json
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_user_id uuid;
+BEGIN
+  -- 1. Insertar directamente en la tabla auth.users usando pgcrypto
+  INSERT INTO auth.users (
+    id, instance_id, aud, role, email, encrypted_password, email_confirmed_at, 
+    raw_app_meta_data, raw_user_meta_data, created_at, updated_at
+  )
+  VALUES (
+    gen_random_uuid(), '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', p_email,
+    crypt(p_password, gen_salt('bf')),
+    now(), '{"provider":"email","providers":["email"]}',
+    json_build_object('nombre', p_nombre, 'rol', p_rol, 'plantel_id', p_plantel_id),
+    now(), now()
+  ) RETURNING id INTO v_user_id;
+
+  -- 2. Crear la identidad en auth.identities
+  INSERT INTO auth.identities (id, user_id, identity_data, provider, provider_id, last_sign_in_at, created_at, updated_at)
+  VALUES (
+    gen_random_uuid(), v_user_id, format('{"sub":"%s","email":"%s"}', v_user_id::text, p_email)::jsonb, 'email', p_email,
+    now(), now(), now()
+  );
+
+  RETURN json_build_object(
+    'success', true,
+    'user_id', v_user_id
+  );
+EXCEPTION WHEN OTHERS THEN
+  RETURN json_build_object(
+    'success', false,
+    'error', SQLERRM
+  );
+END;
+$$;
