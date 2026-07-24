@@ -613,8 +613,9 @@ window.realizarSetupInicial = async () => {
         }, 1000);
 
     } catch(e) { 
-        console.error("Setup Error:", e);
-        alert("Error en Setup: " + e.message); 
+        console.error("Setup Error Completo:", e);
+        let errorMsg = e.message || JSON.stringify(e);
+        alert("Error en Setup: " + errorMsg); 
         if(btn) {
             btn.disabled = false;
             btn.innerHTML = 'Finalizar Registro';
