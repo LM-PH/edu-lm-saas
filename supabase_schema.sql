@@ -561,3 +561,94 @@ CREATE TRIGGER on_perfil_deleted
   AFTER DELETE ON public.perfiles
   FOR EACH ROW
   EXECUTE FUNCTION public.handle_deleted_perfil();
+
+-- =======================================================
+-- ACTUALIZACIÓN SAAS MULTI-TENANT (PLANTELES)
+-- =======================================================
+
+CREATE TABLE IF NOT EXISTS public.planteles (
+    id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+    nombre text NOT NULL,
+    logo_url text,
+    creado_en timestamp with time zone DEFAULT now()
+);
+
+ALTER TABLE public.planteles ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Public read planteles" ON public.planteles FOR SELECT USING (true);
+CREATE POLICY "Admin full planteles" ON public.planteles FOR ALL USING (true);
+
+ALTER TABLE public.perfiles ADD COLUMN IF NOT EXISTS plantel_id uuid REFERENCES public.planteles(id) ON DELETE CASCADE;
+ALTER TABLE public.perfiles ADD COLUMN IF NOT EXISTS es_master boolean DEFAULT false;
+ALTER TABLE public.grupos ADD COLUMN IF NOT EXISTS plantel_id uuid REFERENCES public.planteles(id) ON DELETE CASCADE;
+ALTER TABLE public.alumnos ADD COLUMN IF NOT EXISTS plantel_id uuid REFERENCES public.planteles(id) ON DELETE CASCADE;
+ALTER TABLE public.materias ADD COLUMN IF NOT EXISTS plantel_id uuid REFERENCES public.planteles(id) ON DELETE CASCADE;
+ALTER TABLE public.calificaciones ADD COLUMN IF NOT EXISTS plantel_id uuid REFERENCES public.planteles(id) ON DELETE CASCADE;
+ALTER TABLE public.bitacora_docente ADD COLUMN IF NOT EXISTS plantel_id uuid REFERENCES public.planteles(id) ON DELETE CASCADE;
+ALTER TABLE public.asistencias ADD COLUMN IF NOT EXISTS plantel_id uuid REFERENCES public.planteles(id) ON DELETE CASCADE;
+ALTER TABLE public.reportes_conducta ADD COLUMN IF NOT EXISTS plantel_id uuid REFERENCES public.planteles(id) ON DELETE CASCADE;
+ALTER TABLE public.actividades_docente ADD COLUMN IF NOT EXISTS plantel_id uuid REFERENCES public.planteles(id) ON DELETE CASCADE;
+ALTER TABLE public.evaluaciones_actividades ADD COLUMN IF NOT EXISTS plantel_id uuid REFERENCES public.planteles(id) ON DELETE CASCADE;
+ALTER TABLE public.encuadres ADD COLUMN IF NOT EXISTS plantel_id uuid REFERENCES public.planteles(id) ON DELETE CASCADE;
+ALTER TABLE public.firmas_encuadre ADD COLUMN IF NOT EXISTS plantel_id uuid REFERENCES public.planteles(id) ON DELETE CASCADE;
+ALTER TABLE public.asignaciones_docentes ADD COLUMN IF NOT EXISTS plantel_id uuid REFERENCES public.planteles(id) ON DELETE CASCADE;
+ALTER TABLE public.perfiles_permitidos ADD COLUMN IF NOT EXISTS plantel_id uuid REFERENCES public.planteles(id) ON DELETE CASCADE;
+ALTER TABLE public.asistencia_sesiones ADD COLUMN IF NOT EXISTS plantel_id uuid REFERENCES public.planteles(id) ON DELETE CASCADE;
+ALTER TABLE public.autorizaciones_movimientos ADD COLUMN IF NOT EXISTS plantel_id uuid REFERENCES public.planteles(id) ON DELETE CASCADE;
+ALTER TABLE public.comunicados ADD COLUMN IF NOT EXISTS plantel_id uuid REFERENCES public.planteles(id) ON DELETE CASCADE;
+
+CREATE OR REPLACE FUNCTION public.es_el_master()
+RETURNS BOOLEAN AS $$
+BEGIN
+  IF (current_setting('request.jwt.claims', true)::json ->> 'email') = 'zlagustin10@gmail.com' THEN
+    RETURN TRUE;
+  END IF;
+  RETURN EXISTS (
+    SELECT 1 FROM public.perfiles 
+    WHERE id = auth.uid() AND es_master = true
+  );
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+CREATE OR REPLACE FUNCTION public.get_my_plantel_id()
+RETURNS UUID AS $$
+DECLARE
+  mi_plantel uuid;
+BEGIN
+  SELECT plantel_id INTO mi_plantel FROM public.perfiles WHERE id = auth.uid() LIMIT 1;
+  RETURN mi_plantel;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+DO $$ 
+DECLARE
+    t_name text;
+    tables_list text[] := ARRAY[
+        'alumnos', 'asistencias', 'autorizaciones_movimientos', 'calificaciones', 
+        'comunicados', 'encuadres', 'evaluaciones_actividades', 'firmas_encuadre', 
+        'actividades_docente', 'asignaciones_docentes', 'grupos', 'materias', 
+        'perfiles_permitidos', 'reportes_conducta', 'estudios_psicosociales', 
+        'cuestionarios_psicosociales', 'horarios_maestros', 'asistencia_sesiones', 
+        'bitacora_docente'
+    ];
+BEGIN
+    FOR t_name IN SELECT unnest(tables_list)
+    LOOP
+        EXECUTE format('ALTER TABLE public.%I ENABLE ROW LEVEL SECURITY;', t_name);
+        EXECUTE format('DROP POLICY IF EXISTS "Multi-Tenant Aislamiento Estricto" ON public.%I;', t_name);
+        EXECUTE format('
+            CREATE POLICY "Multi-Tenant Aislamiento Estricto" 
+            ON public.%I 
+            AS RESTRICTIVE
+            FOR ALL 
+            TO authenticated 
+            USING (
+                plantel_id = public.get_my_plantel_id() 
+                OR public.es_el_master() = TRUE
+            )
+            WITH CHECK (
+                plantel_id = public.get_my_plantel_id() 
+                OR public.es_el_master() = TRUE
+            );
+        ', t_name);
+    END LOOP;
+END $$;
