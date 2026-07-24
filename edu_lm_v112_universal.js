@@ -575,26 +575,22 @@ window.realizarSetupInicial = async () => {
         if (prepErr) throw prepErr;
         if (prepData && prepData.success === false) throw new Error(prepData.error);
 
-        // 2. Creamos al usuario OFICIALMENTE en Supabase (Esto evita el "Invalid credentials")
-        const { data: authData, error: authErr } = await supabaseClient.auth.signUp({
-            email: cor,
-            password: pas,
-            options: {
-                data: { nombre: dir, rol: 'directivo', plantel_id: prepData.plantel_id }
-            }
+        // 2. Creamos al usuario OFICIALMENTE usando la función maestra para brincar Rate Limits
+        const { data: adminData, error: adminErr } = await supabaseClient.rpc('crear_usuario_admin', {
+            p_email: cor,
+            p_password: pas,
+            p_nombre: dir,
+            p_rol: 'directivo',
+            p_plantel_id: prepData.plantel_id
         });
 
-        if(authErr) {
-            // Si ya existía de un intento anterior, simplemente iniciamos sesión
-            if (authErr.message.toLowerCase().includes("already registered")) {
-                const { error: loginErr } = await supabaseClient.auth.signInWithPassword({ email: cor, password: pas });
-                if(loginErr) throw loginErr;
-            } else {
-                throw authErr;
-            }
+        // 3. Ya sea que se creó nuevo o ya existía, iniciamos sesión a la fuerza
+        const { error: loginErr } = await supabaseClient.auth.signInWithPassword({ email: cor, password: pas });
+        if(loginErr) {
+            throw new Error("Escuela registrada, pero falló el inicio de sesión automático. Tu contraseña podría estar mal. " + loginErr.message);
         }
 
-        // 3. Aseguramos que su perfil público exista
+        // 4. Aseguramos que su perfil público exista (por si el trigger falló)
         const userId = (await supabaseClient.auth.getUser()).data.user?.id;
         if (userId) {
             await supabaseClient.from('perfiles').upsert({
