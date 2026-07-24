@@ -575,22 +575,36 @@ window.realizarSetupInicial = async () => {
         if (prepErr) throw prepErr;
         if (prepData && prepData.success === false) throw new Error(prepData.error);
 
-        // 2. Creamos al usuario OFICIALMENTE usando la función maestra para brincar Rate Limits
-        const { data: adminData, error: adminErr } = await supabaseClient.rpc('crear_usuario_admin', {
-            p_email: cor,
-            p_password: pas,
-            p_nombre: dir,
-            p_rol: 'directivo',
-            p_plantel_id: prepData.plantel_id
+        // 2. Intentamos crear la cuenta oficial en Supabase Auth
+        const { data: authData, error: authErr } = await supabaseClient.auth.signUp({
+            email: cor,
+            password: pas,
+            options: {
+                data: { nombre: dir, rol: 'directivo', plantel_id: prepData.plantel_id }
+            }
         });
 
-        // 3. Ya sea que se creó nuevo o ya existía, iniciamos sesión a la fuerza
-        const { error: loginErr } = await supabaseClient.auth.signInWithPassword({ email: cor, password: pas });
-        if(loginErr) {
-            throw new Error("Escuela registrada, pero falló el inicio de sesión automático. Tu contraseña podría estar mal. " + loginErr.message);
+        // Si Supabase rechaza el signUp (usuario ya existe, rate limit, etc.), 
+        // intentamos directamente iniciar sesión con las credenciales ingresadas
+        if (authErr) {
+            const msg = authErr.message || authErr.code || JSON.stringify(authErr);
+            // Si NO es un error de "ya existe", lo reportamos
+            if (!msg.toLowerCase().includes('already') && !msg.toLowerCase().includes('over') && !msg.toLowerCase().includes('limit') && !msg.toLowerCase().includes('taken')) {
+                throw new Error(msg);
+            }
         }
 
-        // 4. Aseguramos que su perfil público exista (por si el trigger falló)
+        // 3. Iniciamos sesión (funciona tanto si se creó nuevo como si ya existía)
+        await new Promise(r => setTimeout(r, 1500)); // pequeña pausa para que Auth procese
+        const { error: loginErr } = await supabaseClient.auth.signInWithPassword({ email: cor, password: pas });
+        if (loginErr) {
+            // Si falló el login, avisamos pero sin borrar la escuela ya creada
+            alert("⚠️ La escuela fue registrada correctamente.\n\nPero no pudo iniciarse la sesión automáticamente.\n\nPor favor, ve al inicio de la aplicación e ingresa manualmente con:\n📧 Correo: " + cor + "\n🔑 Contraseña: la que escribiste en el registro.");
+            window.location.reload();
+            return;
+        }
+
+        // 4. Aseguramos que su perfil público exista y tenga el plantel correcto
         const userId = (await supabaseClient.auth.getUser()).data.user?.id;
         if (userId) {
             await supabaseClient.from('perfiles').upsert({
@@ -598,12 +612,12 @@ window.realizarSetupInicial = async () => {
                 nombre: dir,
                 rol: 'directivo',
                 plantel_id: prepData.plantel_id
-            });
+            }, { onConflict: 'id' });
         }
 
         window.showToast("¡Plantel registrado con éxito!", "success");
 
-        // Recargamos para entrar fresco
+        // Recargamos para entrar al panel del director
         setTimeout(() => {
             window.location.reload();
         }, 1000);
