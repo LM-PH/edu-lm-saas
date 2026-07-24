@@ -65,11 +65,6 @@ BEGIN
           new.raw_user_meta_data->>'nombre',
           NULLIF(new.raw_user_meta_data->>'plantel_id', '')::uuid
         );
-
-        -- Marcar como activo en perfiles_permitidos
-        UPDATE public.perfiles_permitidos
-        SET estado = 'activo'
-        WHERE email = new.email;
   EXCEPTION WHEN OTHERS THEN
     RAISE WARNING 'Error en handle_new_user: %', SQLERRM;
   END;
@@ -77,9 +72,34 @@ BEGIN
 END;
 $$;
 
-create trigger on_auth_user_created
-  after insert on auth.users
-  for each row execute procedure public.handle_new_user();
+-- Trigger para registrar usuarios nuevos automáticamente en la tabla perfiles
+DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
+CREATE TRIGGER on_auth_user_created
+  AFTER INSERT ON auth.users
+  FOR EACH ROW EXECUTE PROCEDURE public.handle_new_user();
+
+-- Función para actualizar estado al iniciar sesión
+CREATE OR REPLACE FUNCTION public.handle_user_login()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+BEGIN
+  -- Si last_sign_in_at cambió a un valor nuevo, es un inicio de sesión
+  IF NEW.last_sign_in_at IS NOT NULL AND (OLD.last_sign_in_at IS NULL OR NEW.last_sign_in_at > OLD.last_sign_in_at) THEN
+    UPDATE public.perfiles_permitidos
+    SET estado = 'activo'
+    WHERE email = NEW.email AND estado = 'pendiente';
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
+-- Trigger para detectar inicio de sesión
+DROP TRIGGER IF EXISTS on_auth_user_login ON auth.users;
+CREATE TRIGGER on_auth_user_login
+  AFTER UPDATE ON auth.users
+  FOR EACH ROW EXECUTE PROCEDURE public.handle_user_login();
 
 -- 4. TABLA GRUPOS
 create table public.grupos (
