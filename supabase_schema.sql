@@ -901,3 +901,31 @@ EXCEPTION WHEN OTHERS THEN
   );
 END;
 $$;
+
+-- =======================================================
+-- TABLA ASIGNACIONES MAESTROS (Para relacionar docentes con materias y grupos)
+-- =======================================================
+CREATE TABLE IF NOT EXISTS public.asignaciones_maestros (
+    id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+    docente_email text NOT NULL,
+    docente_nombre text,
+    materia text NOT NULL,
+    grupo_id uuid REFERENCES public.grupos(id) ON DELETE CASCADE,
+    target_grado text,
+    plantel_id uuid REFERENCES public.planteles(id) ON DELETE CASCADE,
+    created_at timestamp with time zone DEFAULT now()
+);
+
+ALTER TABLE public.asignaciones_maestros ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Directivos_manage_asignaciones" ON public.asignaciones_maestros FOR ALL TO authenticated USING (
+    public.is_admin_or_master() 
+    OR EXISTS (
+        SELECT 1 FROM public.perfiles p
+        WHERE p.id = auth.uid() 
+        AND p.rol = 'directivo' 
+        AND p.plantel_id = asignaciones_maestros.plantel_id
+    )
+);
+
+CREATE POLICY "Lectura_general_asignaciones" ON public.asignaciones_maestros FOR SELECT TO authenticated USING (true);
