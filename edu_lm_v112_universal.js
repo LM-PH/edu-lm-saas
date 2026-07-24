@@ -577,13 +577,15 @@ window.realizarSetupInicial = async () => {
         }
 
         // 2. Crear la escuela Y auto-confirmar el correo del director en auth.users
-        const { data: prepData, error: prepErr } = await supabaseClient.rpc('preparar_registro_director', {
+        let { data: prepDataRaw, error: prepErr } = await supabaseClient.rpc('preparar_registro_director', {
             p_email: cor,
             p_nombre_director: dir,
             p_nombre_escuela: esc,
             p_logo_url: logoBase64
         });
         if (prepErr) throw prepErr;
+        
+        let prepData = typeof prepDataRaw === 'string' ? JSON.parse(prepDataRaw) : prepDataRaw;
         if (prepData && prepData.success === false) throw new Error(prepData.error);
 
         // 3. Ahora el correo está confirmado — iniciar sesión
@@ -597,7 +599,7 @@ window.realizarSetupInicial = async () => {
 
         // 4. Asegurar que el perfil tenga el plantel correcto
         const userId = (await supabaseClient.auth.getUser()).data.user?.id;
-        if (userId) {
+        if (userId && prepData && prepData.plantel_id) {
             await supabaseClient.from('perfiles').upsert({
                 id: userId, nombre: dir, rol: 'directivo', plantel_id: prepData.plantel_id
             }, { onConflict: 'id' });
