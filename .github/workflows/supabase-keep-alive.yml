@@ -1,0 +1,17 @@
+name: Supabase Keep Alive
+
+on:
+  schedule:
+    # Corre todos los días a las 12:00 UTC automáticamente
+    - cron: '0 12 * * *'
+  workflow_dispatch:
+
+jobs:
+  ping-supabase:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Hacer ping a Supabase para evitar pausa
+        run: |
+          echo "Haciendo petición a la base de datos..."
+          curl -s -o /dev/null -w "%{http_code}" https://eexgjaydpuioncenlsmv.supabase.co/auth/v1/health
+          echo " Ping completado exitosamente. Supabase ha registrado actividad."
