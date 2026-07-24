@@ -613,9 +613,9 @@ window.realizarSetupInicial = async () => {
         }, 1000);
 
     } catch(e) { 
+        let fullError = typeof e === 'object' ? JSON.stringify(e, Object.getOwnPropertyNames(e)) : String(e);
         console.error("Setup Error Completo:", e);
-        let errorMsg = e.message || JSON.stringify(e);
-        alert("Error en Setup: " + errorMsg); 
+        alert("Error en Setup: " + fullError);
         if(btn) {
             btn.disabled = false;
             btn.innerHTML = 'Finalizar Registro';
