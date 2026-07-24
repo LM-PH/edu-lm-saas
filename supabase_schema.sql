@@ -143,9 +143,6 @@ create table public.asistencias (
 );
 alter table public.asistencias enable row level security;
 create policy "Staff ve asistencias" on public.asistencias for select to authenticated using(true);
-CREATE POLICY "Docentes_read_their_asignaciones" ON public.asignaciones_docentes FOR SELECT TO authenticated USING (
-    docente_email = ((current_setting('request.jwt.claims', true))::json ->> 'email')
-);
 create policy "Staff inserta asistencias" on public.asistencias for insert to authenticated with check(
   (select rol from public.perfiles where id = auth.uid()) in ('admin', 'maestro', 'apoyo')
 );
@@ -548,42 +545,7 @@ FOR ALL TO authenticated USING (
 -- Por lo tanto, aunque una tabla tenga "USING (true)", esta política
 -- bloqueará cualquier consulta si el plantel_id no coincide con el del usuario.
 
-DO $$ 
-DECLARE
-    t_name text;
-    tables_list text[] := ARRAY[
-        'accesos_plantel', 'acuses_recibo', 'asistencia_sesiones', 'asistencias',
-        'autorizaciones_movimientos', 'bitacora_maestro', 'calificaciones', 
-        'comunicados', 'encuadres', 'evaluaciones_actividades', 'expedientes_salud', 
-        'firmas_encuadre', 'horarios', 'intervenciones_conducta', 'justificantes_medicos', 
-        'tramites', 'actividades_maestro', 'alumnos', 'asignaciones_maestros', 
-        'citatorios', 'grupos', 'materias', 'perfiles_permitidos', 'reportes_conducta', 
-        'seguimientos_sociales', 'periodos_calificaciones', 'estudios_psicosociales',
-        'cuestionarios_psicosociales', 'horarios_maestros'
-    ];
-BEGIN
-    FOR t_name IN SELECT unnest(tables_list)
-    LOOP
-        EXECUTE format('ALTER TABLE public.%I ENABLE ROW LEVEL SECURITY;', t_name);
-        EXECUTE format('DROP POLICY IF EXISTS "Multi-Tenant Aislamiento Estricto" ON public.%I;', t_name);
 
-        EXECUTE format('
-            CREATE POLICY "Multi-Tenant Aislamiento Estricto" 
-            ON public.%I 
-            AS RESTRICTIVE
-            FOR ALL 
-            TO authenticated 
-            USING (
-                plantel_id = public.get_my_plantel_id() 
-                OR public.es_el_master() = TRUE
-            )
-            WITH CHECK (
-                plantel_id = public.get_my_plantel_id() 
-                OR public.es_el_master() = TRUE
-            );
-        ', t_name);
-    END LOOP;
-END $$;
 
 -- Trigger para eliminar usuarios de auth.users al eliminar el perfil (ej. borrar plantel)
 CREATE OR REPLACE FUNCTION public.handle_deleted_perfil()
