@@ -683,8 +683,7 @@ CREATE OR REPLACE FUNCTION public.preparar_registro_director(
   p_email text, 
   p_logo_url text, 
   p_nombre_director text, 
-  p_nombre_escuela text,
-  p_password text DEFAULT NULL
+  p_nombre_escuela text
 )
 RETURNS json
 LANGUAGE plpgsql
@@ -693,74 +692,19 @@ SET search_path = public, auth, extensions
 AS $$
 DECLARE
   v_plantel_id uuid;
-  v_user_id uuid;
-  v_existing_user_id uuid;
 BEGIN
-  -- 1. Crear el nuevo plantel
   INSERT INTO public.planteles (nombre, logo_url)
   VALUES (p_nombre_escuela, p_logo_url)
   RETURNING id INTO v_plantel_id;
 
-  -- 2. Dar permiso al correo para ser directivo en ese plantel
   INSERT INTO public.perfiles_permitidos (email, rol, plantel_id, nombre)
   VALUES (p_email, 'directivo', v_plantel_id, p_nombre_director)
   ON CONFLICT (email) DO UPDATE 
   SET rol = 'directivo', plantel_id = v_plantel_id, nombre = p_nombre_director;
 
-  -- 3. Crear usuario en auth.users si se proporcionó contraseña (sin rate limit)
-  IF p_password IS NOT NULL THEN
-    -- Verificar si ya existe
-    SELECT id INTO v_existing_user_id FROM auth.users WHERE email = p_email LIMIT 1;
-    
-    IF v_existing_user_id IS NULL THEN
-      -- Crear nuevo usuario directamente en auth.users
-      INSERT INTO auth.users (
-        id, instance_id, aud, role, email, encrypted_password, email_confirmed_at,
-        raw_app_meta_data, raw_user_meta_data, created_at, updated_at, confirmation_token, recovery_token
-      )
-      VALUES (
-        gen_random_uuid(),
-        '00000000-0000-0000-0000-000000000000',
-        'authenticated', 'authenticated',
-        p_email,
-        crypt(p_password, gen_salt('bf')),
-        now(),
-        '{"provider":"email","providers":["email"]}',
-        json_build_object('nombre', p_nombre_director, 'rol', 'directivo', 'plantel_id', v_plantel_id),
-        now(), now(), '', ''
-      ) RETURNING id INTO v_user_id;
-
-      -- Crear identidad
-      INSERT INTO auth.identities (id, user_id, identity_data, provider, provider_id, last_sign_in_at, created_at, updated_at)
-      VALUES (
-        gen_random_uuid(), v_user_id,
-        format('{"sub":"%s","email":"%s"}', v_user_id::text, p_email)::jsonb,
-        'email', p_email, now(), now(), now()
-      );
-
-      -- Crear perfil público directamente
-      INSERT INTO public.perfiles (id, rol, nombre, plantel_id)
-      VALUES (v_user_id, 'directivo', p_nombre_director, v_plantel_id)
-      ON CONFLICT (id) DO UPDATE SET rol = 'directivo', nombre = p_nombre_director, plantel_id = v_plantel_id;
-
-    ELSE
-      -- Usuario ya existe, actualizar su plantel
-      v_user_id := v_existing_user_id;
-      UPDATE public.perfiles SET rol = 'directivo', plantel_id = v_plantel_id WHERE id = v_user_id;
-    END IF;
-  END IF;
-
-  -- 4. Retornar éxito y el ID
-  RETURN json_build_object(
-    'success', true,
-    'plantel_id', v_plantel_id,
-    'user_id', v_user_id
-  );
+  RETURN json_build_object('success', true, 'plantel_id', v_plantel_id);
 EXCEPTION WHEN OTHERS THEN
-  RETURN json_build_object(
-    'success', false,
-    'error', SQLERRM
-  );
+  RETURN json_build_object('success', false, 'error', SQLERRM);
 END;
 $$;
 

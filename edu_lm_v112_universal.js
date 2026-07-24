@@ -273,7 +273,7 @@ window.handleLogin = async (e) => {
   } catch (err) {
     console.error(">>> LOGIN ERROR:", err);
     if(errorMsg) {
-        errorMsg.innerText = err.message;
+        errorMsg.innerText = err.message || err.error_description || JSON.stringify(err) || 'Error desconocido. Verifique sus credenciales.';
         errorMsg.style.color = '#ef4444';
     }
   } finally {
@@ -565,22 +565,32 @@ window.realizarSetupInicial = async () => {
     }
 
     try {
-        // 1. Un solo RPC hace todo: crea la escuela Y al director en auth.users sin rate limit
+        // 1. Crear solo la escuela en la BD (sin tocar auth.users)
         const { data: prepData, error: prepErr } = await supabaseClient.rpc('preparar_registro_director', {
             p_email: cor,
             p_nombre_director: dir,
             p_nombre_escuela: esc,
-            p_logo_url: logoBase64,
-            p_password: pas
+            p_logo_url: logoBase64
         });
         if (prepErr) throw prepErr;
         if (prepData && prepData.success === false) throw new Error(prepData.error);
 
-        // 2. Solo iniciamos sesión — el usuario ya existe en la BD
-        await new Promise(r => setTimeout(r, 1000));
+        // 2. Crear la cuenta en Supabase Auth (método oficial, compatible 100%)
+        const { data: authData, error: authErr } = await supabaseClient.auth.signUp({
+            email: cor,
+            password: pas,
+            options: { data: { nombre: dir, rol: 'directivo', plantel_id: prepData.plantel_id } }
+        });
+        // Ignorar el error silencioso de "ya existe" (Supabase devuelve {} sin mensaje)
+        if (authErr && authErr.message) {
+            throw new Error(authErr.message);
+        }
+
+        // 3. Iniciar sesión con las credenciales recién creadas
+        await new Promise(r => setTimeout(r, 1500));
         const { error: loginErr } = await supabaseClient.auth.signInWithPassword({ email: cor, password: pas });
         if (loginErr) {
-            alert("⚠️ Escuela registrada.\n\nNo se pudo iniciar sesión automáticamente.\n\nIngresa manualmente con:\n📧 " + cor + "\n🔑 La contraseña que escribiste.");
+            alert("⚠️ Escuela registrada.\n\nIngresa manualmente con:\n📧 " + cor + "\n🔑 La contraseña que escribiste.");
             window.location.reload();
             return;
         }
