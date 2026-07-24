@@ -581,8 +581,8 @@ window.realizarSetupInicial = async () => {
             password: pas,
             options: { data: { nombre: dir, rol: 'directivo', plantel_id: prepData.plantel_id } }
         });
-        // Ignorar el error silencioso de "ya existe" (Supabase devuelve {} sin mensaje)
-        if (authErr && authErr.message) {
+        // Ignorar el error silencioso de "ya existe" o rate limit (Supabase devuelve {} o mensaje vacío)
+        if (authErr && authErr.message && authErr.message !== '{}' && authErr.message !== '""') {
             throw new Error(authErr.message);
         }
 
