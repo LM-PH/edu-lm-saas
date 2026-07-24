@@ -777,10 +777,14 @@ CREATE TABLE IF NOT EXISTS public.citatorios (
     alumno_id uuid REFERENCES public.alumnos(id) ON DELETE CASCADE,
     emisor_id uuid REFERENCES public.perfiles(id) ON DELETE CASCADE,
     motivo text NOT NULL,
-    tipo text NOT NULL,
+    tipo text DEFAULT 'General',
     estado text DEFAULT 'pendiente',
-    fecha timestamp with time zone DEFAULT now(),
-    plantel_id uuid REFERENCES public.planteles(id) ON DELETE CASCADE
+    creado_en timestamp with time zone DEFAULT now(),
+    plantel_id uuid REFERENCES public.planteles(id) ON DELETE CASCADE,
+    fecha_cita timestamp with time zone,
+    firma_enterado text,
+    fecha_enterado timestamp with time zone,
+    visto_por_alumno boolean DEFAULT false
 );
 
 CREATE TABLE IF NOT EXISTS public.seguimientos_sociales (
