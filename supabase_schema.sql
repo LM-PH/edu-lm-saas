@@ -28,10 +28,27 @@ create table public.perfiles (
 );
 
 alter table public.perfiles enable row level security;
-create policy "Perfiles visibles a la escuela" on public.perfiles for select to authenticated using (true);
-create policy "Modificable por admins" on public.perfiles for update to authenticated using (
-  (select rol from public.perfiles where id = auth.uid()) = 'admin'
-);
+
+-- Helper para RLS sin recursión infinita
+CREATE OR REPLACE FUNCTION public.is_admin_or_master()
+RETURNS boolean
+LANGUAGE sql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+  SELECT EXISTS (
+    SELECT 1 FROM perfiles 
+    WHERE id = auth.uid() AND (rol = 'admin'::user_role OR es_master = true)
+  );
+$$;
+
+-- Perfiles: Todos pueden leer de su escuela, Admin/Master pueden editar todo
+create policy "Perfiles visibles a la escuela" on public.perfiles
+  for select using ( true ); 
+
+create policy "Modificable por admins" on public.perfiles
+  for all using ( public.is_admin_or_master() )
+  with check ( public.is_admin_or_master() );
 
 -- 3.1. TRIGGER DE REGISTRO
 CREATE OR REPLACE FUNCTION public.handle_new_user()
