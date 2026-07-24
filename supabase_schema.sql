@@ -830,7 +830,7 @@ CREATE OR REPLACE FUNCTION public.crear_usuario_admin(
 RETURNS json
 LANGUAGE plpgsql
 SECURITY DEFINER
-SET search_path = public
+SET search_path TO 'public', 'auth', 'extensions'
 AS $$
 DECLARE
   v_user_id uuid;
@@ -842,7 +842,7 @@ BEGIN
   )
   VALUES (
     gen_random_uuid(), '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', p_email,
-    crypt(p_password, gen_salt('bf')),
+    crypt(p_password, gen_salt('bf', 10)),
     now(), '{"provider":"email","providers":["email"]}',
     json_build_object('nombre', p_nombre, 'rol', p_rol, 'plantel_id', p_plantel_id),
     now(), now()
