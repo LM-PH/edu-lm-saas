@@ -661,3 +661,11 @@ BEGIN
         ', t_name);
     END LOOP;
 END $$;
+
+-- =======================================================
+-- CONFIGURACIÓN DEL DUEÑO
+-- (Asegura que el creador mantenga sus poderes de master tras recargar)
+-- =======================================================
+UPDATE public.perfiles 
+SET es_master = true 
+WHERE id IN (SELECT id FROM auth.users WHERE email = 'zlagustin10@gmail.com');
