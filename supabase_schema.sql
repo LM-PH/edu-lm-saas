@@ -669,3 +669,45 @@ END $$;
 UPDATE public.perfiles 
 SET es_master = true 
 WHERE id IN (SELECT id FROM auth.users WHERE email = 'zlagustin10@gmail.com');
+
+-- =======================================================
+-- FUNCIÓN PARA REGISTRAR NUEVOS PLANTELES
+-- (Usada por el panel SaaS para preparar la base de datos)
+-- =======================================================
+CREATE OR REPLACE FUNCTION public.preparar_registro_director(
+  p_email text, 
+  p_logo_url text, 
+  p_nombre_director text, 
+  p_nombre_escuela text
+)
+RETURNS json
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_plantel_id uuid;
+BEGIN
+  -- 1. Crear el nuevo plantel
+  INSERT INTO public.planteles (nombre, logo_url)
+  VALUES (p_nombre_escuela, p_logo_url)
+  RETURNING id INTO v_plantel_id;
+
+  -- 2. Dar permiso al correo para ser directivo en ese plantel
+  INSERT INTO public.perfiles_permitidos (email, rol, plantel_id, nombre)
+  VALUES (p_email, 'directivo', v_plantel_id, p_nombre_director)
+  ON CONFLICT (email) DO UPDATE 
+  SET rol = 'directivo', plantel_id = v_plantel_id, nombre = p_nombre_director;
+
+  -- 3. Retornar éxito y el ID
+  RETURN json_build_object(
+    'success', true,
+    'plantel_id', v_plantel_id
+  );
+EXCEPTION WHEN OTHERS THEN
+  RETURN json_build_object(
+    'success', false,
+    'error', SQLERRM
+  );
+END;
+$$;
