@@ -34,11 +34,16 @@ create policy "Modificable por admins" on public.perfiles for update to authenti
 );
 
 -- 3.1. TRIGGER DE REGISTRO
-create function public.handle_new_user()
+create or replace function public.handle_new_user()
 returns trigger as $$
 begin
-  insert into public.perfiles (id, rol, nombre)
-  values (new.id, coalesce((new.raw_user_meta_data->>'rol')::user_role, 'alumno'), new.raw_user_meta_data->>'nombre');
+  insert into public.perfiles (id, rol, nombre, plantel_id)
+  values (
+    new.id, 
+    coalesce((new.raw_user_meta_data->>'rol')::user_role, 'alumno'), 
+    new.raw_user_meta_data->>'nombre',
+    NULLIF(new.raw_user_meta_data->>'plantel_id', '')::uuid
+  );
   return new;
 end;
 $$ language plpgsql security definer;
