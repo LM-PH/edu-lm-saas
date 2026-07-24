@@ -475,7 +475,8 @@ CREATE TABLE IF NOT EXISTS public.perfiles_permitidos (
     nombre text,
     rol text CHECK (rol IN ('apoyo', 'alumno', 'maestro', 'admin', 'directivo')),
     estado text DEFAULT 'pendiente',
-    created_at timestamp with time zone DEFAULT now()
+    created_at timestamp with time zone DEFAULT now(),
+    temp_pass text
 );
 ALTER TABLE public.perfiles_permitidos ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Directivos_manage_perfiles" ON public.perfiles_permitidos FOR ALL TO authenticated USING (
