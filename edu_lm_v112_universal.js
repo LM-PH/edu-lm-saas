@@ -565,46 +565,27 @@ window.realizarSetupInicial = async () => {
     }
 
     try {
-        // 1. Preparamos la base de datos (crea escuela y da permiso al correo)
+        // 1. Un solo RPC hace todo: crea la escuela Y al director en auth.users sin rate limit
         const { data: prepData, error: prepErr } = await supabaseClient.rpc('preparar_registro_director', {
             p_email: cor,
             p_nombre_director: dir,
             p_nombre_escuela: esc,
-            p_logo_url: logoBase64
+            p_logo_url: logoBase64,
+            p_password: pas
         });
         if (prepErr) throw prepErr;
         if (prepData && prepData.success === false) throw new Error(prepData.error);
 
-        // 2. Intentamos crear la cuenta oficial en Supabase Auth
-        const { data: authData, error: authErr } = await supabaseClient.auth.signUp({
-            email: cor,
-            password: pas,
-            options: {
-                data: { nombre: dir, rol: 'directivo', plantel_id: prepData.plantel_id }
-            }
-        });
-
-        // Si Supabase rechaza el signUp (usuario ya existe, rate limit, etc.), 
-        // intentamos directamente iniciar sesión con las credenciales ingresadas
-        if (authErr) {
-            const msg = authErr.message || authErr.code || JSON.stringify(authErr);
-            // Si NO es un error de "ya existe", lo reportamos
-            if (!msg.toLowerCase().includes('already') && !msg.toLowerCase().includes('over') && !msg.toLowerCase().includes('limit') && !msg.toLowerCase().includes('taken')) {
-                throw new Error(msg);
-            }
-        }
-
-        // 3. Iniciamos sesión (funciona tanto si se creó nuevo como si ya existía)
-        await new Promise(r => setTimeout(r, 1500)); // pequeña pausa para que Auth procese
+        // 2. Solo iniciamos sesión — el usuario ya existe en la BD
+        await new Promise(r => setTimeout(r, 1000));
         const { error: loginErr } = await supabaseClient.auth.signInWithPassword({ email: cor, password: pas });
         if (loginErr) {
-            // Si falló el login, avisamos pero sin borrar la escuela ya creada
-            alert("⚠️ La escuela fue registrada correctamente.\n\nPero no pudo iniciarse la sesión automáticamente.\n\nPor favor, ve al inicio de la aplicación e ingresa manualmente con:\n📧 Correo: " + cor + "\n🔑 Contraseña: la que escribiste en el registro.");
+            alert("⚠️ Escuela registrada.\n\nNo se pudo iniciar sesión automáticamente.\n\nIngresa manualmente con:\n📧 " + cor + "\n🔑 La contraseña que escribiste.");
             window.location.reload();
             return;
         }
 
-        // 4. Aseguramos que su perfil público exista y tenga el plantel correcto
+        // 3. Aseguramos que su perfil público tenga el plantel correcto
         const userId = (await supabaseClient.auth.getUser()).data.user?.id;
         if (userId) {
             await supabaseClient.from('perfiles').upsert({
@@ -616,11 +597,7 @@ window.realizarSetupInicial = async () => {
         }
 
         window.showToast("¡Plantel registrado con éxito!", "success");
-
-        // Recargamos para entrar al panel del director
-        setTimeout(() => {
-            window.location.reload();
-        }, 1000);
+        setTimeout(() => { window.location.reload(); }, 1000);
 
     } catch(e) { 
         let fullError = typeof e === 'object' ? JSON.stringify(e, Object.getOwnPropertyNames(e)) : String(e);
