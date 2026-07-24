@@ -838,20 +838,26 @@ BEGIN
   -- 1. Insertar directamente en la tabla auth.users usando pgcrypto
   INSERT INTO auth.users (
     id, instance_id, aud, role, email, encrypted_password, email_confirmed_at, 
-    raw_app_meta_data, raw_user_meta_data, created_at, updated_at
+    raw_app_meta_data, raw_user_meta_data, created_at, updated_at,
+    confirmation_token, recovery_token, email_change_token_new, email_change,
+    is_sso_user, is_anonymous, is_super_admin, phone_change, phone_change_token, 
+    email_change_token_current, email_change_confirm_status, reauthentication_token
   )
   VALUES (
     gen_random_uuid(), '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', p_email,
     crypt(p_password, gen_salt('bf', 10)),
     now(), '{"provider":"email","providers":["email"]}',
     json_build_object('nombre', p_nombre, 'rol', p_rol, 'plantel_id', p_plantel_id),
-    now(), now()
+    now(), now(),
+    '', '', '', '',
+    false, false, false, '', '',
+    '', 0, ''
   ) RETURNING id INTO v_user_id;
 
   -- 2. Crear la identidad en auth.identities
   INSERT INTO auth.identities (id, user_id, identity_data, provider, provider_id, last_sign_in_at, created_at, updated_at)
   VALUES (
-    gen_random_uuid(), v_user_id, format('{"sub":"%s","email":"%s"}', v_user_id::text, p_email)::jsonb, 'email', p_email,
+    gen_random_uuid(), v_user_id, json_build_object('sub', v_user_id::text, 'email', p_email, 'email_verified', false, 'phone_verified', false), 'email', v_user_id::text,
     now(), now(), now()
   );
 
