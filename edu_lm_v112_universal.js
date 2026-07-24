@@ -565,7 +565,18 @@ window.realizarSetupInicial = async () => {
     }
 
     try {
-        // 1. Crear solo la escuela en la BD (sin tocar auth.users)
+        // 1. Crear la cuenta en Auth PRIMERO (puede quedar sin confirmar)
+        const { data: authData, error: authErr } = await supabaseClient.auth.signUp({
+            email: cor,
+            password: pas,
+            options: { data: { nombre: dir, rol: 'directivo' } }
+        });
+        // Ignorar error silencioso {} (usuario ya existe)
+        if (authErr && authErr.message && authErr.message !== '{}' && authErr.message !== '""') {
+            throw new Error(authErr.message);
+        }
+
+        // 2. Crear la escuela Y auto-confirmar el correo del director en auth.users
         const { data: prepData, error: prepErr } = await supabaseClient.rpc('preparar_registro_director', {
             p_email: cor,
             p_nombre_director: dir,
@@ -575,19 +586,8 @@ window.realizarSetupInicial = async () => {
         if (prepErr) throw prepErr;
         if (prepData && prepData.success === false) throw new Error(prepData.error);
 
-        // 2. Crear la cuenta en Supabase Auth (método oficial, compatible 100%)
-        const { data: authData, error: authErr } = await supabaseClient.auth.signUp({
-            email: cor,
-            password: pas,
-            options: { data: { nombre: dir, rol: 'directivo', plantel_id: prepData.plantel_id } }
-        });
-        // Ignorar el error silencioso de "ya existe" o rate limit (Supabase devuelve {} o mensaje vacío)
-        if (authErr && authErr.message && authErr.message !== '{}' && authErr.message !== '""') {
-            throw new Error(authErr.message);
-        }
-
-        // 3. Iniciar sesión con las credenciales recién creadas
-        await new Promise(r => setTimeout(r, 1500));
+        // 3. Ahora el correo está confirmado — iniciar sesión
+        await new Promise(r => setTimeout(r, 1000));
         const { error: loginErr } = await supabaseClient.auth.signInWithPassword({ email: cor, password: pas });
         if (loginErr) {
             alert("⚠️ Escuela registrada.\n\nIngresa manualmente con:\n📧 " + cor + "\n🔑 La contraseña que escribiste.");
@@ -595,14 +595,11 @@ window.realizarSetupInicial = async () => {
             return;
         }
 
-        // 3. Aseguramos que su perfil público tenga el plantel correcto
+        // 4. Asegurar que el perfil tenga el plantel correcto
         const userId = (await supabaseClient.auth.getUser()).data.user?.id;
         if (userId) {
             await supabaseClient.from('perfiles').upsert({
-                id: userId,
-                nombre: dir,
-                rol: 'directivo',
-                plantel_id: prepData.plantel_id
+                id: userId, nombre: dir, rol: 'directivo', plantel_id: prepData.plantel_id
             }, { onConflict: 'id' });
         }
 

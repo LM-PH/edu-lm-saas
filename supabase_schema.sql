@@ -693,14 +693,24 @@ AS $$
 DECLARE
   v_plantel_id uuid;
 BEGIN
+  -- 1. Crear el plantel
   INSERT INTO public.planteles (nombre, logo_url)
   VALUES (p_nombre_escuela, p_logo_url)
   RETURNING id INTO v_plantel_id;
 
+  -- 2. Registrar permiso del director
   INSERT INTO public.perfiles_permitidos (email, rol, plantel_id, nombre)
   VALUES (p_email, 'directivo', v_plantel_id, p_nombre_director)
   ON CONFLICT (email) DO UPDATE 
   SET rol = 'directivo', plantel_id = v_plantel_id, nombre = p_nombre_director;
+
+  -- 3. AUTO-CONFIRMAR el correo en auth.users (si ya fue creado por signUp)
+  --    Esto evita que el director tenga que hacer clic en el correo de verificación
+  UPDATE auth.users 
+  SET email_confirmed_at = now(),
+      updated_at = now()
+  WHERE email = p_email 
+    AND email_confirmed_at IS NULL;
 
   RETURN json_build_object('success', true, 'plantel_id', v_plantel_id);
 EXCEPTION WHEN OTHERS THEN
