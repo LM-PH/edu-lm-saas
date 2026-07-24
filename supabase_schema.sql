@@ -58,13 +58,18 @@ SECURITY DEFINER
 AS $$
 BEGIN
   BEGIN
-    INSERT INTO public.perfiles (id, rol, nombre, plantel_id)
-    VALUES (
-      new.id, 
-      coalesce((new.raw_user_meta_data->>'rol')::user_role, 'alumno'), 
-      new.raw_user_meta_data->>'nombre',
-      NULLIF(new.raw_user_meta_data->>'plantel_id', '')::uuid
-    );
+        INSERT INTO public.perfiles (id, rol, nombre, plantel_id)
+        VALUES (
+          new.id, 
+          coalesce((new.raw_user_meta_data->>'rol')::user_role, 'alumno'), 
+          new.raw_user_meta_data->>'nombre',
+          NULLIF(new.raw_user_meta_data->>'plantel_id', '')::uuid
+        );
+
+        -- Marcar como activo en perfiles_permitidos
+        UPDATE public.perfiles_permitidos
+        SET estado = 'activo'
+        WHERE email = new.email;
   EXCEPTION WHEN OTHERS THEN
     RAISE WARNING 'Error en handle_new_user: %', SQLERRM;
   END;
