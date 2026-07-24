@@ -929,3 +929,146 @@ CREATE POLICY "Directivos_manage_asignaciones" ON public.asignaciones_maestros F
 );
 
 CREATE POLICY "Lectura_general_asignaciones" ON public.asignaciones_maestros FOR SELECT TO authenticated USING (true);
+
+-- =======================================================
+-- TABLAS FALTANTES AGREGADAS AUTOMATICAMENTE
+-- =======================================================
+CREATE TABLE IF NOT EXISTS public.expedientes_salud (
+    id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+    alumno_id uuid REFERENCES public.alumnos(id) ON DELETE CASCADE,
+    tipo_alergia text,
+    observaciones_medicas text,
+    perfil_id uuid REFERENCES public.perfiles(id) ON DELETE CASCADE,
+    plantel_id uuid REFERENCES public.planteles(id) ON DELETE CASCADE,
+    creado_en timestamp with time zone DEFAULT now()
+);
+ALTER TABLE public.expedientes_salud ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Lectura y escritura salud" ON public.expedientes_salud FOR ALL TO authenticated USING (plantel_id = (SELECT p.plantel_id FROM public.perfiles p WHERE p.id = auth.uid()));
+
+CREATE TABLE IF NOT EXISTS public.justificantes_medicos (
+    id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+    alumno_id uuid REFERENCES public.alumnos(id) ON DELETE CASCADE,
+    autor_id uuid REFERENCES public.perfiles(id) ON DELETE CASCADE,
+    motivo text,
+    fecha_inicio timestamp with time zone,
+    fecha_fin timestamp with time zone,
+    plantel_id uuid REFERENCES public.planteles(id) ON DELETE CASCADE,
+    fecha_emision timestamp with time zone DEFAULT now()
+);
+ALTER TABLE public.justificantes_medicos ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Lectura y escritura justificantes" ON public.justificantes_medicos FOR ALL TO authenticated USING (plantel_id = (SELECT p.plantel_id FROM public.perfiles p WHERE p.id = auth.uid()));
+
+CREATE TABLE IF NOT EXISTS public.accesos_plantel (
+    id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+    alumno_id uuid REFERENCES public.alumnos(id) ON DELETE CASCADE,
+    estado text NOT NULL,
+    registrador_id uuid REFERENCES public.perfiles(id) ON DELETE CASCADE,
+    fecha text NOT NULL,
+    hora text NOT NULL,
+    plantel_id uuid REFERENCES public.planteles(id) ON DELETE CASCADE
+);
+ALTER TABLE public.accesos_plantel ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Lectura y escritura accesos" ON public.accesos_plantel FOR ALL TO authenticated USING (plantel_id = (SELECT p.plantel_id FROM public.perfiles p WHERE p.id = auth.uid()));
+
+CREATE TABLE IF NOT EXISTS public.tramites (
+    id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+    alumno_id uuid REFERENCES public.alumnos(id) ON DELETE CASCADE,
+    tipo text NOT NULL,
+    estado text DEFAULT 'Pendiente',
+    plantel_id uuid REFERENCES public.planteles(id) ON DELETE CASCADE,
+    creado_en timestamp with time zone DEFAULT now()
+);
+ALTER TABLE public.tramites ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Lectura y escritura tramites" ON public.tramites FOR ALL TO authenticated USING (plantel_id = (SELECT p.plantel_id FROM public.perfiles p WHERE p.id = auth.uid()));
+
+CREATE TABLE IF NOT EXISTS public.comunicados_vistos (
+    perfil_id uuid REFERENCES public.perfiles(id) ON DELETE CASCADE,
+    comunicado_id uuid REFERENCES public.comunicados(id) ON DELETE CASCADE,
+    visto_en timestamp with time zone DEFAULT now(),
+    PRIMARY KEY (perfil_id, comunicado_id)
+);
+ALTER TABLE public.comunicados_vistos ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Acceso general vistos" ON public.comunicados_vistos FOR ALL TO authenticated USING (true);
+
+CREATE TABLE IF NOT EXISTS public.bitacora_maestro (
+    id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+    perfil_id uuid REFERENCES public.perfiles(id) ON DELETE CASCADE,
+    firma_autor text,
+    texto text NOT NULL,
+    fecha_referencia timestamp with time zone,
+    plantel_id uuid REFERENCES public.planteles(id) ON DELETE CASCADE,
+    creado_en timestamp with time zone DEFAULT now()
+);
+ALTER TABLE public.bitacora_maestro ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Lectura y escritura bitacora" ON public.bitacora_maestro FOR ALL TO authenticated USING (plantel_id = (SELECT p.plantel_id FROM public.perfiles p WHERE p.id = auth.uid()));
+
+CREATE TABLE IF NOT EXISTS public.firmas_boleta (
+    id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+    alumno_id uuid REFERENCES public.alumnos(id) ON DELETE CASCADE,
+    plantel_id uuid REFERENCES public.planteles(id) ON DELETE CASCADE,
+    trimestre text NOT NULL,
+    nombre_tutor text NOT NULL,
+    fecha_firma timestamp with time zone DEFAULT now()
+);
+ALTER TABLE public.firmas_boleta ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Lectura y escritura firmas boleta" ON public.firmas_boleta FOR ALL TO authenticated USING (plantel_id = (SELECT p.plantel_id FROM public.perfiles p WHERE p.id = auth.uid()));
+
+CREATE TABLE IF NOT EXISTS public.actividades_maestro (
+    id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+    maestro_id uuid REFERENCES public.perfiles(id) ON DELETE CASCADE,
+    titulo text NOT NULL,
+    descripcion text,
+    materia text NOT NULL,
+    grupo_id uuid REFERENCES public.grupos(id) ON DELETE CASCADE,
+    target_grado text,
+    rubro_name text,
+    rubro_peso numeric,
+    trimestre integer,
+    plantel_id uuid REFERENCES public.planteles(id) ON DELETE CASCADE,
+    creado_en timestamp with time zone DEFAULT now()
+);
+ALTER TABLE public.actividades_maestro ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Lectura y escritura actividades maestro" ON public.actividades_maestro FOR ALL TO authenticated USING (plantel_id = (SELECT p.plantel_id FROM public.perfiles p WHERE p.id = auth.uid()));
+
+CREATE TABLE IF NOT EXISTS public.horarios (
+    id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+    nombre text NOT NULL,
+    archivo_url text NOT NULL,
+    grado text,
+    grupo_id uuid REFERENCES public.grupos(id) ON DELETE CASCADE,
+    plantel_id uuid REFERENCES public.planteles(id) ON DELETE CASCADE,
+    creado_en timestamp with time zone DEFAULT now()
+);
+ALTER TABLE public.horarios ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Lectura y escritura horarios" ON public.horarios FOR ALL TO authenticated USING (plantel_id = (SELECT p.plantel_id FROM public.perfiles p WHERE p.id = auth.uid()));
+
+CREATE TABLE IF NOT EXISTS public.biblioteca_prestamos (
+    id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+    alumno_id uuid REFERENCES public.alumnos(id) ON DELETE CASCADE,
+    tipo text NOT NULL,
+    recurso text NOT NULL,
+    condicion_entrega text,
+    condicion_devolucion text,
+    profesor_solicitante text,
+    modulo_solicitante text,
+    devuelto boolean DEFAULT false,
+    fecha_devolucion timestamp with time zone,
+    plantel_id uuid REFERENCES public.planteles(id) ON DELETE CASCADE,
+    creado_en timestamp with time zone DEFAULT now()
+);
+ALTER TABLE public.biblioteca_prestamos ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Lectura y escritura bib prestamos" ON public.biblioteca_prestamos FOR ALL TO authenticated USING (plantel_id = (SELECT p.plantel_id FROM public.perfiles p WHERE p.id = auth.uid()));
+
+CREATE TABLE IF NOT EXISTS public.biblioteca_reservas (
+    id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+    maestro_id uuid REFERENCES public.perfiles(id) ON DELETE CASCADE,
+    fecha text NOT NULL,
+    hora_inicio text NOT NULL,
+    hora_fin text NOT NULL,
+    proposito text,
+    area text,
+    plantel_id uuid REFERENCES public.planteles(id) ON DELETE CASCADE,
+    creado_en timestamp with time zone DEFAULT now()
+);
+ALTER TABLE public.biblioteca_reservas ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Lectura y escritura bib reservas" ON public.biblioteca_reservas FOR ALL TO authenticated USING (plantel_id = (SELECT p.plantel_id FROM public.perfiles p WHERE p.id = auth.uid()));
