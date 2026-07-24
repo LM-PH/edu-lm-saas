@@ -689,7 +689,7 @@ CREATE OR REPLACE FUNCTION public.preparar_registro_director(
 RETURNS json
 LANGUAGE plpgsql
 SECURITY DEFINER
-SET search_path = public, auth
+SET search_path = public, auth, extensions
 AS $$
 DECLARE
   v_plantel_id uuid;
