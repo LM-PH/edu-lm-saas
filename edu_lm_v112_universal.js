@@ -8631,7 +8631,7 @@ window.justificarFaltaManual = async (alumnoId, fecha, rawVal) => {
             registrador_id: userData.user.id,
             grupo_id: gid,
             estado: 'Justificada',
-            materia: (window.currentAulaMateria || '').trim(),
+            materia: (materia || '').trim(),
             creado_en: `${fecha}T23:59:59Z`, 
             fecha: fecha,
             tipo: 'Maestro (Manual)',
