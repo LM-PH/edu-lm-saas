@@ -8312,7 +8312,7 @@ window.cargarAlumnosLista = async () => {
             }
             
             for(let al of alumnos) {
-                const initials = al.nombreOrdenado.substring(0,2).toUpperCase();
+                const initials = al.nombre.substring(0,2).toUpperCase();
                 let promFinalNum = 0;
 
                 if (isModoFinal) {
@@ -8347,7 +8347,7 @@ window.cargarAlumnosLista = async () => {
                     <tr style="border-bottom:1px solid var(--border)">
                         <td style="padding:12px; display:flex; gap:12px; align-items:center;">
                            <div style="width:32px; height:32px; border-radius:50%; background:var(--primary); color:white; display:flex; justify-content:center; align-items:center; font-size:12px; font-weight:bold; flex-shrink:0;">${initials}</div>
-                           <div><span style="font-weight:600;">${al.nombreOrdenado}</span> <br> <span style="font-size:0.75rem; color:var(--text-muted)">${al.matricula}</span></div>
+                           <div><span style="font-weight:600;">${al.nombre}</span> <br> <span style="font-size:0.75rem; color:var(--text-muted)">${al.matricula}</span></div>
                         </td>
                         <td style="text-align:center; padding:12px;">${p1.toFixed(1)}</td>
                         <td style="text-align:center; padding:12px;">${p2.toFixed(1)}</td>
@@ -8395,7 +8395,7 @@ window.cargarAlumnosLista = async () => {
                     <tr style="border-bottom:1px solid var(--border)">
                         <td style="padding:12px; display:flex; gap:12px; align-items:center;">
                            <div style="width:32px; height:32px; border-radius:50%; background:var(--primary); color:white; display:flex; justify-content:center; align-items:center; font-size:12px; font-weight:bold; flex-shrink:0;">${initials}</div>
-                           <div><span style="font-weight:600;">${al.nombreOrdenado}</span> <br> <span style="font-size:0.75rem; color:var(--text-muted)">${al.matricula}</span></div>
+                           <div><span style="font-weight:600;">${al.nombre}</span> <br> <span style="font-size:0.75rem; color:var(--text-muted)">${al.matricula}</span></div>
                         </td>
                         ${actCells}
                         <td style="text-align:center; padding:12px; font-weight:bold;">${promFinalNum.toFixed(2)}</td>
@@ -8480,7 +8480,7 @@ window.cargarAlumnosLista = async () => {
              </tr>`;
              
             for(let al of alumnos) {
-                const initials = al.nombreOrdenado.substring(0,2).toUpperCase();
+                const initials = al.nombre.substring(0,2).toUpperCase();
                 let asistCell = '', totalDias = diasArray.length, faltas = 0, asistenciasConteo = 0, retardosCount = 0, justificadasCount = 0;
                 if (totalDias > 0) {
                     diasArray.forEach(d => {
@@ -8525,7 +8525,7 @@ window.cargarAlumnosLista = async () => {
                 <tr style="border-bottom:1px solid var(--border)">
                     <td style="padding:12px; display:flex; gap:12px; align-items:center;">
                        <div style="width:32px; height:32px; border-radius:50%; background:var(--primary); color:white; display:flex; justify-content:center; align-items:center; font-size:12px; font-weight:bold; flex-shrink:0;">${initials}</div>
-                       <div><span style="font-weight:600;">${al.nombreOrdenado}</span> <br> <span style="font-size:0.75rem; color:var(--text-muted)">${al.matricula}</span></div>
+                       <div><span style="font-weight:600;">${al.nombre}</span> <br> <span style="font-size:0.75rem; color:var(--text-muted)">${al.matricula}</span></div>
                     </td>
                     ${asistCell}
                     <td style="text-align:center; padding:12px;">${summaryText}</td>
@@ -8716,7 +8716,7 @@ window.cargarBoletasGrupo = async () => {
         
         let htmlRows = '';
         for(let al of alumnos) {
-            const initials = al.nombreOrdenado.substring(0,2).toUpperCase();
+            const initials = al.nombre.substring(0,2).toUpperCase();
             let promFinalNum = 0;
             let currentSettledVal = null;
             let histCells = '';
@@ -8767,7 +8767,7 @@ window.cargarBoletasGrupo = async () => {
             <tr style="border-bottom:1px solid var(--border)">
                 <td style="padding:12px; display:flex; gap:12px; align-items:center;">
                    <div style="width:32px; height:32px; border-radius:50%; background:var(--primary); color:white; display:flex; justify-content:center; align-items:center; font-size:12px; font-weight:bold; flex-shrink:0;">${initials}</div>
-                   <div><span style="font-weight:600;">${al.nombreOrdenado}</span> <br> <span style="font-size:0.75rem; color:var(--text-muted)">${al.matricula}</span></div>
+                   <div><span style="font-weight:600;">${al.nombre}</span> <br> <span style="font-size:0.75rem; color:var(--text-muted)">${al.matricula}</span></div>
                 </td>
                 ${histCells}
                 <td style="background:var(--surface-hover); text-align:center; color:var(--text-muted); font-weight:bold;">${promFinalNum.toFixed(2)}</td>
