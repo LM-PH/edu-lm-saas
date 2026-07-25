@@ -13429,11 +13429,16 @@ window.cargarAsignacionesYHorarioDocente = async () => {
         
         const selAsig = document.getElementById('selAsignacionDocente');
         if(selAsig) {
-            if(asigs.length === 0) {
-                selAsig.innerHTML = '<option value="">-- Sin asignaciones cargadas --</option>';
+            // Filtrar las materias base que no tienen grupo ni grado asignado
+            const asigsReales = asigs.filter(a => a.grupos || a.target_grado);
+            
+            if(asigsReales.length === 0) {
+                selAsig.innerHTML = '<option value="">-- Sin grupos asignados aún --</option>';
             } else {
                 selAsig.innerHTML = '<option value="">-- Seleccione una Asignación --</option>' +
-                    asigs.map((a, idx) => {
+                    asigsReales.map((a) => {
+                        // Encontramos el index original en 'asigs' para que el value coincida con _lastAsignacionesDocente
+                        const idx = asigs.indexOf(a);
                         const grpLabel = a.grupos ? a.grupos.nombre : (a.target_grado ? `Grado ${a.target_grado}` : 'Sin Grupo');
                         return `<option value="${idx}">${a.materia} - ${grpLabel}</option>`;
                     }).join('');
