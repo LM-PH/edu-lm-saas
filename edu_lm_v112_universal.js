@@ -3130,15 +3130,26 @@ window.loadFocosRojos = async () => {
     const cont = document.getElementById('focosRojosContenedor');
     if(!cont) return;
     try {
-        const { data: reportes, error } = await supabaseClient
-            .from('reportes_conducta')
-            .select('alumno_id, gravedad, alumnos(id, nombre, matricula, grupos(nombre))')
-            .eq('resuelto', false)
-            .eq('plantel_id', state.plantelId); // Contamos TODOS los no resueltos de esta escuela
+        const [reportesRes, citatoriosRes] = await Promise.all([
+            supabaseClient
+                .from('reportes_conducta')
+                .select('alumno_id, gravedad, alumnos(id, nombre, matricula, grupos(nombre))')
+                .eq('resuelto', false)
+                .eq('plantel_id', state.plantelId),
+            supabaseClient
+                .from('citatorios')
+                .select('alumno_id, estado, firma_enterado, tipo, alumnos(id, nombre, matricula, grupos(nombre))')
+                .neq('estado', 'atendido')
+                .eq('plantel_id', state.plantelId)
+        ]);
 
-        if(error) throw error;
+        if(reportesRes.error) throw reportesRes.error;
+        if(citatoriosRes.error) throw citatoriosRes.error;
+
         const conteo = {};
-        (reportes || []).forEach(r => {
+        
+        // 1. Contabilizar reportes activos
+        (reportesRes.data || []).forEach(r => {
             if(!r.alumnos) return;
             const aid = r.alumno_id;
             if(!conteo[aid]) {
@@ -3148,30 +3159,23 @@ window.loadFocosRojos = async () => {
             if(r.gravedad === 'Grave') conteo[aid].graves++;
         });
 
-        // Fetch citatorios for these students to show status in the table
-        const aluIds = Object.keys(conteo);
-        if(aluIds.length > 0) {
-            const { data: citatoriosData } = await supabaseClient
-                .from('citatorios')
-                .select('alumno_id, estado, firma_enterado, tipo')
-                .in('alumno_id', aluIds)
-                .neq('estado', 'atendido');
-            
-            if(citatoriosData) {
-                citatoriosData.forEach(cit => {
-                    if(conteo[cit.alumno_id]) {
-                        const key = cit.tipo === 'Conductual' ? 'citatorioConductual' : 'citatorioGeneral';
-                        // Si hay varios, priorizamos el pendiente, pero si está enterado lo mostramos
-                        if (!conteo[cit.alumno_id][key] || conteo[cit.alumno_id][key] === 'Firmado') {
-                            conteo[cit.alumno_id][key] = cit.estado === 'enterado' ? 'Firmado' : 'Pendiente';
-                        }
-                    }
-                });
+        // 2. Añadir citatorios activos (incluso si no tienen reportes)
+        (citatoriosRes.data || []).forEach(cit => {
+            if(!cit.alumnos) return;
+            const aid = cit.alumno_id;
+            if(!conteo[aid]) {
+                conteo[aid] = { count: 0, graves: 0, nombre: cit.alumnos.nombre, matricula: cit.alumnos.matricula, grupo: cit.alumnos.grupos?.nombre || 'S/G' };
             }
-        }
+            
+            const key = cit.tipo === 'Conductual' ? 'citatorioConductual' : 'citatorioGeneral';
+            // Si hay varios, priorizamos el pendiente
+            if (!conteo[aid][key] || conteo[aid][key] === 'Firmado') {
+                conteo[aid][key] = cit.estado === 'enterado' ? 'Firmado' : 'Pendiente';
+            }
+        });
 
-        // Mostramos si tiene al menos 1 reporte activo
-        const focos = Object.entries(conteo).map(([id, info]) => ({ id, ...info })).filter(f => f.count >= 1);
+        // Mostramos si tiene al menos 1 reporte activo O algún citatorio pendiente/firmado
+        const focos = Object.entries(conteo).map(([id, info]) => ({ id, ...info })).filter(f => f.count >= 1 || f.citatorioGeneral || f.citatorioConductual);
         
         if(focos.length === 0) {
             cont.innerHTML = '<tr><td colspan="5" style="text-align:center; padding:40px; color:var(--text-muted)">No hay alumnos con reportes activos.</td></tr>';
