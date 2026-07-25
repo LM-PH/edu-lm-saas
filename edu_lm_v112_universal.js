@@ -3412,7 +3412,7 @@ window.guardarReporteApoyo = async () => {
             .eq('gravedad', 'Grave')
             .eq('resuelto', false);
 
-        if(gravesCount >= 3) {
+        if(gravesCount > 0 && gravesCount % 3 === 0 && sev === 'Grave') {
             // Enviar citatorio formal automático a LINEA DE TIEMPO
             await supabaseClient.from('comunicados').insert([{
                 autor_id: u.data.user.id,
@@ -3431,13 +3431,6 @@ window.guardarReporteApoyo = async () => {
                 tipo: 'Conductual',
                 plantel_id: state.plantelId
             }]);
-            
-            // Marcar los reportes como resueltos (procesados) para que no vuelvan a detonar otro citatorio inmediato
-            await supabaseClient.from('reportes_conducta')
-                .update({ resuelto: true })
-                .eq('alumno_id', aid)
-                .eq('gravedad', 'Grave')
-                .eq('resuelto', false);
             
             window.showToast("Citatorio automático enviado por acumulación de reportes", "warning");
         } else if(sev === 'Grave' || cat === 'Conducta') {
