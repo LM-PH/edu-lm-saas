@@ -12913,7 +12913,7 @@ window.loadFiltrosAlumnosDinamicos = async () => {
         
         sGrado.value = valGrado;
         sGrupo.value = valGrupo;
-    } catch(e) { console.error("Error cargando filtros dinámicos:", e); }
+    } catch(e) { console.error("Error cargando filtros dinámicos:", e); alert("Error filtros: " + (e.message || JSON.stringify(e))); }
 };
 
 window.loadListasAdminPersonal = async (searchTerm = '') => {
