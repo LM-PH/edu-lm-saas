@@ -3509,7 +3509,7 @@ window.guardarCitatorio = async () => {
         if(window.loadCitatoriosApoyo) window.loadCitatoriosApoyo();
     } catch(e) {
         console.error(e);
-        window.showToast("Error al enviar citatorio", "error");
+        window.showToast("Error: " + (e.message || JSON.stringify(e)), "error"); alert("Error BD: " + JSON.stringify(e));
     } finally {
         btn.disabled = false;
         btn.innerHTML = 'Enviar Citatorio';
