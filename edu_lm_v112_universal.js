@@ -6090,10 +6090,16 @@ window.updateNotificationBadge = async (clearAll = false) => {
             const { data: asig } = await supabaseClient.from('asignaciones_maestros').select('grupo_id, target_grado').eq('docente_email', state.user.email);
             if(asig) {
                 for (const a of asig) {
-                    if(a.grupo_id) audArr.push('Grupo_' + a.grupo_id);
+                    if(a.grupo_id) {
+                        audArr.push('Grupo_' + a.grupo_id);
+                        audArr.push('Maestros_Grupo_' + a.grupo_id);
+                    }
                     else if(a.target_grado) {
                         const { data: grps } = await supabaseClient.from('grupos').select('id').like('nombre', a.target_grado + '%');
-                        if(grps) grps.forEach(g => audArr.push('Grupo_' + g.id));
+                        if(grps) grps.forEach(g => {
+                            audArr.push('Grupo_' + g.id);
+                            audArr.push('Maestros_Grupo_' + g.id);
+                        });
                     }
                 }
             }
@@ -6558,7 +6564,7 @@ window.notificarMaestrosJustificante = async (alumnoId, motivo, inicio, fin) => 
         const { error: comErr } = await supabaseClient.from('comunicados').insert([{
             autor_id: state.user.id,
             titulo: 'JUSTIFICANTE MÉDICO: ' + al.nombre,
-            audiencia: 'Grupo_' + al.grupo_id,
+            audiencia: 'Maestros_Grupo_' + al.grupo_id,
             mensaje: mensaje,
             plantel_id: state.plantelId
         }]);
@@ -7700,6 +7706,7 @@ window.loadTimelinePersonal = async (selectedDate) => {
                 for (const a of asig) {
                     if(a.grupo_id) {
                         audArr.push('Grupo_' + a.grupo_id);
+                        audArr.push('Maestros_Grupo_' + a.grupo_id);
                     } else if(a.target_grado) {
                         const { data: relatedGroups } = await supabaseClient
                             .from('grupos')
@@ -7707,7 +7714,10 @@ window.loadTimelinePersonal = async (selectedDate) => {
                             .like('nombre', a.target_grado + '%');
                         
                         if(relatedGroups) {
-                            relatedGroups.forEach(rg => audArr.push('Grupo_' + rg.id));
+                            relatedGroups.forEach(rg => {
+                                audArr.push('Grupo_' + rg.id);
+                                audArr.push('Maestros_Grupo_' + rg.id);
+                            });
                         }
                     }
                 }
