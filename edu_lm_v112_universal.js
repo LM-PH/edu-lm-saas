@@ -5879,6 +5879,11 @@ async function renderMasterGestionPerfiles() {
             biblioteca: users.filter(u => u.rol === 'biblioteca')
         };
         
+        categorized.alumno.sort((a, b) => {
+            if (a.grupo === b.grupo) return (a.nombre || '').localeCompare(b.nombre || '');
+            return (a.grupo || '').localeCompare(b.grupo || '');
+        });
+        
         categorized.alumno.forEach(u => availableGroups.add(u.grupo));
 
         const renderUserRow = (u) => `
