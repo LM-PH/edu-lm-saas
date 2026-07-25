@@ -5127,7 +5127,7 @@ window.loadMisTramites = async () => {
             .from('tramites')
             .select('*')
             .eq('alumno_id', alumno.id)
-            .order('fecha_solicitud', { ascending: false });
+            .order('creado_en', { ascending: false });
 
         if(error) throw error;
 
@@ -5140,7 +5140,7 @@ window.loadMisTramites = async () => {
         const iconos = { Pendiente: 'fa-clock', Subido: 'fa-check-circle' };
 
         cont.innerHTML = data.map(t => {
-            const fecha = new Date(t.fecha_solicitud).toLocaleDateString('es-MX', { dateStyle: 'medium' });
+            const fecha = new Date(t.creado_en).toLocaleDateString('es-MX', { dateStyle: 'medium' });
             const color = colores[t.estado] || 'var(--text-muted)';
             const icon = iconos[t.estado] || 'fa-file';
             const btnDoc = t.archivo_url
@@ -5176,7 +5176,7 @@ window.loadTramitesAdmin = async () => {
             .select('*, alumnos(nombre, matricula)')
             .eq('plantel_id', state.plantelId)
             .eq('estado', 'Pendiente')
-            .order('fecha_solicitud', { ascending: false });
+            .order('creado_en', { ascending: false });
 
         if(error) throw error;
 
@@ -5188,7 +5188,7 @@ window.loadTramitesAdmin = async () => {
         const colores = { Pendiente: 'var(--warning)', Subido: 'var(--success)' };
 
         cont.innerHTML = data.map(t => {
-            const fecha = new Date(t.fecha_solicitud).toLocaleDateString('es-MX', { dateStyle: 'medium' });
+            const fecha = new Date(t.creado_en).toLocaleDateString('es-MX', { dateStyle: 'medium' });
             const alumnoNombre = t.alumnos ? `${t.alumnos.nombre} (${t.alumnos.matricula})` : 'Alumno desconocido';
             const color = colores[t.estado] || 'var(--text-muted)';
             const btnSubir = t.estado === 'Pendiente'
@@ -5356,7 +5356,7 @@ window.loadAutorizaciones = async () => {
             .select('*')
             .eq('plantel_id', state.plantelId)
             .eq('estado', 'pendiente')
-            .order('fecha_solicitud', { ascending: false });
+            .order('creado_en', { ascending: false });
             
         if(error) throw error;
         if(!data || data.length === 0) {
@@ -5365,7 +5365,7 @@ window.loadAutorizaciones = async () => {
         }
 
         list.innerHTML = data.map(item => {
-            const dateStr = item.fecha_solicitud ? new Date(item.fecha_solicitud).toLocaleString('es-MX', { dateStyle:'short', timeStyle:'short' }) : 'Reciente';
+            const dateStr = item.creado_en ? new Date(item.creado_en).toLocaleString('es-MX', { dateStyle:'short', timeStyle:'short' }) : 'Reciente';
             return `
             <div style="border:1px solid var(--border); border-radius:8px; padding:16px; margin-bottom:12px; background:white; display:flex; justify-content:space-between; align-items:center; gap:16px; flex-wrap:wrap;">
                 <div>
