@@ -8259,21 +8259,7 @@ window.cargarAlumnosLista = async () => {
              return;
         }
 
-        // ORDENAMIENTO POR APELLIDO (Ponce Herrera Luis Miguel)
-        const formatName = (n) => {
-            const parts = n.trim().split(/\s+/);
-            if(parts.length < 2) return n;
-            // Asumimos: Nombres... Apellido1 Apellido2
-            // Pasamos a: Apellido1 Apellido2 Nombres...
-            const surnames = parts.slice(-2);
-            const names = parts.slice(0, -2);
-            return (surnames.join(' ') + ' ' + names.join(' ')).trim();
-        };
-
-        const alumnos = rawAlumnos.map(al => ({
-            ...al,
-            nombreOrdenado: formatName(al.nombre)
-        })).sort((a,b) => a.nombreOrdenado.localeCompare(b.nombreOrdenado));
+        const alumnos = rawAlumnos;
 
         let htmlRows = '';
         let stats = { sumPromedios: 0, aprobados: 0, reprobados: 0, total: alumnos.length };
@@ -8665,23 +8651,7 @@ window.cargarBoletasGrupo = async () => {
             return;
         }
 
-        // ORDENAMIENTO POR APELLIDO (Ponce Herrera Luis Miguel)
-        const formatName = (n) => {
-            if(!n) return "Sin Nombre";
-            const parts = n.trim().split(/\s+/);
-            if(parts.length < 2) return n;
-            // Asumimos: Nombres... Apellido1 Apellido2
-            // Pasamos a: Apellido1 Apellido2 Nombres...
-            const surnames = parts.slice(-2);
-            const names = parts.slice(0, -2);
-            return (surnames.join(' ') + ' ' + names.join(' ')).trim();
-        };
-
-
-        const alumnos = rawAlumnos.map(al => ({
-            ...al,
-            nombreOrdenado: formatName(al.nombre)
-        })).sort((a,b) => a.nombreOrdenado.localeCompare(b.nombreOrdenado));
+        const alumnos = rawAlumnos;
 
         // 3. Fetch Calificaciones ya asentadas (Si es modo final, traer los 3 trimestres)
         // Usamos ilike con el nombre de la materia directamente para mayor compatibilidad
