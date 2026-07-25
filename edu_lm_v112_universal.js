@@ -5855,8 +5855,19 @@ async function renderMasterGestionPerfiles() {
         if(error) throw error;
 
         const { data: alumnosData } = await supabaseClient.from('alumnos')
-            .select('contacto_email, grupos(nombre)')
+            .select('contacto_email, grupo_id')
             .eq('plantel_id', state.plantelId);
+            
+        const { data: gruposData } = await supabaseClient.from('grupos')
+            .select('id, nombre')
+            .eq('plantel_id', state.plantelId);
+            
+        const grupoDict = {};
+        if (gruposData) {
+            gruposData.forEach(g => {
+                grupoDict[g.id] = g.nombre;
+            });
+        }
             
         const grupoMap = {};
         const availableGroups = new Set();
