@@ -2094,7 +2094,7 @@ window.loadComunicadosAdmin = async (fechaFiltro = null) => {
     cont.innerHTML = '<p style="color:var(--text-muted); text-align:center;"><i class="fa-solid fa-spinner fa-spin"></i> Cargando...</p>';
     try {
         let query = supabaseClient.from('comunicados')
-            .select('*, perfiles(nombre)')
+            .select('*, perfiles!autor_id(nombre)')
             .order('fecha_envio', { ascending: false })
             .limit(30);
 
@@ -7687,7 +7687,7 @@ window.loadTimelinePersonal = async (selectedDate) => {
 
 
         let query = supabaseClient.from('comunicados')
-           .select('*, perfiles(nombre)')
+           .select('*, perfiles!autor_id(nombre)')
            .in('audiencia', audArr)
            .gte('fecha_envio', startOfDay)
            .lte('fecha_envio', endOfDay)
