@@ -6524,14 +6524,7 @@ window.registrarJustificanteMedico = async () => {
         // 2. Notificar a Maestros
         await window.notificarMaestrosJustificante(aid, motivo, inicio, fin);
 
-        // 3. Notificar al Alumno v132
-        await supabaseClient.from('comunicados').insert([{
-            autor_id: state.user.id,
-            titulo: `📄 JUSTIFICANTE MÉDICO APROBADO`,
-            mensaje: `Se ha registrado y aprobado tu justificante médico.\nMOTIVO: ${motivo}\nPERIODO: ${inicio} al ${fin}\n\nLos docentes de tus materias han sido notificados para las consideraciones académicas correspondientes.`,
-            audiencia: `Alumno_${aid}`,
-            plantel_id: state.plantelId
-        }]);
+        // Se removió la notificación al alumno según solicitud del cliente. Solo se notifica a maestros.
 
         window.showToast('Justificante generado y enviado a todos.', 'success');
         
