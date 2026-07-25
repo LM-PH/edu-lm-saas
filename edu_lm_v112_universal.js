@@ -5441,15 +5441,13 @@ window.resolverAutorizacion = async (id, dictamen, payloadStr = null) => {
                  await supabaseClient.from('asignaciones_maestros').delete().eq('docente_email', payload.email).eq('plantel_id', state.plantelId);
                  const { error: errPerm } = await supabaseClient.from('perfiles_permitidos').delete().eq('id', payload.id_permitido);
                  if(errPerm) throw errPerm;
-                 const { data: pExist } = await supabaseClient.from('perfiles').select('id').eq('nombre', payload.nombre).eq('plantel_id', state.plantelId).maybeSingle();
-                 if(pExist && pExist.id) await supabaseClient.from('perfiles').delete().eq('id', pExist.id).eq('plantel_id', state.plantelId);
+                 
+                 // Usar RPC para borrar 100% seguro (desde auth.users hasta perfiles)
+                 await supabaseClient.rpc('eliminar_usuario_por_email', { p_email: payload.email, p_plantel_id: state.plantelId });
             }
             else if(payload.action === 'delete_alumno') {
                  const idToDelete = payload.id_permitido || payload.target_id;
-                 const { error: errAlu } = await supabaseClient.from('alumnos').delete().eq('id', idToDelete);
-                 if(errAlu) throw errAlu;
-                 const { data: pExist } = await supabaseClient.from('perfiles').select('id').eq('nombre', payload.nombre).eq('plantel_id', state.plantelId).maybeSingle();
-                 if(pExist && pExist.id) await supabaseClient.from('perfiles').delete().eq('id', pExist.id).eq('plantel_id', state.plantelId);
+                 await supabaseClient.rpc('eliminar_alumno_seguro', { p_alumno_id: idToDelete, p_plantel_id: state.plantelId });
                  if(payload.email) await supabaseClient.from('perfiles_permitidos').delete().eq('email', payload.email);
             }
         }
@@ -13103,18 +13101,15 @@ window.eliminarPersona = async (idPermitido, email, nombre, rol = '') => {
         if (isDirectivo) {
             // Acción Directa para Directivos
             if (rol === 'alumno') {
-                const { error: errAlu } = await supabaseClient.from('alumnos').delete().eq('id', idPermitido);
-                if(errAlu) throw errAlu;
-                const { data: pExist } = await supabaseClient.from('perfiles').select('id').eq('nombre', nombre).eq('plantel_id', state.plantelId).maybeSingle();
-                if(pExist && pExist.id) await supabaseClient.from('perfiles').delete().eq('id', pExist.id).eq('plantel_id', state.plantelId);
+                await supabaseClient.rpc('eliminar_alumno_seguro', { p_alumno_id: idPermitido, p_plantel_id: state.plantelId });
                 await supabaseClient.from('perfiles_permitidos').delete().eq('email', email);
                 window.showToast("Alumno eliminado correctamente.", "success");
             } else {
                 await supabaseClient.from('asignaciones_maestros').delete().eq('docente_email', email).eq('plantel_id', state.plantelId);
                 const { error: errPerm } = await supabaseClient.from('perfiles_permitidos').delete().eq('id', idPermitido);
                 if(errPerm) throw errPerm;
-                const { data: pExist } = await supabaseClient.from('perfiles').select('id').eq('nombre', nombre).eq('plantel_id', state.plantelId).maybeSingle();
-                if(pExist && pExist.id) await supabaseClient.from('perfiles').delete().eq('id', pExist.id).eq('plantel_id', state.plantelId);
+                
+                await supabaseClient.rpc('eliminar_usuario_por_email', { p_email: email, p_plantel_id: state.plantelId });
                 window.showToast("Personal eliminado y acceso revocado.", "success");
             }
         } else {
