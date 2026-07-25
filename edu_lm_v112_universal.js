@@ -6084,9 +6084,12 @@ window.updateNotificationBadge = async (clearAll = false) => {
         let creadoEn = null;
         let pId = state.user.id;
 
+        if (userRole !== 'alumno' && userRole !== 'estudiante') {
+            audArr.push('Maestro_' + state.user.id);
+        }
+
         if (userRole === 'maestro' || userRole === 'docente') {
             audArr.push('Maestros', 'Personal');
-            audArr.push('Maestro_' + state.user.id);
             const { data: asig } = await supabaseClient.from('asignaciones_maestros').select('grupo_id, target_grado').eq('docente_email', state.user.email);
             if(asig) {
                 for (const a of asig) {
@@ -7383,6 +7386,18 @@ window.firmarCitatorio = async (id) => {
             .eq('id', id);
 
         if(error) throw error;
+
+        // Enviar notificación de regreso a Trabajo Social / Emisor
+        const { data: citData } = await supabaseClient.from('citatorios').select('*, alumnos(nombre)').eq('id', id).single();
+        if(citData && citData.emisor_id) {
+            await supabaseClient.from('comunicados').insert([{
+                autor_id: state.user.id,
+                titulo: `✅ Citatorio Firmado: ${citData.alumnos?.nombre || 'Alumno'}`,
+                mensaje: `El padre/tutor **${firma.trim()}** ha firmado de enterado el citatorio de Seguimiento Conductual enviado a **${citData.alumnos?.nombre || 'Alumno'}**.\n\nMotivo original: ${citData.motivo}`,
+                audiencia: `Maestro_${citData.emisor_id}`,
+                plantel_id: state.plantelId
+            }]);
+        }
         window.showToast("Citatorio firmado por el tutor", "success");
         window.loadTimelineAlumno();
     } catch(e) { 
