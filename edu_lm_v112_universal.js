@@ -10895,16 +10895,11 @@ window.cargarEncuadreActivo = async () => {
             plantel_id: state.plantelId
         };
 
-        if(isTec) {
-            if(encExistente) {
-                const { error } = await supabaseClient.from('encuadres').update(payloadEnc).eq('id', encExistente.id);
-                if(error) throw error;
-            } else {
-                const { error } = await supabaseClient.from('encuadres').insert([payloadEnc]);
-                if(error) throw error;
-            }
+        if(encExistente) {
+            const { error } = await supabaseClient.from('encuadres').update(payloadEnc).eq('id', encExistente.id);
+            if(error) throw error;
         } else {
-            const { error } = await supabaseClient.from('encuadres').upsert(payloadEnc, { onConflict: 'grupo_id, materia, trimestre' });
+            const { error } = await supabaseClient.from('encuadres').insert([payloadEnc]);
             if(error) throw error;
         }
 
