@@ -6866,7 +6866,7 @@ window.loadBoletasAlumno = async () => {
         `;
     } catch(e) {
         console.error(e);
-        cont.innerHTML = '<div class="alert alert-danger" style="font-size:0.85rem;">Error al sincronizar con el servidor escolar.</div>';
+        cont.innerHTML = `<div class="alert alert-danger" style="font-size:0.85rem;">Error al sincronizar con el servidor escolar: ${e.message || e.error_description || JSON.stringify(e)}</div>`;
     }
 };
 
@@ -7099,8 +7099,8 @@ window.loadFirmasPendientes = async () => {
              return;
         }
         
-        // Obtenemos los encuadres del grupo
-        const { data: encuadres } = await supabaseClient.from('encuadres').select('*, perfiles(nombre)').eq('grupo_id', alum.grupo_id);
+        // Obtenemos los encuadres del grupo que ya fueron enviados
+        const { data: encuadres } = await supabaseClient.from('encuadres').select('*, perfiles(nombre)').eq('grupo_id', alum.grupo_id).eq('notificacion_enviada', true);
         
         if(!encuadres || encuadres.length === 0) {
             cont.innerHTML = '<div style="padding:20px; text-align:center; color:var(--text-muted);">Sin encuadres o firmas pendientes.</div>';
