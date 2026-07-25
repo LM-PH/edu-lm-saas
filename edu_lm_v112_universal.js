@@ -13182,14 +13182,12 @@ window.resetEstadoEncuadre = async () => {
             // 2. Borrar firmas
             await supabaseClient.from('firmas_encuadre').delete().eq('encuadre_id', encData.id);
 
-            // 3. Borrar comunicados relacionados a este trimestre específico
-            const labelTri = (window.currentTrimestre || 1) + "° Trimestre";
+            // 3. Borrar comunicados relacionados a este encuadre específico usando la etiqueta invisible
             const { data: coms } = await supabaseClient.from('comunicados')
                 .select('id')
                 .eq('plantel_id', state.plantelId)
                 .eq('autor_id', encData.maestro_id)
-                .ilike('titulo', `%${mat}%`)
-                .ilike('titulo', `%${labelTri}%`);
+                .ilike('mensaje', `%[REF_ID: ${encData.id}]%`);
             
             if(coms && coms.length > 0) {
                 const cIds = coms.map(c => c.id);
