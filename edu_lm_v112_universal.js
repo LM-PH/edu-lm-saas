@@ -5863,7 +5863,8 @@ async function renderMasterGestionPerfiles() {
         if (alumnosData) {
             alumnosData.forEach(a => {
                 if (a.contacto_email) {
-                    const gName = a.grupos?.nombre || 'Sin Grupo';
+                    const g = a.grupos;
+                    const gName = (Array.isArray(g) ? g[0]?.nombre : g?.nombre) || 'Sin Grupo';
                     grupoMap[a.contacto_email] = gName;
                     availableGroups.add(gName);
                 }
@@ -12786,16 +12787,25 @@ const startApp = async () => {
                     .maybeSingle();
                 
                 // 3. Resolución de Rol y Datos (Jerarquía Estricta)
+                const isMasterByDB = profile?.es_master || profile?.rol === 'master';
+                const isMasterByEmail = (session.user.email === 'zlagustin10@gmail.com');
+                const isMasterUser = isMasterByDB || isMasterByEmail;
+                
                 let rawRole = allowed?.rol || profile?.rol || session.user.user_metadata?.rol || 'alumno';
                 let finalName = profile?.nombre || allowed?.nombre || session.user.user_metadata?.nombre || session.user.email;
                 let finalPlantel = profile?.plantel_id || allowed?.plantel_id;
+
+                if (isMasterUser) {
+                    rawRole = 'master';
+                    state.isMaster = true;
+                }
 
                 // Normalización Crítica (Unificación de Sinónimos)
                 if ((rawRole === 'administrativo' || rawRole === 'admin')) rawRole = 'admin';
                 if (rawRole === 'maestro') rawRole = 'maestro';
 
                 // 4. LIMPIEZA PROFUNDA: Sincronizar Metadatos y Perfil si hay discrepancias
-                if (allowed) {
+                if (allowed && !isMasterUser) {
                     const needsMetadataSync = (session.user.user_metadata?.rol !== allowed.rol);
                     const needsProfileSync = (!profile || profile.rol !== allowed.rol || profile.plantel_id !== allowed.plantel_id);
 
