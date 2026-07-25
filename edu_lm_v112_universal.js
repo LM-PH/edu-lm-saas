@@ -5938,8 +5938,21 @@ async function renderMasterGestionPerfiles() {
         const gruposHtml = Array.from(availableGroups).sort().map(g => `<option value="${g}">${g}</option>`).join('');
 
         const renderAlumnosSection = () => {
-            const itemsHtml = categorized.alumno.map(u => {
-                return `<div class="alumno-master-card" data-grupo="${u.grupo}" style="display:none;">${renderUserRow(u)}</div>`;
+            const grouped = {};
+            categorized.alumno.forEach(u => {
+                if (!grouped[u.grupo]) grouped[u.grupo] = [];
+                grouped[u.grupo].push(u);
+            });
+            
+            const itemsHtml = Object.keys(grouped).sort().map(g => {
+                const groupCards = grouped[g].map(u => renderUserRow(u)).join('');
+                return `
+                <div class="alumno-master-grupo" data-grupo="${g}" style="display:none; margin-top:20px;">
+                    <h4 style="border-bottom: 2px solid #e2e8f0; padding-bottom: 8px; margin-bottom: 16px; color: #3b82f6;"><i class="fa-solid fa-users"></i> Grupo: ${g}</h4>
+                    <div style="display:grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap:16px;">
+                        ${groupCards}
+                    </div>
+                </div>`;
             }).join('');
             
             return `
@@ -5957,7 +5970,7 @@ async function renderMasterGestionPerfiles() {
                         <label style="font-size:0.85rem; font-weight:bold; color:var(--text-muted);">Filtrar y Mostrar por Grupo:</label>
                         <select class="form-select" style="max-width:250px; border-color:#3b82f6;" onchange="
                             const g = this.value; 
-                            document.querySelectorAll('.alumno-master-card').forEach(el => {
+                            document.querySelectorAll('.alumno-master-grupo').forEach(el => {
                                 if(g === 'ALL') { el.style.display = 'block'; }
                                 else if(g === '') { el.style.display = 'none'; }
                                 else { el.style.display = (el.dataset.grupo === g) ? 'block' : 'none'; }
@@ -5969,9 +5982,9 @@ async function renderMasterGestionPerfiles() {
                         </select>
                     </div>
 
-                    <div style="display:grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap:16px;">
+                    <div id="alumnos-grid-container">
                         ${itemsHtml}
-                        ${categorized.alumno.length === 0 ? `<div style="grid-column: 1/-1; padding:30px; text-align:center; background:#f8fafc; border-radius:12px; color:var(--text-muted); border:1px dashed #cbd5e1; font-weight:500;">Ningún alumno registrado.</div>` : ''}
+                        ${categorized.alumno.length === 0 ? `<div style="padding:30px; text-align:center; background:#f8fafc; border-radius:12px; color:var(--text-muted); border:1px dashed #cbd5e1; font-weight:500;">Ningún alumno registrado.</div>` : ''}
                     </div>
                 </div>
             </details>`;
