@@ -10480,7 +10480,7 @@ window.openReporteModal = async () => {
     document.getElementById('app').insertAdjacentHTML('beforeend', modalHTML);
     
     try {
-        let query = supabaseClient.from('alumnos').select('id, nombre').eq('plantel_id', state.plantelId);
+        let query = supabaseClient.from('alumnos').select('id, nombre').eq('plantel_id', state.plantelId).order('nombre');
         
         if (window.currentAulaGrupoId && window.currentAulaGrupoId.startsWith('grado:')) {
             // Formato: "grado:1°|Computación"
@@ -10904,7 +10904,7 @@ window.cargarEncuadreActivo = async () => {
         }
 
         // 2. Obtener los alumnos del grupo/grado para notificarles
-        let alumnosQuery = supabaseClient.from('alumnos').select('id, nombre').eq('plantel_id', state.plantelId);
+        let alumnosQuery = supabaseClient.from('alumnos').select('id, nombre').eq('plantel_id', state.plantelId).order('nombre');
         if(isTec) {
             const gNorm = targetGrado.includes('°') ? targetGrado : targetGrado + '°';
             // v116: Robust matching for technologies
