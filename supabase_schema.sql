@@ -136,8 +136,8 @@ alter table public.alumnos enable row level security;
 create policy "Alumnos ven su propio matricula" on public.alumnos for select to authenticated using(
   perfil_id = auth.uid() or (select rol from public.perfiles where id = auth.uid()) in ('admin', 'maestro', 'apoyo')
 );
-create policy "Admin inserta alumnos" on public.alumnos for all to authenticated using(
-  (select rol from public.perfiles where id = auth.uid()) = 'admin'
+create policy "Admins y Directivos gestionan alumnos" on public.alumnos for all to authenticated using(
+  (select rol from public.perfiles where id = auth.uid()) IN ('admin', 'directivo')
 );
 
 -- 5.1. TRIGGER DE BAJA/GRADUACIÓN (Limpieza Profunda)
