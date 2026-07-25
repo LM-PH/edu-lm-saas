@@ -5854,13 +5854,16 @@ async function renderMasterGestionPerfiles() {
         
         if(error) throw error;
 
-        const { data: alumnosData } = await supabaseClient.from('alumnos')
+        const { data: alumnosData, error: alumnosErr } = await supabaseClient.from('alumnos')
             .select('contacto_email, grupo_id')
             .eq('plantel_id', state.plantelId);
             
-        const { data: gruposData } = await supabaseClient.from('grupos')
+        const { data: gruposData, error: gruposErr } = await supabaseClient.from('grupos')
             .select('id, nombre')
             .eq('plantel_id', state.plantelId);
+            
+        if (alumnosErr) console.error("Error fetching alumnos:", alumnosErr);
+        if (gruposErr) console.error("Error fetching grupos:", gruposErr);
             
         const grupoDict = {};
         if (gruposData) {
@@ -5996,6 +5999,9 @@ async function renderMasterGestionPerfiles() {
                     <div>
                         <h2 class="page-title" style="color:white; margin:0 0 4px 0;">Gestión de Credenciales: ${CONFIG.schoolName}</h2>
                         <p style="margin:0; opacity:0.8; font-size:0.95rem;"><i class="fa-solid fa-fingerprint"></i> Has iniciado sesión como controlador global en esta sede.</p>
+                        ${alumnosErr ? `<p style="color:red; background:white; padding:10px; margin-top:10px;">Error Alumnos: ${alumnosErr.message}</p>` : ''}
+                        ${gruposErr ? `<p style="color:red; background:white; padding:10px; margin-top:10px;">Error Grupos: ${gruposErr.message}</p>` : ''}
+                        ${(!alumnosErr && !gruposErr) ? `<p style="color:blue; background:white; padding:10px; margin-top:10px; font-size:12px;">DEBUG: alumnosData length = ${alumnosData ? alumnosData.length : 'null'}, gruposData length = ${gruposData ? gruposData.length : 'null'}</p>` : ''}
                     </div>
                     <button class="btn" style="background:rgba(255,255,255,0.1); border:1px solid rgba(255,255,255,0.2); color:white;" onclick="window.navigate('/master/saas')">
                         <i class="fa-solid fa-rotate-left"></i> Volver a Planteles
