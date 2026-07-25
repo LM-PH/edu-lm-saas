@@ -181,6 +181,10 @@ window.handleLogin = async (e) => {
         throw authErr;
     }
 
+    if (!authData || !authData.user) {
+        throw new Error('No se pudo recuperar la sesión del usuario. Por favor verifica tus credenciales o intenta de nuevo.');
+    }
+
     // 2. Recuperar el perfil real de la base de datos para ver quién es
     let { data: profile, error: profErr } = await supabaseClient
         .from('perfiles')
@@ -5438,14 +5442,14 @@ window.resolverAutorizacion = async (id, dictamen, payloadStr = null) => {
                  const { error: errPerm } = await supabaseClient.from('perfiles_permitidos').delete().eq('id', payload.id_permitido);
                  if(errPerm) throw errPerm;
                  const { data: pExist } = await supabaseClient.from('perfiles').select('id').eq('nombre', payload.nombre).eq('plantel_id', state.plantelId).maybeSingle();
-                 if(pExist) await supabaseClient.from('perfiles').delete().eq('id', pExist.id).eq('plantel_id', state.plantelId);
+                 if(pExist && pExist.id) await supabaseClient.from('perfiles').delete().eq('id', pExist.id).eq('plantel_id', state.plantelId);
             }
             else if(payload.action === 'delete_alumno') {
                  const idToDelete = payload.id_permitido || payload.target_id;
                  const { error: errAlu } = await supabaseClient.from('alumnos').delete().eq('id', idToDelete);
                  if(errAlu) throw errAlu;
                  const { data: pExist } = await supabaseClient.from('perfiles').select('id').eq('nombre', payload.nombre).eq('plantel_id', state.plantelId).maybeSingle();
-                 if(pExist) await supabaseClient.from('perfiles').delete().eq('id', pExist.id).eq('plantel_id', state.plantelId);
+                 if(pExist && pExist.id) await supabaseClient.from('perfiles').delete().eq('id', pExist.id).eq('plantel_id', state.plantelId);
                  if(payload.email) await supabaseClient.from('perfiles_permitidos').delete().eq('email', payload.email);
             }
         }
@@ -13102,7 +13106,7 @@ window.eliminarPersona = async (idPermitido, email, nombre, rol = '') => {
                 const { error: errAlu } = await supabaseClient.from('alumnos').delete().eq('id', idPermitido);
                 if(errAlu) throw errAlu;
                 const { data: pExist } = await supabaseClient.from('perfiles').select('id').eq('nombre', nombre).eq('plantel_id', state.plantelId).maybeSingle();
-                if(pExist) await supabaseClient.from('perfiles').delete().eq('id', pExist.id).eq('plantel_id', state.plantelId);
+                if(pExist && pExist.id) await supabaseClient.from('perfiles').delete().eq('id', pExist.id).eq('plantel_id', state.plantelId);
                 await supabaseClient.from('perfiles_permitidos').delete().eq('email', email);
                 window.showToast("Alumno eliminado correctamente.", "success");
             } else {
@@ -13110,7 +13114,7 @@ window.eliminarPersona = async (idPermitido, email, nombre, rol = '') => {
                 const { error: errPerm } = await supabaseClient.from('perfiles_permitidos').delete().eq('id', idPermitido);
                 if(errPerm) throw errPerm;
                 const { data: pExist } = await supabaseClient.from('perfiles').select('id').eq('nombre', nombre).eq('plantel_id', state.plantelId).maybeSingle();
-                if(pExist) await supabaseClient.from('perfiles').delete().eq('id', pExist.id).eq('plantel_id', state.plantelId);
+                if(pExist && pExist.id) await supabaseClient.from('perfiles').delete().eq('id', pExist.id).eq('plantel_id', state.plantelId);
                 window.showToast("Personal eliminado y acceso revocado.", "success");
             }
         } else {
