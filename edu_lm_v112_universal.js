@@ -5344,9 +5344,12 @@ window.switchTramiteView = async (view) => {
                 <div style="background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:12px 14px; position:relative;">
                     <div style="font-weight:600; font-size:0.9rem; color:var(--text-main); margin-bottom:4px;">${t.tipo}</div>
                     <div style="font-size:0.75rem; color:var(--text-muted); margin-bottom:8px;"><i class="fa-solid fa-user"></i> ${alumno}</div>
-                    <div style="display:flex; justify-content:space-between; align-items:center;">
+                    <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:6px;">
                         <span style="font-size:0.7rem; color:var(--text-muted)">Emitido: ${emision}</span>
-                        <a href="${t.archivo_url}" target="_blank" class="btn btn-outline btn-xs" style="color:var(--success); border-color:var(--success);"><i class="fa-solid fa-eye"></i> Ver PDF</a>
+                        <div style="display:flex; gap:6px;">
+                            <a href="${t.archivo_url}" target="_blank" class="btn btn-outline btn-xs" style="color:var(--success); border-color:var(--success);"><i class="fa-solid fa-eye"></i> Ver PDF</a>
+                            <button class="btn btn-outline btn-xs" style="color:var(--danger); border-color:var(--danger);" onclick="window.eliminarTramiteEntregado('${t.id}')"><i class="fa-solid fa-trash-can"></i> Borrar</button>
+                        </div>
                     </div>
                 </div>`;
             }).join('');
@@ -5354,6 +5357,25 @@ window.switchTramiteView = async (view) => {
             console.error(e);
             cont.innerHTML = '<p style="color:var(--danger)">Error al cargar el historial.</p>';
         }
+    }
+};
+
+window.eliminarTramiteEntregado = async (tramiteId) => {
+    if(!confirm("⚠️ ¿Estás seguro de eliminar este trámite entregado?\n\nEsta acción eliminará el registro entregado por si hubo una equivocación de envío.")) return;
+
+    try {
+        const { error } = await supabaseClient
+            .from('tramites')
+            .delete()
+            .eq('id', tramiteId);
+
+        if(error) throw error;
+
+        window.showToast("Trámite entregado eliminado correctamente.", "success");
+        if(window.switchTramiteView) window.switchTramiteView('historial');
+    } catch(err) {
+        console.error(err);
+        window.showToast("Error al eliminar trámite: " + err.message, "error");
     }
 };
 
