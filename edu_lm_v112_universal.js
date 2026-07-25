@@ -3130,26 +3130,18 @@ window.loadFocosRojos = async () => {
     const cont = document.getElementById('focosRojosContenedor');
     if(!cont) return;
     try {
-        const [reportesRes, citatoriosRes] = await Promise.all([
-            supabaseClient
-                .from('reportes_conducta')
-                .select('alumno_id, gravedad, alumnos(id, nombre, matricula, grupos(nombre))')
-                .eq('resuelto', false)
-                .eq('plantel_id', state.plantelId),
-            supabaseClient
-                .from('citatorios')
-                .select('alumno_id, estado, firma_enterado, tipo, alumnos(id, nombre, matricula, grupos(nombre))')
-                .neq('estado', 'atendido')
-                .eq('plantel_id', state.plantelId)
-        ]);
+        // 1. Obtener reportes activos
+        const { data: reportes, error: repErr } = await supabaseClient
+            .from('reportes_conducta')
+            .select('alumno_id, gravedad, alumnos(id, nombre, matricula, grupos(nombre))')
+            .eq('resuelto', false)
+            .eq('plantel_id', state.plantelId);
 
-        if(reportesRes.error) throw reportesRes.error;
-        if(citatoriosRes.error) throw citatoriosRes.error;
+        if(repErr) throw repErr;
 
         const conteo = {};
         
-        // 1. Contabilizar reportes activos
-        (reportesRes.data || []).forEach(r => {
+        (reportes || []).forEach(r => {
             if(!r.alumnos) return;
             const aid = r.alumno_id;
             if(!conteo[aid]) {
@@ -3159,16 +3151,39 @@ window.loadFocosRojos = async () => {
             if(r.gravedad === 'Grave') conteo[aid].graves++;
         });
 
-        // 2. Añadir citatorios activos (incluso si no tienen reportes)
-        (citatoriosRes.data || []).forEach(cit => {
-            if(!cit.alumnos) return;
-            const aid = cit.alumno_id;
-            if(!conteo[aid]) {
-                conteo[aid] = { count: 0, graves: 0, nombre: cit.alumnos.nombre, matricula: cit.alumnos.matricula, grupo: cit.alumnos.grupos?.nombre || 'S/G' };
+        // 2. Obtener citatorios activos de toda la escuela
+        const { data: citatoriosData, error: citErr } = await supabaseClient
+            .from('citatorios')
+            .select('alumno_id, estado, tipo')
+            .neq('estado', 'atendido')
+            .eq('plantel_id', state.plantelId);
+
+        if(citErr) throw citErr;
+
+        // Si hay citatorios de alumnos que NO están en conteo (porque no tienen reportes activos), obtenemos su info
+        const cits = citatoriosData || [];
+        const missingAids = [...new Set(cits.map(c => c.alumno_id).filter(aid => !conteo[aid]))];
+        
+        if (missingAids.length > 0) {
+            const { data: missingAlumnos } = await supabaseClient
+                .from('alumnos')
+                .select('id, nombre, matricula, grupos(nombre)')
+                .in('id', missingAids);
+                
+            if (missingAlumnos) {
+                missingAlumnos.forEach(al => {
+                    conteo[al.id] = { count: 0, graves: 0, nombre: al.nombre, matricula: al.matricula, grupo: al.grupos?.nombre || 'S/G' };
+                });
             }
+        }
+
+        // Ahora asignamos los estados de los citatorios
+        cits.forEach(cit => {
+            const aid = cit.alumno_id;
+            if(!conteo[aid]) return; // por si acaso
             
             const key = cit.tipo === 'Conductual' ? 'citatorioConductual' : 'citatorioGeneral';
-            // Si hay varios, priorizamos el pendiente
+            // Priorizamos el estado 'Pendiente' si hay varios
             if (!conteo[aid][key] || conteo[aid][key] === 'Firmado') {
                 conteo[aid][key] = cit.estado === 'enterado' ? 'Firmado' : 'Pendiente';
             }
