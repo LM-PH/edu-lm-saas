@@ -2785,7 +2785,7 @@ window.buscarExpedienteGlobal = async (query) => {
     const resDiv = document.getElementById('resExpedienteGlobal');
     if(!query || query.length < 2) { resDiv.style.display = 'none'; return; }
     try {
-        const { data } = await supabaseClient.from('alumnos').select('*, grupos(nombre)').eq('plantel_id', state.plantelId).or(`nombre.ilike.%${query}%,matricula.ilike.%${query}%`).limit(10);
+        const { data } = await supabaseClient.from('alumnos').select('*, grupos(nombre)').eq('plantel_id', state.plantelId).or(`nombre.ilike.%${query}%,matricula.ilike.%${query}%`).order('nombre').limit(10);
         if(!data || data.length === 0) {
             resDiv.innerHTML = '<div style="padding:15px; color:var(--text-muted)">No se encontraron alumnos.</div>';
             resDiv.style.display = 'block';
@@ -7905,7 +7905,7 @@ window.finalizarActividad = async (id) => {
 
         if (act) {
             // 2. Obtener lista de alumnos (mismo grupo o tecnología)
-            let qAlu = supabaseClient.from('alumnos').select('id, nombre').eq('plantel_id', act.plantel_id);
+            let qAlu = supabaseClient.from('alumnos').select('id, nombre').eq('plantel_id', act.plantel_id).order('nombre');
             if(act.grupo_id) {
                 qAlu = qAlu.eq('grupo_id', act.grupo_id);
             } else if(act.target_grado) {
@@ -8240,7 +8240,7 @@ window.cargarAlumnosLista = async () => {
     const targetGrado = isTec ? idPart.replace('grado:', '').trim() : null;
 
     try {
-        let alumnosQuery = supabaseClient.from('alumnos').select('id, nombre, matricula, contacto_email').eq('plantel_id', state.plantelId);
+        let alumnosQuery = supabaseClient.from('alumnos').select('id, nombre, matricula, contacto_email').eq('plantel_id', state.plantelId).order('nombre');
         if(isTec) {
             const gNorm = targetGrado.includes('°') ? targetGrado : targetGrado + '°';
             // v116: Robust matching for technologies
@@ -8648,7 +8648,7 @@ window.cargarBoletasGrupo = async () => {
         const matId = tmateria?.id;
 
         // 2. Fetch Alumnos
-        let alumnosQuery = supabaseClient.from('alumnos').select('id, nombre, matricula').eq('plantel_id', state.plantelId);
+        let alumnosQuery = supabaseClient.from('alumnos').select('id, nombre, matricula').eq('plantel_id', state.plantelId).order('nombre');
         if(isTec) {
             const gNorm = targetGrado.includes('°') ? targetGrado : targetGrado + '°';
             // v116: Robust matching for technologies
@@ -11654,7 +11654,7 @@ window.notificarRevisionSabana = async () => {
         btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Enviando reportes...';
 
         // Obtenemos los alumnos del grupo para tener sus IDs actuales y sus IDs de perfil (usuario)
-        const { data: alums } = await supabaseClient.from('alumnos').select('id, nombre, perfil_id').eq('grupo_id', gid);
+        const { data: alums } = await supabaseClient.from('alumnos').select('id, nombre, perfil_id').eq('grupo_id', gid).order('nombre');
         
         const headers = Array.from(tabla.querySelectorAll("thead th")).map(th => th.innerText.trim());
         // Función de normalización robusta: Sin acentos, minúsculas, sin espacios extra
