@@ -3421,13 +3421,19 @@ window.guardarReporteApoyo = async () => {
             
             // CREAR EN LA TABLA OFICIAL PARA RECABAR FIRMA
             await supabaseClient.from('citatorios').insert([{
-                id: crypto.randomUUID(),
                 alumno_id: aid,
                 emisor_id: u.data.user.id,
                 motivo: `Acumulación crítica de ${gravesCount} reportes graves sin atender. (Citatorio Conductual URGENTE)`,
                 tipo: 'Conductual',
                 plantel_id: state.plantelId
             }]);
+            
+            // Marcar los reportes como resueltos (procesados) para que no vuelvan a detonar otro citatorio inmediato
+            await supabaseClient.from('reportes_conducta')
+                .update({ resuelto: true })
+                .eq('alumno_id', aid)
+                .eq('gravedad', 'Grave')
+                .eq('resuelto', false);
             
             window.showToast("Citatorio automático enviado por acumulación de reportes", "warning");
         } else if(sev === 'Grave' || cat === 'Conducta') {
@@ -3484,7 +3490,6 @@ window.guardarCitatorio = async () => {
         if(!u.data.user) throw new Error("Sin sesión activa.");
 
         const { error } = await supabaseClient.from('citatorios').insert([{
-            id: crypto.randomUUID(),
             alumno_id: aid,
             emisor_id: u.data.user.id,
             motivo: motivo.trim(),
