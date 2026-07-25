@@ -9814,6 +9814,7 @@ window.guardarAsistenciaQR = async (matricula, grupoId) => {
             estado: estFinal,
             materia: (window.currentAulaMateria || 'N/A').trim(),
             grupo_id: String(grupoId).startsWith('grado:') ? null : String(grupoId),
+            fecha: hoy,
             plantel_id: state.plantelId
         }]);
         if(error) throw error;
