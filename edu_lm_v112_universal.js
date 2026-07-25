@@ -8633,6 +8633,7 @@ window.justificarFaltaManual = async (alumnoId, fecha, rawVal) => {
             estado: 'Justificada',
             materia: (window.currentAulaMateria || '').trim(),
             creado_en: `${fecha}T10:00:00Z`, 
+            fecha: fecha,
             tipo: 'Maestro (Manual)',
             plantel_id: state.plantelId
         }]);
