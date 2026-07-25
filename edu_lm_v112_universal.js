@@ -2567,7 +2567,7 @@ function renderMaestroCalificaciones() {
       </table>
       </div>
       
-      <div style="margin-top:24px; padding-top:24px; border-top:1px solid var(--border); display:flex; justify-content:space-between; align-items:center;">
+      <div id="contenedorBotonEnviarBoleta" style="margin-top:24px; padding-top:24px; border-top:1px solid var(--border); display:flex; justify-content:space-between; align-items:center;">
          <span style="font-size:0.85rem; color:var(--text-muted);">El sistema promedia los rubros de forma ponderada. Edita la calificación final si requieres realizar un ajuste definitivo.</span>
          <button class="btn btn-primary btn-lg" onclick="window.sellarYEnviarCalificaciones()">
             <i class="fa-solid fa-paper-plane"></i> Sellar y Enviar a Control Escolar
@@ -5466,6 +5466,35 @@ window.resolverAutorizacion = async (id, dictamen, payloadStr = null) => {
                  const idToDelete = payload.id_permitido || payload.target_id;
                  await supabaseClient.rpc('eliminar_alumno_seguro', { p_alumno_id: idToDelete, p_plantel_id: state.plantelId });
                  if(payload.email) await supabaseClient.from('perfiles_permitidos').delete().eq('email', payload.email);
+            }
+            else if(payload.action === 'desbloquear_calificaciones') {
+                 const { error: errDel } = await supabaseClient.from('calificaciones')
+                     .delete()
+                     .eq('plantel_id', state.plantelId)
+                     .eq('trimestre', payload.trimestre)
+                     .ilike('materia_nombre', (payload.materia || '').trim());
+                 if(errDel) throw errDel;
+
+                 if(payload.maestro_id) {
+                     await supabaseClient.from('comunicados').insert([{
+                         autor_id: (await supabaseClient.auth.getUser()).data.user?.id,
+                         titulo: `✅ AUTORIZADO: Apertura de Calificaciones (${payload.materia})`,
+                         mensaje: `La administración ha APROBADO tu solicitud de modificación de calificaciones para la materia ${payload.materia} (${payload.trimestre}° Trimestre).\n\nYa puedes ingresar nuevamente al módulo para capturar y asentar las correcciones necesarias.`,
+                         audiencia: `Maestro_${payload.maestro_id}`,
+                         plantel_id: state.plantelId
+                     }]);
+                 }
+            }
+        } else if(dictamen === 'rechazada' && payloadStr) {
+            const payload = JSON.parse(decodeURIComponent(payloadStr));
+            if(payload.action === 'desbloquear_calificaciones' && payload.maestro_id) {
+                await supabaseClient.from('comunicados').insert([{
+                    autor_id: (await supabaseClient.auth.getUser()).data.user?.id,
+                    titulo: `❌ DENEGADO: Apertura de Calificaciones (${payload.materia})`,
+                    mensaje: `La administración ha RECHAZADO la solicitud de modificación de calificaciones para la materia ${payload.materia} (${payload.trimestre}° Trimestre).`,
+                    audiencia: `Maestro_${payload.maestro_id}`,
+                    plantel_id: state.plantelId
+                }]);
             }
         }
 
@@ -8740,6 +8769,27 @@ window.cargarBoletasGrupo = async () => {
         }
         const { data: historial } = await histQuery;
         
+        // Determinar si ya hay calificaciones asentadas para esta materia y trimestre
+        const tieneCalificacionesAsentadas = (historial && historial.length > 0);
+        let tieneSolicitudPendiente = false;
+
+        if(tieneCalificacionesAsentadas) {
+            const { data: reqs } = await supabaseClient
+                .from('autorizaciones_movimientos')
+                .select('id, payload_json')
+                .eq('plantel_id', state.plantelId)
+                .eq('tipo_accion', 'MODIFICACION_CALIFICACIONES')
+                .eq('estado', 'pendiente');
+            
+            if(reqs && reqs.length > 0) {
+                tieneSolicitudPendiente = reqs.some(r => 
+                    r.payload_json?.materia === materiaClean && 
+                    r.payload_json?.trimestre === currentTrim && 
+                    (r.payload_json?.grupo_id === gid || r.payload_json?.grupo_id === selectVal)
+                );
+            }
+        }
+        
         // 4. Fetch Actividades (SOLO si no es modo final, ya que en final promediamos T1,T2,T3)
         let acts = [];
         let hasActs = false;
@@ -8834,6 +8884,9 @@ window.cargarBoletasGrupo = async () => {
             
             const promRounded = Math.round(promFinalNum);
             const displayVal = currentSettledVal !== undefined && currentSettledVal !== null ? currentSettledVal : promRounded;
+            const inputAttr = tieneCalificacionesAsentadas 
+                ? 'disabled readonly style="width:85px; text-align:center; margin:auto; font-weight:bold; border:2px solid var(--border); color:var(--text-muted); background:#f1f5f9; font-size:1.1rem; cursor:not-allowed;"' 
+                : 'style="width:85px; text-align:center; margin:auto; font-weight:bold; border:2px solid var(--primary); color:var(--primary); background:white; font-size:1.1rem;"';
 
             htmlRows += `
             <tr style="border-bottom:1px solid var(--border)">
@@ -8846,7 +8899,7 @@ window.cargarBoletasGrupo = async () => {
                 <td style="background:var(--surface-hover); text-align:center; padding:12px;">
                    <input type="number" class="form-input input-calificacion" 
                           data-alumno="${al.id}" 
-                          style="width:85px; text-align:center; margin:auto; font-weight:bold; border:2px solid var(--primary); color:var(--primary); background:white; font-size:1.1rem;" 
+                          ${inputAttr}
                           value="${displayVal}" step="0.1" min="0" max="10">
                 </td>
              </tr>`;
@@ -8954,6 +9007,52 @@ window.sellarYEnviarCalificaciones = async () => {
         alert("Ocurrió un error al guardar: " + e.message);
     } finally {
         if(btn) { btn.innerHTML = oldHtml; btn.disabled = false; }
+    }
+};
+
+window.solicitarModificacionCalificaciones = async (materia, trimestre, grupoId) => {
+    const motivo = prompt(`⚠️ Para solicitar la modificación de calificaciones a la Dirección/Administración, ingresa el motivo del cambio:\n\nAsignatura: ${materia} (${trimestre}° Trimestre)`);
+    if(motivo === null) return;
+    if(!motivo.trim()) return alert("Debes ingresar un motivo válido para realizar la solicitud.");
+
+    try {
+        const u = await supabaseClient.auth.getUser();
+        if(!u.data.user) return alert("Sesión expirada.");
+
+        const { data: prof } = await supabaseClient.from('perfiles').select('nombre').eq('id', u.data.user.id).single();
+        const maestroNombre = prof?.nombre || 'Docente';
+
+        const { error: errReq } = await supabaseClient.from('autorizaciones_movimientos').insert([{
+            tipo_accion: 'MODIFICACION_CALIFICACIONES',
+            detalles: `El docente ${maestroNombre} solicita modificar calificaciones de ${materia} (${trimestre}° Trimestre). Motivo: ${motivo.trim()}`,
+            payload_json: {
+                action: 'desbloquear_calificaciones',
+                materia: materia,
+                trimestre: parseInt(trimestre),
+                grupo_id: grupoId,
+                maestro_id: u.data.user.id,
+                maestro_nombre: maestroNombre,
+                motivo: motivo.trim()
+            },
+            estado: 'pendiente',
+            plantel_id: state.plantelId
+        }]);
+
+        if(errReq) throw errReq;
+
+        await supabaseClient.from('comunicados').insert([{
+            autor_id: u.data.user.id,
+            titulo: `🔓 SOLICITUD DE MODIFICACIÓN DE CALIFICACIONES: ${materia}`,
+            mensaje: `El docente ${maestroNombre} ha solicitado la apertura de calificaciones para el ${trimestre}° Trimestre en la materia ${materia}.\n\n📝 Motivo expresado: ${motivo.trim()}\n\nPor favor diríjase al módulo de Autorización de Movimientos para aprobar o rechazar esta solicitud.`,
+            audiencia: 'Admin',
+            plantel_id: state.plantelId
+        }]);
+
+        alert("✅ Tu solicitud de modificación ha sido enviada con éxito a Administración.\nUna vez aprobada, podrás editar nuevamente las calificaciones.");
+        window.cargarBoletasGrupo();
+    } catch(e) {
+        console.error(e);
+        alert("Error al enviar la solicitud: " + e.message);
     }
 };
 
