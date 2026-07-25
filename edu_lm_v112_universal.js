@@ -8757,17 +8757,21 @@ window.cargarBoletasGrupo = async () => {
         // 3. Fetch Calificaciones ya asentadas (Si es modo final, traer los 3 trimestres)
         // Usamos ilike con el nombre de la materia directamente para mayor compatibilidad
         const materiaClean = materiaText.trim();
+        const aluIds = alumnos.map(a => a.id);
         let histQuery = supabaseClient.from('calificaciones')
-            .select('alumno_id, calificacion, trimestre')
+            .select('alumno_id, calificacion, trimestre, materia_nombre')
             .eq('plantel_id', state.plantelId)
-            .ilike('materia_nombre', materiaClean);
+            .in('alumno_id', aluIds);
             
         if(isModoFinal) {
             histQuery = histQuery.in('trimestre', [1, 2, 3, 4]);
         } else {
             histQuery = histQuery.eq('trimestre', currentTrim);
         }
-        const { data: historial } = await histQuery;
+        const { data: rawHistorial } = await histQuery;
+        const historial = (rawHistorial || []).filter(h => 
+            !materiaClean || (h.materia_nombre || '').trim().toLowerCase() === materiaClean.toLowerCase()
+        );
         
         // Determinar si ya hay calificaciones asentadas para esta materia y trimestre
         const tieneCalificacionesAsentadas = (historial && historial.length > 0);
@@ -8906,6 +8910,35 @@ window.cargarBoletasGrupo = async () => {
         }
         
         tbody.innerHTML = htmlRows;
+
+        // Actualizar contenedor del botón según estado de bloqueo
+        const contenedorBoton = document.getElementById('contenedorBotonEnviarBoleta');
+        if(contenedorBoton) {
+            if(!tieneCalificacionesAsentadas) {
+                contenedorBoton.innerHTML = `
+                    <span style="font-size:0.85rem; color:var(--text-muted);">El sistema promedia los rubros de forma ponderada. Edita la calificación final si requieres realizar un ajuste definitivo.</span>
+                    <button class="btn btn-primary btn-lg" onclick="window.sellarYEnviarCalificaciones()">
+                        <i class="fa-solid fa-paper-plane"></i> Sellar y Enviar a Control Escolar
+                    </button>
+                `;
+            } else if(tieneSolicitudPendiente) {
+                contenedorBoton.innerHTML = `
+                    <span style="font-size:0.85rem; color:#d97706; font-weight:600;"><i class="fa-solid fa-hourglass-half"></i> Calificaciones bloqueadas. Tienes una solicitud de modificación en revisión por Administración.</span>
+                    <button class="btn btn-outline btn-lg" disabled style="opacity:0.75; cursor:not-allowed; border-color:#d97706; color:#d97706; background:#fffbeb;">
+                        <i class="fa-solid fa-clock"></i> Solicitud Pendiente de Aprobación
+                    </button>
+                `;
+            } else {
+                const matEscaped = materiaClean.replace(/'/g, "\\'");
+                const selectValEscaped = selectVal.replace(/'/g, "\\'");
+                contenedorBoton.innerHTML = `
+                    <span style="font-size:0.85rem; color:var(--danger); font-weight:600;"><i class="fa-solid fa-lock"></i> Calificaciones asentadas y bloqueadas.</span>
+                    <button class="btn btn-warning btn-lg" style="background:#d97706; color:white; border:none; font-weight:600; padding:10px 20px; border-radius:8px;" onclick="window.solicitarModificacionCalificaciones('${matEscaped}', ${currentTrim}, '${selectValEscaped}')">
+                        <i class="fa-solid fa-unlock-keyhole"></i> Solicitar Modificación de Calificaciones
+                    </button>
+                `;
+            }
+        }
         
     } catch(err) {
         console.error(err);
