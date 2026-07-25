@@ -7808,19 +7808,43 @@ window.loadTimelinePersonal = async (selectedDate) => {
         // --- RESOLUCIÓN DE AUDIENCIAS (Humano-Leíble) ---
         const groupIds = [];
         const studentIds = [];
+        const teacherUserIds = [];
+
         data.forEach(c => {
+            if(!c.audiencia) return;
             if(c.audiencia.startsWith('Grupo_')) groupIds.push(c.audiencia.replace('Grupo_', ''));
+            if(c.audiencia.startsWith('Maestros_Grupo_')) groupIds.push(c.audiencia.replace('Maestros_Grupo_', ''));
             if(c.audiencia.startsWith('Alumno_')) studentIds.push(c.audiencia.replace('Alumno_', ''));
+            if(c.audiencia.startsWith('Maestro_')) teacherUserIds.push(c.audiencia.replace('Maestro_', ''));
         });
 
-        const nameMap = { 'General': 'Toda la comunidad', 'Todos': 'Toda la comunidad', 'Maestros': 'Maestros', 'Personal': 'Maestros, personal de apoyo y biblioteca', 'Alumnos': 'Alumnos', 'Apoyo': 'Personal de Apoyo' };
+        const nameMap = { 
+            'General': 'Toda la comunidad', 
+            'Todos': 'Toda la comunidad', 
+            'Maestros': 'Maestros', 
+            'Personal': 'Maestros, personal de apoyo y biblioteca', 
+            'Alumnos': 'Alumnos', 
+            'Apoyo': 'Personal de Apoyo',
+            'Admin_Firma': 'Administración',
+            'Admin': 'Administración'
+        };
+
         if(groupIds.length > 0) {
             const { data: grs } = await supabaseClient.from('grupos').select('id, nombre').in('id', groupIds);
-            if(grs) grs.forEach(g => nameMap['Grupo_' + g.id] = 'Grupo: ' + g.nombre);
+            if(grs) {
+                grs.forEach(g => {
+                    nameMap['Grupo_' + g.id] = 'Grupo: ' + g.nombre;
+                    nameMap['Maestros_Grupo_' + g.id] = 'Docentes de ' + g.nombre;
+                });
+            }
         }
         if(studentIds.length > 0) {
             const { data: stus } = await supabaseClient.from('alumnos').select('id, nombre, grupos(nombre)').in('id', studentIds);
             if(stus) stus.forEach(s => nameMap['Alumno_' + s.id] = `Alumno: ${s.nombre} (${s.grupos?.nombre || 'S/G'})`);
+        }
+        if(teacherUserIds.length > 0) {
+            const { data: profs } = await supabaseClient.from('perfiles').select('id, nombre').in('id', teacherUserIds);
+            if(profs) profs.forEach(p => nameMap['Maestro_' + p.id] = `Docente: ${p.nombre}`);
         }
 
         if(!data || data.length === 0) {
