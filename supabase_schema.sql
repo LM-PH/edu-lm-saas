@@ -46,9 +46,15 @@ $$;
 create policy "Perfiles visibles a la escuela" on public.perfiles
   for select using ( true ); 
 
-create policy "Modificable por admins" on public.perfiles
-  for all using ( public.is_admin_or_master() )
-  with check ( public.is_admin_or_master() );
+create policy "Modificable por admins y directivos" on public.perfiles
+  for all using (
+    public.is_admin_or_master() 
+    OR (SELECT rol FROM public.perfiles WHERE id = auth.uid()) = 'directivo'
+  )
+  with check (
+    public.is_admin_or_master() 
+    OR (SELECT rol FROM public.perfiles WHERE id = auth.uid()) = 'directivo'
+  );
 
 -- 3.1. TRIGGER DE REGISTRO
 CREATE OR REPLACE FUNCTION public.handle_new_user()
