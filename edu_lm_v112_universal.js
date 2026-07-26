@@ -9270,32 +9270,22 @@ window.imprimirLista = async (esVacia = false) => {
     });
     const totalAlumnos = rowsList.length || 1;
 
-    // CÁLCULO DINÁMICO DE ESCALA PARA 1 SOLA HOJA
-    let fontSize = '10.5px';
-    let paddingCell = '4px 6px';
-    let logoHeight = '42px';
-    let sigMargin = '25px';
-    let sigLineHeight = '35px';
+    // CÁLCULO MATEMÁTICO CONTINUO PARA GARANTIZAR 1 SOLA HOJA INDEPENDIENTEMENTE DEL NÚMERO DE ALUMNOS
+    const n = Math.max(totalAlumnos, 1);
+    
+    // Tamaño de fuente continuo entre 6.5px y 11px
+    let fontSizePx = Math.max(6.5, Math.min(11, 280 / (n + 10)));
+    let fontSize = fontSizePx.toFixed(1) + 'px';
 
-    if (totalAlumnos > 35) {
-        fontSize = '7.5px';
-        paddingCell = '1px 3px';
-        logoHeight = '32px';
-        sigMargin = '10px';
-        sigLineHeight = '20px';
-    } else if (totalAlumnos > 25) {
-        fontSize = '8.5px';
-        paddingCell = '2px 4px';
-        logoHeight = '36px';
-        sigMargin = '15px';
-        sigLineHeight = '25px';
-    } else if (totalAlumnos > 18) {
-        fontSize = '9.5px';
-        paddingCell = '3px 5px';
-        logoHeight = '38px';
-        sigMargin = '20px';
-        sigLineHeight = '30px';
-    }
+    // Padding vertical y horizontal proporcional
+    let padV = Math.max(0.5, Math.min(5, (180 / n) - 2.5)).toFixed(1) + 'px';
+    let padH = Math.max(2, Math.min(6, (220 / n))).toFixed(1) + 'px';
+    let paddingCell = `${padV} ${padH}`;
+
+    // Logo y espacios de firma escalados continuamente
+    let logoHeight = Math.max(22, Math.min(42, 600 / n)).toFixed(0) + 'px';
+    let sigMargin = Math.max(6, Math.min(25, 400 / n)).toFixed(0) + 'px';
+    let sigLineHeight = Math.max(16, Math.min(35, 450 / n)).toFixed(0) + 'px';
 
     let tableContentHtml = '';
     let statsHtml = '';
@@ -9303,9 +9293,9 @@ window.imprimirLista = async (esVacia = false) => {
     if (esVacia) {
         // Generar una plantilla vacía de 15 columnas
         const numCols = 15;
-        let headers = `<th style="width:30px;">No.</th><th style="text-align:left; min-width: 180px;">Nombre del Alumno</th>`;
+        let headers = `<th style="width:25px;">No.</th><th style="text-align:left; min-width: 160px;">Nombre del Alumno</th>`;
         for (let i = 1; i <= numCols; i++) {
-            headers += `<th style="width: 25px; text-align:center;">${i}</th>`;
+            headers += `<th style="width: 22px; text-align:center;">${i}</th>`;
         }
         
         let rowsHtml = '';
@@ -9354,11 +9344,11 @@ window.imprimirLista = async (esVacia = false) => {
 
             if(statsData.length > 0) {
                 statsHtml = `
-                    <div style="display:flex; justify-content:space-around; align-items:center; background:#f8fafc; border:1px solid #cbd5e1; border-radius:4px; padding:3px 8px; margin-bottom:6px; font-size:${fontSize};">
+                    <div style="display:flex; justify-content:space-around; align-items:center; background:#f8fafc; border:1px solid #cbd5e1; border-radius:4px; padding:2px 6px; margin-bottom:4px; font-size:${fontSize};">
                         ${statsData.map(s => `
                             <div>
                                 <span style="color:#64748b; font-weight:600;">${s.label}:</span>
-                                <strong style="color:#1e40af; font-size:1.1em; margin-left:4px;">${s.value}</strong>
+                                <strong style="color:#1e40af; font-size:1.1em; margin-left:3px;">${s.value}</strong>
                             </div>
                         `).join('<span style="color:#cbd5e1;">|</span>')}
                     </div>
@@ -9379,44 +9369,45 @@ window.imprimirLista = async (esVacia = false) => {
                         font-family: 'Segoe UI', Arial, sans-serif; 
                         color: #1e293b; 
                         background: #fff;
-                        padding: 10px;
+                        padding: 8px;
                         font-size: ${fontSize};
-                        line-height: 1.2;
+                        line-height: 1.1;
                     }
                     .header-container {
                         display: flex;
                         justify-content: space-between;
                         align-items: center;
                         border-bottom: 2px solid #1e40af;
-                        padding-bottom: 4px;
-                        margin-bottom: 6px;
+                        padding-bottom: 3px;
+                        margin-bottom: 4px;
                     }
                     .header-left {
                         display: flex;
                         align-items: center;
-                        gap: 10px;
+                        gap: 8px;
                     }
                     .logo-img { 
                         max-height: ${logoHeight}; 
                         object-fit: contain; 
                     }
                     .title-box h1 { 
-                        font-size: 14px; 
+                        font-size: 13px; 
                         color: #1e40af; 
                         text-transform: uppercase; 
                         margin: 0;
                         font-weight: 800;
+                        line-height: 1.1;
                     }
                     .title-box p { 
-                        font-size: 10px; 
+                        font-size: 9px; 
                         color: #475569; 
                         font-weight: 600;
                     }
                     .meta-grid {
                         display: grid;
                         grid-template-columns: auto auto;
-                        gap: 4px 15px;
-                        font-size: 9px;
+                        gap: 2px 12px;
+                        font-size: 8.5px;
                         text-align: right;
                         color: #334155;
                     }
@@ -9425,13 +9416,14 @@ window.imprimirLista = async (esVacia = false) => {
                     .data-table, table { 
                         width: 100%; 
                         border-collapse: collapse; 
-                        margin-bottom: 6px; 
+                        margin-bottom: 4px; 
                     }
                     .data-table th, .data-table td, table th, table td { 
                         border: 1px solid #475569; 
                         padding: ${paddingCell}; 
                         text-align: center; 
                         font-size: ${fontSize}; 
+                        line-height: 1.05;
                     }
                     .data-table th, table th { 
                         background-color: #f1f5f9; 
@@ -9447,32 +9439,39 @@ window.imprimirLista = async (esVacia = false) => {
                     }
                     .signature-box { 
                         text-align: center; 
-                        width: 180px; 
+                        width: 160px; 
                     }
                     .signature-line { 
                         border-top: 1px solid #000; 
-                        margin-bottom: 3px; 
+                        margin-bottom: 2px; 
                         height: ${sigLineHeight}; 
                     }
 
                     @media print {
                         @page { 
                             size: ${esVacia ? 'landscape' : 'portrait'}; 
-                            margin: 0.5cm; 
+                            margin: 0.3cm; 
                         }
-                        body {
-                            margin: 0;
-                            padding: 0;
+                        html, body {
+                            height: 100vh !important;
+                            max-height: 100vh !important;
+                            overflow: hidden !important;
+                            margin: 0 !important;
+                            padding: 0 !important;
                         }
-                        .signatures {
-                            page-break-inside: avoid !important;
-                            break-inside: avoid !important;
+                        .print-main-wrapper {
+                            height: 98vh !important;
+                            max-height: 98vh !important;
+                            display: flex;
+                            flex-direction: column;
+                            justify-content: space-between;
+                            overflow: hidden !important;
                         }
                     }
                 </style>
             </head>
             <body>
-                <div style="display: flex; flex-direction: column; justify-content: space-between; min-height: 96vh;">
+                <div class="print-main-wrapper" style="display: flex; flex-direction: column; justify-content: space-between; min-height: 96vh;">
                     <div>
                         <div class="header-container">
                             <div class="header-left">
@@ -9498,12 +9497,12 @@ window.imprimirLista = async (esVacia = false) => {
                     <div class="signatures">
                         <div class="signature-box">
                             <div class="signature-line"></div>
-                            <div style="font-size: 10px; font-weight: bold; color: #0f172a;">Profr(a). ${state.userName || 'Docente Titular'}</div>
+                            <div style="font-size: 9px; font-weight: bold; color: #0f172a;">Profr(a). ${state.userName || 'Docente Titular'}</div>
                             <div style="font-size: 8px; color: #475569; text-transform: uppercase;">Firma del Docente</div>
                         </div>
                         <div class="signature-box">
                             <div class="signature-line"></div>
-                            <div style="font-size: 10px; font-weight: bold; color: #0f172a;">DIRECCIÓN ESCOLAR</div>
+                            <div style="font-size: 9px; font-weight: bold; color: #0f172a;">DIRECCIÓN ESCOLAR</div>
                             <div style="font-size: 8px; color: #475569; text-transform: uppercase;">Sello y Firma de Recibido</div>
                         </div>
                     </div>
