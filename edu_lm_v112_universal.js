@@ -9334,10 +9334,28 @@ window.imprimirLista = async (esVacia = false) => {
             </table>
         `;
     } else {
-        // Clonar tabla y limpiar columnas de contacto/acciones
+        // Clonar tabla y limpiar columnas/estilos inline de celdas
         const cloneTable = tabla.cloneNode(true);
         cloneTable.classList.add('data-table');
+        
+        // Limpiar inline styles (padding: 12px, avatar height: 32px) para permitir escalado CSS
+        cloneTable.querySelectorAll('th, td').forEach(c => {
+            c.style.padding = paddingCell;
+            c.style.height = 'auto';
+            c.style.minWidth = 'auto';
+            
+            // Eliminar avatares redondos y reducir nombres
+            const avatar = c.querySelector('div[style*="border-radius:50%"]');
+            if(avatar) avatar.remove();
+            
+            const spanName = c.querySelector('span[style*="font-weight:600"]');
+            if(spanName) {
+                c.innerHTML = `<strong>${spanName.innerText.trim()}</strong>`;
+            }
+        });
+
         cloneTable.querySelectorAll('tr').forEach(r => {
+            r.style.height = 'auto';
             const lastTd = r.cells[r.cells.length - 1];
             if(lastTd && (lastTd.innerHTML.includes('fa-envelope') || lastTd.innerText.includes('Contacto'))) {
                 lastTd.remove();
@@ -9353,7 +9371,7 @@ window.imprimirLista = async (esVacia = false) => {
 
             if(statsData.length > 0) {
                 statsHtml = `
-                    <div style="display:flex; justify-content:space-around; align-items:center; background:#f8fafc; border:1px solid #cbd5e1; border-radius:4px; padding:1px 4px; margin-bottom:3px; font-size:${fontSize};">
+                    <div style="display:flex; justify-content:space-around; align-items:center; background:#f8fafc; border:1px solid #cbd5e1; border-radius:4px; padding:1px 4px; margin-bottom:2px; font-size:${fontSize};">
                         ${statsData.map(s => `
                             <div>
                                 <span style="color:#64748b; font-weight:600;">${s.label}:</span>
@@ -9378,22 +9396,22 @@ window.imprimirLista = async (esVacia = false) => {
                         font-family: 'Segoe UI', Arial, sans-serif; 
                         color: #1e293b; 
                         background: #fff;
-                        padding: 6px;
+                        padding: 4px;
                         font-size: ${fontSize};
-                        line-height: 1.05;
+                        line-height: 1.0;
                     }
                     .header-container {
                         display: flex;
                         justify-content: space-between;
                         align-items: center;
-                        border-bottom: 2px solid #1e40af;
+                        border-bottom: 1.5px solid #1e40af;
                         padding-bottom: 2px;
-                        margin-bottom: 3px;
+                        margin-bottom: 2px;
                     }
                     .header-left {
                         display: flex;
                         align-items: center;
-                        gap: 6px;
+                        gap: 5px;
                     }
                     .logo-img { 
                         max-height: ${logoHeight}; 
@@ -9405,18 +9423,18 @@ window.imprimirLista = async (esVacia = false) => {
                         text-transform: uppercase; 
                         margin: 0;
                         font-weight: 800;
-                        line-height: 1.05;
+                        line-height: 1.0;
                     }
                     .title-box p { 
-                        font-size: 8px; 
+                        font-size: 7.5px; 
                         color: #475569; 
                         font-weight: 600;
                     }
                     .meta-grid {
                         display: grid;
                         grid-template-columns: auto auto;
-                        gap: 2px 10px;
-                        font-size: 7.5px;
+                        gap: 1px 8px;
+                        font-size: 7px;
                         text-align: right;
                         color: #334155;
                     }
@@ -9425,14 +9443,15 @@ window.imprimirLista = async (esVacia = false) => {
                     .data-table, table { 
                         width: 100%; 
                         border-collapse: collapse; 
-                        margin-bottom: 3px; 
+                        margin-bottom: 2px; 
                     }
                     .data-table th, .data-table td, table th, table td { 
-                        border: 1px solid #475569; 
-                        padding: ${paddingCell}; 
+                        border: 1px solid #475569 !important; 
+                        padding: ${paddingCell} !important; 
                         text-align: center; 
-                        font-size: ${fontSize}; 
-                        line-height: 1.0;
+                        font-size: ${fontSize} !important; 
+                        line-height: 1.0 !important;
+                        height: auto !important;
                     }
                     .data-table th, table th { 
                         background-color: #f1f5f9; 
@@ -9445,32 +9464,32 @@ window.imprimirLista = async (esVacia = false) => {
                         justify-content: space-around !important; 
                         align-items: flex-end !important;
                         margin-top: ${sigMargin} !important; 
-                        padding-top: 2px !important;
+                        padding-top: 1px !important;
                         flex-shrink: 0 !important;
                         page-break-inside: avoid !important; 
                         break-inside: avoid !important;
                     }
                     .signature-box { 
                         text-align: center !important; 
-                        width: 180px !important; 
+                        width: 150px !important; 
                     }
                     .signature-line { 
                         border-top: 1.5px solid #000000 !important; 
-                        margin-bottom: 2px !important; 
+                        margin-bottom: 1px !important; 
                         height: ${sigLineHeight} !important; 
                     }
 
                     @media print {
                         @page { 
                             size: ${esHorizontal ? 'landscape' : 'portrait'}; 
-                            margin: 0.3cm; 
+                            margin: 0.2cm; 
                         }
                         body {
                             margin: 0 !important;
                             padding: 0 !important;
                         }
                         .print-main-wrapper {
-                            min-height: 94vh !important;
+                            min-height: 93vh !important;
                             display: flex !important;
                             flex-direction: column !important;
                             justify-content: space-between !important;
@@ -9513,13 +9532,13 @@ window.imprimirLista = async (esVacia = false) => {
                     <div class="signatures">
                         <div class="signature-box">
                             <div class="signature-line"></div>
-                            <div style="font-size: 8.5px; font-weight: bold; color: #000; line-height: 1.1;">${state.userName || 'Docente Titular'}</div>
-                            <div style="font-size: 7px; color: #333; text-transform: uppercase; font-weight: 600;">Docente / Profesor(a) Titular</div>
+                            <div style="font-size: 8px; font-weight: bold; color: #000; line-height: 1;">${state.userName || 'Docente Titular'}</div>
+                            <div style="font-size: 6.5px; color: #333; text-transform: uppercase; font-weight: 600;">Docente / Profesor(a) Titular</div>
                         </div>
                         <div class="signature-box">
                             <div class="signature-line"></div>
-                            <div style="font-size: 8.5px; font-weight: bold; color: #000; line-height: 1.1;">${directorName}</div>
-                            <div style="font-size: 7px; color: #333; text-transform: uppercase; font-weight: 600;">Director(a) / Responsable Directo</div>
+                            <div style="font-size: 8px; font-weight: bold; color: #000; line-height: 1;">${directorName}</div>
+                            <div style="font-size: 6.5px; color: #333; text-transform: uppercase; font-weight: 600;">Director(a) / Responsable Directo</div>
                         </div>
                     </div>
                 </div>
