@@ -9458,46 +9458,54 @@ window.imprimirLista = async (esVacia = false) => {
                     @media print {
                         @page { 
                             size: ${esVacia ? 'landscape' : 'portrait'}; 
-                            margin: 0.4cm; 
+                            margin: 0.5cm; 
                         }
-                        html, body {
-                            height: 99vh;
-                            overflow: hidden !important;
+                        body {
+                            margin: 0;
+                            padding: 0;
+                        }
+                        .signatures {
+                            page-break-inside: avoid !important;
+                            break-inside: avoid !important;
                         }
                     }
                 </style>
             </head>
             <body>
-                <div class="header-container">
-                    <div class="header-left">
-                        ${schoolLogo ? `<img src="${schoolLogo}" class="logo-img" alt="Logo">` : ''}
-                        <div class="title-box">
-                            <h1>${schoolName.toUpperCase()}</h1>
-                            <p>${esVacia ? 'PLANTILLA AUXILIAR DE REGISTRO Y CONTROL' : 'ACTA OFICIAL DE RESULTADOS ESCOLARES'}</p>
+                <div style="display: flex; flex-direction: column; justify-content: space-between; min-height: 96vh;">
+                    <div>
+                        <div class="header-container">
+                            <div class="header-left">
+                                ${schoolLogo ? `<img src="${schoolLogo}" class="logo-img" alt="Logo">` : ''}
+                                <div class="title-box">
+                                    <h1>${schoolName.toUpperCase()}</h1>
+                                    <p>${esVacia ? 'PLANTILLA AUXILIAR DE REGISTRO Y CONTROL' : 'ACTA OFICIAL DE RESULTADOS ESCOLARES'}</p>
+                                </div>
+                            </div>
+                            <div class="meta-grid">
+                                <div><strong>Docente:</strong> ${state.userName || 'Docente Titular'}</div>
+                                <div><strong>Periodo:</strong> ${currentTrim}</div>
+                                <div><strong>Grupo/Materia:</strong> ${grupoName}</div>
+                                <div><strong>Fecha:</strong> ${fecha}</div>
+                            </div>
                         </div>
-                    </div>
-                    <div class="meta-grid">
-                        <div><strong>Docente:</strong> ${state.userName || 'Docente Titular'}</div>
-                        <div><strong>Periodo:</strong> ${currentTrim}</div>
-                        <div><strong>Grupo/Materia:</strong> ${grupoName}</div>
-                        <div><strong>Fecha:</strong> ${fecha}</div>
-                    </div>
-                </div>
 
-                ${statsHtml}
+                        ${statsHtml}
 
-                ${tableContentHtml}
-
-                <div class="signatures">
-                    <div class="signature-box">
-                        <div class="signature-line"></div>
-                        <div style="font-size: 9px; font-weight: bold;">Profr(a). ${state.userName || 'Docente'}</div>
-                        <div style="font-size: 8px; color: #64748b;">Firma del Docente</div>
+                        ${tableContentHtml}
                     </div>
-                    <div class="signature-box">
-                        <div class="signature-line"></div>
-                        <div style="font-size: 9px; font-weight: bold;">DIRECCIÓN ESCOLAR</div>
-                        <div style="font-size: 8px; color: #64748b;">Sello y Firma de Recibido</div>
+
+                    <div class="signatures">
+                        <div class="signature-box">
+                            <div class="signature-line"></div>
+                            <div style="font-size: 10px; font-weight: bold; color: #0f172a;">Profr(a). ${state.userName || 'Docente Titular'}</div>
+                            <div style="font-size: 8px; color: #475569; text-transform: uppercase;">Firma del Docente</div>
+                        </div>
+                        <div class="signature-box">
+                            <div class="signature-line"></div>
+                            <div style="font-size: 10px; font-weight: bold; color: #0f172a;">DIRECCIÓN ESCOLAR</div>
+                            <div style="font-size: 8px; color: #475569; text-transform: uppercase;">Sello y Firma de Recibido</div>
+                        </div>
                     </div>
                 </div>
 
