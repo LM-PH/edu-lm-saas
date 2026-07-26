@@ -9300,11 +9300,11 @@ window.imprimirLista = async (esVacia = false) => {
     let statsHtml = '';
     
     if (esVacia) {
-        // Generar una plantilla vacía de 15 columnas
-        const numCols = 15;
-        let headers = `<th style="width:25px;">No.</th><th style="text-align:left; min-width: 140px;">Nombre del Alumno</th>`;
+        // Generar una plantilla vacía de 30 columnas (registro mensual completo de 30 días/casillas)
+        const numCols = 30;
+        let headers = `<th style="width:20px;">No.</th><th style="text-align:left; min-width: 130px;">Nombre del Alumno</th>`;
         for (let i = 1; i <= numCols; i++) {
-            headers += `<th style="width: 20px; text-align:center;">${i}</th>`;
+            headers += `<th style="width: 15px; text-align:center;">${i}</th>`;
         }
         
         let rowsHtml = '';
