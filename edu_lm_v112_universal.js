@@ -9250,15 +9250,20 @@ window.imprimirLista = async (esVacia = false) => {
 
     const currentTrim = state.selectedMaestroTrimestre === 'final' ? 'PROMEDIO FINAL' : `${state.selectedMaestroTrimestre}° TRIMESTRE`;
 
-    // Obtener datos del plantel para el membrete
+    // Obtener datos del plantel y director registrado para el membrete y firmas
     let schoolName = CONFIG.schoolName || 'Escuela';
     let schoolLogo = null;
+    let directorName = 'DIRECCIÓN ESCOLAR / RESPONSABLE DIRECTO';
     try {
         if(state.plantelId) {
             const { data: pt } = await supabaseClient.from('planteles').select('nombre, logo_url').eq('id', state.plantelId).maybeSingle();
             if(pt) {
                 if(pt.nombre) schoolName = pt.nombre;
                 if(pt.logo_url) schoolLogo = pt.logo_url;
+            }
+            const { data: dirData } = await supabaseClient.from('perfiles').select('nombre').eq('plantel_id', state.plantelId).eq('rol', 'directivo').maybeSingle();
+            if(dirData && dirData.nombre) {
+                directorName = dirData.nombre;
             }
         }
     } catch(e) {}
@@ -9270,22 +9275,22 @@ window.imprimirLista = async (esVacia = false) => {
     });
     const totalAlumnos = rowsList.length || 1;
 
-    // CÁLCULO MATEMÁTICO CONTINUO PARA GARANTIZAR 1 SOLA HOJA INDEPENDIENTEMENTE DEL NÚMERO DE ALUMNOS
+    // CÁLCULO MATEMÁTICO CONTINUO PARA GARANTIZAR 1 SOLA HOJA CON TODO Y FIRMAS
     const n = Math.max(totalAlumnos, 1);
     
-    // Tamaño de fuente continuo entre 6.5px y 11px
-    let fontSizePx = Math.max(6.5, Math.min(11, 280 / (n + 10)));
+    // Tamaño de fuente continuo entre 5.5px y 10.5px
+    let fontSizePx = Math.max(5.5, Math.min(10.5, 250 / (n + 8)));
     let fontSize = fontSizePx.toFixed(1) + 'px';
 
-    // Padding vertical y horizontal proporcional
-    let padV = Math.max(0.5, Math.min(5, (180 / n) - 2.5)).toFixed(1) + 'px';
-    let padH = Math.max(2, Math.min(6, (220 / n))).toFixed(1) + 'px';
+    // Padding vertical y horizontal proporcional ultra ajustado
+    let padV = Math.max(0, Math.min(4, (140 / n) - 2.0)).toFixed(1) + 'px';
+    let padH = Math.max(1.5, Math.min(5, (180 / n))).toFixed(1) + 'px';
     let paddingCell = `${padV} ${padH}`;
 
     // Logo y espacios de firma escalados continuamente
-    let logoHeight = Math.max(22, Math.min(42, 600 / n)).toFixed(0) + 'px';
-    let sigMargin = Math.max(6, Math.min(25, 400 / n)).toFixed(0) + 'px';
-    let sigLineHeight = Math.max(16, Math.min(35, 450 / n)).toFixed(0) + 'px';
+    let logoHeight = Math.max(20, Math.min(38, 500 / n)).toFixed(0) + 'px';
+    let sigMargin = Math.max(4, Math.min(18, 300 / n)).toFixed(0) + 'px';
+    let sigLineHeight = Math.max(12, Math.min(26, 350 / n)).toFixed(0) + 'px';
 
     let tableContentHtml = '';
     let statsHtml = '';
@@ -9293,9 +9298,9 @@ window.imprimirLista = async (esVacia = false) => {
     if (esVacia) {
         // Generar una plantilla vacía de 15 columnas
         const numCols = 15;
-        let headers = `<th style="width:25px;">No.</th><th style="text-align:left; min-width: 160px;">Nombre del Alumno</th>`;
+        let headers = `<th style="width:25px;">No.</th><th style="text-align:left; min-width: 150px;">Nombre del Alumno</th>`;
         for (let i = 1; i <= numCols; i++) {
-            headers += `<th style="width: 22px; text-align:center;">${i}</th>`;
+            headers += `<th style="width: 20px; text-align:center;">${i}</th>`;
         }
         
         let rowsHtml = '';
@@ -9344,11 +9349,11 @@ window.imprimirLista = async (esVacia = false) => {
 
             if(statsData.length > 0) {
                 statsHtml = `
-                    <div style="display:flex; justify-content:space-around; align-items:center; background:#f8fafc; border:1px solid #cbd5e1; border-radius:4px; padding:2px 6px; margin-bottom:4px; font-size:${fontSize};">
+                    <div style="display:flex; justify-content:space-around; align-items:center; background:#f8fafc; border:1px solid #cbd5e1; border-radius:4px; padding:1px 4px; margin-bottom:3px; font-size:${fontSize};">
                         ${statsData.map(s => `
                             <div>
                                 <span style="color:#64748b; font-weight:600;">${s.label}:</span>
-                                <strong style="color:#1e40af; font-size:1.1em; margin-left:3px;">${s.value}</strong>
+                                <strong style="color:#1e40af; font-size:1.05em; margin-left:2px;">${s.value}</strong>
                             </div>
                         `).join('<span style="color:#cbd5e1;">|</span>')}
                     </div>
@@ -9369,45 +9374,45 @@ window.imprimirLista = async (esVacia = false) => {
                         font-family: 'Segoe UI', Arial, sans-serif; 
                         color: #1e293b; 
                         background: #fff;
-                        padding: 8px;
+                        padding: 6px;
                         font-size: ${fontSize};
-                        line-height: 1.1;
+                        line-height: 1.05;
                     }
                     .header-container {
                         display: flex;
                         justify-content: space-between;
                         align-items: center;
                         border-bottom: 2px solid #1e40af;
-                        padding-bottom: 3px;
-                        margin-bottom: 4px;
+                        padding-bottom: 2px;
+                        margin-bottom: 3px;
                     }
                     .header-left {
                         display: flex;
                         align-items: center;
-                        gap: 8px;
+                        gap: 6px;
                     }
                     .logo-img { 
                         max-height: ${logoHeight}; 
                         object-fit: contain; 
                     }
                     .title-box h1 { 
-                        font-size: 13px; 
+                        font-size: 12px; 
                         color: #1e40af; 
                         text-transform: uppercase; 
                         margin: 0;
                         font-weight: 800;
-                        line-height: 1.1;
+                        line-height: 1.05;
                     }
                     .title-box p { 
-                        font-size: 9px; 
+                        font-size: 8.5px; 
                         color: #475569; 
                         font-weight: 600;
                     }
                     .meta-grid {
                         display: grid;
                         grid-template-columns: auto auto;
-                        gap: 2px 12px;
-                        font-size: 8.5px;
+                        gap: 2px 10px;
+                        font-size: 8px;
                         text-align: right;
                         color: #334155;
                     }
@@ -9416,14 +9421,14 @@ window.imprimirLista = async (esVacia = false) => {
                     .data-table, table { 
                         width: 100%; 
                         border-collapse: collapse; 
-                        margin-bottom: 4px; 
+                        margin-bottom: 3px; 
                     }
                     .data-table th, .data-table td, table th, table td { 
                         border: 1px solid #475569; 
                         padding: ${paddingCell}; 
                         text-align: center; 
                         font-size: ${fontSize}; 
-                        line-height: 1.05;
+                        line-height: 1.0;
                     }
                     .data-table th, table th { 
                         background-color: #f1f5f9; 
@@ -9436,41 +9441,54 @@ window.imprimirLista = async (esVacia = false) => {
                         justify-content: space-around !important; 
                         align-items: flex-end !important;
                         margin-top: ${sigMargin} !important; 
-                        padding-top: 5px !important;
+                        padding-top: 3px !important;
                         flex-shrink: 0 !important;
                         page-break-inside: avoid !important; 
                         break-inside: avoid !important;
                     }
                     .signature-box { 
                         text-align: center !important; 
-                        width: 200px !important; 
+                        width: 220px !important; 
                     }
                     .signature-line { 
                         border-top: 1.5px solid #000000 !important; 
-                        margin-bottom: 3px !important; 
+                        margin-bottom: 2px !important; 
                         height: ${sigLineHeight} !important; 
                     }
 
                     @media print {
                         @page { 
                             size: ${esVacia ? 'landscape' : 'portrait'}; 
-                            margin: 0.4cm; 
+                            margin: 0.25cm; 
                         }
                         html, body {
+                            height: 100vh !important;
+                            max-height: 100vh !important;
+                            overflow: hidden !important;
                             margin: 0 !important;
                             padding: 0 !important;
                         }
                         .print-main-wrapper {
-                            min-height: 95vh !important;
+                            height: 98vh !important;
+                            max-height: 98vh !important;
                             display: flex !important;
                             flex-direction: column !important;
                             justify-content: space-between !important;
+                            overflow: hidden !important;
+                        }
+                        table {
+                            page-break-inside: avoid !important;
+                            break-inside: avoid !important;
+                        }
+                        tr {
+                            page-break-inside: avoid !important;
+                            break-inside: avoid !important;
                         }
                     }
                 </style>
             </head>
             <body>
-                <div class="print-main-wrapper" style="display: flex; flex-direction: column; justify-content: space-between; min-height: 95vh;">
+                <div class="print-main-wrapper">
                     <div>
                         <div class="header-container">
                             <div class="header-left">
@@ -9496,13 +9514,13 @@ window.imprimirLista = async (esVacia = false) => {
                     <div class="signatures">
                         <div class="signature-box">
                             <div class="signature-line"></div>
-                            <div style="font-size: 9.5px; font-weight: bold; color: #000;">Profr(a). ${state.userName || 'Docente Titular'}</div>
-                            <div style="font-size: 8px; color: #333; text-transform: uppercase; font-weight: 600;">Firma del Docente Titular</div>
+                            <div style="font-size: 9px; font-weight: bold; color: #000;">${state.userName || 'Docente Titular'}</div>
+                            <div style="font-size: 7.5px; color: #333; text-transform: uppercase; font-weight: 600;">Docente / Profesor(a) Titular</div>
                         </div>
                         <div class="signature-box">
                             <div class="signature-line"></div>
-                            <div style="font-size: 9.5px; font-weight: bold; color: #000;">DIRECCIÓN ESCOLAR / RESPONSABLE DIRECTO</div>
-                            <div style="font-size: 8px; color: #333; text-transform: uppercase; font-weight: 600;">Sello y Firma de Recibido</div>
+                            <div style="font-size: 9px; font-weight: bold; color: #000;">${directorName}</div>
+                            <div style="font-size: 7.5px; color: #333; text-transform: uppercase; font-weight: 600;">Director(a) / Responsable Directo</div>
                         </div>
                     </div>
                 </div>
