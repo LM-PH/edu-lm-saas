@@ -9268,29 +9268,26 @@ window.imprimirLista = async (esVacia = false) => {
         }
     } catch(e) {}
 
-    // Contar el número de alumnos válidos para escalado dinámico
-    const rowsList = Array.from(tbody.querySelectorAll("tr")).filter(r => {
-        const txt = r.innerText || "";
-        return txt && !txt.includes("Seleccione") && !txt.includes("Cargando") && !txt.includes("Sin resultados");
-    });
-    const totalAlumnos = rowsList.length || 1;
+    // Detectar número de columnas para decidir orientación automáticamente
+    const totalCols = tabla ? (tabla.querySelectorAll('tr:first-child th, tr:first-child td').length || 5) : 5;
+    const esHorizontal = esVacia || totalCols > 6 || (selT && selT.value === 'evaluaciones');
 
     // CÁLCULO MATEMÁTICO CONTINUO PARA GARANTIZAR 1 SOLA HOJA CON TODO Y FIRMAS
     const n = Math.max(totalAlumnos, 1);
     
-    // Tamaño de fuente continuo entre 5.5px y 10.5px
-    let fontSizePx = Math.max(5.5, Math.min(10.5, 250 / (n + 8)));
+    // Tamaño de fuente continuo entre 5.0px y 10.0px (ajustado por columnas)
+    let fontSizePx = Math.max(5.0, Math.min(10.0, (240 / (n + 8)) - (totalCols > 8 ? 0.8 : 0)));
     let fontSize = fontSizePx.toFixed(1) + 'px';
 
     // Padding vertical y horizontal proporcional ultra ajustado
-    let padV = Math.max(0, Math.min(4, (140 / n) - 2.0)).toFixed(1) + 'px';
-    let padH = Math.max(1.5, Math.min(5, (180 / n))).toFixed(1) + 'px';
+    let padV = Math.max(0, Math.min(3.5, (120 / n) - 1.8)).toFixed(1) + 'px';
+    let padH = Math.max(1, Math.min(4, (160 / n))).toFixed(1) + 'px';
     let paddingCell = `${padV} ${padH}`;
 
     // Logo y espacios de firma escalados continuamente
-    let logoHeight = Math.max(20, Math.min(38, 500 / n)).toFixed(0) + 'px';
-    let sigMargin = Math.max(4, Math.min(18, 300 / n)).toFixed(0) + 'px';
-    let sigLineHeight = Math.max(12, Math.min(26, 350 / n)).toFixed(0) + 'px';
+    let logoHeight = Math.max(18, Math.min(35, 450 / n)).toFixed(0) + 'px';
+    let sigMargin = Math.max(4, Math.min(15, 250 / n)).toFixed(0) + 'px';
+    let sigLineHeight = Math.max(12, Math.min(22, 300 / n)).toFixed(0) + 'px';
 
     let tableContentHtml = '';
     let statsHtml = '';
@@ -9298,7 +9295,7 @@ window.imprimirLista = async (esVacia = false) => {
     if (esVacia) {
         // Generar una plantilla vacía de 15 columnas
         const numCols = 15;
-        let headers = `<th style="width:25px;">No.</th><th style="text-align:left; min-width: 150px;">Nombre del Alumno</th>`;
+        let headers = `<th style="width:25px;">No.</th><th style="text-align:left; min-width: 140px;">Nombre del Alumno</th>`;
         for (let i = 1; i <= numCols; i++) {
             headers += `<th style="width: 20px; text-align:center;">${i}</th>`;
         }
@@ -9396,7 +9393,7 @@ window.imprimirLista = async (esVacia = false) => {
                         object-fit: contain; 
                     }
                     .title-box h1 { 
-                        font-size: 12px; 
+                        font-size: 11px; 
                         color: #1e40af; 
                         text-transform: uppercase; 
                         margin: 0;
@@ -9404,7 +9401,7 @@ window.imprimirLista = async (esVacia = false) => {
                         line-height: 1.05;
                     }
                     .title-box p { 
-                        font-size: 8.5px; 
+                        font-size: 8px; 
                         color: #475569; 
                         font-weight: 600;
                     }
@@ -9412,7 +9409,7 @@ window.imprimirLista = async (esVacia = false) => {
                         display: grid;
                         grid-template-columns: auto auto;
                         gap: 2px 10px;
-                        font-size: 8px;
+                        font-size: 7.5px;
                         text-align: right;
                         color: #334155;
                     }
@@ -9441,14 +9438,14 @@ window.imprimirLista = async (esVacia = false) => {
                         justify-content: space-around !important; 
                         align-items: flex-end !important;
                         margin-top: ${sigMargin} !important; 
-                        padding-top: 3px !important;
+                        padding-top: 2px !important;
                         flex-shrink: 0 !important;
                         page-break-inside: avoid !important; 
                         break-inside: avoid !important;
                     }
                     .signature-box { 
                         text-align: center !important; 
-                        width: 220px !important; 
+                        width: 180px !important; 
                     }
                     .signature-line { 
                         border-top: 1.5px solid #000000 !important; 
@@ -9458,23 +9455,18 @@ window.imprimirLista = async (esVacia = false) => {
 
                     @media print {
                         @page { 
-                            size: ${esVacia ? 'landscape' : 'portrait'}; 
-                            margin: 0.25cm; 
+                            size: ${esHorizontal ? 'landscape' : 'portrait'}; 
+                            margin: 0.3cm; 
                         }
-                        html, body {
-                            height: 100vh !important;
-                            max-height: 100vh !important;
-                            overflow: hidden !important;
+                        body {
                             margin: 0 !important;
                             padding: 0 !important;
                         }
                         .print-main-wrapper {
-                            height: 98vh !important;
-                            max-height: 98vh !important;
+                            min-height: 94vh !important;
                             display: flex !important;
                             flex-direction: column !important;
                             justify-content: space-between !important;
-                            overflow: hidden !important;
                         }
                         table {
                             page-break-inside: avoid !important;
@@ -9514,13 +9506,13 @@ window.imprimirLista = async (esVacia = false) => {
                     <div class="signatures">
                         <div class="signature-box">
                             <div class="signature-line"></div>
-                            <div style="font-size: 9px; font-weight: bold; color: #000;">${state.userName || 'Docente Titular'}</div>
-                            <div style="font-size: 7.5px; color: #333; text-transform: uppercase; font-weight: 600;">Docente / Profesor(a) Titular</div>
+                            <div style="font-size: 8.5px; font-weight: bold; color: #000; line-height: 1.1;">${state.userName || 'Docente Titular'}</div>
+                            <div style="font-size: 7px; color: #333; text-transform: uppercase; font-weight: 600;">Docente / Profesor(a) Titular</div>
                         </div>
                         <div class="signature-box">
                             <div class="signature-line"></div>
-                            <div style="font-size: 9px; font-weight: bold; color: #000;">${directorName}</div>
-                            <div style="font-size: 7.5px; color: #333; text-transform: uppercase; font-weight: 600;">Director(a) / Responsable Directo</div>
+                            <div style="font-size: 8.5px; font-weight: bold; color: #000; line-height: 1.1;">${directorName}</div>
+                            <div style="font-size: 7px; color: #333; text-transform: uppercase; font-weight: 600;">Director(a) / Responsable Directo</div>
                         </div>
                     </div>
                 </div>
