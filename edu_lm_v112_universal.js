@@ -9432,46 +9432,45 @@ window.imprimirLista = async (esVacia = false) => {
                     }
                     
                     .signatures { 
-                        display: flex; 
-                        justify-content: space-around; 
-                        margin-top: ${sigMargin}; 
-                        page-break-inside: avoid; 
+                        display: flex !important; 
+                        justify-content: space-around !important; 
+                        align-items: flex-end !important;
+                        margin-top: ${sigMargin} !important; 
+                        padding-top: 5px !important;
+                        flex-shrink: 0 !important;
+                        page-break-inside: avoid !important; 
+                        break-inside: avoid !important;
                     }
                     .signature-box { 
-                        text-align: center; 
-                        width: 160px; 
+                        text-align: center !important; 
+                        width: 200px !important; 
                     }
                     .signature-line { 
-                        border-top: 1px solid #000; 
-                        margin-bottom: 2px; 
-                        height: ${sigLineHeight}; 
+                        border-top: 1.5px solid #000000 !important; 
+                        margin-bottom: 3px !important; 
+                        height: ${sigLineHeight} !important; 
                     }
 
                     @media print {
                         @page { 
                             size: ${esVacia ? 'landscape' : 'portrait'}; 
-                            margin: 0.3cm; 
+                            margin: 0.4cm; 
                         }
                         html, body {
-                            height: 100vh !important;
-                            max-height: 100vh !important;
-                            overflow: hidden !important;
                             margin: 0 !important;
                             padding: 0 !important;
                         }
                         .print-main-wrapper {
-                            height: 98vh !important;
-                            max-height: 98vh !important;
-                            display: flex;
-                            flex-direction: column;
-                            justify-content: space-between;
-                            overflow: hidden !important;
+                            min-height: 95vh !important;
+                            display: flex !important;
+                            flex-direction: column !important;
+                            justify-content: space-between !important;
                         }
                     }
                 </style>
             </head>
             <body>
-                <div class="print-main-wrapper" style="display: flex; flex-direction: column; justify-content: space-between; min-height: 96vh;">
+                <div class="print-main-wrapper" style="display: flex; flex-direction: column; justify-content: space-between; min-height: 95vh;">
                     <div>
                         <div class="header-container">
                             <div class="header-left">
@@ -9497,13 +9496,13 @@ window.imprimirLista = async (esVacia = false) => {
                     <div class="signatures">
                         <div class="signature-box">
                             <div class="signature-line"></div>
-                            <div style="font-size: 9px; font-weight: bold; color: #0f172a;">Profr(a). ${state.userName || 'Docente Titular'}</div>
-                            <div style="font-size: 8px; color: #475569; text-transform: uppercase;">Firma del Docente</div>
+                            <div style="font-size: 9.5px; font-weight: bold; color: #000;">Profr(a). ${state.userName || 'Docente Titular'}</div>
+                            <div style="font-size: 8px; color: #333; text-transform: uppercase; font-weight: 600;">Firma del Docente Titular</div>
                         </div>
                         <div class="signature-box">
                             <div class="signature-line"></div>
-                            <div style="font-size: 9px; font-weight: bold; color: #0f172a;">DIRECCIÓN ESCOLAR</div>
-                            <div style="font-size: 8px; color: #475569; text-transform: uppercase;">Sello y Firma de Recibido</div>
+                            <div style="font-size: 9.5px; font-weight: bold; color: #000;">DIRECCIÓN ESCOLAR / RESPONSABLE DIRECTO</div>
+                            <div style="font-size: 8px; color: #333; text-transform: uppercase; font-weight: 600;">Sello y Firma de Recibido</div>
                         </div>
                     </div>
                 </div>
