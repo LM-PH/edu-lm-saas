@@ -9268,6 +9268,13 @@ window.imprimirLista = async (esVacia = false) => {
         }
     } catch(e) {}
 
+    // Contar el número de alumnos válidos y columnas para escalado dinámico
+    const rowsList = Array.from(tbody.querySelectorAll("tr")).filter(r => {
+        const txt = r.innerText || "";
+        return txt && !txt.includes("Seleccione") && !txt.includes("Cargando") && !txt.includes("Sin resultados");
+    });
+    const totalAlumnos = rowsList.length || 1;
+
     // Detectar número de columnas para decidir orientación automáticamente
     const totalCols = tabla ? (tabla.querySelectorAll('tr:first-child th, tr:first-child td').length || 5) : 5;
     const esHorizontal = esVacia || totalCols > 6 || (selT && selT.value === 'evaluaciones');
