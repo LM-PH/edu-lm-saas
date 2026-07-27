@@ -3103,7 +3103,7 @@ window.loadApoyoRiesgoData = async () => {
             }
         });
 
-        // 3. Cargar actividades evaluadas (evaluaciones_actividades) sin límite de 1000 filas
+        // 3. Cargar actividades evaluadas (evaluaciones_actividades)
         const { data: actsData } = await supabaseClient.from('actividades_maestro')
             .select('id, titulo, trimestre, materia, rubro_peso')
             .limit(10000);
@@ -3114,6 +3114,25 @@ window.loadApoyoRiesgoData = async () => {
                 .limit(50000);
 
             if (evalsData && evalsData.length > 0) {
+                // Chequeo A: Evaluaciones individuales en actividades (0 o < 6.0)
+                evalsData.forEach(ev => {
+                    if (!ev.alumno_id || !mapAlumnosById[ev.alumno_id]) return;
+                    const actObj = actsData.find(a => a.id === ev.actividad_id);
+                    if (!actObj) return;
+
+                    if (trim !== 'Todos' && String(actObj.trimestre) !== String(trim)) return;
+
+                    const rawVal = (ev.calificacion !== null && ev.calificacion !== undefined) ? String(ev.calificacion).trim() : '0';
+                    const numVal = parseFloat(rawVal);
+                    const esNotaReprobatoria = isNaN(numVal) || numVal < 6.0;
+
+                    if (esNotaReprobatoria) {
+                        const tag = (trim === 'Todos' && actObj.trimestre) ? `${actObj.materia} (T${actObj.trimestre})` : actObj.materia;
+                        mapAlumnosById[ev.alumno_id].materiasFallas.set(tag, true);
+                    }
+                });
+
+                // Chequeo B: Promedio ponderado propuesto del trimestre < 6.0
                 const mapaActis = {};
                 evalsData.forEach(ev => {
                     if (!ev.alumno_id || !mapAlumnosById[ev.alumno_id]) return;
@@ -3144,7 +3163,7 @@ window.loadApoyoRiesgoData = async () => {
                         if (promPropuesto < 6.0) {
                             const tag = (trim === 'Todos' && item.trimestre) ? `${item.materia} (T${item.trimestre})` : item.materia;
                             if (mapAlumnosById[item.alumno_id]) {
-                                mapAlumnosById[item.alumno_id].materiasFallas.set(tag, promPropuesto);
+                                mapAlumnosById[item.alumno_id].materiasFallas.set(tag, true);
                             }
                         }
                     }
@@ -3168,9 +3187,7 @@ window.loadApoyoRiesgoData = async () => {
         // 4. Filtrar alumnos con 1 o más materias reprobadas
         const alumnosEnRiesgo = Object.values(mapAlumnosById)
             .map(a => {
-                const matList = Array.from(a.materiasFallas.entries()).map(([mName, score]) => {
-                    return `${mName}: ${score.toFixed(1)}`;
-                });
+                const matList = Array.from(a.materiasFallas.keys()); // Solo nombres limpios de asignaturas
                 return {
                     ...a,
                     materias: matList,
