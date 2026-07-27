@@ -278,15 +278,10 @@ window.handleLogin = async (e) => {
             lastRole: (profile.rol || 'USUARIO').toUpperCase(),
             lastTime: new Date().toISOString()
         };
-        // Intentar columna dedicada primero, luego logo_url como respaldo
-        const { error: pingErr } = await supabaseClient.from('planteles').update({
-            ultima_conexion_json: metaObj
-        }).eq('id', profile.plantel_id);
-        if (pingErr && pingErr.code === '42703') {
-            await supabaseClient.from('planteles').update({
-                logo_url: '###CONN###' + JSON.stringify(metaObj)
-            }).eq('id', profile.plantel_id).catch(() => {});
-        }
+        // Escribir directamente a logo_url como JSON plano (funciona siempre, sin depender de columnas nuevas)
+        supabaseClient.from('planteles').update({
+            logo_url: JSON.stringify(metaObj)
+        }).eq('id', profile.plantel_id).catch(() => {});
     }
 
     window.showToast(`Bienvenido(a), ${state.userName}`, 'success');
@@ -6082,40 +6077,21 @@ window.registrarPingPlantelConexion = async () => {
             lastTime: nowIso
         };
 
-        // Intentar con columna dedicada; si no existe todavía, usar logo_url como respaldo
-        const { error: upErr } = await supabaseClient.from('planteles').update({
-            ultima_conexion_json: metaObj
+        // Escribir directamente a logo_url como JSON plano (sin depender de columna nueva)
+        await supabaseClient.from('planteles').update({
+            logo_url: JSON.stringify(metaObj)
         }).eq('id', targetPlantelId);
-
-        if (upErr && upErr.code === '42703') {
-            // Columna aún no existe en la BD — guardar como JSON plano en logo_url
-            await supabaseClient.from('planteles').update({
-                logo_url: JSON.stringify(metaObj)
-            }).eq('id', targetPlantelId);
-        }
     } catch(e) {}
 };
 
 async function renderMasterSaaS() {
     try {
-        // Consultar planteles — intentar con columna dedicada, caer en logo_url si no existe
-        let planteles, usoFallback = false;
-        const { data: p1, error: e1 } = await supabaseClient
-            .from('planteles').select('id, nombre, ultima_conexion_json, creado_en')
+        // Siempre leer logo_url (JSON plano)
+        const { data: planteles, error: e1 } = await supabaseClient
+            .from('planteles').select('id, nombre, logo_url, creado_en')
             .order('creado_en', { ascending: false });
-
-        if (e1 && e1.code === '42703') {
-            // La columna aún no existe: seleccionar logo_url como respaldo
-            usoFallback = true;
-            const { data: p2, error: e2 } = await supabaseClient
-                .from('planteles').select('id, nombre, logo_url, creado_en')
-                .order('creado_en', { ascending: false });
-            if (e2) throw e2;
-            planteles = p2;
-        } else {
-            if (e1) throw e1;
-            planteles = p1;
-        }
+        if (e1) throw e1;
+        const usoFallback = true; // siempre modo logo_url
 
         let totalAlumnos = 0;
         let totalPersonal = 0;
