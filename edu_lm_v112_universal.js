@@ -3171,16 +3171,11 @@ window.loadApoyoRiesgoData = async () => {
             }
         }
 
-        // Helper flexible para hacer match de grado ("1°" vs "1", etc.)
-        const matchGrado = (alGrado, selectedGrado) => {
-            if (!selectedGrado || selectedGrado === 'Todos') return true;
-            if (alGrado === null || alGrado === undefined) return false;
-            const strAl = (alGrado + '').trim().toLowerCase();
-            const strSel = (selectedGrado + '').trim().toLowerCase();
-            if (strAl === strSel) return true;
-            const numAl = strAl.replace(/[^0-9]/g, '');
-            const numSel = strSel.replace(/[^0-9]/g, '');
-            if (numAl && numSel && numAl === numSel) return true;
+        // Helper flexible para hacer match de grupo (por ID o por Nombre)
+        const matchGrupo = (al, selectedGrupo) => {
+            if (!selectedGrupo || selectedGrupo === 'Todos') return true;
+            if (al.grupo_id === selectedGrupo) return true;
+            if (al.grupo && (al.grupo + '').trim().toLowerCase() === (selectedGrupo + '').trim().toLowerCase()) return true;
             return false;
         };
 
@@ -3197,7 +3192,7 @@ window.loadApoyoRiesgoData = async () => {
             .filter(a => a.numReprobadas > 0)
             .filter(al => {
                 if (!matchGrado(al.grado, grado)) return false;
-                if (grupo !== 'Todos' && al.grupo_id !== grupo && (!al.grupo || al.grupo !== grupo)) return false;
+                if (!matchGrupo(al, grupo)) return false;
                 return true;
             })
             .filter(a => {
@@ -3218,6 +3213,9 @@ window.loadApoyoRiesgoData = async () => {
         badge.innerText = `${alumnosEnRiesgo.length} detectados`;
 
         let html = `
+            <div style="padding:10px 14px; background:#eff6ff; border:1px solid #bfdbfe; border-radius:8px; margin-bottom:15px; font-size:0.85rem; color:#1e40af;">
+                <i class="fa-solid fa-circle-info"></i> Se evaluaron actas finales y registros continuos. Se detectaron <strong>${alumnosEnRiesgo.length} alumnos</strong> con calificaciones reprobatorias (menores a 6.0 o en 0).
+            </div>
             <div style="overflow-x:auto;">
                 <table class="risk-table" style="width:100%;">
                     <thead>
@@ -3233,14 +3231,14 @@ window.loadApoyoRiesgoData = async () => {
         `;
 
         alumnosEnRiesgo.forEach(al => {
-            const badgesMaterias = al.materias.map(m => `<span class="badge" style="background:#f1f5f9; color:#475569; margin:2px; font-weight:normal; border:1px solid #cbd5e1;">${m}</span>`).join('');
+            const badgesMaterias = al.materias.map(m => `<span class="badge" style="background:#fee2e2; color:#991b1b; margin:2px; font-weight:600; border:1px solid #fca5a5;">${m}</span>`).join('');
             
             html += `
                 <tr>
                     <td style="font-weight:600;">${al.nombre}</td>
                     <td>${al.grado} - ${al.grupo}</td>
                     <td style="text-align:center;">
-                        <span style="font-size:1.2rem; font-weight:bold; color:var(--danger);">${al.materias.length}</span>
+                        <span style="font-size:1.2rem; font-weight:bold; color:var(--danger);">${al.numReprobadas}</span>
                     </td>
                     <td style="max-width:300px; line-height:1.6;">${badgesMaterias}</td>
                     <td style="text-align:center;">
