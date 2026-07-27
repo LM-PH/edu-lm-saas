@@ -3049,46 +3049,69 @@ window.loadApoyoRiesgoData = async () => {
     badge.style.display = 'none';
 
     try {
-        let query = supabaseClient.from('calificaciones')
-            .select('calificacion, trimestre, materia_nombre, alumnos!inner(id, nombre, grado, grupo_id, grupos(nombre))')
-            .eq('plantel_id', state.plantelId)
-            .lt('calificacion', 6); // Buscar reprobadas (< 6)
+        // 1. Obtener los alumnos del plantel (filtrando por grado y grupo si aplica)
+        let alQuery = supabaseClient.from('alumnos')
+            .select('id, nombre, grado, grupo_id, grupos(nombre)')
+            .eq('plantel_id', state.plantelId);
 
-        if(trim !== 'Todos') {
-            query = query.eq('trimestre', parseInt(trim));
+        if (grado !== 'Todos') {
+            alQuery = alQuery.eq('grado', grado);
+        }
+        if (grupo !== 'Todos') {
+            alQuery = alQuery.eq('grupo_id', grupo);
         }
 
-        const { data, error } = await query;
-        if(error) throw error;
+        const { data: alumnosData, error: errAl } = await alQuery;
+        if (errAl) throw errAl;
 
-        // Filtrar grado y grupo en JS para evitar incompatibilidades de sintaxis en joins PostgREST
-        const dataFiltrada = (data || []).filter(row => {
-            if (!row.alumnos) return false;
-            if (grado !== 'Todos' && (row.alumnos.grado || '').trim() !== grado.trim()) return false;
-            if (grupo !== 'Todos' && row.alumnos.grupo_id !== grupo) return false;
-            return true;
+        if (!alumnosData || alumnosData.length === 0) {
+            hold.innerHTML = '<p style="text-align:center; padding:30px; color:var(--success);"><i class="fa-solid fa-check-circle" style="font-size:2rem; display:block; margin-bottom:10px;"></i>No se encontraron alumnos registrados bajo los filtros seleccionados.</p>';
+            return;
+        }
+
+        const mapAlumnosById = {};
+        alumnosData.forEach(al => {
+            mapAlumnosById[al.id] = {
+                id: al.id,
+                nombre: al.nombre,
+                grado: al.grado,
+                grupo: al.grupos ? al.grupos.nombre : 'Sin grupo',
+                materias: new Set()
+            };
         });
 
-        if(dataFiltrada.length === 0) {
+        const alumIds = Object.keys(mapAlumnosById);
+        if (alumIds.length === 0) {
+            hold.innerHTML = '<p style="text-align:center; padding:30px; color:var(--success);"><i class="fa-solid fa-check-circle" style="font-size:2rem; display:block; margin-bottom:10px;"></i>No hay alumnos bajo estos filtros.</p>';
+            return;
+        }
+
+        // 2. Obtener calificaciones reprobatorias (< 6) para estos alumnos
+        let califQuery = supabaseClient.from('calificaciones')
+            .select('alumno_id, calificacion, trimestre, materia_nombre')
+            .in('alumno_id', alumIds)
+            .lt('calificacion', 6);
+
+        if (trim !== 'Todos') {
+            califQuery = califQuery.eq('trimestre', parseInt(trim));
+        }
+
+        const { data: califsData, error: errCal } = await califQuery;
+        if (errCal) throw errCal;
+
+        if (!califsData || califsData.length === 0) {
             hold.innerHTML = '<p style="text-align:center; padding:30px; color:var(--success);"><i class="fa-solid fa-check-circle" style="font-size:2rem; display:block; margin-bottom:10px;"></i>No se detectaron alumnos con calificaciones reprobatorias bajo estos filtros.</p>';
             return;
         }
 
-        const mapaAlumnos = {};
-        dataFiltrada.forEach(row => {
-            const aId = row.alumnos.id;
-            if(!mapaAlumnos[aId]) {
-                mapaAlumnos[aId] = {
-                    id: aId,
-                    nombre: row.alumnos.nombre,
-                    grado: row.alumnos.grado,
-                    grupo: row.alumnos.grupos ? row.alumnos.grupos.nombre : 'Sin grupo',
-                    materias: new Set()
-                };
+        califsData.forEach(row => {
+            if (mapAlumnosById[row.alumno_id]) {
+                const matTag = (trim === 'Todos' && row.trimestre) ? `${row.materia_nombre} (T${row.trimestre})` : row.materia_nombre;
+                mapAlumnosById[row.alumno_id].materias.add(matTag);
             }
-            const matTag = (trim === 'Todos' && row.trimestre) ? `${row.materia_nombre} (T${row.trimestre})` : row.materia_nombre;
-            mapaAlumnos[aId].materias.add(matTag);
         });
+
+        const mapaAlumnos = mapAlumnosById;
 
         const alumnosEnRiesgo = Object.values(mapaAlumnos)
             .map(a => ({ ...a, materias: Array.from(a.materias) }))
