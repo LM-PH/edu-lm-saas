@@ -4404,6 +4404,7 @@ function renderApoyoPrefectura() {
                     <option value="">Selecciona Grupo...</option>
                 </select>
                 <button class="btn btn-primary btn-sm" onclick="window.loadAsistenciasApoyo()"><i class="fa-solid fa-rotate"></i></button>
+                <button class="btn btn-outline btn-sm" onclick="window.imprimirRegistroAccesos('fechaAsistenciaApoyo', 'selGrupoAsistenciaApoyo')" title="Imprimir Reporte del Día" style="border-color:var(--primary); color:var(--primary); font-weight:600;"><i class="fa-solid fa-print"></i> Imprimir</button>
             </div>
             <div style="max-height:500px; overflow-y:auto; border:1px solid var(--border); border-radius:12px;">
                 <table class="risk-table" style="width:100%">
@@ -4589,6 +4590,166 @@ window.loadAsistenciasApoyo = async () => {
             `;
         }).join('');
     } catch(e) { console.error(e); }
+};
+
+window.imprimirRegistroAccesos = async (fechaInputId = 'fechaAsistenciaApoyo', grupoInputId = 'selGrupoAsistenciaApoyo') => {
+    try {
+        const elFecha = document.getElementById(fechaInputId) || document.getElementById('fechaAsistenciaApoyo') || document.getElementById('fechaAsistenciaApoyoTS');
+        const elGrupo = document.getElementById(grupoInputId) || document.getElementById('selGrupoAsistenciaApoyo') || document.getElementById('selGrupoAsistenciaApoyoTS');
+        
+        const fecha = elFecha?.value || new Date().toLocaleDateString('en-CA');
+        const grupoId = elGrupo?.value || '';
+        
+        let pId = state.plantelId || state.user?.user_metadata?.plantel_id;
+        if(!pId && state.user?.id) {
+            const { data: prof } = await supabaseClient.from('perfiles').select('plantel_id').eq('id', state.user.id).maybeSingle();
+            pId = prof?.plantel_id;
+            if(pId) state.plantelId = pId;
+        }
+
+        let query = supabaseClient.from('accesos_plantel')
+            .select('*, alumnos(nombre, matricula, grupos(nombre, id))')
+            .eq('fecha', fecha);
+
+        if(pId) query = query.eq('plantel_id', pId);
+
+        const { data: rawData, error } = await query;
+        if(error) throw error;
+
+        let data = rawData || [];
+        if(grupoId) {
+            data = data.filter(a => a.alumnos?.grupos?.id === grupoId || a.alumnos?.grupo_id === grupoId);
+        }
+
+        if(!data || data.length === 0) {
+            return alert("No hay registros de accesos o salidas para la fecha seleccionada (" + fecha + ").");
+        }
+
+        data.sort((a, b) => {
+            const grpA = a.alumnos?.grupos?.nombre || '';
+            const grpB = b.alumnos?.grupos?.nombre || '';
+            if(grpA !== grpB) return grpA.localeCompare(grpB);
+            return (a.alumnos?.nombre || '').localeCompare(b.alumnos?.nombre || '');
+        });
+
+        const { data: plantelData } = await supabaseClient.from('planteles').select('nombre, logo_url').eq('id', pId).maybeSingle();
+        const schoolName = plantelData?.nombre || 'Plantel Escolar';
+        const schoolLogo = plantelData?.logo_url || '';
+
+        const printWindow = window.open('', '_blank');
+        const fechaImpresion = new Date().toLocaleDateString();
+
+        const countAsistencia = data.filter(d => d.estado === 'Asistencia').length;
+        const countRetardo = data.filter(d => d.estado === 'Retardo').length;
+        const countSalida = data.filter(d => d.estado === 'Salida').length;
+        const countInasistencia = data.filter(d => d.estado === 'Inasistencia').length;
+
+        const filasTable = data.map((d, index) => {
+            let badgeStyle = "background:#f0fdf4; color:#166534; font-weight:bold;";
+            if(d.estado === 'Retardo') badgeStyle = "background:#fffbeb; color:#92400e; font-weight:bold;";
+            if(d.estado === 'Salida') badgeStyle = "background:#fef3c7; color:#d97706; font-weight:bold;";
+            if(d.estado === 'Inasistencia') badgeStyle = "background:#fef2f2; color:#991b1b; font-weight:bold;";
+
+            return `
+                <tr>
+                    <td style="text-align:center; padding:8px; border-bottom:1px solid #e2e8f0;">${index + 1}</td>
+                    <td style="padding:8px; border-bottom:1px solid #e2e8f0; font-weight:600;">${d.alumnos?.nombre || 'S/D'}</td>
+                    <td style="text-align:center; padding:8px; border-bottom:1px solid #e2e8f0;">${d.alumnos?.matricula || 'N/A'}</td>
+                    <td style="text-align:center; padding:8px; border-bottom:1px solid #e2e8f0;">${d.alumnos?.grupos?.nombre || 'S/G'}</td>
+                    <td style="text-align:center; padding:8px; border-bottom:1px solid #e2e8f0;">
+                        <span style="${badgeStyle} padding:3px 8px; border-radius:4px; font-size:11px;">${d.estado}</span>
+                    </td>
+                    <td style="text-align:center; padding:8px; border-bottom:1px solid #e2e8f0;">${d.hora || 'N/A'}</td>
+                </tr>
+            `;
+        }).join('');
+
+        printWindow.document.write(`
+            <html>
+                <head>
+                    <title>Reporte de Accesos y Salidas - ${fecha}</title>
+                    <style>
+                        body { font-family: 'Segoe UI', Arial, sans-serif; padding: 30px; color: #333; line-height: 1.4; }
+                        .header { text-align: center; margin-bottom: 25px; border-bottom: 2px solid #1e40af; padding-bottom: 12px; }
+                        .logo-img { max-height: 70px; margin-bottom: 8px; object-fit: contain; }
+                        .header h2 { font-size: 24px; margin: 0 0 4px 0; color: #000; text-transform: uppercase; }
+                        .header h1 { margin: 0; color: #1e40af; font-size: 18px; text-transform: uppercase; }
+                        .header p { margin: 4px 0; font-size: 13px; color: #555; font-weight: bold; }
+                        .summary-box { background: #f8fafc; border: 1px solid #cbd5e1; padding: 15px; border-radius: 8px; margin-bottom: 20px; display: flex; justify-content: space-around; font-size: 13px; text-align: center; }
+                        .summary-item { display: flex; flex-direction: column; }
+                        .summary-num { font-size: 18px; font-weight: bold; }
+                        table { width: 100%; border-collapse: collapse; font-size: 12px; margin-top: 10px; }
+                        th { background: #1e40af; color: white; padding: 8px; text-align: left; text-transform: uppercase; font-size: 11px; }
+                        th.center, td.center { text-align: center; }
+                        .footer { margin-top: 30px; display: flex; justify-content: space-between; font-size: 11px; color: #64748b; border-top: 1px solid #e2e8f0; padding-top: 10px; }
+                        @media print {
+                            body { padding: 10px; }
+                            button { display: none; }
+                        }
+                    </style>
+                </head>
+                <body>
+                    <div class="header">
+                        ${schoolLogo ? `<img src="${schoolLogo}" class="logo-img" />` : ''}
+                        <h2>${schoolName}</h2>
+                        <h1>Reporte Diario de Accesos y Salidas</h1>
+                        <p>Fecha del Reporte: ${fecha}</p>
+                    </div>
+
+                    <div class="summary-box">
+                        <div class="summary-item">
+                            <span class="summary-num" style="color:#166534;">${countAsistencia}</span>
+                            <span>Entradas Puntuales</span>
+                        </div>
+                        <div class="summary-item">
+                            <span class="summary-num" style="color:#92400e;">${countRetardo}</span>
+                            <span>Retardos</span>
+                        </div>
+                        <div class="summary-item">
+                            <span class="summary-num" style="color:#d97706;">${countSalida}</span>
+                            <span>Salidas</span>
+                        </div>
+                        <div class="summary-item">
+                            <span class="summary-num" style="color:#991b1b;">${countInasistencia}</span>
+                            <span>Inasistencias</span>
+                        </div>
+                        <div class="summary-item">
+                            <span class="summary-num" style="color:#1e40af;">${data.length}</span>
+                            <span>Total Registros</span>
+                        </div>
+                    </div>
+
+                    <table>
+                        <thead>
+                            <tr>
+                                <th class="center" style="width:40px;">#</th>
+                                <th>Alumno</th>
+                                <th class="center">Matrícula</th>
+                                <th class="center">Grupo</th>
+                                <th class="center">Estado</th>
+                                <th class="center">Hora</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${filasTable}
+                        </tbody>
+                    </table>
+
+                    <div class="footer">
+                        <span>Generado por Sistema Escolar EDU-LM</span>
+                        <span>Impreso el: ${fechaImpresion}</span>
+                    </div>
+                    <script>
+                        window.onload = function() { window.print(); }
+                    </script>
+                </body>
+            </html>
+        `);
+        printWindow.document.close();
+    } catch(e) {
+        console.error(e);
+        alert("Error al generar el reporte de accesos: " + e.message);
+    }
 };
 
 window.generarInasistenciasMasivas = async () => {
@@ -4858,6 +5019,7 @@ function renderApoyoTSEscaner() {
                     <option value="">Selecciona Grupo...</option>
                 </select>
                 <button class="btn btn-primary btn-sm" onclick="window.loadAsistenciasApoyo()"><i class="fa-solid fa-rotate"></i></button>
+                <button class="btn btn-outline btn-sm" onclick="window.imprimirRegistroAccesos('fechaAsistenciaApoyoTS', 'selGrupoAsistenciaApoyoTS')" title="Imprimir Reporte del Día" style="border-color:var(--primary); color:var(--primary); font-weight:600;"><i class="fa-solid fa-print"></i> Imprimir</button>
             </div>
             <div style="max-height:500px; overflow-y:auto; border:1px solid var(--border); border-radius:12px;">
                 <table class="risk-table" style="width:100%">
