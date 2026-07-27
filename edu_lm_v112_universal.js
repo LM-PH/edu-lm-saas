@@ -3045,7 +3045,7 @@ window.loadApoyoRiesgoData = async () => {
     const grupo = document.getElementById('riesgoGrupoSel') ? document.getElementById('riesgoGrupoSel').value : 'Todos';
     const umbral = document.getElementById('riesgoUmbralSel').value || '1+';
 
-    hold.innerHTML = '<p style="text-align:center; padding:30px;"><i class="fa-solid fa-spinner fa-spin"></i> Analizando calificaciones de la escuela...</p>';
+    hold.innerHTML = '<p style="text-align:center; padding:30px;"><i class="fa-solid fa-spinner fa-spin"></i> Escaneando calificaciones y promedios reprobatorios...</p>';
     badge.style.display = 'none';
 
     try {
@@ -3062,33 +3062,61 @@ window.loadApoyoRiesgoData = async () => {
             return false;
         };
 
-        const mapaFallas = {}; // alumno_id -> Set(materias)
+        // 1. Obtener la lista completa de alumnos
+        let alQuery = supabaseClient.from('alumnos')
+            .select('id, nombre, grado, grupo_id, grupos(nombre)');
 
-        // 1. Fuente A: Calificaciones Asentadas (Tabla calificaciones)
+        if (state.plantelId) {
+            alQuery = alQuery.or(`plantel_id.eq.${state.plantelId},plantel_id.is.null`);
+        }
+
+        const { data: alumnosData, error: errAl } = await alQuery;
+        if (errAl) throw errAl;
+
+        if (!alumnosData || alumnosData.length === 0) {
+            hold.innerHTML = '<p style="text-align:center; padding:30px; color:var(--text-muted);"><i class="fa-solid fa-user-slash" style="font-size:2rem; display:block; margin-bottom:10px;"></i>No hay alumnos registrados en la escuela.</p>';
+            return;
+        }
+
+        const mapAlumnosById = {};
+        alumnosData.forEach(al => {
+            mapAlumnosById[al.id] = {
+                id: al.id,
+                nombre: al.nombre,
+                grado: al.grado || '',
+                grupo: al.grupos ? al.grupos.nombre : 'Sin grupo',
+                grupo_id: al.grupo_id,
+                materias: new Set()
+            };
+        });
+
+        const alumIds = Object.keys(mapAlumnosById);
+
+        // 2. Fuente A: Calificaciones Asentadas (Tabla calificaciones)
         let califQuery = supabaseClient.from('calificaciones')
-            .select('alumno_id, calificacion, trimestre, materia_nombre');
+            .select('alumno_id, calificacion, trimestre, materia_nombre')
+            .in('alumno_id', alumIds);
 
         if (trim !== 'Todos') {
             califQuery = califQuery.eq('trimestre', parseInt(trim));
         }
 
         const { data: califsData, error: errCal } = await califQuery;
-        if (errCal) console.error("Error al consultar calificaciones asentadas:", errCal);
+        if (errCal) console.error("Error califs:", errCal);
 
         (califsData || []).forEach(c => {
-            if (!c.alumno_id) return;
+            if (!mapAlumnosById[c.alumno_id]) return;
             const val = parseFloat(c.calificacion);
-            // Toda calificación menor a 6.0 (incluyendo 0, 0.0, null, NaN o sin calificar)
+            // Reprobada si es < 6.0 (0, 0.0, 5.9, null, NaN o no aprobatoria)
             const esReprobada = isNaN(val) ? true : (val < 6.0);
             if (esReprobada) {
-                if (!mapaFallas[c.alumno_id]) mapaFallas[c.alumno_id] = new Set();
-                const nombreMat = c.materia_nombre || 'Asignatura';
+                const nombreMat = (c.materia_nombre || 'Asignatura').trim();
                 const matTag = (trim === 'Todos' && c.trimestre) ? `${nombreMat} (T${c.trimestre})` : nombreMat;
-                mapaFallas[c.alumno_id].add(matTag);
+                mapAlumnosById[c.alumno_id].materias.add(matTag);
             }
         });
 
-        // 2. Fuente B: Evaluaciones de Actividades Continuas (Tabla actividades_maestro + evaluaciones_actividades)
+        // 3. Fuente B: Evaluaciones de Actividades Continuas (Tabla actividades_maestro + evaluaciones_actividades)
         let actQuery = supabaseClient.from('actividades_maestro')
             .select('id, titulo, trimestre, materia, rubro_peso');
 
@@ -3101,13 +3129,15 @@ window.loadApoyoRiesgoData = async () => {
             const actIds = actsData.map(a => a.id);
             const { data: evalsData } = await supabaseClient.from('evaluaciones_actividades')
                 .select('alumno_id, actividad_id, calificacion')
+                .in('alumno_id', alumIds)
                 .in('actividad_id', actIds);
 
             if (evalsData && evalsData.length > 0) {
                 const mapaActis = {};
                 evalsData.forEach(ev => {
+                    if (!mapAlumnosById[ev.alumno_id]) return;
                     const actObj = actsData.find(a => a.id === ev.actividad_id);
-                    if (!actObj || !ev.alumno_id) return;
+                    if (!actObj) return;
                     const key = `${ev.alumno_id}_${actObj.materia}_${actObj.trimestre}`;
                     if (!mapaActis[key]) {
                         mapaActis[key] = {
@@ -3128,43 +3158,24 @@ window.loadApoyoRiesgoData = async () => {
                     if (item.pesoTotal > 0) {
                         const promPropuesto = item.suma / item.pesoTotal;
                         if (promPropuesto < 6.0) {
-                            if (!mapaFallas[item.alumno_id]) mapaFallas[item.alumno_id] = new Set();
-                            const matTag = (trim === 'Todos' && item.trimestre) ? `${item.materia} (T${item.trimestre})` : item.materia;
-                            mapaFallas[item.alumno_id].add(matTag);
+                            if (mapAlumnosById[item.alumno_id]) {
+                                const matTag = (trim === 'Todos' && item.trimestre) ? `${item.materia} (T${item.trimestre})` : item.materia;
+                                mapAlumnosById[item.alumno_id].materias.add(matTag);
+                            }
                         }
                     }
                 });
             }
         }
 
-        const alumnoIdsConFallas = Object.keys(mapaFallas);
-        if (alumnoIdsConFallas.length === 0) {
-            hold.innerHTML = '<p style="text-align:center; padding:30px; color:var(--success);"><i class="fa-solid fa-check-circle" style="font-size:2rem; display:block; margin-bottom:10px;"></i>No se detectaron alumnos con calificaciones reprobatorias (menores a 6.0 o en 0) bajo estos filtros.</p>';
-            return;
-        }
-
-        // 3. Obtener los datos de los alumnos que tienen materias reprobadas
-        const { data: alumnosData, error: errAl } = await supabaseClient.from('alumnos')
-            .select('id, nombre, grado, grupo_id, grupos(nombre)')
-            .in('id', alumnoIdsConFallas);
-
-        if (errAl) throw errAl;
-
-        const alumnosEnRiesgo = (alumnosData || [])
+        // 4. Filtrar los alumnos que tienen materias reprobadas (materias.size > 0) y coinciden con grado/grupo/umbral
+        const alumnosEnRiesgo = Object.values(mapAlumnosById)
+            .map(a => ({ ...a, materias: Array.from(a.materias) }))
+            .filter(a => a.materias.length > 0)
             .filter(al => {
                 if (!matchGrado(al.grado, grado)) return false;
-                if (grupo !== 'Todos' && al.grupo_id !== grupo && (!al.grupos || al.grupos.nombre !== grupo)) return false;
+                if (grupo !== 'Todos' && al.grupo_id !== grupo && (!al.grupo || al.grupo !== grupo)) return false;
                 return true;
-            })
-            .map(al => {
-                const setMat = mapaFallas[al.id] || new Set();
-                return {
-                    id: al.id,
-                    nombre: al.nombre,
-                    grado: al.grado || '',
-                    grupo: al.grupos ? al.grupos.nombre : 'Sin grupo',
-                    materias: Array.from(setMat)
-                };
             })
             .filter(a => {
                 if (umbral === '1+') return a.materias.length >= 1;
@@ -3175,8 +3186,8 @@ window.loadApoyoRiesgoData = async () => {
             .sort((a,b) => b.materias.length - a.materias.length);
 
         if (alumnosEnRiesgo.length === 0) {
-            let msg = umbral === '1-2' ? 'de 1 a 2 materias reprobadas' : (umbral === '3+' ? '3 o más materias reprobadas' : 'materias reprobadas');
-            hold.innerHTML = `<p style="text-align:center; padding:30px; color:var(--success);"><i class="fa-solid fa-check-circle" style="font-size:2rem; display:block; margin-bottom:10px;"></i>No hay alumnos con ${msg}.</p>`;
+            let msg = umbral === '1-2' ? 'de 1 a 2 materias reprobadas' : (umbral === '3+' ? '3 o más materias reprobadas' : 'materias reprobadas o en 0');
+            hold.innerHTML = `<p style="text-align:center; padding:30px; color:var(--success);"><i class="fa-solid fa-check-circle" style="font-size:2rem; display:block; margin-bottom:10px;"></i>No hay alumnos con ${msg} bajo estos filtros.</p>`;
             return;
         }
 
