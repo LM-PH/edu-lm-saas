@@ -6108,17 +6108,9 @@ async function renderMasterSaaS() {
                         </tr>
                     </thead>
                     <tbody>
-                        <!-- Fila del Robot de GitHub -->
-                        <tr style="border-bottom:1px solid #f1f5f9; background:#faf5ff;">
-                            <td style="padding:12px; font-weight:700; color:#6b21a8;">
-                                <i class="fa-solid fa-robot" style="margin-right:6px;"></i> Robot GitHub Keep-Alive
-                            </td>
-                            <td style="padding:12px;"><span style="background:#f3e8ff; color:#7e22ce; padding:2px 8px; border-radius:12px; font-size:0.75rem; font-weight:bold;">AUTOMÁTICO</span></td>
-                            <td style="padding:12px; color:var(--text-muted);">Servicio de Mantenimiento</td>
-                            <td style="padding:12px; font-weight:600; color:#581c87;">Programado Cada 3 Días a las 12:00 UTC</td>
-                            <td style="padding:12px; text-align:center;"><span style="background:#d8b4fe; color:#581c87; padding:2px 8px; border-radius:12px; font-size:0.7rem; font-weight:bold;">GITHUB ACTIONS</span></td>
-                        </tr>
-                        ${ultimasConexiones.map(c => `
+                        ${ultimasConexiones.length === 0 ? `
+                        <tr><td colspan="5" style="padding:20px; text-align:center; color:var(--text-muted);">No hay conexiones registradas todavía.</td></tr>
+                        ` : ultimasConexiones.map(c => `
                         <tr style="border-bottom:1px solid #f1f5f9;">
                             <td style="padding:12px; font-weight:700;">${c.nombre || c.email}</td>
                             <td style="padding:12px;"><span style="background:#e0e7ff; color:#3730a3; padding:2px 8px; border-radius:12px; font-size:0.75rem; font-weight:bold;">${c.rol}</span></td>
