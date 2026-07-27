@@ -6025,15 +6025,29 @@ async function renderMasterSaaS() {
             if(resP && resP.count) totalPersonal = resP.count;
         } catch(e) {}
 
-        try {
-            const { data: perfs } = await supabaseClient
-                .from('perfiles')
-                .select('id, nombre, rol, fecha_creacion, planteles(nombre)')
-                .neq('rol', 'alumno')
-                .order('fecha_creacion', { ascending: false })
-                .limit(10);
-            if(perfs) ultimasConexiones = perfs;
-        } catch(e) {}
+        // Registrar la conexión del usuario activo actual
+        if(state.user) {
+            try {
+                const nowStr = new Date().toLocaleString();
+                const myLog = {
+                    nombre: state.userName || state.user.email,
+                    email: state.user.email,
+                    rol: (state.isMaster ? 'CREADOR DEL SISTEMA' : (state.role || 'ADMIN')).toUpperCase(),
+                    plantel: CONFIG.schoolName || 'Centro de Mando',
+                    fecha: nowStr,
+                    origen: 'WEB APP (SESIÓN ACTIVA)'
+                };
+                let auditLog = JSON.parse(localStorage.getItem('edu_lm_audit_logins') || '[]');
+                auditLog = auditLog.filter(x => x.email !== state.user.email);
+                auditLog.unshift(myLog);
+                localStorage.setItem('edu_lm_audit_logins', JSON.stringify(auditLog.slice(0, 10)));
+                ultimasConexiones = auditLog;
+            } catch(e) {}
+        } else {
+            try {
+                ultimasConexiones = JSON.parse(localStorage.getItem('edu_lm_audit_logins') || '[]');
+            } catch(e) {}
+        }
 
         return `
         <div class="page-header" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:16px;">
@@ -6104,14 +6118,12 @@ async function renderMasterSaaS() {
                             <td style="padding:12px; font-weight:600; color:#581c87;">Programado Cada 3 Días a las 12:00 UTC</td>
                             <td style="padding:12px; text-align:center;"><span style="background:#d8b4fe; color:#581c87; padding:2px 8px; border-radius:12px; font-size:0.7rem; font-weight:bold;">GITHUB ACTIONS</span></td>
                         </tr>
-                        ${ultimasConexiones.length === 0 ? `
-                        <tr><td colspan="5" style="padding:20px; text-align:center; color:var(--text-muted);">No hay conexiones recientes registradas.</td></tr>
-                        ` : ultimasConexiones.map(c => `
+                        ${ultimasConexiones.map(c => `
                         <tr style="border-bottom:1px solid #f1f5f9;">
-                            <td style="padding:12px; font-weight:700;">${c.nombre || 'Usuario Registrado'}</td>
-                            <td style="padding:12px;"><span style="background:#f1f5f9; color:var(--text-main); padding:2px 8px; border-radius:12px; font-size:0.75rem; text-transform:uppercase; font-weight:bold;">${c.rol || 'USUARIO'}</span></td>
-                            <td style="padding:12px;">${c.planteles?.nombre || 'Plantel Registrado'}</td>
-                            <td style="padding:12px; font-size:0.85rem; color:var(--text-muted);">${c.fecha_creacion ? new Date(c.fecha_creacion).toLocaleString() : 'Reciente'}</td>
+                            <td style="padding:12px; font-weight:700;">${c.nombre || c.email}</td>
+                            <td style="padding:12px;"><span style="background:#e0e7ff; color:#3730a3; padding:2px 8px; border-radius:12px; font-size:0.75rem; font-weight:bold;">${c.rol}</span></td>
+                            <td style="padding:12px;">${c.plantel}</td>
+                            <td style="padding:12px; font-size:0.85rem; color:var(--text-muted); font-weight:600;">${c.fecha}</td>
                             <td style="padding:12px; text-align:center;"><span style="background:#dcfce7; color:#15803d; padding:2px 8px; border-radius:12px; font-size:0.7rem; font-weight:bold;">WEB APP</span></td>
                         </tr>
                         `).join('')}
