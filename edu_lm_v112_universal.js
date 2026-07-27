@@ -6339,7 +6339,7 @@ async function renderMasterGestionPerfiles() {
         if(error) throw error;
 
         const { data: alumnosData, error: alumnosErr } = await supabaseClient.from('alumnos')
-            .select('contacto_email, grupo_id')
+            .select('contacto_email, grupo_id, grado, grupos(nombre)')
             .eq('plantel_id', state.plantelId);
             
         const { data: gruposData, error: gruposErr } = await supabaseClient.from('grupos')
@@ -6358,28 +6358,67 @@ async function renderMasterGestionPerfiles() {
             
         const grupoMap = {};
         const availableGroups = new Set();
+        const knownStudentEmails = new Set();
+
         if (alumnosData) {
             alumnosData.forEach(a => {
-                if (a.contacto_email) {
-                    const g = a.grupos;
-                    const gName = (Array.isArray(g) ? g[0]?.nombre : g?.nombre) || 'Sin Grupo';
-                    grupoMap[a.contacto_email] = gName;
+                const gName = (Array.isArray(a.grupos) ? a.grupos[0]?.nombre : a.grupos?.nombre) || grupoDict[a.grupo_id] || (a.grado ? `${a.grado}°` : 'Sin Grupo');
+                const emailKey = (a.contacto_email || '').trim().toLowerCase();
+                if (emailKey) {
+                    grupoMap[emailKey] = gName;
                     availableGroups.add(gName);
                 }
             });
         }
 
+        // 1. Mapear alumnos desde perfiles_permitidos con su grupo real
+        const alumnosPermitidos = users.filter(u => u.rol === 'alumno').map(u => {
+            const emailKey = (u.email || '').trim().toLowerCase();
+            if (emailKey) knownStudentEmails.add(emailKey);
+            return {
+                ...u,
+                grupo: grupoMap[emailKey] || 'Sin Grupo'
+            };
+        });
+
+        // 2. Incluir alumnos de la tabla alumnos que no estén en perfiles_permitidos
+        if (alumnosData) {
+            alumnosData.forEach(a => {
+                const emailKey = (a.contacto_email || '').trim().toLowerCase();
+                if (emailKey && !knownStudentEmails.has(emailKey)) {
+                    const gName = (Array.isArray(a.grupos) ? a.grupos[0]?.nombre : a.grupos?.nombre) || grupoDict[a.grupo_id] || (a.grado ? `${a.grado}°` : 'Sin Grupo');
+                    alumnosPermitidos.push({
+                        id: a.id,
+                        nombre: a.nombre,
+                        email: a.contacto_email || 'Sin correo registrado',
+                        rol: 'alumno',
+                        grupo: gName,
+                        temp_pass: 'Registrado en padrón'
+                    });
+                    availableGroups.add(gName);
+                    knownStudentEmails.add(emailKey);
+                }
+            });
+        }
+
         const categorized = {
-            alumno: users.filter(u => u.rol === 'alumno').map(u => ({ ...u, grupo: grupoMap[u.email] || 'Sin Grupo' })),
+            alumno: alumnosPermitidos,
             maestro: users.filter(u => u.rol === 'maestro'),
             apoyo: users.filter(u => u.rol === 'apoyo'),
             admin: users.filter(u => ['admin', 'administrativo', 'directivo'].includes(u.rol)),
             biblioteca: users.filter(u => u.rol === 'biblioteca')
         };
         
+        // Helper para ordenar grupos naturalmente por Grado y Grupo (1° A, 1° B, 2° A, 2° B, 3° A...)
+        const sortGroupNames = (gA, gB) => {
+            if (gA === 'Sin Grupo') return 1;
+            if (gB === 'Sin Grupo') return -1;
+            return gA.localeCompare(gB, undefined, { numeric: true, sensitivity: 'base' });
+        };
+        
         categorized.alumno.sort((a, b) => {
-            if (a.grupo === b.grupo) return (a.nombre || '').localeCompare(b.nombre || '');
-            return (a.grupo || '').localeCompare(b.grupo || '');
+            if (a.grupo === b.grupo) return (a.nombre || '').localeCompare(b.nombre || '', 'es', { sensitivity: 'base' });
+            return sortGroupNames(a.grupo || 'Sin Grupo', b.grupo || 'Sin Grupo');
         });
         
         categorized.alumno.forEach(u => availableGroups.add(u.grupo));
@@ -6422,20 +6461,32 @@ async function renderMasterGestionPerfiles() {
             </details>
         `;
 
-        const gruposHtml = Array.from(availableGroups).sort().map(g => `<option value="${g}">${g}</option>`).join('');
+        const sortedAvailableGroups = Array.from(availableGroups).sort(sortGroupNames);
+        const gruposHtml = sortedAvailableGroups.map(g => `<option value="${g}">${g}</option>`).join('');
 
         const renderAlumnosSection = () => {
             const grouped = {};
             categorized.alumno.forEach(u => {
-                if (!grouped[u.grupo]) grouped[u.grupo] = [];
-                grouped[u.grupo].push(u);
+                const grp = u.grupo || 'Sin Grupo';
+                if (!grouped[grp]) grouped[grp] = [];
+                grouped[grp].push(u);
             });
             
-            const itemsHtml = Object.keys(grouped).sort().map(g => {
+            const sortedGroupKeys = Object.keys(grouped).sort(sortGroupNames);
+
+            const itemsHtml = sortedGroupKeys.map(g => {
+                grouped[g].sort((a, b) => (a.nombre || '').localeCompare(b.nombre || '', 'es', { sensitivity: 'base' }));
                 const groupCards = grouped[g].map(u => renderUserRow(u)).join('');
                 return `
-                <div class="alumno-master-grupo" data-grupo="${g}" style="display:none; margin-top:20px;">
-                    <h4 style="border-bottom: 2px solid #e2e8f0; padding-bottom: 8px; margin-bottom: 16px; color: #3b82f6;"><i class="fa-solid fa-users"></i> Grupo: ${g}</h4>
+                <div class="alumno-master-grupo" data-grupo="${g}" style="display:block; margin-top:24px;">
+                    <div style="display:flex; justify-content:space-between; align-items:center; border-bottom: 2px solid #3b82f6; padding-bottom: 8px; margin-bottom: 16px;">
+                        <h4 style="margin:0; color: #1d4ed8; font-weight:800; font-size:1.05rem;">
+                            <i class="fa-solid fa-users" style="margin-right:6px;"></i> Grado y Grupo: ${g}
+                        </h4>
+                        <span style="font-size:0.8rem; background:#dbeafe; color:#1e40af; padding:3px 10px; border-radius:12px; font-weight:700;">
+                            ${grouped[g].length} alumno(s)
+                        </span>
+                    </div>
                     <div style="display:grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap:16px;">
                         ${groupCards}
                     </div>
@@ -6443,28 +6494,26 @@ async function renderMasterGestionPerfiles() {
             }).join('');
             
             return `
-            <details style="margin-bottom:24px; background:white; border-radius:16px; border:1px solid #edf2f7; padding:20px; box-shadow:0 4px 6px -1px rgba(0,0,0,0.05); transition:all 0.3s ease;">
+            <details open style="margin-bottom:24px; background:white; border-radius:16px; border:1px solid #edf2f7; padding:20px; box-shadow:0 4px 6px -1px rgba(0,0,0,0.05); transition:all 0.3s ease;">
                 <summary style="display:flex; align-items:center; gap:12px; cursor:pointer; list-style:none; outline:none; margin:-10px; padding:10px; border-radius:12px;" onmouseover="this.style.background='#f8fafc'" onmouseout="this.style.background='transparent'">
                     <div style="width:40px; height:40px; border-radius:12px; background:#3b82f6; color:white; display:flex; align-items:center; justify-content:center; font-size:1.2rem; flex-shrink:0;">
                         <i class="fa-solid fa-user-graduate"></i>
                     </div>
                     <h3 style="margin:0; font-weight:800; color:#1e293b; flex:1;">Padrón de Alumnos <span style="font-size:0.9rem; font-weight:500; color:var(--text-muted); margin-left:8px; background:#f1f5f9; padding:4px 10px; border-radius:20px;">${categorized.alumno.length} registros</span></h3>
-                    <div style="color:var(--text-muted); font-size:0.85rem; font-weight:600; background:#f1f5f9; padding:6px 14px; border-radius:20px; display:flex; align-items:center; gap:6px;"><i class="fa-solid fa-chevron-down"></i> Mostrar</div>
+                    <div style="color:var(--text-muted); font-size:0.85rem; font-weight:600; background:#f1f5f9; padding:6px 14px; border-radius:20px; display:flex; align-items:center; gap:6px;"><i class="fa-solid fa-chevron-down"></i> Mostrar / Ocultar</div>
                 </summary>
                 
                 <div style="margin-top:24px; border-top:2px dashed #e2e8f0; padding-top:24px;">
-                    <div style="margin-bottom:16px; background:#f8fafc; padding:12px; border-radius:12px; border:1px solid #e2e8f0; display:flex; gap:12px; align-items:center;">
-                        <label style="font-size:0.85rem; font-weight:bold; color:var(--text-muted);">Filtrar y Mostrar por Grupo:</label>
-                        <select class="form-select" style="max-width:250px; border-color:#3b82f6;" onchange="
+                    <div style="margin-bottom:20px; background:#f8fafc; padding:14px 18px; border-radius:12px; border:1px solid #e2e8f0; display:flex; gap:16px; align-items:center; flex-wrap:wrap;">
+                        <label style="font-size:0.85rem; font-weight:bold; color:#334155;"><i class="fa-solid fa-filter" style="color:#3b82f6; margin-right:6px;"></i> Filtrar por Grupo:</label>
+                        <select class="form-select" style="max-width:300px; border-color:#3b82f6; font-weight:600;" onchange="
                             const g = this.value; 
                             document.querySelectorAll('.alumno-master-grupo').forEach(el => {
-                                if(g === 'ALL') { el.style.display = 'block'; }
-                                else if(g === '') { el.style.display = 'none'; }
+                                if(g === 'ALL' || g === '') { el.style.display = 'block'; }
                                 else { el.style.display = (el.dataset.grupo === g) ? 'block' : 'none'; }
                             });
                         ">
-                            <option value="">-- Ocultos (Selecciona un grupo) --</option>
-                            <option value="ALL">Mostrar Todos (Saturar vista)</option>
+                            <option value="ALL">Mostrar Todos (Ordenados por Grado y Grupo)</option>
                             ${gruposHtml}
                         </select>
                     </div>
