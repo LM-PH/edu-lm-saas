@@ -10453,16 +10453,18 @@ window.startPrefScanner = async (mode = 'metralleta') => {
     if(window.Html5Qrcode) {
         try {
             if(window._prefScanner) {
-                await window._prefScanner.stop().catch(()=>{});
+                try {
+                    await window._prefScanner.stop().catch(()=>{});
+                } catch(err) {}
                 window._prefScanner = null;
             }
             
+            reader.innerHTML = '';
             window._prefScanner = new Html5Qrcode("reader-prefectura");
             await window._prefScanner.start(
                 { facingMode: state.cameraMode },
                 { fps: 15, qrbox: { width: 250, height: 250 } },
                 (decodedText) => { 
-                    // Ya no truncamos a 36, enviamos el texto completo para buscar matrícula
                     window.registrarAsistenciaPrefectura(decodedText.trim());
                 },
                 (err) => {}
@@ -10476,33 +10478,35 @@ window.startPrefScanner = async (mode = 'metralleta') => {
 };
 
 window.pausePrefScanner = async () => {
-    try {
-        if(window._prefScanner) {
-            await window._prefScanner.pause(true).catch(()=>{});
+    const stopBtn = document.getElementById('btn-stop-pref');
+    const resumeBtn = document.getElementById('btn-resume-pref');
+    const reader = document.getElementById('reader-prefectura');
+
+    if(stopBtn) stopBtn.style.display = 'none';
+    if(resumeBtn) resumeBtn.style.display = 'inline-flex';
+
+    if(window._prefScanner) {
+        try {
+            const scanner = window._prefScanner;
+            window._prefScanner = null;
+            await scanner.stop().catch(()=>{});
+        } catch(e) {
+            console.error("Error al apagar cámara Prefectura:", e);
         }
-        const stopBtn = document.getElementById('btn-stop-pref');
-        const resumeBtn = document.getElementById('btn-resume-pref');
-        if(stopBtn) stopBtn.style.display = 'none';
-        if(resumeBtn) resumeBtn.style.display = 'inline-flex';
-    } catch(e) { console.error("Error pause Pref scanner", e); }
+    }
+    if(reader) {
+        reader.innerHTML = '<div style="display:flex; height:100%; align-items:center; justify-content:center; color:#94a3b8; font-weight:bold; font-size:1.1rem;"><i class="fa-solid fa-video-slash" style="margin-right:10px;"></i> Cámara Apagada</div>';
+    }
 };
 
 window.resumePrefScanner = async () => {
-    try {
-        if(window._prefScanner) {
-            try {
-                window._prefScanner.resume();
-            } catch(err) {
-                await window.startPrefScanner(window.prefScanMode || 'metralleta');
-            }
-        } else {
-            await window.startPrefScanner(window.prefScanMode || 'metralleta');
-        }
-        const stopBtn = document.getElementById('btn-stop-pref');
-        const resumeBtn = document.getElementById('btn-resume-pref');
-        if(stopBtn) stopBtn.style.display = 'inline-flex';
-        if(resumeBtn) resumeBtn.style.display = 'none';
-    } catch(e) { console.error("Error resume Pref scanner", e); }
+    const stopBtn = document.getElementById('btn-stop-pref');
+    const resumeBtn = document.getElementById('btn-resume-pref');
+
+    if(resumeBtn) resumeBtn.style.display = 'none';
+    if(stopBtn) stopBtn.style.display = 'inline-flex';
+
+    await window.startPrefScanner(window.prefScanMode || 'metralleta');
 };
 
 window.stopPrefScanner = async () => {
@@ -10668,33 +10672,35 @@ window.toggleCameraModeTS = () => {
 };
 
 window.pauseTSScanner = async () => {
-    try {
-        if(window._tsScanner) {
-            await window._tsScanner.pause(true).catch(()=>{});
+    const btnStop = document.getElementById('btn-stop-ts');
+    const btnResume = document.getElementById('btn-resume-ts');
+    const reader = document.getElementById('reader-ts');
+
+    if(btnStop) btnStop.style.display = 'none';
+    if(btnResume) btnResume.style.display = 'inline-flex';
+
+    if(window._tsScanner) {
+        try {
+            const scanner = window._tsScanner;
+            window._tsScanner = null;
+            await scanner.stop().catch(()=>{});
+        } catch(e) {
+            console.error("Error al apagar cámara TS:", e);
         }
-        const btnStop = document.getElementById('btn-stop-ts');
-        if(btnStop) btnStop.style.display = 'none';
-        const btnResume = document.getElementById('btn-resume-ts');
-        if(btnResume) btnResume.style.display = 'inline-flex';
-    } catch(e) { console.error("Error pause TS scanner", e); }
+    }
+    if(reader) {
+        reader.innerHTML = '<div style="display:flex; height:100%; align-items:center; justify-content:center; color:#94a3b8; font-weight:bold; font-size:1.1rem;"><i class="fa-solid fa-video-slash" style="margin-right:10px;"></i> Cámara Apagada</div>';
+    }
 };
 
 window.resumeTSScanner = async () => {
-    try {
-        if(window._tsScanner) {
-            try {
-                window._tsScanner.resume();
-            } catch(err) {
-                await window.startTSScanner(window.tsScanMode || 'metralleta');
-            }
-        } else {
-            await window.startTSScanner(window.tsScanMode || 'metralleta');
-        }
-        const btnStop = document.getElementById('btn-stop-ts');
-        if(btnStop) btnStop.style.display = 'inline-flex';
-        const btnResume = document.getElementById('btn-resume-ts');
-        if(btnResume) btnResume.style.display = 'none';
-    } catch(e) { console.error("Error resume TS scanner", e); }
+    const btnStop = document.getElementById('btn-stop-ts');
+    const btnResume = document.getElementById('btn-resume-ts');
+
+    if(btnResume) btnResume.style.display = 'none';
+    if(btnStop) btnStop.style.display = 'inline-flex';
+
+    await window.startTSScanner(window.tsScanMode || 'metralleta');
 };
 
 window.stopTSScanner = async () => {
@@ -10705,8 +10711,8 @@ window.stopTSScanner = async () => {
             await scanner.stop().catch(()=>{});
         }
         const btnStop = document.getElementById('btn-stop-ts');
-        if(btnStop) btnStop.style.display = 'none';
         const btnResume = document.getElementById('btn-resume-ts');
+        if(btnStop) btnStop.style.display = 'none';
         if(btnResume) btnResume.style.display = 'none';
     } catch(e) { console.error("Error stop TS scanner", e); }
 };
@@ -10716,15 +10722,20 @@ window.startTSScanner = async (mode = 'metralleta') => {
     const reader = document.getElementById('reader-ts');
     if(!reader) return;
 
-    document.getElementById('btn-stop-ts').style.display = 'inline-block';
-    document.getElementById('btn-resume-ts').style.display = 'none';
+    const btnStop = document.getElementById('btn-stop-ts');
+    const btnResume = document.getElementById('btn-resume-ts');
+    if(btnStop) btnStop.style.display = 'inline-flex';
+    if(btnResume) btnResume.style.display = 'none';
 
     try {
         if(window._tsScanner) {
-            await window._tsScanner.stop().catch(()=>{});
+            try {
+                await window._tsScanner.stop().catch(()=>{});
+            } catch(err) {}
             window._tsScanner = null;
         }
         
+        reader.innerHTML = '';
         window._tsScanner = new Html5Qrcode("reader-ts");
         
         await window._tsScanner.start(
@@ -10750,7 +10761,7 @@ window.startTSScanner = async (mode = 'metralleta') => {
             },
             (errorMessage) => { /* ignore */ }
         );
-    } catch(e) { console.error(e); }
+    } catch(e) { console.error("Error al iniciar cámara TS:", e); }
 };
 
 window.registrarAsistenciaTS = async (qrText) => {
