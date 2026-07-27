@@ -9489,7 +9489,19 @@ window.cargarBoletasGrupo = async () => {
                 currentSettledVal = historial?.find(h => h.alumno_id === al.id)?.calificacion;
             }
             
-            const promRounded = Math.round(promFinalNum);
+            // Normatividad escolar SEP: cualquier calificación menor a 6.0 (ej. 5.9, 5.8) es reprobatoria y NO se redondea a 6.
+            const redondearCalificacionSep = (val) => {
+                if (val === null || val === undefined || isNaN(val)) return 0;
+                const num = parseFloat(val);
+                if (num <= 0) return 0;
+                if (num < 6.0) {
+                    return Math.floor(num); // Ej. 5.9 -> 5 (Reprobatorio)
+                }
+                return Math.round(num); // Ej. 6.5 -> 7, 7.5 -> 8 (Aprobatorio)
+            };
+            window.redondearCalificacionSep = redondearCalificacionSep;
+
+            const promRounded = redondearCalificacionSep(promFinalNum);
             const displayVal = currentSettledVal !== undefined && currentSettledVal !== null ? currentSettledVal : promRounded;
             const inputAttr = tieneCalificacionesAsentadas 
                 ? 'disabled readonly style="width:85px; text-align:center; margin:auto; font-weight:bold; border:2px solid var(--border); color:var(--text-muted); background:#f1f5f9; font-size:1.1rem; cursor:not-allowed;"' 
