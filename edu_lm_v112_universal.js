@@ -6005,6 +6005,26 @@ async function renderPage(path) {
   }
 }
 
+window.registrarPingPlantelConexion = async () => {
+    if(!state.user || !state.plantelId || state.isMaster) return;
+    try {
+        const uNombre = state.userName || state.user?.user_metadata?.nombre || state.user?.email || 'Usuario';
+        const uRol = (state.role || 'USUARIO').toUpperCase();
+        const nowIso = new Date().toISOString();
+
+        const metaObj = {
+            lastUser: uNombre,
+            lastEmail: state.user?.email,
+            lastRole: uRol,
+            lastTime: nowIso
+        };
+
+        await supabaseClient.from('planteles').update({
+            logo_url: JSON.stringify(metaObj)
+        }).eq('id', state.plantelId).catch(()=>{});
+    } catch(e) {}
+};
+
 async function renderMasterSaaS() {
     try {
         // Consultar planteles y estadísticas globales
@@ -6013,8 +6033,6 @@ async function renderMasterSaaS() {
 
         let totalAlumnos = 0;
         let totalPersonal = 0;
-        let ultimasConexiones = [];
-
         try {
             const resA = await supabaseClient.from('alumnos').select('*', { count: 'exact', head: true });
             if(resA && resA.count) totalAlumnos = resA.count;
@@ -6025,35 +6043,29 @@ async function renderMasterSaaS() {
             if(resP && resP.count) totalPersonal = resP.count;
         } catch(e) {}
 
-        // Registrar la conexión del usuario activo actual
-        if(state.user) {
+        // Procesar la última conexión por plantel (1 persona por escuela)
+        const conexionesPorPlantel = planteles.map(p => {
+            let meta = null;
             try {
-                const nowStr = new Date().toLocaleString();
-                const myLog = {
-                    nombre: state.userName || state.user.email,
-                    email: state.user.email,
-                    rol: (state.isMaster ? 'CREADOR DEL SISTEMA' : (state.role || 'ADMIN')).toUpperCase(),
-                    plantel: CONFIG.schoolName || 'Centro de Mando',
-                    fecha: nowStr,
-                    origen: 'WEB APP (SESIÓN ACTIVA)'
-                };
-                let auditLog = JSON.parse(localStorage.getItem('edu_lm_audit_logins') || '[]');
-                auditLog = auditLog.filter(x => x.email !== state.user.email);
-                auditLog.unshift(myLog);
-                localStorage.setItem('edu_lm_audit_logins', JSON.stringify(auditLog.slice(0, 10)));
-                ultimasConexiones = auditLog;
+                if(p.logo_url && p.logo_url.trim().startsWith('{')) {
+                    meta = JSON.parse(p.logo_url);
+                }
             } catch(e) {}
-        } else {
-            try {
-                ultimasConexiones = JSON.parse(localStorage.getItem('edu_lm_audit_logins') || '[]');
-            } catch(e) {}
-        }
+            return {
+                id: p.id,
+                plantelNombre: p.nombre,
+                slug: p.slug,
+                lastUser: meta ? meta.lastUser : null,
+                lastRole: meta ? meta.lastRole : null,
+                lastTime: meta ? new Date(meta.lastTime).toLocaleString() : null
+            };
+        });
 
         return `
         <div class="page-header" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:16px;">
           <div>
             <h2 class="page-title"><i class="fa-solid fa-crown" style="color:#eab308; margin-right:8px;"></i> Centro de Mando del Creador</h2>
-            <p class="page-subtitle">Monitoreo global de planteles, registro de última conexión y salud del robot de mantenimiento.</p>
+            <p class="page-subtitle">Monitoreo global en tiempo real: 1 última conexión registrada por plantel.</p>
           </div>
           <div style="display:flex; gap:10px;">
             <button class="btn btn-primary" onclick="window.probarPingMaster()" style="font-weight:600;">
@@ -6085,14 +6097,14 @@ async function renderMasterSaaS() {
            </div>
         </div>
 
-        <!-- TABLA DE REGISTRO DE ULTIMAS CONEXIONES Y ACTIVIDAD -->
+        <!-- TABLA DE ULTIMA CONEXION REAL POR PLANTEL (1 FILA POR PLANTEL) -->
         <div class="card shadow-md" style="margin-bottom:32px; border-radius:24px;">
             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px; flex-wrap:wrap; gap:10px;">
                 <h3 style="margin:0; font-size:1.2rem; font-weight:800; color:var(--primary);">
-                    <i class="fa-solid fa-clock-rotate-left"></i> Registro de Últimas Conexiones y Actividad Reciente
+                    <i class="fa-solid fa-clock-rotate-left"></i> Última Conexión Registrada por Plantel
                 </h3>
                 <span style="font-size:0.8rem; background:#e0f2fe; color:#0369a1; padding:4px 12px; border-radius:20px; font-weight:700;">
-                    <i class="fa-solid fa-robot"></i> Robot Mantenimiento GitHub: Cada 3 Días
+                    <i class="fa-solid fa-tower-broadcast"></i> Sincronización Global Multidispositivo
                 </span>
             </div>
 
@@ -6100,23 +6112,29 @@ async function renderMasterSaaS() {
                 <table class="table" style="width:100%; border-collapse:collapse;">
                     <thead>
                         <tr style="background:#f8fafc; border-bottom:2px solid #e2e8f0; text-align:left; font-size:0.8rem; text-transform:uppercase; color:var(--text-muted);">
-                            <th style="padding:12px;">Usuario / Creador</th>
-                            <th style="padding:12px;">Rol en Sistema</th>
                             <th style="padding:12px;">Escuela / Plantel</th>
-                            <th style="padding:12px;">Última Conexión / Registro</th>
-                            <th style="padding:12px; text-align:center;">Origen</th>
+                            <th style="padding:12px;">Última Persona Conectada</th>
+                            <th style="padding:12px;">Rol del Usuario</th>
+                            <th style="padding:12px;">Fecha y Hora de Conexión</th>
+                            <th style="padding:12px; text-align:center;">Estado</th>
                         </tr>
                     </thead>
                     <tbody>
-                        ${ultimasConexiones.length === 0 ? `
-                        <tr><td colspan="5" style="padding:20px; text-align:center; color:var(--text-muted);">No hay conexiones registradas todavía.</td></tr>
-                        ` : ultimasConexiones.map(c => `
+                        ${conexionesPorPlantel.map(c => `
                         <tr style="border-bottom:1px solid #f1f5f9;">
-                            <td style="padding:12px; font-weight:700;">${c.nombre || c.email}</td>
-                            <td style="padding:12px;"><span style="background:#e0e7ff; color:#3730a3; padding:2px 8px; border-radius:12px; font-size:0.75rem; font-weight:bold;">${c.rol}</span></td>
-                            <td style="padding:12px;">${c.plantel}</td>
-                            <td style="padding:12px; font-size:0.85rem; color:var(--text-muted); font-weight:600;">${c.fecha}</td>
-                            <td style="padding:12px; text-align:center;"><span style="background:#dcfce7; color:#15803d; padding:2px 8px; border-radius:12px; font-size:0.7rem; font-weight:bold;">WEB APP</span></td>
+                            <td style="padding:12px; font-weight:800; color:var(--primary);">${c.plantelNombre}</td>
+                            <td style="padding:12px; font-weight:700;">
+                                ${c.lastUser ? `<i class="fa-solid fa-user-check" style="color:#10b981; margin-right:6px;"></i>${c.lastUser}` : '<span style="color:var(--text-muted); font-style:italic;">Sin conexiones aún</span>'}
+                            </td>
+                            <td style="padding:12px;">
+                                ${c.lastRole ? `<span style="background:#e0e7ff; color:#3730a3; padding:2px 8px; border-radius:12px; font-size:0.75rem; font-weight:bold;">${c.lastRole}</span>` : '-'}
+                            </td>
+                            <td style="padding:12px; font-size:0.85rem; color:var(--text-muted); font-weight:600;">
+                                ${c.lastTime || 'Pendiente de primer ingreso'}
+                            </td>
+                            <td style="padding:12px; text-align:center;">
+                                ${c.lastUser ? '<span style="background:#dcfce7; color:#15803d; padding:2px 8px; border-radius:12px; font-size:0.7rem; font-weight:bold;">CONECTADO</span>' : '<span style="background:#f1f5f9; color:#64748b; padding:2px 8px; border-radius:12px; font-size:0.7rem; font-weight:bold;">INACTIVO</span>'}
+                            </td>
                         </tr>
                         `).join('')}
                     </tbody>
@@ -6432,6 +6450,7 @@ async function renderApp() {
       // generateHTML es la que pone el sidebar y el wrapper
       app.innerHTML = generateHTML(pageContent);
       if(window.updateNotificationBadge) setTimeout(window.updateNotificationBadge, 500);
+      if(window.registrarPingPlantelConexion) setTimeout(window.registrarPingPlantelConexion, 1000);
     }
     // Asegurar que los eventos se vuelvan a vincular
     attachDOMEvents();
