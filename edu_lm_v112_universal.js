@@ -3110,7 +3110,7 @@ window.loadApoyoRiesgoData = async () => {
         const { data: califsData } = await califQuery;
         (califsData || []).forEach(c => {
             const val = parseFloat(c.calificacion);
-            if (!isNaN(val) && val < 6.0 && val > 0) {
+            if (!isNaN(val) && val < 6.0 && val >= 0) {
                 if (mapAlumnosById[c.alumno_id]) {
                     const nombreMat = c.materia_nombre || (c.materias ? c.materias.nombre : 'Asignatura');
                     const matTag = (trim === 'Todos' && c.trimestre) ? `${nombreMat} (T${c.trimestre})` : nombreMat;
@@ -3162,7 +3162,7 @@ window.loadApoyoRiesgoData = async () => {
                 Object.values(mapaActis).forEach(item => {
                     if (item.pesoTotal > 0) {
                         const promPropuesto = item.suma / item.pesoTotal;
-                        if (promPropuesto < 6.0 && promPropuesto > 0) {
+                        if (promPropuesto < 6.0 && promPropuesto >= 0) {
                             if (mapAlumnosById[item.alumno_id]) {
                                 const matTag = (trim === 'Todos' && item.trimestre) ? `${item.materia} (T${item.trimestre})` : item.materia;
                                 mapAlumnosById[item.alumno_id].materias.add(matTag);
