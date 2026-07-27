@@ -5631,17 +5631,17 @@ window.obtenerSolicitanteInfo = (item) => {
         if (rawRol === 'maestro') {
             nombre = 'Docente Titular';
         } else {
-            nombre = state.userName || 'Administrativo de Control Escolar';
+            nombre = 'Personal Administrativo / Control Escolar';
         }
     }
 
     const roleMap = {
-        'admin': 'Administrativo',
-        'administrativo': 'Administrativo',
+        'admin': 'Personal Administrativo',
+        'administrativo': 'Personal Administrativo',
         'directivo': 'Directivo',
         'director': 'Directivo',
-        'maestro': 'Docente',
-        'docente': 'Docente',
+        'maestro': 'Docente Titular',
+        'docente': 'Docente Titular',
         'apoyo': 'Trabajo Social / Apoyo',
         'biblioteca': 'Biblioteca'
     };
@@ -5651,7 +5651,7 @@ window.obtenerSolicitanteInfo = (item) => {
 };
 
 window.obtenerDatosSolicitanteActual = async () => {
-    let nombre = state.userName;
+    let nombre = '';
     let rol = state.role || 'admin';
 
     try {
@@ -5669,7 +5669,7 @@ window.obtenerDatosSolicitanteActual = async () => {
     } catch(e) { console.error("Error al obtener datos solicitante:", e); }
 
     if (!nombre) {
-        nombre = state.user?.email || 'Administrativo';
+        nombre = state.userName || state.user?.email || 'Personal Administrativo';
     }
 
     return {
