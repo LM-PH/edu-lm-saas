@@ -1148,17 +1148,18 @@ window.ejecutarPromocionMasiva = async () => {
             alert(`✅ ¡Éxito! Alumnos de ${sourceNom} promovidos a ${targetNom}.`);
         } else {
             // Solicitud para Admins
+            const datosSol = await window.obtenerDatosSolicitanteActual();
             const { error: errReq } = await supabaseClient.from('autorizaciones_movimientos').insert([{
                 plantel_id: state.plantelId,
                 tipo_accion: 'PROMOCIÓN MASIVA',
-                detalles: `Mover grupo ${sourceNom} a ${targetNom}`,
+                detalles: `Solicitado por ${datosSol.solicitante_nombre}: Mover grupo ${sourceNom} a ${targetNom}`,
                 estado: 'pendiente',
                 payload_json: {
                     action: 'promover_grupo',
                     sourceNom: sourceNom,
                     targetNom: targetNom,
                     tGrado: tGrado,
-                    ...window.obtenerDatosSolicitanteActual()
+                    ...datosSol
                 }
             }]);
             if(errReq) throw errReq;
@@ -1211,15 +1212,16 @@ window.graduarGeneracion = async () => {
             alert(`¡Generación Graduada! Se han eliminado los registros de ${grado}°.`);
         } else {
             // Solicitud para Admins
+            const datosSol = await window.obtenerDatosSolicitanteActual();
             const { error: errReq } = await supabaseClient.from('autorizaciones_movimientos').insert([{
                 plantel_id: state.plantelId,
                 tipo_accion: 'GRADUACIÓN MASIVA',
-                detalles: `Baja permanente de todos los grupos de ${grado}°`,
+                detalles: `Solicitado por ${datosSol.solicitante_nombre}: Baja permanente de todos los grupos de ${grado}°`,
                 estado: 'pendiente',
                 payload_json: {
                     action: 'graduar_generacion',
                     grado: grado,
-                    ...window.obtenerDatosSolicitanteActual()
+                    ...datosSol
                 }
             }]);
             if(errReq) throw errReq;
@@ -1270,16 +1272,17 @@ window.darDeBajaAlumno = async (id, nombre) => {
             }
             alert('Alumno dado de baja exitosamente.');
         } else {
+            const datosSol = await window.obtenerDatosSolicitanteActual();
             const { error: errReq } = await supabaseClient.from('autorizaciones_movimientos').insert([{
                 plantel_id: state.plantelId,
                 tipo_accion: 'BAJA DE ALUMNO',
-                detalles: `Baja definitiva de student: ${nombre}`,
+                detalles: `Solicitado por ${datosSol.solicitante_nombre}: Baja definitiva del alumno ${nombre}`,
                 estado: 'pendiente',
                 payload_json: {
                     action: 'delete_alumno',
                     target_id: id,
                     nombre: nombre,
-                    ...window.obtenerDatosSolicitanteActual()
+                    ...datosSol
                 }
             }]);
             if(errReq) throw errReq;
@@ -1319,17 +1322,18 @@ window.promoverGradoAlumno = async (id) => {
             alert(`Alumno promovido exitosamente a ${nombreCompletoGrupo}.`);
         } else {
             // Solicitud para Admins
+            const datosSol = await window.obtenerDatosSolicitanteActual();
             const { error: errReq } = await supabaseClient.from('autorizaciones_movimientos').insert([{
                 plantel_id: state.plantelId,
                 tipo_accion: 'PROMOCIÓN INDIVIDUAL',
-                detalles: `Promover alumno a: ${nombreCompletoGrupo}`,
+                detalles: `Solicitado por ${datosSol.solicitante_nombre}: Promover alumno a ${nombreCompletoGrupo}`,
                 estado: 'pendiente',
                 payload_json: {
                     action: 'promover_alumno',
                     target_id: id,
                     targetNom: nombreCompletoGrupo,
                     tGrado: nuevoGrado,
-                    ...window.obtenerDatosSolicitanteActual()
+                    ...datosSol
                 }
             }]);
             if(errReq) throw errReq;
@@ -5598,8 +5602,21 @@ window.eliminarTramiteEntregado = async (tramiteId) => {
 // ======================================
 window.obtenerSolicitanteInfo = (item) => {
     const pj = item.payload_json || {};
-    const nombre = pj.solicitante_nombre || pj.maestro_nombre || 'Usuario del Sistema';
-    
+    let nombre = pj.solicitante_nombre || pj.maestro_nombre;
+
+    // Intentar extraer el nombre del campo detalles si no vino en el JSON
+    if (!nombre && item.detalles) {
+        const matchDocente = item.detalles.match(/El docente\s+([^s]+?)\s+solicita/i);
+        if (matchDocente && matchDocente[1]) {
+            nombre = matchDocente[1].trim();
+        } else {
+            const matchSolicitado = item.detalles.match(/Solicitado por\s+([^(:]+)/i);
+            if (matchSolicitado && matchSolicitado[1]) {
+                nombre = matchSolicitado[1].trim();
+            }
+        }
+    }
+
     let rawRol = (pj.solicitante_rol || '').toLowerCase().trim();
     if (!rawRol) {
         const accion = (item.tipo_accion || '').toUpperCase();
@@ -5607,6 +5624,14 @@ window.obtenerSolicitanteInfo = (item) => {
             rawRol = 'maestro';
         } else {
             rawRol = 'admin';
+        }
+    }
+
+    if (!nombre) {
+        if (rawRol === 'maestro') {
+            nombre = 'Docente Titular';
+        } else {
+            nombre = state.userName || 'Administrativo de Control Escolar';
         }
     }
 
@@ -5625,13 +5650,32 @@ window.obtenerSolicitanteInfo = (item) => {
     return { nombre, rol: rolFormatted, fullDisplay: `${nombre} (${rolFormatted})` };
 };
 
-window.obtenerDatosSolicitanteActual = () => {
-    const uName = state.userName || state.user?.user_metadata?.nombre || state.user?.email || 'Usuario';
-    const uRole = state.role || 'admin';
+window.obtenerDatosSolicitanteActual = async () => {
+    let nombre = state.userName;
+    let rol = state.role || 'admin';
+
+    try {
+        const u = await supabaseClient.auth.getUser();
+        if (u.data?.user) {
+            const { data: prof } = await supabaseClient
+                .from('perfiles')
+                .select('nombre, rol')
+                .eq('id', u.data.user.id)
+                .maybeSingle();
+
+            if (prof?.nombre) nombre = prof.nombre;
+            if (prof?.rol) rol = prof.rol;
+        }
+    } catch(e) { console.error("Error al obtener datos solicitante:", e); }
+
+    if (!nombre) {
+        nombre = state.user?.email || 'Administrativo';
+    }
+
     return {
-        solicitante_nombre: uName,
-        solicitante_rol: uRole,
-        maestro_nombre: uName
+        solicitante_nombre: nombre,
+        solicitante_rol: rol,
+        maestro_nombre: nombre
     };
 };
 
@@ -10157,11 +10201,8 @@ window.solicitarModificacionCalificaciones = async (materia, trimestre, grupoId,
     if(!motivo.trim()) return alert("Debes ingresar un motivo válido para realizar la solicitud.");
 
     try {
-        const u = await supabaseClient.auth.getUser();
-        if(!u.data.user) return alert("Sesión expirada.");
-
-        const { data: prof } = await supabaseClient.from('perfiles').select('nombre').eq('id', u.data.user.id).single();
-        const maestroNombre = prof?.nombre || 'Docente';
+        const datosSol = await window.obtenerDatosSolicitanteActual();
+        const maestroNombre = datosSol.solicitante_nombre;
 
         const tipoAccion = isProrroga ? 'PRORROGA_CALIFICACIONES' : 'MODIFICACION_CALIFICACIONES';
         const tituloNotif = isProrroga 
@@ -10178,6 +10219,7 @@ window.solicitarModificacionCalificaciones = async (materia, trimestre, grupoId,
                 grupo_id: grupoId,
                 maestro_id: u.data.user.id,
                 maestro_nombre: maestroNombre,
+                ...datosSol,
                 motivo: motivo.trim()
             },
             estado: 'pendiente',
