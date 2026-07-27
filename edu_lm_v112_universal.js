@@ -6065,7 +6065,7 @@ window.registrarPingPlantelConexion = async () => {
         };
 
         await supabaseClient.from('planteles').update({
-            logo_url: JSON.stringify(metaObj)
+            ultima_conexion_json: metaObj
         }).eq('id', targetPlantelId);
     } catch(e) {}
 };
@@ -6073,7 +6073,7 @@ window.registrarPingPlantelConexion = async () => {
 async function renderMasterSaaS() {
     try {
         // Consultar planteles y estadísticas globales
-        const { data: planteles, error } = await supabaseClient.from('planteles').select('*').order('creado_en', { ascending: false });
+        const { data: planteles, error } = await supabaseClient.from('planteles').select('id, nombre, ultima_conexion_json, creado_en').order('creado_en', { ascending: false });
         if(error) throw error;
 
         let totalAlumnos = 0;
@@ -6090,19 +6090,10 @@ async function renderMasterSaaS() {
 
         // Procesar la última conexión por plantel (1 persona por escuela)
         const conexionesPorPlantel = planteles.map(p => {
-            let meta = null;
-            try {
-                if(p.logo_url) {
-                    const raw = p.logo_url.trim();
-                    if(raw.startsWith('{') && raw.endsWith('}')) {
-                        meta = JSON.parse(raw);
-                    }
-                }
-            } catch(e) {}
+            const meta = p.ultima_conexion_json || null;
             return {
                 id: p.id,
                 plantelNombre: p.nombre,
-                slug: p.slug,
                 lastUser: meta ? meta.lastUser : null,
                 lastRole: meta ? meta.lastRole : null,
                 lastTime: meta ? new Date(meta.lastTime).toLocaleString() : null

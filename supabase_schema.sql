@@ -641,8 +641,12 @@ CREATE TABLE IF NOT EXISTS public.planteles (
     id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
     nombre text NOT NULL,
     logo_url text,
+    ultima_conexion_json jsonb DEFAULT NULL,
     creado_en timestamp with time zone DEFAULT now()
 );
+
+-- Agregar columna si ya existe la tabla
+ALTER TABLE public.planteles ADD COLUMN IF NOT EXISTS ultima_conexion_json jsonb DEFAULT NULL;
 
 ALTER TABLE public.planteles ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Public read planteles" ON public.planteles FOR SELECT USING (true);
