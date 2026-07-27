@@ -10255,6 +10255,18 @@ window.sellarYEnviarCalificaciones = async () => {
         const { error } = await supabaseClient.from('calificaciones').upsert(updates, { onConflict: 'alumno_id, materia_nombre, trimestre' });
         if(error) throw error;
         
+        // Consumir / concluir cualquier permiso de prórroga o modificación aprobado previamente para esta materia/trimestre
+        try {
+            await supabaseClient
+                .from('autorizaciones_movimientos')
+                .update({ estado: 'completada', fecha_resolucion: new Date().toISOString() })
+                .eq('plantel_id', state.plantelId)
+                .in('tipo_accion', ['MODIFICACION_CALIFICACIONES', 'PRORROGA_CALIFICACIONES'])
+                .eq('estado', 'aprobada');
+        } catch(eConsumir) {
+            console.error("Error al concluir autorización consumida:", eConsumir);
+        }
+        
         // 3. Procesar Notificaciones Automáticas (Trimestre Final)
         if(reprobados.length > 0) {
             let coms = reprobados.map(alId => ({
