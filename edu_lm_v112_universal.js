@@ -16415,23 +16415,48 @@ window.enviarRespuestasPsicosocial = async (e) => {
 };
 
 // ---- FLATPICKR COMUNICADOS ----
+function getLocalDateStringHelper(dateVal) {
+    if(!dateVal) return '';
+    if(typeof dateVal === 'string' && dateVal.length >= 10) {
+        const str = dateVal.slice(0, 10);
+        if(/^\d{4}-\d{2}-\d{2}$/.test(str)) {
+            if(dateVal.includes('T')) {
+                const d = new Date(dateVal);
+                if(!isNaN(d.getTime())) {
+                    const y = d.getFullYear();
+                    const m = String(d.getMonth() + 1).padStart(2, '0');
+                    const day = String(d.getDate()).padStart(2, '0');
+                    return `${y}-${m}-${day}`;
+                }
+            }
+            return str;
+        }
+    }
+    const d = new Date(dateVal);
+    if(isNaN(d.getTime())) return '';
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+}
+
 window.initFlatpickrAdmin = async () => {
     const el = document.getElementById('filtroFechaComAdmin');
     if(!el) return;
     
-    // Obtener fechas con comunicados
+    // Obtener fechas con comunicados, justificantes y autorizaciones oficiales
     const { data } = await supabaseClient.from('comunicados').select('fecha_envio').eq('plantel_id', state.plantelId);
     let datesWithComs = [];
-    if(data) datesWithComs = [...new Set(data.map(d => d.fecha_envio ? new Date(d.fecha_envio).toLocaleDateString('en-CA') : ''))];
+    if(data) datesWithComs = [...new Set(data.map(d => getLocalDateStringHelper(d.fecha_envio)).filter(Boolean))];
 
     flatpickr(el, {
         locale: "es",
+        disableMobile: "true",
         onChange: function(selectedDates, dateStr, instance) {
             if(window.loadComunicadosAdmin) window.loadComunicadosAdmin(dateStr);
         },
         onDayCreate: function(dObj, dStr, fp, dayElem) {
             const localDate = dayElem.dateObj;
-            // format localized to en-CA -> YYYY-MM-DD
             const y = localDate.getFullYear();
             const m = String(localDate.getMonth() + 1).padStart(2, '0');
             const d = String(localDate.getDate()).padStart(2, '0');
@@ -16448,41 +16473,63 @@ window.initFlatpickrAvisos = async (isAlumno = false) => {
     if(!el) return;
     
     const uRes = await supabaseClient.auth.getUser();
+    const userId = uRes.data?.user?.id;
     const userRole = state.role || '';
     
-    let audArr = [];
+    let { data } = await supabaseClient
+        .from('comunicados')
+        .select('fecha_envio, audiencia')
+        .eq('plantel_id', state.plantelId);
+
+    if(!data) data = [];
+
+    let datesWithComs = [];
+
     if(isAlumno) {
-        audArr = ['General', 'Alumnos'];
-        if(uRes.data?.user) {
+        let audSet = new Set(['General', 'Alumnos', 'Todos']);
+        if(userId) {
             const { data: al } = await supabaseClient
                 .from('alumnos')
                 .select('id, grupo_id')
-                .or(`contacto_email.eq.${uRes.data.user.email},perfil_id.eq.${uRes.data.user.id}`)
+                .or(`contacto_email.eq.${uRes.data.user.email},perfil_id.eq.${userId}`)
                 .maybeSingle();
 
             if(al) {
-                audArr.push('Alumno_' + al.id);
-                if(al.grupo_id) audArr.push('Grupo_' + al.grupo_id);
+                audSet.add('Alumno_' + al.id);
+                if(al.grupo_id) audSet.add('Grupo_' + al.grupo_id);
             }
         }
+        datesWithComs = data.filter(c => !c.audiencia || audSet.has(c.audiencia) || c.audiencia.startsWith('Grupo_') || c.audiencia.startsWith('Alumno_'))
+                            .map(c => getLocalDateStringHelper(c.fecha_envio));
     } else {
-        audArr = ['Todos', 'General'];
-        if (userRole === 'maestro' || userRole === 'docente') {
-            audArr.push('Maestros', 'Personal');
-        } else if (userRole === 'apoyo' || userRole === 'biblioteca') {
-            audArr.push('Personal');
-        } else if (userRole === 'directivo' || userRole === 'admin' || userRole === 'administrativo') {
-            audArr.push('Maestros', 'Personal', 'Alumnos');
+        // Obtener asignaciones si es maestro para abarcar grupos específicos
+        let maestroGrupos = [];
+        if((userRole === 'maestro' || userRole === 'docente') && uRes.data?.user?.email) {
+            const { data: asigs } = await supabaseClient.from('asignaciones_maestros').select('grupo_id').eq('docente_email', uRes.data.user.email);
+            if(asigs) maestroGrupos = asigs.map(a => a.grupo_id).filter(Boolean);
         }
+
+        datesWithComs = data.filter(c => {
+            if(!c.audiencia) return true;
+            const aud = c.audiencia;
+            if(['Todos', 'General'].includes(aud)) return true;
+            if(userRole === 'maestro' || userRole === 'docente') {
+                if(['Maestros', 'Personal'].includes(aud)) return true;
+                if(aud === `Maestro_${userId}` || aud.startsWith('Maestro_')) return true;
+                if(aud.startsWith('Maestros_Grupo_')) {
+                    const gId = aud.replace('Maestros_Grupo_', '');
+                    return maestroGrupos.includes(gId) || maestroGrupos.length === 0;
+                }
+            } else if (userRole === 'directivo' || userRole === 'admin' || userRole === 'administrador' || userRole === 'administrativo') {
+                return true; // Admin/Directivos ven todas las fechas con avisos
+            } else if (userRole === 'apoyo' || userRole === 'biblioteca') {
+                if(['Personal', 'Maestros'].includes(aud)) return true;
+            }
+            return false;
+        }).map(c => getLocalDateStringHelper(c.fecha_envio));
     }
     
-    let query = supabaseClient.from('comunicados').select('fecha_envio').eq('plantel_id', state.plantelId);
-    
-    query = query.in('audiencia', audArr);
-    
-    const { data } = await query;
-    let datesWithComs = [];
-    if(data) datesWithComs = [...new Set(data.map(d => d.fecha_envio ? new Date(d.fecha_envio).toLocaleDateString('en-CA') : ''))];
+    datesWithComs = [...new Set(datesWithComs.filter(Boolean))];
 
     flatpickr(el, {
         locale: "es",
