@@ -4373,10 +4373,10 @@ function renderApoyoPrefectura() {
         <div id="pref-feedback" style="margin-top:20px; width:100%; max-width:500px; min-height:80px;"></div>
         
         <div style="display:flex; gap:12px; margin-top:20px;">
-            <button id="btn-stop-pref" class="btn btn-outline" onclick="window.stopPrefScanner()" style="display:none; border-radius:30px; padding:10px 25px;">
+            <button id="btn-stop-pref" class="btn btn-outline" onclick="window.pausePrefScanner()" style="display:none; border-radius:30px; padding:10px 25px;">
                 <i class="fa-solid fa-power-off"></i> Pausar Cámara
             </button>
-            <button id="btn-resume-pref" class="btn btn-primary" onclick="window.startPrefScanner('metralleta')" style="display:none; border-radius:30px; padding:10px 25px;">
+            <button id="btn-resume-pref" class="btn btn-primary" onclick="window.resumePrefScanner()" style="display:none; border-radius:30px; padding:10px 25px;">
                 <i class="fa-solid fa-play"></i> Reanudar Cámara
             </button>
             <button class="btn btn-info" onclick="window.toggleCameraMode()" style="border-radius:30px; padding:10px 25px;">
@@ -4948,10 +4948,10 @@ function renderApoyoTSEscaner() {
         <div id="ts-feedback" style="margin-top:20px; width:100%; max-width:500px; min-height:80px;"></div>
         
         <div style="display:flex; gap:12px; margin-top:20px;">
-            <button id="btn-stop-ts" class="btn btn-outline" onclick="window.stopTSScanner()" style="display:none; border-radius:30px; padding:10px 25px;">
+            <button id="btn-stop-ts" class="btn btn-outline" onclick="window.pauseTSScanner()" style="display:none; border-radius:30px; padding:10px 25px;">
                 <i class="fa-solid fa-power-off"></i> Pausar Cámara
             </button>
-            <button id="btn-resume-ts" class="btn btn-primary" onclick="window.startTSScanner('metralleta')" style="display:none; border-radius:30px; padding:10px 25px;">
+            <button id="btn-resume-ts" class="btn btn-primary" onclick="window.resumeTSScanner()" style="display:none; border-radius:30px; padding:10px 25px;">
                 <i class="fa-solid fa-play"></i> Reanudar Cámara
             </button>
             <button class="btn btn-info" onclick="window.toggleCameraModeTS()" style="border-radius:30px; padding:10px 25px;">
@@ -10475,22 +10475,48 @@ window.startPrefScanner = async (mode = 'metralleta') => {
     }
 };
 
-window.stopPrefScanner = async () => {
-    const reader = document.getElementById('reader-prefectura');
-    const stopBtn = document.getElementById('btn-stop-pref');
-    const startPanel = document.getElementById('panel-pre-start');
+window.pausePrefScanner = async () => {
+    try {
+        if(window._prefScanner) {
+            await window._prefScanner.pause(true).catch(()=>{});
+        }
+        const stopBtn = document.getElementById('btn-stop-pref');
+        const resumeBtn = document.getElementById('btn-resume-pref');
+        if(stopBtn) stopBtn.style.display = 'none';
+        if(resumeBtn) resumeBtn.style.display = 'inline-flex';
+    } catch(e) { console.error("Error pause Pref scanner", e); }
+};
 
-    if(window._prefScanner) {
-        try {
+window.resumePrefScanner = async () => {
+    try {
+        if(window._prefScanner) {
+            try {
+                window._prefScanner.resume();
+            } catch(err) {
+                await window.startPrefScanner(window.prefScanMode || 'metralleta');
+            }
+        } else {
+            await window.startPrefScanner(window.prefScanMode || 'metralleta');
+        }
+        const stopBtn = document.getElementById('btn-stop-pref');
+        const resumeBtn = document.getElementById('btn-resume-pref');
+        if(stopBtn) stopBtn.style.display = 'inline-flex';
+        if(resumeBtn) resumeBtn.style.display = 'none';
+    } catch(e) { console.error("Error resume Pref scanner", e); }
+};
+
+window.stopPrefScanner = async () => {
+    try {
+        if(window._prefScanner) {
             const scanner = window._prefScanner;
             window._prefScanner = null;
-            scanner.stop().catch(()=>{});
-        } catch(e) {}
-    }
-
-    if(reader) reader.style.display = 'none';
-    if(startPanel) startPanel.style.display = 'block';
-    if(stopBtn) stopBtn.style.display = 'none';
+            await scanner.stop().catch(()=>{});
+        }
+        const stopBtn = document.getElementById('btn-stop-pref');
+        const resumeBtn = document.getElementById('btn-resume-pref');
+        if(stopBtn) stopBtn.style.display = 'none';
+        if(resumeBtn) resumeBtn.style.display = 'none';
+    } catch(e) { console.error("Error stop Pref scanner", e); }
 };
 
 window.registrarAsistenciaPrefectura = async (uid) => {
@@ -10641,17 +10667,47 @@ window.toggleCameraModeTS = () => {
     window.startTSScanner(window.tsScanMode);
 };
 
+window.pauseTSScanner = async () => {
+    try {
+        if(window._tsScanner) {
+            await window._tsScanner.pause(true).catch(()=>{});
+        }
+        const btnStop = document.getElementById('btn-stop-ts');
+        if(btnStop) btnStop.style.display = 'none';
+        const btnResume = document.getElementById('btn-resume-ts');
+        if(btnResume) btnResume.style.display = 'inline-flex';
+    } catch(e) { console.error("Error pause TS scanner", e); }
+};
+
+window.resumeTSScanner = async () => {
+    try {
+        if(window._tsScanner) {
+            try {
+                window._tsScanner.resume();
+            } catch(err) {
+                await window.startTSScanner(window.tsScanMode || 'metralleta');
+            }
+        } else {
+            await window.startTSScanner(window.tsScanMode || 'metralleta');
+        }
+        const btnStop = document.getElementById('btn-stop-ts');
+        if(btnStop) btnStop.style.display = 'inline-flex';
+        const btnResume = document.getElementById('btn-resume-ts');
+        if(btnResume) btnResume.style.display = 'none';
+    } catch(e) { console.error("Error resume TS scanner", e); }
+};
+
 window.stopTSScanner = async () => {
     try {
         if(window._tsScanner) {
             const scanner = window._tsScanner;
             window._tsScanner = null;
-            scanner.stop().catch(()=>{});
+            await scanner.stop().catch(()=>{});
         }
         const btnStop = document.getElementById('btn-stop-ts');
         if(btnStop) btnStop.style.display = 'none';
         const btnResume = document.getElementById('btn-resume-ts');
-        if(btnResume) btnResume.style.display = 'inline-block';
+        if(btnResume) btnResume.style.display = 'none';
     } catch(e) { console.error("Error stop TS scanner", e); }
 };
 
