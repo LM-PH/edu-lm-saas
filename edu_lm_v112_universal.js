@@ -15062,35 +15062,124 @@ async function renderBibliotecaDashboard() {
             const hoy = new Date().toISOString().split('T')[0];
             const { count: cR } = await supabaseClient.from('biblioteca_reservas').select('*', {count: 'exact', head:true}).eq('plantel_id', state.plantelId).eq('fecha', hoy);
             if(document.getElementById('countReservas')) document.getElementById('countReservas').innerText = cR || 0;
+            
+            if(window.loadBibliotecaPrestamosDashboard) window.loadBibliotecaPrestamosDashboard();
         } catch(e) {}
     }, 100);
 
     return `
       <div class="page-header" style="background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%); color:white; padding:32px; border-radius:24px; margin-bottom:32px;">
-        <h2 class="page-title" style="color:white; margin:0 0 8px 0;"><i class="fa-solid fa-book-bookmark"></i> Panel de Biblioteca</h2>
-        <p style="margin:0; opacity:0.8;">Gestión de préstamos y aula de medios.</p>
+        <h2 class="page-title" style="color:white; margin:0 0 8px 0;"><i class="fa-solid fa-book-bookmark"></i> Panel de Biblioteca y Aula de Medios</h2>
+        <p style="margin:0; opacity:0.8;">Gestión integral de préstamos, reservaciones de aula de medios, bitácora e historial imprimible.</p>
       </div>
       
-      <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap:24px;">
+      <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap:20px; margin-bottom:32px;">
          <div class="card stat-card" style="cursor:pointer;" onclick="window.navigate('/biblioteca/prestamos')">
             <div class="stat-icon" style="background:#eff6ff; color:#3b82f6;"><i class="fa-solid fa-laptop-file"></i></div>
             <div class="stat-info">
                <div class="stat-label">Préstamos Activos</div>
                <div class="stat-value" id="countPrestamos"><i class="fa-solid fa-spinner fa-spin"></i></div>
-               <p style="font-size:0.75rem; color:var(--text-muted); margin:0;">Clic para gestionar</p>
+               <p style="font-size:0.75rem; color:var(--text-muted); margin:0;">Gestionar entregas</p>
             </div>
          </div>
+         
          <div class="card stat-card" style="cursor:pointer;" onclick="window.navigate('/biblioteca/reservas')">
             <div class="stat-icon" style="background:#fef2f2; color:#ef4444;"><i class="fa-solid fa-calendar-check"></i></div>
             <div class="stat-info">
                <div class="stat-label">Reservas de Aula Hoy</div>
                <div class="stat-value" id="countReservas"><i class="fa-solid fa-spinner fa-spin"></i></div>
-               <p style="font-size:0.75rem; color:var(--text-muted); margin:0;">Clic para ver calendario</p>
+               <p style="font-size:0.75rem; color:var(--text-muted); margin:0;">Ver horarios apartados</p>
             </div>
+         </div>
+
+         <div class="card stat-card" style="cursor:pointer;" onclick="window.navigate('/biblioteca/historial')">
+            <div class="stat-icon" style="background:#f3e8ff; color:#8b5cf6;"><i class="fa-solid fa-clock-rotate-left"></i></div>
+            <div class="stat-info">
+               <div class="stat-label">Historial de Préstamos</div>
+               <div class="stat-value" style="font-size:1.2rem;"><i class="fa-solid fa-print"></i> Reportes</div>
+               <p style="font-size:0.75rem; color:var(--text-muted); margin:0;">Imprimir préstamos</p>
+            </div>
+         </div>
+         
+         <div class="card stat-card" style="cursor:pointer;" onclick="window.navigate('/biblioteca/bitacora')">
+            <div class="stat-icon" style="background:#fef3c7; color:#d97706;"><i class="fa-solid fa-book-journal-whills"></i></div>
+            <div class="stat-info">
+               <div class="stat-label">Bitácora de Hechos</div>
+               <div class="stat-value" style="font-size:1.2rem;"><i class="fa-solid fa-pen-clip"></i> Jornada</div>
+               <p style="font-size:0.75rem; color:var(--text-muted); margin:0;">Incidencias y recados</p>
+            </div>
+         </div>
+
+         <div class="card stat-card" style="cursor:pointer;" onclick="window.navigate('/biblioteca/comunicados')">
+            <div class="stat-icon" style="background:#ecfdf5; color:#10b981;"><i class="fa-solid fa-bullhorn"></i></div>
+            <div class="stat-info">
+               <div class="stat-label">Avisos Oficiales</div>
+               <div class="stat-value" style="font-size:1.2rem;"><i class="fa-solid fa-envelope-open-text"></i> Anuncios</div>
+               <p style="font-size:0.75rem; color:var(--text-muted); margin:0;">Comunicados dirección</p>
+            </div>
+         </div>
+      </div>
+
+      <div class="card">
+         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
+            <h3 style="margin:0;"><i class="fa-solid fa-clock" style="color:var(--warning)"></i> Préstamos Pendientes de Devolución</h3>
+            <button class="btn btn-primary btn-sm" onclick="window.navigate('/biblioteca/prestamos')"><i class="fa-solid fa-plus"></i> Registrar Nuevo Préstamo</button>
+         </div>
+         <div id="bibDashListaPrestamos">
+            <div style="text-align:center; padding:20px; color:var(--text-muted);"><i class="fa-solid fa-spinner fa-spin"></i> Cargando préstamos activos...</div>
          </div>
       </div>
     `;
 }
+
+window.loadBibliotecaPrestamosDashboard = async () => {
+    const container = document.getElementById('bibDashListaPrestamos');
+    if(!container) return;
+    try {
+        const { data, error } = await supabaseClient.from('biblioteca_prestamos')
+            .select('*, alumnos(nombre, grupos(nombre))')
+            .eq('plantel_id', state.plantelId)
+            .eq('devuelto', false)
+            .order('creado_en', { ascending: false });
+            
+        if(error) throw error;
+        
+        if(!data || data.length === 0) {
+            container.innerHTML = '<div style="text-align:center; padding:30px; color:var(--text-muted); font-style:italic;"><i class="fa-solid fa-circle-check" style="color:var(--success); font-size:1.5rem; display:block; margin-bottom:8px;"></i> No hay préstamos pendientes. Todo el material ha sido devuelto.</div>';
+            return;
+        }
+        
+        container.innerHTML = data.map(p => {
+            let icon = '<i class="fa-solid fa-box" style="color:#f59e0b"></i>';
+            let bg = '#fef3c7';
+            if (p.tipo === 'libro') { icon = '<i class="fa-solid fa-book" style="color:#8b5cf6"></i>'; bg = '#f3e8ff'; }
+            else if (p.tipo === 'computadora') { icon = '<i class="fa-solid fa-laptop" style="color:#3b82f6"></i>'; bg = '#eff6ff'; }
+            else if (p.tipo === 'juego') { icon = '<i class="fa-solid fa-chess-knight" style="color:#10b981"></i>'; bg = '#d1fae5'; }
+            const f = new Date(p.creado_en || p.fecha_prestamo).toLocaleString([], {day:'2-digit', month:'short', hour:'2-digit', minute:'2-digit'});
+            
+            return `
+               <div style="border:1px solid var(--border); border-radius:12px; padding:16px; margin-bottom:12px; display:flex; gap:16px; align-items:center; justify-content:space-between;">
+                  <div style="display:flex; gap:16px; align-items:center;">
+                      <div style="width:44px; height:44px; border-radius:12px; background:${bg}; display:flex; align-items:center; justify-content:center; font-size:1.3rem;">
+                         ${icon}
+                      </div>
+                      <div>
+                         <div style="font-weight:700; font-size:1rem; color:var(--text-main); margin-bottom:2px;">${p.recurso} <span style="font-size:0.75rem; font-weight:normal; color:var(--text-muted);">(${p.tipo})</span></div>
+                         <div style="font-size:0.85rem; color:var(--text-muted);"><i class="fa-regular fa-user"></i> ${p.alumnos?.nombre || 'Alumno'} (${p.alumnos?.grupos?.nombre || ''})</div>
+                         <div style="font-size:0.75rem; color:var(--text-muted);"><i class="fa-regular fa-clock"></i> Prestado: ${f} ${p.profesor_solicitante ? `| Solicitó: ${p.profesor_solicitante}` : ''}</div>
+                      </div>
+                  </div>
+                  <button class="btn btn-outline btn-sm" style="color:var(--success); border-color:var(--success);" onclick="window.bibDevolverPrestamo('${p.id}')">
+                      <i class="fa-solid fa-check"></i> Marcar Devuelto
+                  </button>
+               </div>
+            `;
+        }).join('');
+    } catch(e) {
+        console.error(e);
+        container.innerHTML = '<div style="color:var(--danger); text-align:center;">Error al cargar préstamos.</div>';
+    }
+};
 
 async function renderBibliotecaPrestamos() {
     setTimeout(window.loadBibliotecaPrestamos, 100);
