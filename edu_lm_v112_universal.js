@@ -3051,7 +3051,8 @@ window.loadApoyoRiesgoData = async () => {
     try {
         // 1. Cargar TODOS los alumnos
         const { data: alumnosData, error: errAl } = await supabaseClient.from('alumnos')
-            .select('id, nombre, grado, grupo_id, grupos(nombre)');
+            .select('id, nombre, grado, grupo_id, grupos(nombre)')
+            .limit(10000);
             
         if (errAl) {
             console.error("Error al cargar alumnos:", errAl);
@@ -3077,12 +3078,10 @@ window.loadApoyoRiesgoData = async () => {
             };
         });
 
-        const alumIds = Object.keys(mapAlumnosById);
-
-        // 2. Cargar TODAS las calificaciones sin restricción
+        // 2. Cargar TODAS las calificaciones sin restricción de URL length y hasta 50,000 registros
         const { data: califsData, error: errCal } = await supabaseClient.from('calificaciones')
             .select('alumno_id, calificacion, trimestre, materia_nombre')
-            .in('alumno_id', alumIds);
+            .limit(50000);
 
         if (errCal) console.error("Error al cargar calificaciones:", errCal);
 
@@ -3104,16 +3103,15 @@ window.loadApoyoRiesgoData = async () => {
             }
         });
 
-        // 3. Cargar actividades evaluadas (evaluaciones_actividades)
+        // 3. Cargar actividades evaluadas (evaluaciones_actividades) sin límite de 1000 filas
         const { data: actsData } = await supabaseClient.from('actividades_maestro')
-            .select('id, titulo, trimestre, materia, rubro_peso');
+            .select('id, titulo, trimestre, materia, rubro_peso')
+            .limit(10000);
 
         if (actsData && actsData.length > 0) {
-            const actIds = actsData.map(a => a.id);
             const { data: evalsData } = await supabaseClient.from('evaluaciones_actividades')
                 .select('alumno_id, actividad_id, calificacion')
-                .in('alumno_id', alumIds)
-                .in('actividad_id', actIds);
+                .limit(50000);
 
             if (evalsData && evalsData.length > 0) {
                 const mapaActis = {};
