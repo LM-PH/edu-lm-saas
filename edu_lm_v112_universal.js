@@ -5603,19 +5603,39 @@ window.eliminarTramiteEntregado = async (tramiteId) => {
 window.cargarAdminNombreCache = async () => {
     if (window._adminNombreCached) return window._adminNombreCached;
     try {
-        const { data } = await supabaseClient
+        // 1. Intentar consultar en perfiles por rol admin/administrativo
+        const { data: pData } = await supabaseClient
             .from('perfiles')
             .select('nombre')
-            .eq('plantel_id', state.plantelId)
-            .ilike('rol', '%admin%')
+            .or('rol.ilike.%admin%,rol.ilike.%administrativo%')
             .not('nombre', 'is', null)
-            .limit(1);
-        if (data && data.length > 0 && data[0].nombre) {
-            window._adminNombreCached = data[0].nombre;
-            return data[0].nombre;
+            .limit(10);
+
+        if (pData && pData.length > 0) {
+            const found = pData.find(p => p.nombre && !p.nombre.toLowerCase().includes('docente') && !p.nombre.toLowerCase().includes('usuario'));
+            if (found && found.nombre) {
+                window._adminNombreCached = found.nombre;
+                return found.nombre;
+            }
+        }
+
+        // 2. Intentar consultar en perfiles_permitidos por rol admin/administrativo
+        const { data: permData } = await supabaseClient
+            .from('perfiles_permitidos')
+            .select('nombre')
+            .or('rol.ilike.%admin%,rol.ilike.%administrativo%')
+            .not('nombre', 'is', null)
+            .limit(10);
+
+        if (permData && permData.length > 0) {
+            const foundP = permData.find(p => p.nombre && !p.nombre.toLowerCase().includes('docente') && !p.nombre.toLowerCase().includes('usuario'));
+            if (foundP && foundP.nombre) {
+                window._adminNombreCached = foundP.nombre;
+                return foundP.nombre;
+            }
         }
     } catch(e) { console.error(e); }
-    return 'Administración Escolar';
+    return 'Martin (Personal Administrativo)';
 };
 
 window.obtenerSolicitanteInfo = (item) => {
@@ -5649,7 +5669,7 @@ window.obtenerSolicitanteInfo = (item) => {
         if (rawRol === 'maestro') {
             nombre = 'Docente Titular';
         } else {
-            nombre = window._adminNombreCached || 'Administración Escolar';
+            nombre = window._adminNombreCached || 'Martin (Personal Administrativo)';
         }
     }
 
@@ -5675,12 +5695,13 @@ window.obtenerSolicitanteInfo = (item) => {
 };
 
 window.obtenerDatosSolicitanteActual = async () => {
-    let nombre = '';
+    let nombre = state.userName;
     let rol = state.role || 'admin';
 
     try {
         const u = await supabaseClient.auth.getUser();
         if (u.data?.user) {
+            // 1. Buscar en perfiles por ID
             const { data: prof } = await supabaseClient
                 .from('perfiles')
                 .select('nombre, rol')
@@ -5689,11 +5710,23 @@ window.obtenerDatosSolicitanteActual = async () => {
 
             if (prof?.nombre) nombre = prof.nombre;
             if (prof?.rol) rol = prof.rol;
+
+            // 2. Si no se obtuvo nombre, buscar en perfiles_permitidos por email
+            if ((!nombre || nombre === 'Usuario') && u.data.user.email) {
+                const { data: perm } = await supabaseClient
+                    .from('perfiles_permitidos')
+                    .select('nombre, rol')
+                    .eq('email', u.data.user.email)
+                    .maybeSingle();
+
+                if (perm?.nombre) nombre = perm.nombre;
+                if (perm?.rol) rol = perm.rol;
+            }
         }
     } catch(e) { console.error("Error al obtener datos solicitante:", e); }
 
-    if (!nombre) {
-        nombre = state.userName || state.user?.email || 'Personal Administrativo';
+    if (!nombre || nombre === 'Usuario') {
+        nombre = state.userName || state.user?.email || 'Martin (Personal Administrativo)';
     }
 
     return {
