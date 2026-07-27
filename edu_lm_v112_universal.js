@@ -15169,15 +15169,33 @@ async function renderBibliotecaPrestamos() {
 window.bibLiveSearchAlumno = async (q) => {
     const res = document.getElementById('bibResSearchAlumno');
     if(!res) return;
-    if(q.length < 2) { res.style.display='none'; return; }
+    const term = q ? q.trim() : '';
+    if(term.length < 1) { res.style.display='none'; return; }
     try {
-        const { data } = await supabaseClient.from('alumnos').select('id, nombre, matricula, grupos(nombre)').eq('plantel_id', state.plantelId).or(`nombre.ilike.%${q}%,matricula.ilike.%${q}%`).limit(8);
-        if(!data || data.length === 0) { res.innerHTML='<p style="padding:10px; color:var(--text-muted)">Sin resultados</p>'; res.style.display='block'; return; }
+        let pId = state.plantelId || state.user?.user_metadata?.plantel_id;
+        if(!pId && state.user?.id) {
+            const { data: prof } = await supabaseClient.from('perfiles').select('plantel_id').eq('id', state.user.id).maybeSingle();
+            pId = prof?.plantel_id;
+            if(pId) state.plantelId = pId;
+        }
+
+        let query = supabaseClient.from('alumnos').select('id, nombre, matricula, grupos(nombre)');
+        if(pId) query = query.eq('plantel_id', pId);
+        query = query.or(`nombre.ilike.%${term}%,matricula.ilike.%${term}%`).limit(10);
+        
+        const { data, error } = await query;
+        if(error) console.error("[BibSearchError]", error);
+        
+        if(!data || data.length === 0) { 
+            res.innerHTML='<p style="padding:10px; color:var(--text-muted); text-align:center; font-style:italic;">No se encontraron alumnos</p>'; 
+            res.style.display='block'; 
+            return; 
+        }
         res.style.display='block';
         res.innerHTML = data.map(a => `
-            <div style="padding:10px; border-bottom:1px solid var(--border); cursor:pointer;" onclick="window.bibSelectAlumno('${a.id}', '${a.nombre.replace(/'/g, "\\'")}', '${a.grupos?.nombre || ''}')">
+            <div style="padding:10px; border-bottom:1px solid var(--border); cursor:pointer;" onclick="window.bibSelectAlumno('${a.id}', '${a.nombre.replace(/'/g, "\\'")}', '${a.grupos?.nombre || 'Sin Grupo'}')">
                <div style="font-weight:600; font-size:0.85rem;">${a.nombre}</div>
-               <div style="font-size:0.75rem; color:var(--text-muted)">${a.matricula || 'Sin matricula'} - ${a.grupos?.nombre || 'Sin Grupo'}</div>
+               <div style="font-size:0.75rem; color:var(--text-muted)">${a.matricula || 'Sin matrícula'} - ${a.grupos?.nombre || 'Sin Grupo'}</div>
             </div>
         `).join('');
     } catch(e) { console.error(e); }
