@@ -260,7 +260,6 @@ window.handleLogin = async (e) => {
     }
 
     // 4. Sincronizar Estado Global
-    const finalProfile = profile || { rol: 'invitado' }; // Fallback de seguridad
     state.user = authData.user;
     state.isMaster = isMasterUser;
     state.role = isMasterUser ? 'master' : profile?.rol;
@@ -269,6 +268,25 @@ window.handleLogin = async (e) => {
     
     if (isMasterUser) {
         CONFIG.schoolName = 'Administración Global SaaS';
+    }
+
+    // Registrar ping de conexión INMEDIATAMENTE si no es el creador del sistema
+    if (!isMasterUser && profile?.plantel_id) {
+        const metaObj = {
+            lastUser: profile.nombre || authData.user.email,
+            lastEmail: email,
+            lastRole: (profile.rol || 'USUARIO').toUpperCase(),
+            lastTime: new Date().toISOString()
+        };
+        // Intentar columna dedicada primero, luego logo_url como respaldo
+        const { error: pingErr } = await supabaseClient.from('planteles').update({
+            ultima_conexion_json: metaObj
+        }).eq('id', profile.plantel_id);
+        if (pingErr && pingErr.code === '42703') {
+            await supabaseClient.from('planteles').update({
+                logo_url: '###CONN###' + JSON.stringify(metaObj)
+            }).eq('id', profile.plantel_id).catch(() => {});
+        }
     }
 
     window.showToast(`Bienvenido(a), ${state.userName}`, 'success');
