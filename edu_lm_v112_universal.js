@@ -6152,7 +6152,7 @@ async function renderMasterSaaS() {
                 plantelNombre: p.nombre,
                 lastUser: meta ? meta.lastUser : null,
                 lastRole: meta ? meta.lastRole : null,
-                lastTime: meta ? new Date(meta.lastTime).toLocaleString() : null
+                lastTime: meta ? meta.lastTime : null
             };
         });
 
@@ -6232,7 +6232,7 @@ async function renderMasterSaaS() {
                                     estadoBadge = '<span style="background:#fef9c3; color:#854d0e; padding:2px 8px; border-radius:12px; font-size:0.7rem; font-weight:bold;">HOY</span>';
                                     tiempoTexto = diffHrs < 1 ? `Hace ${diffMin} min` : `Hace ${diffHrs} hrs`;
                                 } else {
-                                    estadoBadge = '<span style="background:#f1f5f9; color:#475569; padding:2px 8px; border-radius:12px; font-size:0.7rem; font-weight:bold;">HACE ${diffDias}d</span>';
+                                    estadoBadge = `<span style="background:#f1f5f9; color:#475569; padding:2px 8px; border-radius:12px; font-size:0.7rem; font-weight:bold;">HACE ${diffDias}d</span>`;
                                     tiempoTexto = entonces.toLocaleString();
                                 }
                             }
