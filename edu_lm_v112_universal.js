@@ -5620,8 +5620,12 @@ window.registrarNuevoPersonal = async () => {
     if(!confirm(`¿Deseas autorizar el acceso de ${nombre} como ${niceRol}?`)) return;
 
     try {
-        // Normalización Blindada: admin/administrativo -> admin, maestro/maestro -> maestro
-        const finalRol = (['admin','administrativo','admin'].includes(rol)) ? 'admin' : (['maestro','maestro'].includes(rol) ? 'maestro' : rol);
+        let finalRol = rol;
+        if (['admin', 'administrativo', 'administrador', 'control_escolar'].includes(rol)) finalRol = 'admin';
+        else if (['maestro', 'docente', 'profesor'].includes(rol)) finalRol = 'maestro';
+        else if (['apoyo', 'prefectura', 'trabajo_social'].includes(rol)) finalRol = 'apoyo';
+        else if (['directivo', 'director', 'subdirector'].includes(rol)) finalRol = 'directivo';
+        else if (['biblioteca', 'medios', 'aula_de_medios'].includes(rol)) finalRol = 'biblioteca';
         
         // Recuperar Plantel ID con máxima prioridad (State -> Metadata -> Fetch DB)
         let finalPlantel = state.plantelId || state.user?.user_metadata?.plantel_id;
@@ -9651,10 +9655,17 @@ window.initEventosAdminMaestros = () => {
                 
                 try {
                     const autoPass = 'Edu' + Math.random().toString(36).substring(2, 8).toUpperCase() + '!';
+                    
+                    let finalRolVal = rolValue;
+                    if (['admin', 'administrativo', 'administrador', 'control_escolar'].includes(rolValue)) finalRolVal = 'admin';
+                    else if (['maestro', 'docente', 'profesor'].includes(rolValue)) finalRolVal = 'maestro';
+                    else if (['apoyo', 'prefectura', 'trabajo_social'].includes(rolValue)) finalRolVal = 'apoyo';
+                    else if (['directivo', 'director', 'subdirector'].includes(rolValue)) finalRolVal = 'directivo';
+                    else if (['biblioteca', 'medios', 'aula_de_medios'].includes(rolValue)) finalRolVal = 'biblioteca';
 
                     const { error } = await supabaseClient.from('perfiles_permitidos').upsert([{ 
                         email: emailValue, 
-                        rol: rolValue, 
+                        rol: finalRolVal, 
                         nombre: nombreValue,
                         plantel_id: currentPlantelID,
                         temp_pass: autoPass
@@ -9667,7 +9678,7 @@ window.initEventosAdminMaestros = () => {
                         p_email: emailValue,
                         p_password: autoPass,
                         p_nombre: nombreValue,
-                        p_rol: rolValue,
+                        p_rol: finalRolVal,
                         p_plantel_id: currentPlantelID
                     });
 
