@@ -6006,38 +6006,50 @@ async function renderPage(path) {
 }
 
 window.registrarPingPlantelConexion = async () => {
-    if(!state.user || !state.plantelId) return;
+    if(!state.user || !state.user.email) return;
     try {
-        const uEmail = state.user.email ? state.user.email.toLowerCase().trim() : '';
-        if(!uEmail) return;
-
+        const uEmail = state.user.email.toLowerCase().trim();
+        let targetPlantelId = state.plantelId;
         let realName = null;
         let realRole = state.role ? state.role.toUpperCase() : 'USUARIO';
 
-        // 1. Consultar el nombre oficial registrado en perfiles_permitidos
+        // 1. Consultar en perfiles_permitidos para este correo
         const { data: perm } = await supabaseClient
             .from('perfiles_permitidos')
-            .select('nombre, rol')
+            .select('nombre, rol, plantel_id')
             .eq('email', uEmail)
             .maybeSingle();
 
-        if (perm && perm.nombre) {
-            realName = perm.nombre;
+        if (perm) {
+            if (perm.nombre) realName = perm.nombre;
             if (perm.rol) realRole = perm.rol.toUpperCase();
-        } else {
-            // 2. Fallback a la tabla perfiles
+            if (perm.plantel_id) targetPlantelId = perm.plantel_id;
+        }
+
+        // 2. Fallback a la tabla perfiles
+        if (!realName || !targetPlantelId) {
             const { data: prof } = await supabaseClient
                 .from('perfiles')
-                .select('nombre, rol')
+                .select('nombre, rol, plantel_id')
                 .eq('id', state.user.id)
                 .maybeSingle();
-            if (prof && prof.nombre) {
-                realName = prof.nombre;
+
+            if (prof) {
+                if (!realName && prof.nombre) realName = prof.nombre;
                 if (prof.rol && prof.rol !== 'master') realRole = prof.rol.toUpperCase();
+                if (!targetPlantelId && prof.plantel_id) targetPlantelId = prof.plantel_id;
             }
         }
 
-        if (!realName) {
+        // 3. Fallback al primer plantel si targetPlantelId no está definido aún
+        if (!targetPlantelId) {
+            const { data: pFirst } = await supabaseClient.from('planteles').select('id').limit(1).maybeSingle();
+            if (pFirst) targetPlantelId = pFirst.id;
+        }
+
+        if (!targetPlantelId) return;
+
+        if (!realName || realName === 'M.C Luis Miguel Ponce Herrera') {
             realName = state.user?.user_metadata?.nombre || uEmail;
         }
 
@@ -6052,7 +6064,7 @@ window.registrarPingPlantelConexion = async () => {
 
         await supabaseClient.from('planteles').update({
             logo_url: JSON.stringify(metaObj)
-        }).eq('id', state.plantelId).catch(()=>{});
+        }).eq('id', targetPlantelId).catch(()=>{});
     } catch(e) {}
 };
 
