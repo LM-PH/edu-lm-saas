@@ -2691,8 +2691,9 @@ function renderApoyoRiesgoAcademico() {
          <div class="form-group">
             <label class="form-label">Umbral de Alerta</label>
             <select class="form-select" id="riesgoUmbralSel">
-                <option value="1-2">De 1 a 2 materias reprobadas</option>
-                <option value="3+" selected>3 o más materias reprobadas</option>
+                <option value="1+" selected>Todos los Alumnos en Riesgo (1 o más materias reprobadas)</option>
+                <option value="1-2">Riesgo Leve (1 a 2 materias reprobadas)</option>
+                <option value="3+">Riesgo Crítico (3 o más materias reprobadas)</option>
             </select>
          </div>
 
@@ -3042,39 +3043,39 @@ window.loadApoyoRiesgoData = async () => {
     const trim = document.getElementById('riesgoTrimestreSel').value;
     const grado = document.getElementById('riesgoGradoSel').value;
     const grupo = document.getElementById('riesgoGrupoSel') ? document.getElementById('riesgoGrupoSel').value : 'Todos';
-    const umbral = document.getElementById('riesgoUmbralSel').value || '3+';
+    const umbral = document.getElementById('riesgoUmbralSel').value || '1+';
 
-    hold.innerHTML = '<p style="text-align:center; padding:30px;">Analizando calificaciones...</p>';
+    hold.innerHTML = '<p style="text-align:center; padding:30px;"><i class="fa-solid fa-spinner fa-spin"></i> Analizando calificaciones...</p>';
     badge.style.display = 'none';
 
     try {
         let query = supabaseClient.from('calificaciones')
-            .select('calificacion, materia_nombre, alumnos!inner(id, nombre, grado, grupo_id, grupos(nombre))')
+            .select('calificacion, trimestre, materia_nombre, alumnos!inner(id, nombre, grado, grupo_id, grupos(nombre))')
             .eq('plantel_id', state.plantelId)
-            .lt('calificacion', 6); // Solo buscar reprobadas (< 6)
+            .lt('calificacion', 6); // Buscar reprobadas (< 6)
 
         if(trim !== 'Todos') {
             query = query.eq('trimestre', parseInt(trim));
         }
 
-        if(grado !== 'Todos') {
-            query = query.eq('alumnos.grado', grado);
-        }
-
-        if(grupo !== 'Todos') {
-            query = query.eq('alumnos.grupo_id', grupo);
-        }
-
         const { data, error } = await query;
         if(error) throw error;
 
-        if(!data || data.length === 0) {
+        // Filtrar grado y grupo en JS para evitar incompatibilidades de sintaxis en joins PostgREST
+        const dataFiltrada = (data || []).filter(row => {
+            if (!row.alumnos) return false;
+            if (grado !== 'Todos' && (row.alumnos.grado || '').trim() !== grado.trim()) return false;
+            if (grupo !== 'Todos' && row.alumnos.grupo_id !== grupo) return false;
+            return true;
+        });
+
+        if(dataFiltrada.length === 0) {
             hold.innerHTML = '<p style="text-align:center; padding:30px; color:var(--success);"><i class="fa-solid fa-check-circle" style="font-size:2rem; display:block; margin-bottom:10px;"></i>No se detectaron alumnos con calificaciones reprobatorias bajo estos filtros.</p>';
             return;
         }
 
         const mapaAlumnos = {};
-        data.forEach(row => {
+        dataFiltrada.forEach(row => {
             const aId = row.alumnos.id;
             if(!mapaAlumnos[aId]) {
                 mapaAlumnos[aId] = {
@@ -3085,21 +3086,23 @@ window.loadApoyoRiesgoData = async () => {
                     materias: new Set()
                 };
             }
-            mapaAlumnos[aId].materias.add(row.materia_nombre);
+            const matTag = (trim === 'Todos' && row.trimestre) ? `${row.materia_nombre} (T${row.trimestre})` : row.materia_nombre;
+            mapaAlumnos[aId].materias.add(matTag);
         });
 
         const alumnosEnRiesgo = Object.values(mapaAlumnos)
             .map(a => ({ ...a, materias: Array.from(a.materias) }))
             .filter(a => {
+                if (umbral === '1+') return a.materias.length >= 1;
                 if (umbral === '1-2') return a.materias.length >= 1 && a.materias.length <= 2;
                 if (umbral === '3+') return a.materias.length >= 3;
-                return false;
+                return a.materias.length >= 1;
             })
             .sort((a,b) => b.materias.length - a.materias.length);
 
         if(alumnosEnRiesgo.length === 0) {
-            let msg = umbral === '1-2' ? 'de 1 a 2 materias reprobadas' : '3 o más materias reprobadas';
-            hold.innerHTML = `<p style="text-align:center; padding:30px; color:var(--success);">No hay alumnos con ${msg}.</p>`;
+            let msg = umbral === '1-2' ? 'de 1 a 2 materias reprobadas' : (umbral === '3+' ? '3 o más materias reprobadas' : 'materias reprobadas');
+            hold.innerHTML = `<p style="text-align:center; padding:30px; color:var(--success);"><i class="fa-solid fa-check-circle" style="font-size:2rem; display:block; margin-bottom:10px;"></i>No hay alumnos con ${msg}.</p>`;
             return;
         }
 
