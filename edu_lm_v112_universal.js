@@ -6007,32 +6007,70 @@ async function renderPage(path) {
 
 async function renderMasterSaaS() {
     try {
-        // USAMOS supabaseClient para ver TODO sin restricciones de RLS
+        // Consultar planteles y estadísticas globales
         const { data: planteles, error } = await supabaseClient.from('planteles').select('*').order('creado_en', { ascending: false });
         if(error) throw error;
 
+        const { count: totalAlumnos } = await supabaseClient.from('alumnos').select('*', { count: 'exact', head: true }).catch(()=>({ count: 0 }));
+        const { count: totalPersonal } = await supabaseClient.from('perfiles_permitidos').select('*', { count: 'exact', head: true }).catch(()=>({ count: 0 }));
+
         return `
-        <div class="page-header">
-          <h2 class="page-title">Centro de Mando SaaS</h2>
-          <p class="page-subtitle">Panel Exclusivo de Dueño y Gestión SaaS</p>
+        <div class="page-header" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:16px;">
+          <div>
+            <h2 class="page-title"><i class="fa-solid fa-crown" style="color:#eab308; margin-right:8px;"></i> Centro de Mando del Creador</h2>
+            <p class="page-subtitle">Monitoreo global de planteles, salud de la base de datos y bot de mantenimiento.</p>
+          </div>
+          <div style="display:flex; gap:10px;">
+            <button class="btn btn-outline" onclick="window.probarPingMaster()" style="border-color:var(--primary); color:var(--primary); font-weight:600;">
+                <i class="fa-solid fa-bolt"></i> Probar Ping DB
+            </button>
+            <button class="btn btn-primary" onclick="window.crearNuevoPlantelModal()">
+                <i class="fa-solid fa-plus"></i> Registrar Escuela
+            </button>
+          </div>
+        </div>
+
+        <!-- MTRICAS GENERALES -->
+        <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap:20px; margin-bottom:28px;">
+           <div class="card shadow-sm" style="border-left:5px solid var(--primary); padding:20px;">
+              <div style="font-size:0.8rem; color:var(--text-muted); font-weight:700; text-transform:uppercase;">Planteles Activos</div>
+              <div style="font-size:1.8rem; font-weight:900; color:var(--text-main); margin-top:4px;">${planteles ? planteles.length : 0}</div>
+           </div>
+
+           <div class="card shadow-sm" style="border-left:5px solid #10b981; padding:20px;">
+              <div style="font-size:0.8rem; color:var(--text-muted); font-weight:700; text-transform:uppercase;">Total Alumnos Global</div>
+              <div style="font-size:1.8rem; font-weight:900; color:#10b981; margin-top:4px;">${totalAlumnos || 0}</div>
+           </div>
+
+           <div class="card shadow-sm" style="border-left:5px solid #8b5cf6; padding:20px;">
+              <div style="font-size:0.8rem; color:var(--text-muted); font-weight:700; text-transform:uppercase;">Personal Autorizado</div>
+              <div style="font-size:1.8rem; font-weight:900; color:#8b5cf6; margin-top:4px;">${totalPersonal || 0}</div>
+           </div>
+
+           <div class="card shadow-sm" style="border-left:5px solid #f59e0b; padding:20px;">
+              <div style="font-size:0.8rem; color:var(--text-muted); font-weight:700; text-transform:uppercase;">Robot Keep-Alive</div>
+              <div style="font-size:0.95rem; font-weight:700; color:#b45309; margin-top:6px;"><i class="fa-solid fa-robot"></i> Activo (Cada 3 Días)</div>
+           </div>
         </div>
 
         <div class="card" style="margin-bottom:32px; border-left: 6px solid var(--danger); background:#fff5f5;">
            <div style="display:flex; gap:16px; align-items:center;">
-              <div style="font-size:2.5rem; color:var(--danger);"><i class="fa-solid fa-radiation"></i></div>
+              <div style="font-size:2.5rem; color:var(--danger);"><i class="fa-solid fa-shield-halved"></i></div>
               <div>
-                 <strong style="display:block; font-size:1.1rem; color:#c53030;">Control de Destrucción (Cascada)</strong>
-                 <p style="margin:0; font-size:0.9rem; color:#9b2c2c;">Al eliminar un plantel, se borran ALUMNOS, MAESTROS, GRUPOS y CALIFICACIONES de forma permanente.</p>
+                 <strong style="display:block; font-size:1.1rem; color:#c53030;">Modo Creador de Sistema Activo</strong>
+                 <p style="margin:0; font-size:0.9rem; color:#9b2c2c;">Selecciona cualquier plantel para ingresar como Administrador o consultar sus perfiles registrados sin restricciones.</p>
               </div>
            </div>
         </div>
+
+        <h3 style="margin-bottom:20px; font-size:1.3rem;"><i class="fa-solid fa-school"></i> Planteles Registrados en el Sistema</h3>
 
         <div class="grid" style="grid-template-columns: repeat(auto-fill, minmax(350px, 1fr)); gap:24px;">
            ${planteles.map(p => `
              <div class="card shadow-md" style="border-top: 6px solid ${p.primary_color || '#2563eb'}; overflow:hidden;">
                 <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:15px;">
                    <div>
-                      <h3 style="margin:0; font-weight:900;">${p.nombre}</h3>
+                      <h3 style="margin:0; font-weight:900; font-size:1.2rem;">${p.nombre}</h3>
                       <code style="background:#f1f5f9; padding:2px 6px; border-radius:4px; font-size:0.75rem;">${p.slug}</code>
                    </div>
                    <div style="font-size:1.5rem; color:${p.primary_color || '#2563eb'}"><i class="fa-solid fa-school-flag"></i></div>
@@ -6044,11 +6082,11 @@ async function renderMasterSaaS() {
                 </div>
 
                 <div style="display:flex; gap:12px;">
-                   <button class="btn btn-primary" style="flex:1; font-size:0.8rem;" onclick="window.gestionarPlantelSaaS('${p.id}', '${p.nombre}')">
-                      <i class="fa-solid fa-eye"></i> Gestionar
+                   <button class="btn btn-primary" style="flex:1; font-size:0.85rem;" onclick="window.gestionarPlantelSaaS('${p.id}', '${p.nombre}')">
+                      <i class="fa-solid fa-right-to-bracket"></i> Entrar a Escuela
                    </button>
-                   <button class="btn" style="flex:1; font-size:0.8rem; background:#fee2e2; color:#dc2626; border:1px solid #fecaca;" onclick="window.eliminarPlantelSaaS('${p.id}', '${p.nombre}')">
-                      <i class="fa-solid fa-trash"></i> Eliminar
+                   <button class="btn" style="flex:1; font-size:0.85rem; background:#fee2e2; color:#dc2626; border:1px solid #fecaca;" onclick="window.eliminarPlantelSaaS('${p.id}', '${p.nombre}')">
+                      <i class="fa-solid fa-trash"></i> Dar de Baja
                    </button>
                 </div>
              </div>
@@ -6057,6 +6095,37 @@ async function renderMasterSaaS() {
         `;
     } catch(e) { return `<div class="error-box">Error SaaS: ${e.message}</div>`; }
 }
+
+window.probarPingMaster = async () => {
+    try {
+        const t0 = performance.now();
+        const { data, error } = await supabaseClient.from('planteles').select('id').limit(1);
+        const t1 = performance.now();
+        if(error) throw error;
+        window.showToast(`✅ Base de datos en línea. Respuesta en ${Math.round(t1 - t0)}ms`, "success");
+    } catch(e) {
+        window.showToast("❌ Error al probar conexión: " + e.message, "error");
+    }
+};
+
+window.crearNuevoPlantelModal = async () => {
+    const nombre = prompt("Ingresa el Nombre Completo de la Nueva Escuela:");
+    if(!nombre || !nombre.trim()) return;
+    const slug = prompt("Ingresa la clave o alias corto (ej. secundaria150):", nombre.toLowerCase().replace(/[^a-z0-9]/g, ''));
+    if(!slug) return;
+
+    try {
+        const { data, error } = await supabaseClient.from('planteles').insert([{
+            nombre: nombre.trim(),
+            slug: slug.trim(),
+            primary_color: '#2563eb'
+        }]).select().single();
+        if(error) throw error;
+
+        window.showToast(`Escuela "${nombre}" dada de alta exitosamente.`, 'success');
+        renderApp();
+    } catch(e) { alert("Error al registrar escuela: " + e.message); }
+};
 
 window.eliminarPlantelSaaS = async (id, nombre) => {
     if(!confirm(`⚠️ ¿ELIMINAR ${nombre.toUpperCase()}?\nEsta acción es irreversible y borrará TODO el plantel.`)) return;
