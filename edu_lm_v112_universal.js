@@ -6088,9 +6088,9 @@ window.registrarPingPlantelConexion = async () => {
         }).eq('id', targetPlantelId);
 
         if (upErr && upErr.code === '42703') {
-            // Columna aún no existe en la BD — guardar como JSON en logo_url
+            // Columna aún no existe en la BD — guardar como JSON plano en logo_url
             await supabaseClient.from('planteles').update({
-                logo_url: '###CONN###' + JSON.stringify(metaObj)
+                logo_url: JSON.stringify(metaObj)
             }).eq('id', targetPlantelId);
         }
     } catch(e) {}
@@ -6135,10 +6135,15 @@ async function renderMasterSaaS() {
             if (!usoFallback) {
                 meta = p.ultima_conexion_json || null;
             } else {
-                // Extraer del campo logo_url con prefijo especial ###CONN###
+                // Leer logo_url: puede ser JSON plano o con prefijo ###CONN###
                 try {
-                    if (p.logo_url && p.logo_url.startsWith('###CONN###')) {
-                        meta = JSON.parse(p.logo_url.replace('###CONN###', ''));
+                    if (p.logo_url) {
+                        const raw = p.logo_url.startsWith('###CONN###')
+                            ? p.logo_url.replace('###CONN###', '')
+                            : p.logo_url;
+                        const parsed = JSON.parse(raw);
+                        // Solo es un ping de conexión si tiene la clave lastUser
+                        if (parsed && parsed.lastUser) meta = parsed;
                     }
                 } catch(e) {}
             }
