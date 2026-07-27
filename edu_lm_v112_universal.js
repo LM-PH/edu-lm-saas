@@ -15378,13 +15378,22 @@ window.bibEliminarPrestamo = async (id) => {
 async function renderBibliotecaReservas() {
     setTimeout(() => { window.loadBibliotecaReservas(true); }, 100);
     return `
-      <div class="page-header">
-         <h2 class="page-title"><i class="fa-solid fa-calendar-plus"></i> Reservaciones Aula de Medios</h2>
+      <div class="page-header" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:15px;">
+         <div>
+            <h2 class="page-title"><i class="fa-solid fa-calendar-plus"></i> Reservaciones Aula de Medios</h2>
+            <p class="page-subtitle">Control de reservaciones y registro de atención en aula de medios.</p>
+         </div>
+         <button class="btn btn-outline" style="border-color:var(--primary); color:var(--primary); display:flex; align-items:center; gap:8px;" onclick="window.imprimirHistorialReservasAula()">
+             <i class="fa-solid fa-print"></i> Imprimir Historial de Uso
+         </button>
       </div>
       <div class="card">
-         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
+         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px; flex-wrap:wrap; gap:15px;">
             <h3 style="margin:0;">Horarios Apartados</h3>
-            <input type="date" id="bibReservaFecha" class="form-input" style="width:auto;" value="${new Date().toISOString().split('T')[0]}" onchange="window.loadBibliotecaReservas(true)">
+            <div style="display:flex; gap:10px; align-items:center;">
+               <label style="font-size:0.8rem; font-weight:bold; color:var(--text-muted);">Fecha:</label>
+               <input type="date" id="bibReservaFecha" class="form-input" style="width:auto; margin:0;" value="${new Date().toISOString().split('T')[0]}" onchange="window.loadBibliotecaReservas(true)">
+            </div>
          </div>
          <div id="bibListaReservas">
             <div style="text-align:center; padding:20px; color:var(--text-muted);"><i class="fa-solid fa-spinner fa-spin"></i> Cargando...</div>
@@ -15396,7 +15405,7 @@ async function renderBibliotecaReservas() {
 window.loadBibliotecaReservas = async (isBib = false) => {
     const prefix = isBib ? 'bib' : 'maestro';
     const container = document.getElementById(prefix + 'ListaReservas');
-    const fecha = document.getElementById(prefix + 'ReservaFecha')?.value;
+    const fecha = document.getElementById(prefix + 'ReservaFecha')?.value || document.getElementById('mReservaFecha')?.value;
     if(!container || !fecha) return;
     
     try {
@@ -15409,23 +15418,32 @@ window.loadBibliotecaReservas = async (isBib = false) => {
         if(error) throw error;
         
         if(!data || data.length === 0) {
-            container.innerHTML = '<div style="text-align:center; padding:30px; background:#f8fafc; border-radius:12px; color:var(--text-muted); border:1px dashed #cbd5e1;">No hay reservaciones para esta fecha.</div>';
+            container.innerHTML = '<div style="text-align:center; padding:30px; background:#f8fafc; border-radius:12px; color:var(--text-muted); border:1px dashed #cbd5e1;">No hay reservaciones registradas para esta fecha.</div>';
             return;
         }
         
         container.innerHTML = data.map(r => {
             const hI = r.hora_inicio.substring(0,5);
             const hF = r.hora_fin.substring(0,5);
-            const isMine = r.maestro_id === state.user.id || state.role === 'biblioteca' || state.role === 'admin';
+            const canManage = isBib || state.role === 'biblioteca' || state.role === 'admin' || state.role === 'directivo';
+            
+            const badgeAtendido = r.atendido 
+               ? `<span style="color:#059669; background:#ecfdf5; padding:6px 12px; border-radius:8px; font-weight:700; font-size:0.85rem; border:1px solid #a7f3d0; display:inline-flex; align-items:center; gap:6px;"><i class="fa-solid fa-check-double"></i> Atendido / Utilizado</span>`
+               : (canManage 
+                   ? `<button class="btn btn-sm btn-outline" style="color:var(--success); border-color:var(--success); font-weight:600;" onclick="window.bibMarcarReservaAtendida('${r.id}', ${isBib})"><i class="fa-solid fa-check"></i> Marcar Atendido</button>`
+                   : `<span style="color:#d97706; background:#fffbeb; padding:4px 10px; border-radius:6px; font-weight:600; font-size:0.8rem;"><i class="fa-solid fa-clock"></i> Pendiente de Uso</span>`
+                 );
             
             return `
-               <div style="border-left:4px solid var(--primary); background:#f8fafc; padding:16px; margin-bottom:12px; border-radius:0 8px 8px 0; display:flex; justify-content:space-between; align-items:center;">
+               <div style="border-left:4px solid ${r.atendido ? '#10b981' : 'var(--primary)'}; background:${r.atendido ? '#f0fdf4' : '#f8fafc'}; padding:16px; margin-bottom:12px; border-radius:0 8px 8px 0; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px;">
                   <div>
-                     <div style="font-weight:700; font-size:1.1rem; color:var(--text-main); margin-bottom:4px;">${hI} - ${hF}</div>
+                     <div style="font-weight:700; font-size:1.1rem; color:var(--text-main); margin-bottom:4px;">${hI} - ${hF} hrs</div>
                      <div style="font-size:0.9rem; color:#475569; font-weight:500;"><i class="fa-solid fa-chalkboard-user" style="color:var(--text-muted)"></i> Maestro: ${r.perfiles?.nombre || 'Desconocido'}</div>
                      ${r.proposito ? `<div style="font-size:0.8rem; color:var(--text-muted); margin-top:4px;"><i class="fa-regular fa-comment-dots"></i> ${r.proposito}</div>` : ''}
                   </div>
-                  ${isMine ? `<button class="btn btn-outline btn-sm" style="color:var(--danger); border-color:var(--danger);" onclick="window.bibEliminarReserva('${r.id}', ${isBib})"><i class="fa-solid fa-trash"></i> Cancelar</button>` : ''}
+                  <div>
+                     ${badgeAtendido}
+                  </div>
                </div>
             `;
         }).join('');
@@ -15436,14 +15454,132 @@ window.loadBibliotecaReservas = async (isBib = false) => {
     }
 };
 
-window.bibEliminarReserva = async (id, isBib) => {
-    if(!confirm("¿Seguro que deseas cancelar esta reservación?")) return;
+window.bibMarcarReservaAtendida = async (id, isBib) => {
     try {
-        const { error } = await supabaseClient.from('biblioteca_reservas').delete().eq('id', id);
+        const { error } = await supabaseClient.from('biblioteca_reservas').update({
+            atendido: true,
+            fecha_atendido: new Date().toISOString()
+        }).eq('id', id);
+        
         if(error) throw error;
-        window.showToast("Reservación cancelada.", "success");
+        window.showToast("Reservación registrada como Atendida / Utilizada.", "success");
         window.loadBibliotecaReservas(isBib);
-    } catch(e) { console.error(e); window.showToast("Error al cancelar.", "error"); }
+    } catch(e) {
+        console.error(e);
+        window.showToast("Error al actualizar la reservación.", "error");
+    }
+};
+
+window.imprimirHistorialReservasAula = async () => {
+    const fecha = document.getElementById('bibReservaFecha')?.value || document.getElementById('mReservaFecha')?.value || new Date().toISOString().split('T')[0];
+    try {
+        const { data, error } = await supabaseClient.from('biblioteca_reservas')
+            .select('*, perfiles(nombre)')
+            .eq('plantel_id', state.plantelId)
+            .eq('fecha', fecha)
+            .order('hora_inicio', { ascending: true });
+            
+        if(error) throw error;
+        
+        if(!data || data.length === 0) {
+            return alert("No hay reservaciones registradas para la fecha seleccionada.");
+        }
+
+        const { data: plantelData } = await supabaseClient.from('planteles').select('nombre, logo_url').eq('id', state.plantelId).single();
+        const schoolName = plantelData?.nombre || 'Plantel Escolar';
+        const schoolLogo = plantelData?.logo_url || '';
+        
+        const printWindow = window.open('', '_blank');
+        const fechaImpresion = new Date().toLocaleDateString();
+
+        const registrosHtml = data.map(r => {
+            const hI = r.hora_inicio.substring(0,5);
+            const hF = r.hora_fin.substring(0,5);
+            const estado = r.atendido ? 'ATENDIDO / UTILIZADO' : 'PENDIENTE DE USO';
+            
+            return `
+            <div class="item-box ${r.atendido ? 'success' : 'pending'}">
+                <div class="item-header">
+                    <strong>Horario: ${hI} - ${hF} hrs</strong>
+                    <span>Estatus: <strong>${estado}</strong></span>
+                </div>
+                <p><strong>Maestro Solicitante:</strong> ${r.perfiles?.nombre || 'No registrado'}</p>
+                <p><strong>Propósito / Clase:</strong> ${r.proposito || 'Práctica escolar'}</p>
+                ${r.fecha_atendido ? `<p class="text-muted"><strong>Registrado atendido en:</strong> ${new Date(r.fecha_atendido).toLocaleString()}</p>` : ''}
+            </div>`;
+        }).join('');
+
+        printWindow.document.write(`
+            <html>
+                <head>
+                    <title>Reporte de Uso - Aula de Medios</title>
+                    <style>
+                        body { font-family: 'Segoe UI', Arial, sans-serif; padding: 40px; color: #333; line-height: 1.5; }
+                        .header { text-align: center; margin-bottom: 30px; border-bottom: 2px solid #1e40af; padding-bottom: 15px; }
+                        .logo-img { max-height: 80px; margin-bottom: 10px; object-fit: contain; }
+                        .header h2 { font-size: 26px; margin: 0 0 5px 0; color: #000; text-transform: uppercase; }
+                        .header h1 { margin: 0; color: #1e40af; font-size: 20px; text-transform: uppercase; }
+                        .header p { margin: 5px 0; font-size: 14px; color: #555; font-weight: bold; }
+                        .info-box { background: #f8fafc; border: 1px solid #e2e8f0; padding: 20px; border-radius: 8px; margin-bottom: 30px; display: flex; justify-content: space-between; font-size: 14px; }
+                        .section-title { font-size: 18px; color: #1e40af; border-bottom: 2px solid #cbd5e1; padding-bottom: 5px; margin-top: 20px; margin-bottom: 15px; text-transform: uppercase; }
+                        .item-box { border: 1px solid #cbd5e1; padding: 14px; border-radius: 8px; margin-bottom: 15px; page-break-inside: avoid; }
+                        .item-box.pending { border-left: 4px solid #f59e0b; background: #fffdf5; }
+                        .item-box.success { border-left: 4px solid #10b981; background: #f0fdf4; }
+                        .item-header { display: flex; justify-content: space-between; margin-bottom: 8px; font-size: 14px; }
+                        .item-box p { margin: 4px 0; font-size: 14px; }
+                        .text-muted { color: #64748b; font-size: 12px; }
+                        .footer-signatures { display: flex; justify-content: space-around; margin-top: 60px; page-break-inside: avoid; }
+                        .sig-line { border-top: 1px solid #000; width: 220px; text-align: center; padding-top: 5px; font-size: 12px; }
+                        @media print {
+                            @page { margin: 2cm; }
+                            body { padding: 0; }
+                        }
+                    </style>
+                </head>
+                <body>
+                    <div class="header">
+                        ${schoolLogo ? `<img src="${schoolLogo}" class="logo-img" alt="Logo">` : ''}
+                        <h2>${schoolName}</h2>
+                        <h1>AULA DE MEDIOS Y COMPUTACIÓN</h1>
+                        <p>REPORTES DE USO Y ATENCIÓN</p>
+                    </div>
+                    
+                    <div class="info-box">
+                        <div>
+                            <strong>Fecha de Consulta:</strong> ${fecha}<br>
+                            <strong>Responsable de Biblioteca:</strong> ${state.userName || state.user?.email || 'Biblioteca'}
+                        </div>
+                        <div style="text-align:right;">
+                            <strong>Fecha de Impresión:</strong> ${fechaImpresion}
+                        </div>
+                    </div>
+
+                    <div class="section-title">Registro de Horarios Apartados</div>
+                    ${registrosHtml}
+
+                    <div class="footer-signatures">
+                        <div class="sig-line">
+                            <strong>${state.userName || state.user?.email || 'Biblioteca'}</strong><br>
+                            Firma Responsable Biblioteca / Aula de Medios
+                        </div>
+                    </div>
+
+                    <script>
+                        window.onload = () => {
+                            setTimeout(() => {
+                                window.print();
+                                window.close();
+                            }, 500);
+                        };
+                    </script>
+                </body>
+            </html>
+        `);
+        printWindow.document.close();
+    } catch(e) {
+        console.error(e);
+        alert("Error al imprimir el historial de reservaciones: " + e.message);
+    }
 };
 
 async function renderMaestroAulaMedios() {
