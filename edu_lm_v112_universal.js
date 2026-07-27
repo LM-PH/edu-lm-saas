@@ -14677,18 +14677,20 @@ window.eliminarPersona = async (idPermitido, email, nombre, rol = '') => {
             }
         } else {
             // Solicitud para Admins
+            const datosSol = await window.obtenerDatosSolicitanteActual();
             const actionType = (rol === 'alumno') ? 'delete_alumno' : 'delete_personal';
             const reqType = (rol === 'alumno') ? 'BAJA DE ALUMNO' : 'BAJA DE PERSONAL';
             const { error: errReq } = await supabaseClient.from('autorizaciones_movimientos').insert([{
                 plantel_id: state.plantelId,
                 tipo_accion: reqType,
-                detalles: `Eliminar acceso a: ${nombre} (${email})`,
+                detalles: `Solicitado por ${datosSol.solicitante_nombre}: Eliminar acceso a ${nombre} (${email})`,
                 estado: 'pendiente',
                 payload_json: {
                     action: actionType,
                     id_permitido: idPermitido,
                     email: email,
-                    nombre: nombre
+                    nombre: nombre,
+                    ...datosSol
                 }
             }]);
             if(errReq) throw errReq;
