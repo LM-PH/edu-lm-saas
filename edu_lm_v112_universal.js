@@ -6215,23 +6215,44 @@ async function renderMasterSaaS() {
                         </tr>
                     </thead>
                     <tbody>
-                        ${conexionesPorPlantel.map(c => `
+                        ${conexionesPorPlantel.map(c => {
+                            let estadoBadge = '<span style="background:#f1f5f9; color:#64748b; padding:2px 8px; border-radius:12px; font-size:0.7rem; font-weight:bold;">SIN REGISTRO</span>';
+                            let tiempoTexto = 'Pendiente de primer ingreso';
+                            if (c.lastTime) {
+                                const ahora = new Date();
+                                const entonces = new Date(c.lastTime);
+                                const diffMs = ahora - entonces;
+                                const diffMin = Math.floor(diffMs / 60000);
+                                const diffHrs = Math.floor(diffMs / 3600000);
+                                const diffDias = Math.floor(diffMs / 86400000);
+                                if (diffMin < 15) {
+                                    estadoBadge = '<span style="background:#dcfce7; color:#15803d; padding:2px 8px; border-radius:12px; font-size:0.7rem; font-weight:bold;">RECIENTE</span>';
+                                    tiempoTexto = `Hace ${diffMin} min`;
+                                } else if (diffHrs < 24) {
+                                    estadoBadge = '<span style="background:#fef9c3; color:#854d0e; padding:2px 8px; border-radius:12px; font-size:0.7rem; font-weight:bold;">HOY</span>';
+                                    tiempoTexto = diffHrs < 1 ? `Hace ${diffMin} min` : `Hace ${diffHrs} hrs`;
+                                } else {
+                                    estadoBadge = '<span style="background:#f1f5f9; color:#475569; padding:2px 8px; border-radius:12px; font-size:0.7rem; font-weight:bold;">HACE ${diffDias}d</span>';
+                                    tiempoTexto = entonces.toLocaleString();
+                                }
+                            }
+                            return `
                         <tr style="border-bottom:1px solid #f1f5f9;">
                             <td style="padding:12px; font-weight:800; color:var(--primary);">${c.plantelNombre}</td>
                             <td style="padding:12px; font-weight:700;">
-                                ${c.lastUser ? `<i class="fa-solid fa-user-check" style="color:#10b981; margin-right:6px;"></i>${c.lastUser}` : '<span style="color:var(--text-muted); font-style:italic;">Sin conexiones aún</span>'}
+                                ${c.lastUser ? `<i class="fa-solid fa-user-clock" style="color:#6366f1; margin-right:6px;"></i>${c.lastUser}` : '<span style="color:var(--text-muted); font-style:italic;">Sin conexiones aún</span>'}
                             </td>
                             <td style="padding:12px;">
                                 ${c.lastRole ? `<span style="background:#e0e7ff; color:#3730a3; padding:2px 8px; border-radius:12px; font-size:0.75rem; font-weight:bold;">${c.lastRole}</span>` : '-'}
                             </td>
                             <td style="padding:12px; font-size:0.85rem; color:var(--text-muted); font-weight:600;">
-                                ${c.lastTime || 'Pendiente de primer ingreso'}
+                                ${tiempoTexto}
                             </td>
                             <td style="padding:12px; text-align:center;">
-                                ${c.lastUser ? '<span style="background:#dcfce7; color:#15803d; padding:2px 8px; border-radius:12px; font-size:0.7rem; font-weight:bold;">CONECTADO</span>' : '<span style="background:#f1f5f9; color:#64748b; padding:2px 8px; border-radius:12px; font-size:0.7rem; font-weight:bold;">INACTIVO</span>'}
+                                ${estadoBadge}
                             </td>
-                        </tr>
-                        `).join('')}
+                        </tr>`;
+                        }).join('')}
                     </tbody>
                 </table>
             </div>
