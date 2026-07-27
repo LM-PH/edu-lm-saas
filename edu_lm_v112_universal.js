@@ -6011,8 +6011,16 @@ async function renderMasterSaaS() {
         const { data: planteles, error } = await supabaseClient.from('planteles').select('*').order('creado_en', { ascending: false });
         if(error) throw error;
 
-        const { count: totalAlumnos } = await supabaseClient.from('alumnos').select('*', { count: 'exact', head: true }).catch(()=>({ count: 0 }));
-        const { count: totalPersonal } = await supabaseClient.from('perfiles_permitidos').select('*', { count: 'exact', head: true }).catch(()=>({ count: 0 }));
+        let totalAlumnos = 0;
+        let totalPersonal = 0;
+        try {
+            const resA = await supabaseClient.from('alumnos').select('*', { count: 'exact', head: true });
+            if(resA && resA.count) totalAlumnos = resA.count;
+        } catch(e) {}
+        try {
+            const resP = await supabaseClient.from('perfiles_permitidos').select('*', { count: 'exact', head: true });
+            if(resP && resP.count) totalPersonal = resP.count;
+        } catch(e) {}
 
         return `
         <div class="page-header" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:16px;">
