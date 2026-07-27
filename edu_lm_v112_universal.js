@@ -5741,24 +5741,426 @@ window.resolverAutorizacion = async (id, dictamen, payloadStr = null) => {
     }
 }
 
+window._calCurrentYear = new Date().getFullYear();
+window._calCurrentMonth = new Date().getMonth();
+
+window.cambiarTabAutorizaciones = (tab, btn) => {
+    document.querySelectorAll('.tab-aut-btn').forEach(b => {
+        b.style.background = 'transparent';
+        b.style.color = 'var(--text-muted)';
+        b.style.borderBottom = '2px solid transparent';
+    });
+    if(btn) {
+        btn.style.background = 'white';
+        btn.style.color = 'var(--primary)';
+        btn.style.borderBottom = '2px solid var(--primary)';
+    }
+
+    document.getElementById('secAutorizacionesPendientes').style.display = (tab === 'pendientes') ? 'block' : 'none';
+    document.getElementById('secAutorizacionesCalendario').style.display = (tab === 'calendario') ? 'block' : 'none';
+    document.getElementById('secAutorizacionesHistorial').style.display = (tab === 'historial') ? 'block' : 'none';
+
+    if (tab === 'calendario') {
+        window.loadCalendarAutorizaciones(window._calCurrentYear, window._calCurrentMonth);
+    } else if (tab === 'historial') {
+        window.loadHistorialAutorizaciones();
+    } else if (tab === 'pendientes') {
+        window.loadAutorizaciones();
+    }
+};
+
+window.loadCalendarAutorizaciones = async (year, month) => {
+    const cont = document.getElementById('calendarioAutorizacionesContainer');
+    if (!cont) return;
+
+    cont.innerHTML = '<div style="text-align:center; padding:30px; color:var(--text-muted)"><i class="fa-solid fa-spinner fa-spin"></i> Cargando calendario de autorizaciones...</div>';
+
+    try {
+        const { data: allReqs, error } = await supabaseClient
+            .from('autorizaciones_movimientos')
+            .select('*')
+            .eq('plantel_id', state.plantelId)
+            .order('creado_en', { ascending: false });
+
+        if (error) throw error;
+
+        const dateMap = {};
+        (allReqs || []).forEach(r => {
+            if (r.creado_en) {
+                const dateKey = new Date(r.creado_en).toISOString().split('T')[0];
+                if (!dateMap[dateKey]) dateMap[dateKey] = [];
+                dateMap[dateKey].push(r);
+            }
+        });
+
+        const months = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
+        const firstDay = new Date(year, month, 1).getDay();
+        const daysInMonth = new Date(year, month + 1, 0).getDate();
+
+        let gridHtml = `
+        <div style="background:white; border-radius:12px; border:1px solid #edf2f7; padding:20px; box-shadow:0 2px 8px rgba(0,0,0,0.03);">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px; flex-wrap:wrap; gap:10px;">
+                <button class="btn btn-outline btn-xs" onclick="window.navCalendarAutorizaciones(-1)">
+                    <i class="fa-solid fa-chevron-left"></i> Mes Anterior
+                </button>
+                <h3 style="margin:0; font-weight:800; color:#1e293b; font-size:1.1rem;">
+                    <i class="fa-solid fa-calendar-days" style="color:var(--primary); margin-right:8px;"></i> ${months[month]} ${year}
+                </h3>
+                <button class="btn btn-outline btn-xs" onclick="window.navCalendarAutorizaciones(1)">
+                    Mes Siguiente <i class="fa-solid fa-chevron-right"></i>
+                </button>
+            </div>
+
+            <div style="display:grid; grid-template-columns: repeat(7, 1fr); gap:6px; text-align:center; font-size:0.8rem; font-weight:700; color:var(--text-muted); margin-bottom:8px;">
+                <div>Dom</div><div>Lun</div><div>Mar</div><div>Mié</div><div>Jue</div><div>Vie</div><div>Sáb</div>
+            </div>
+
+            <div style="display:grid; grid-template-columns: repeat(7, 1fr); gap:6px;">
+        `;
+
+        for (let i = 0; i < firstDay; i++) {
+            gridHtml += `<div style="height:70px; background:#f8fafc; border-radius:8px; opacity:0.5;"></div>`;
+        }
+
+        const todayStr = new Date().toISOString().split('T')[0];
+        for (let day = 1; day <= daysInMonth; day++) {
+            const dayFormatted = String(day).padStart(2, '0');
+            const monthFormatted = String(month + 1).padStart(2, '0');
+            const dateKey = `${year}-${monthFormatted}-${dayFormatted}`;
+            const dayReqs = dateMap[dateKey] || [];
+            const isToday = (dateKey === todayStr);
+
+            let dotsHtml = '';
+            if (dayReqs.length > 0) {
+                const pend = dayReqs.filter(r => r.estado === 'pendiente').length;
+                const apr = dayReqs.filter(r => r.estado === 'aprobada').length;
+                const rech = dayReqs.filter(r => r.estado === 'rechazada').length;
+
+                dotsHtml = `
+                <div style="display:flex; gap:3px; justify-content:center; margin-top:4px; flex-wrap:wrap;">
+                    ${apr > 0 ? `<span style="font-size:0.65rem; background:#dcfce7; color:#166534; padding:1px 5px; border-radius:8px; font-weight:bold;" title="${apr} Aprobadas">🟢 ${apr}</span>` : ''}
+                    ${rech > 0 ? `<span style="font-size:0.65rem; background:#fee2e2; color:#991b1b; padding:1px 5px; border-radius:8px; font-weight:bold;" title="${rech} Rechazadas">🔴 ${rech}</span>` : ''}
+                    ${pend > 0 ? `<span style="font-size:0.65rem; background:#fef9c3; color:#854d0e; padding:1px 5px; border-radius:8px; font-weight:bold;" title="${pend} Pendientes">🟡 ${pend}</span>` : ''}
+                </div>`;
+            }
+
+            gridHtml += `
+            <div onclick="window.verDetalleDiaAutorizaciones('${dateKey}')" 
+                 style="min-height:70px; padding:6px; background:${dayReqs.length > 0 ? '#eff6ff' : (isToday ? '#f0fdf4' : 'white')}; border:1px solid ${isToday ? '#22c55e' : (dayReqs.length > 0 ? '#3b82f6' : '#e2e8f0')}; border-radius:8px; cursor:pointer; transition:transform 0.1s, box-shadow 0.1s;"
+                 onmouseover="this.style.boxShadow='0 2px 6px rgba(0,0,0,0.1)'" onmouseout="this.style.boxShadow='none'">
+                <div style="font-weight:700; font-size:0.85rem; color:${isToday ? '#166534' : '#1e293b'}">${day}</div>
+                ${dotsHtml}
+            </div>`;
+        }
+
+        gridHtml += `
+            </div>
+            
+            <div style="margin-top:16px; display:flex; gap:16px; justify-content:center; font-size:0.75rem; color:var(--text-muted); flex-wrap:wrap;">
+                <span>🟢 Aprobadas</span>
+                <span>🔴 Rechazadas</span>
+                <span>🟡 Pendientes por resolver</span>
+            </div>
+        </div>
+
+        <div id="detalleDiaCalendarioAutorizaciones" style="margin-top:20px;">
+            <div style="padding:20px; text-align:center; background:#f8fafc; border-radius:12px; border:1px dashed #cbd5e1; color:var(--text-muted);">
+                <i class="fa-solid fa-hand-pointer" style="font-size:1.2rem; margin-bottom:6px; display:block;"></i>
+                Haz clic en cualquier día marcado del calendario para ver los expedientes detallados de esa fecha.
+            </div>
+        </div>
+        `;
+
+        cont.innerHTML = gridHtml;
+        window._calendarDataReqs = allReqs;
+
+    } catch (e) {
+        console.error("Error al cargar calendario de autorizaciones:", e);
+        cont.innerHTML = '<div style="color:var(--danger); text-align:center; padding:20px;">Error al cargar el calendario.</div>';
+    }
+};
+
+window.navCalendarAutorizaciones = (delta) => {
+    window._calCurrentMonth += delta;
+    if (window._calCurrentMonth < 0) {
+        window._calCurrentMonth = 11;
+        window._calCurrentYear -= 1;
+    } else if (window._calCurrentMonth > 11) {
+        window._calCurrentMonth = 0;
+        window._calCurrentYear += 1;
+    }
+    window.loadCalendarAutorizaciones(window._calCurrentYear, window._calCurrentMonth);
+};
+
+window.verDetalleDiaAutorizaciones = (dateKey) => {
+    const cont = document.getElementById('detalleDiaCalendarioAutorizaciones');
+    if (!cont || !window._calendarDataReqs) return;
+
+    const reqs = window._calendarDataReqs.filter(r => {
+        if (!r.creado_en) return false;
+        return new Date(r.creado_en).toISOString().split('T')[0] === dateKey;
+    });
+
+    const formattedDate = new Date(dateKey + 'T12:00:00').toLocaleDateString('es-MX', { weekday:'long', year:'numeric', month:'long', day:'numeric' });
+
+    if (reqs.length === 0) {
+        cont.innerHTML = `
+        <div style="background:white; padding:20px; border-radius:12px; border:1px solid #e2e8f0;">
+            <h4 style="margin:0 0 10px 0; color:#1e293b;"><i class="fa-regular fa-calendar-check"></i> ${formattedDate}</h4>
+            <p style="color:var(--text-muted); margin:0;">No se registraron solicitudes en esta fecha.</p>
+        </div>`;
+        return;
+    }
+
+    const cardsHtml = reqs.map(r => {
+        const badgeColor = r.estado === 'aprobada' ? 'background:#dcfce7; color:#166534;' :
+                           (r.estado === 'rechazada' ? 'background:#fee2e2; color:#991b1b;' : 'background:#fef9c3; color:#854d0e;');
+        const statusIcon = r.estado === 'aprobada' ? 'fa-circle-check' : (r.estado === 'rechazada' ? 'fa-circle-xmark' : 'fa-hourglass-half');
+
+        return `
+        <div style="background:white; border:1px solid #e2e8f0; border-radius:12px; padding:16px; margin-bottom:12px; box-shadow:0 2px 4px rgba(0,0,0,0.02);">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; flex-wrap:wrap; gap:8px;">
+                <span class="badge" style="background:#eff6ff; color:#1d4ed8; font-weight:700;">${r.tipo_accion}</span>
+                <span class="badge" style="${badgeColor} font-weight:700; text-transform:uppercase;">
+                    <i class="fa-solid ${statusIcon}"></i> ${r.estado}
+                </span>
+            </div>
+            <p style="font-weight:700; margin:0 0 6px 0; color:#1e293b; font-size:0.95rem;">${r.detalles || 'Sin detalles'}</p>
+            <div style="font-size:0.75rem; color:var(--text-muted); display:flex; gap:16px; flex-wrap:wrap;">
+                <span><i class="fa-regular fa-clock"></i> Creado: ${new Date(r.creado_en).toLocaleString('es-MX')}</span>
+                ${r.fecha_resolucion ? `<span><i class="fa-solid fa-check-double"></i> Resuelto: ${new Date(r.fecha_resolucion).toLocaleString('es-MX')}</span>` : ''}
+            </div>
+        </div>`;
+    }).join('');
+
+    cont.innerHTML = `
+    <div style="background:#f8fafc; padding:20px; border-radius:12px; border:1px solid #cbd5e1;">
+        <h4 style="margin:0 0 16px 0; color:#1e293b; font-weight:800;">
+            <i class="fa-solid fa-calendar-day" style="color:var(--primary);"></i> Expedientes del ${formattedDate} (${reqs.length})
+        </h4>
+        ${cardsHtml}
+    </div>`;
+};
+
+window.loadHistorialAutorizaciones = async () => {
+    const tbody = document.getElementById('tbodyHistorialAutorizaciones');
+    if (!tbody) return;
+
+    tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; padding:30px; color:var(--text-muted)"><i class="fa-solid fa-spinner fa-spin"></i> Cargando historial...</td></tr>';
+
+    try {
+        const { data, error } = await supabaseClient
+            .from('autorizaciones_movimientos')
+            .select('*')
+            .eq('plantel_id', state.plantelId)
+            .order('creado_en', { ascending: false });
+
+        if (error) throw error;
+        window._allHistorialReqs = data || [];
+
+        window.renderHistorialAutorizacionesTabla(window._allHistorialReqs);
+
+    } catch (e) {
+        console.error(e);
+        tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; color:var(--danger); padding:20px;">Error al cargar historial.</td></tr>';
+    }
+};
+
+window.renderHistorialAutorizacionesTabla = (list) => {
+    const tbody = document.getElementById('tbodyHistorialAutorizaciones');
+    if (!tbody) return;
+
+    if (!list || list.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; padding:30px; color:var(--text-muted)">No hay registros en el historial.</td></tr>';
+        return;
+    }
+
+    tbody.innerHTML = list.map(item => {
+        const createdStr = item.creado_en ? new Date(item.creado_en).toLocaleString('es-MX', { dateStyle:'short', timeStyle:'short' }) : '-';
+        const resStr = item.fecha_resolucion ? new Date(item.fecha_resolucion).toLocaleString('es-MX', { dateStyle:'short', timeStyle:'short' }) : '-';
+        const badgeStyle = item.estado === 'aprobada' ? 'background:#dcfce7; color:#166534;' :
+                           (item.estado === 'rechazada' ? 'background:#fee2e2; color:#991b1b;' : 'background:#fef9c3; color:#854d0e;');
+
+        const maestroNombre = item.payload_json?.maestro_nombre || 'Docente/Admin';
+
+        return `
+        <tr style="border-bottom:1px solid #e2e8f0;">
+            <td style="padding:10px; font-size:0.8rem; font-family:monospace; color:var(--text-muted);">${createdStr}</td>
+            <td style="padding:10px;"><span class="badge" style="background:#eff6ff; color:#1d4ed8; font-weight:700;">${item.tipo_accion}</span></td>
+            <td style="padding:10px; font-weight:600; font-size:0.85rem;">${maestroNombre}</td>
+            <td style="padding:10px; font-size:0.85rem; color:#334155;">${item.detalles}</td>
+            <td style="padding:10px; text-align:center;">
+                <span class="badge" style="${badgeStyle} text-transform:uppercase; font-weight:700;">${item.estado}</span>
+            </td>
+            <td style="padding:10px; font-size:0.8rem; font-family:monospace; color:var(--text-muted); text-align:center;">${resStr}</td>
+        </tr>`;
+    }).join('');
+};
+
+window.filtrarHistorialAutorizaciones = (query) => {
+    if (!window._allHistorialReqs) return;
+    const q = (query || '').toLowerCase().trim();
+    const filtered = window._allHistorialReqs.filter(r => {
+        const text = `${r.tipo_accion} ${r.detalles} ${r.estado} ${r.payload_json?.maestro_nombre || ''}`.toLowerCase();
+        return text.includes(q);
+    });
+    window.renderHistorialAutorizacionesTabla(filtered);
+};
+
+window.imprimirReporteAutorizaciones = () => {
+    const list = window._allHistorialReqs || window._calendarDataReqs || [];
+    if (list.length === 0) return alert("No hay datos para generar el reporte impreso.");
+
+    const printWin = window.open('', '_blank');
+    if (!printWin) return alert("Por favor permite las ventanas emergentes para imprimir el reporte.");
+
+    const rowsHtml = list.map(item => {
+        const createdStr = item.creado_en ? new Date(item.creado_en).toLocaleString('es-MX') : '-';
+        const resStr = item.fecha_resolucion ? new Date(item.fecha_resolucion).toLocaleString('es-MX') : '-';
+        const estadoText = (item.estado || 'PENDIENTE').toUpperCase();
+
+        return `
+        <tr style="border-bottom:1px solid #ccc;">
+            <td style="padding:6px; border:1px solid #ccc; font-size:0.75rem;">${createdStr}</td>
+            <td style="padding:6px; border:1px solid #ccc; font-size:0.75rem; font-weight:bold;">${item.tipo_accion}</td>
+            <td style="padding:6px; border:1px solid #ccc; font-size:0.75rem;">${item.payload_json?.maestro_nombre || 'Docente'}</td>
+            <td style="padding:6px; border:1px solid #ccc; font-size:0.75rem;">${item.detalles || '-'}</td>
+            <td style="padding:6px; border:1px solid #ccc; font-size:0.75rem; text-align:center; font-weight:bold;">${estadoText}</td>
+            <td style="padding:6px; border:1px solid #ccc; font-size:0.75rem; text-align:center;">${resStr}</td>
+        </tr>`;
+    }).join('');
+
+    const htmlContent = `
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <title>Reporte Oficial de Autorizaciones</title>
+        <style>
+            body { font-family: Arial, sans-serif; padding: 20px; color: #111; }
+            h2, h3 { margin: 0; text-align: center; }
+            table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+            th { background: #f1f5f9; padding: 8px; border: 1px solid #ccc; font-size: 0.8rem; text-align: left; }
+            @media print {
+                body { padding: 0; }
+                .no-print { display: none; }
+            }
+        </style>
+    </head>
+    <body>
+        <div style="text-align:center; border-bottom: 2px solid #000; padding-bottom: 12px; margin-bottom: 16px;">
+            <h2>${CONFIG.schoolName || 'PLANTEL EDUCATIVO'}</h2>
+            <h3 style="color:#444; font-weight:normal; margin-top:4px;">REPORTE OFICIAL DE AUTORIZACIONES Y MOVIMIENTOS ADMINISTRATIVOS</h3>
+            <p style="margin:4px 0 0 0; font-size:0.8rem; color:#666;">Fecha de impresión: ${new Date().toLocaleString('es-MX')} | Total de registros: ${list.length}</p>
+        </div>
+
+        <table>
+            <thead>
+                <tr>
+                    <th>Fecha Solicitud</th>
+                    <th>Tipo Acción</th>
+                    <th>Solicitante</th>
+                    <th>Detalles / Motivo</th>
+                    <th>Estado / Dictamen</th>
+                    <th>Fecha Resolución</th>
+                </tr>
+            </thead>
+            <tbody>
+                ${rowsHtml}
+            </tbody>
+        </table>
+
+        <div style="margin-top:60px; display:flex; justify-content:space-between; text-align:center;">
+            <div style="width:40%; border-top:1px solid #000; padding-top:6px; font-size:0.85rem;">
+                <strong>Control Escolar / Administración</strong><br>Firma y Sello
+            </div>
+            <div style="width:40%; border-top:1px solid #000; padding-top:6px; font-size:0.85rem;">
+                <strong>Dirección del Plantel</strong><br>Firma y Sello
+            </div>
+        </div>
+
+        <script>
+            window.onload = () => { window.print(); };
+        </script>
+    </body>
+    </html>`;
+
+    printWin.document.open();
+    printWin.document.write(htmlContent);
+    printWin.document.close();
+};
+
 function renderDirectivoAutorizaciones() {
     setTimeout(() => { if(window.loadAutorizaciones) window.loadAutorizaciones(); }, 150);
     return `
-      <div class="page-header" style="display:flex; justify-content:space-between; align-items:center;">
+      <div class="page-header" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:16px;">
         <div>
-          <h2 class="page-title">Centro de Autorizaciones</h2>
-          <p class="page-subtitle">Peticiones de baja y modificaciones globales para directivos.</p>
+          <h2 class="page-title">Centro de Autorizaciones y Movimientos</h2>
+          <p class="page-subtitle">Gestión de solicitudes, registro por calendario e informes impresos oficiales.</p>
         </div>
+        <button class="btn btn-outline" style="border-color:var(--primary); color:var(--primary); font-weight:700;" onclick="window.imprimirReporteAutorizaciones()">
+          <i class="fa-solid fa-print"></i> Imprimir Reporte de Autorizaciones
+        </button>
       </div>
-      
-      <div class="card" style="padding:24px; background:#f8fafc; border:1px solid #e2e8f0; border-radius:12px;">
-         <h3 style="margin-bottom:20px; display:flex; align-items:center; gap:8px; font-size:1.1rem">
-            <i class="fa-solid fa-inbox" style="color:var(--primary)"></i> 
-            Solicitudes Administrativas Pendientes
-         </h3>
-         <div id="listaAutorizaciones">
-             <div style="text-align:center; padding:20px; color:var(--text-muted)"><i class="fa-solid fa-spinner fa-spin"></i> Cargando expedientes...</div>
-         </div>
+
+      <div style="display:flex; gap:12px; margin-bottom:20px; border-bottom:2px solid var(--border); padding-bottom:10px; flex-wrap:wrap;">
+          <button class="btn tab-aut-btn active" onclick="window.cambiarTabAutorizaciones('pendientes', this)" style="background:white; color:var(--primary); border-bottom:2px solid var(--primary); font-weight:700;">
+              <i class="fa-solid fa-inbox"></i> Solicitudes Pendientes
+          </button>
+          <button class="btn tab-aut-btn" onclick="window.cambiarTabAutorizaciones('calendario', this)" style="background:transparent; color:var(--text-muted); font-weight:700;">
+              <i class="fa-solid fa-calendar-days"></i> Registro por Calendario
+          </button>
+          <button class="btn tab-aut-btn" onclick="window.cambiarTabAutorizaciones('historial', this)" style="background:transparent; color:var(--text-muted); font-weight:700;">
+              <i class="fa-solid fa-file-invoice"></i> Historial Completo y Reportes
+          </button>
+      </div>
+
+      <div id="secAutorizacionesPendientes">
+          <div class="card" style="padding:24px; background:#f8fafc; border:1px solid #e2e8f0; border-radius:12px;">
+             <h3 style="margin-bottom:20px; display:flex; align-items:center; gap:8px; font-size:1.1rem">
+                <i class="fa-solid fa-inbox" style="color:var(--primary)"></i> 
+                Solicitudes Administrativas Pendientes por Resolver
+             </h3>
+             <div id="listaAutorizaciones">
+                 <div style="text-align:center; padding:20px; color:var(--text-muted)"><i class="fa-solid fa-spinner fa-spin"></i> Cargando expedientes...</div>
+             </div>
+          </div>
+      </div>
+
+      <div id="secAutorizacionesCalendario" style="display:none;">
+          <div id="calendarioAutorizacionesContainer"></div>
+      </div>
+
+      <div id="secAutorizacionesHistorial" style="display:none;">
+          <div class="card" style="padding:24px;">
+              <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px; flex-wrap:wrap; gap:12px;">
+                  <h3 style="margin:0;"><i class="fa-solid fa-clock-rotate-left text-primary"></i> Historial General de Autorizaciones</h3>
+                  <div style="display:flex; gap:12px; align-items:center;">
+                      <input type="text" class="form-input" placeholder="Buscar por docente, materia o estado..." 
+                             style="width:260px; font-size:0.85rem;" onkeyup="window.filtrarHistorialAutorizaciones(this.value)">
+                      <button class="btn btn-primary btn-sm" onclick="window.imprimirReporteAutorizaciones()">
+                          <i class="fa-solid fa-print"></i> Imprimir Reporte PDF
+                      </button>
+                  </div>
+              </div>
+
+              <div style="overflow-x:auto;">
+                  <table class="risk-table" style="width:100%;">
+                      <thead>
+                          <tr>
+                              <th style="padding:10px; text-align:left;">Fecha Solicitud</th>
+                              <th style="padding:10px; text-align:left;">Tipo Acción</th>
+                              <th style="padding:10px; text-align:left;">Solicitante</th>
+                              <th style="padding:10px; text-align:left;">Detalles / Motivo</th>
+                              <th style="padding:10px; text-align:center;">Dictamen</th>
+                              <th style="padding:10px; text-align:center;">Fecha Resolución</th>
+                          </tr>
+                      </thead>
+                      <tbody id="tbodyHistorialAutorizaciones">
+                          <tr><td colspan="6" style="text-align:center; padding:20px; color:var(--text-muted)">Cargando datos...</td></tr>
+                      </tbody>
+                  </table>
+              </div>
+          </div>
       </div>
     `;
 }
