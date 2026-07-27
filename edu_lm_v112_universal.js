@@ -15205,7 +15205,7 @@ window.loadBibliotecaPrestamos = async () => {
             .select('*, alumnos(nombre, grupos(nombre))')
             .eq('plantel_id', state.plantelId)
             .eq('devuelto', false)
-            .order('fecha_prestamo', { ascending: false });
+            .order('creado_en', { ascending: false });
             
         if(error) throw error;
         
@@ -15220,7 +15220,7 @@ window.loadBibliotecaPrestamos = async () => {
             if (p.tipo === 'libro') { icon = '<i class="fa-solid fa-book" style="color:#8b5cf6"></i>'; bg = '#f3e8ff'; }
             else if (p.tipo === 'computadora') { icon = '<i class="fa-solid fa-laptop" style="color:#3b82f6"></i>'; bg = '#eff6ff'; }
             else if (p.tipo === 'juego') { icon = '<i class="fa-solid fa-chess-knight" style="color:#10b981"></i>'; bg = '#d1fae5'; }
-            const f = new Date(p.fecha_prestamo).toLocaleString([], {day:'2-digit', month:'short', hour:'2-digit', minute:'2-digit'});
+            const f = new Date(p.creado_en || p.fecha_prestamo).toLocaleString([], {day:'2-digit', month:'short', hour:'2-digit', minute:'2-digit'});
             
             return `
                <div style="border:1px solid var(--border); border-radius:12px; padding:16px; margin-bottom:12px; display:flex; gap:16px; align-items:center;">
@@ -15564,9 +15564,9 @@ window.imprimirHistorialBiblioteca = async () => {
         const { data, error } = await supabaseClient.from('biblioteca_prestamos')
             .select('*, alumnos(nombre, matricula, grupos(nombre))')
             .eq('plantel_id', state.plantelId)
-            .gte('fecha_prestamo', start)
-            .lte('fecha_prestamo', end)
-            .order('fecha_prestamo', { ascending: false });
+            .gte('creado_en', start)
+            .lte('creado_en', end)
+            .order('creado_en', { ascending: false });
             
         if(error) throw error;
         
@@ -15582,7 +15582,7 @@ window.imprimirHistorialBiblioteca = async () => {
         const fechaImpresion = new Date().toLocaleDateString();
 
         const registrosHtml = data.map(p => {
-            const fPrestamo = new Date(p.fecha_prestamo).toLocaleString([], {hour:'2-digit', minute:'2-digit'});
+            const fPrestamo = new Date(p.creado_en || p.fecha_prestamo).toLocaleString([], {hour:'2-digit', minute:'2-digit'});
             const estado = p.devuelto ? `Devuelto` : `PENDIENTE NO DEVUELTO`;
             
             return `
@@ -15679,15 +15679,16 @@ window.loadHistorialBiblioteca = async (fecha) => {
     if(!cont) return;
     try {
         cont.innerHTML = '<div style="text-align:center; padding:20px; color:var(--text-muted);"><i class="fa-solid fa-spinner fa-spin"></i> Cargando...</div>';
-        const start = new Date(`${fecha}T00:00:00`).toISOString();
-        const end = new Date(`${fecha}T23:59:59.999`).toISOString();
+        const targetDate = fecha || new Date().toLocaleDateString('en-CA');
+        const start = new Date(`${targetDate}T00:00:00`).toISOString();
+        const end = new Date(`${targetDate}T23:59:59.999`).toISOString();
         
         const { data, error } = await supabaseClient.from('biblioteca_prestamos')
             .select('*, alumnos(nombre, grupos(nombre))')
             .eq('plantel_id', state.plantelId)
-            .gte('fecha_prestamo', start)
-            .lte('fecha_prestamo', end)
-            .order('fecha_prestamo', { ascending: false });
+            .gte('creado_en', start)
+            .lte('creado_en', end)
+            .order('creado_en', { ascending: false });
             
         if(error) throw error;
         
@@ -15703,7 +15704,7 @@ window.loadHistorialBiblioteca = async (fecha) => {
             else if (p.tipo === 'computadora') { icon = '<i class="fa-solid fa-laptop" style="color:#3b82f6"></i>'; bg = '#eff6ff'; }
             else if (p.tipo === 'juego') { icon = '<i class="fa-solid fa-chess-knight" style="color:#10b981"></i>'; bg = '#d1fae5'; }
             
-            const f = new Date(p.fecha_prestamo).toLocaleString([], {hour:'2-digit', minute:'2-digit'});
+            const f = new Date(p.creado_en || p.fecha_prestamo).toLocaleString([], {hour:'2-digit', minute:'2-digit'});
             const estado = p.devuelto ? '<span style="color:var(--success); font-weight:bold;"><i class="fa-solid fa-check"></i> Devuelto</span>' : '<span style="color:var(--danger); font-weight:bold;"><i class="fa-solid fa-clock"></i> Pendiente</span>';
             
             return `
