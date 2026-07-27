@@ -3066,13 +3066,15 @@ window.loadApoyoRiesgoData = async () => {
 
         // 1. Fuente A: Calificaciones Asentadas (Tabla calificaciones)
         let califQuery = supabaseClient.from('calificaciones')
-            .select('alumno_id, calificacion, trimestre, materia_nombre, materias(nombre)');
+            .select('alumno_id, calificacion, trimestre, materia_nombre');
 
         if (trim !== 'Todos') {
             califQuery = califQuery.eq('trimestre', parseInt(trim));
         }
 
-        const { data: califsData } = await califQuery;
+        const { data: califsData, error: errCal } = await califQuery;
+        if (errCal) console.error("Error al consultar calificaciones asentadas:", errCal);
+
         (califsData || []).forEach(c => {
             if (!c.alumno_id) return;
             const val = parseFloat(c.calificacion);
@@ -3080,7 +3082,7 @@ window.loadApoyoRiesgoData = async () => {
             const esReprobada = isNaN(val) ? true : (val < 6.0);
             if (esReprobada) {
                 if (!mapaFallas[c.alumno_id]) mapaFallas[c.alumno_id] = new Set();
-                const nombreMat = c.materia_nombre || (c.materias ? c.materias.nombre : 'Asignatura');
+                const nombreMat = c.materia_nombre || 'Asignatura';
                 const matTag = (trim === 'Todos' && c.trimestre) ? `${nombreMat} (T${c.trimestre})` : nombreMat;
                 mapaFallas[c.alumno_id].add(matTag);
             }
