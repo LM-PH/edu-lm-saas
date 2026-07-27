@@ -5600,19 +5600,37 @@ window.eliminarTramiteEntregado = async (tramiteId) => {
 // ======================================
 // DIRECTOR / DIRECTIVO WORKFLOW
 // ======================================
+window.cargarAdminNombreCache = async () => {
+    if (window._adminNombreCached) return window._adminNombreCached;
+    try {
+        const { data } = await supabaseClient
+            .from('perfiles')
+            .select('nombre')
+            .eq('plantel_id', state.plantelId)
+            .ilike('rol', '%admin%')
+            .not('nombre', 'is', null)
+            .limit(1);
+        if (data && data.length > 0 && data[0].nombre) {
+            window._adminNombreCached = data[0].nombre;
+            return data[0].nombre;
+        }
+    } catch(e) { console.error(e); }
+    return 'Administración Escolar';
+};
+
 window.obtenerSolicitanteInfo = (item) => {
     const pj = item.payload_json || {};
     let nombre = pj.solicitante_nombre || pj.maestro_nombre;
 
     // Intentar extraer el nombre del campo detalles si no vino en el JSON
     if (!nombre && item.detalles) {
-        const matchDocente = item.detalles.match(/El docente\s+([^s]+?)\s+solicita/i);
-        if (matchDocente && matchDocente[1]) {
-            nombre = matchDocente[1].trim();
+        const matchSolicitado = item.detalles.match(/Solicitado por\s+([^:]+)/i);
+        if (matchSolicitado && matchSolicitado[1]) {
+            nombre = matchSolicitado[1].trim();
         } else {
-            const matchSolicitado = item.detalles.match(/Solicitado por\s+([^(:]+)/i);
-            if (matchSolicitado && matchSolicitado[1]) {
-                nombre = matchSolicitado[1].trim();
+            const matchDocente = item.detalles.match(/El docente\s+([^s]+?)\s+solicita/i);
+            if (matchDocente && matchDocente[1]) {
+                nombre = matchDocente[1].trim();
             }
         }
     }
@@ -5631,7 +5649,7 @@ window.obtenerSolicitanteInfo = (item) => {
         if (rawRol === 'maestro') {
             nombre = 'Docente Titular';
         } else {
-            nombre = 'Personal Administrativo / Control Escolar';
+            nombre = window._adminNombreCached || 'Administración Escolar';
         }
     }
 
@@ -5647,7 +5665,13 @@ window.obtenerSolicitanteInfo = (item) => {
     };
 
     const rolFormatted = roleMap[rawRol] || rawRol.toUpperCase();
-    return { nombre, rol: rolFormatted, fullDisplay: `${nombre} (${rolFormatted})` };
+    
+    let fullDisplay = `${nombre} (${rolFormatted})`;
+    if (nombre === 'Administración Escolar' || nombre === 'Docente Titular' || nombre.includes('Administrativ')) {
+        fullDisplay = nombre;
+    }
+
+    return { nombre, rol: rolFormatted, fullDisplay };
 };
 
 window.obtenerDatosSolicitanteActual = async () => {
@@ -5684,6 +5708,7 @@ window.loadAutorizaciones = async () => {
     if(!list) return;
     list.innerHTML = 'Cargando bandeja...';
     try {
+        await window.cargarAdminNombreCache();
         const { data, error } = await supabaseClient
             .from('autorizaciones_movimientos')
             .select('*')
@@ -5866,6 +5891,7 @@ window.loadCalendarAutorizaciones = async (year, month) => {
     cont.innerHTML = '<div style="text-align:center; padding:30px; color:var(--text-muted)"><i class="fa-solid fa-spinner fa-spin"></i> Cargando calendario de autorizaciones...</div>';
 
     try {
+        await window.cargarAdminNombreCache();
         const { data: allReqs, error } = await supabaseClient
             .from('autorizaciones_movimientos')
             .select('*')
@@ -6041,6 +6067,7 @@ window.loadHistorialAutorizaciones = async () => {
     tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; padding:30px; color:var(--text-muted)"><i class="fa-solid fa-spinner fa-spin"></i> Cargando historial...</td></tr>';
 
     try {
+        await window.cargarAdminNombreCache();
         const { data, error } = await supabaseClient
             .from('autorizaciones_movimientos')
             .select('*')
