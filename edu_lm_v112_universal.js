@@ -3045,51 +3045,60 @@ window.loadApoyoRiesgoData = async () => {
     const grupo = document.getElementById('riesgoGrupoSel') ? document.getElementById('riesgoGrupoSel').value : 'Todos';
     const umbral = document.getElementById('riesgoUmbralSel').value || '1+';
 
-    hold.innerHTML = '<p style="text-align:center; padding:30px;"><i class="fa-solid fa-spinner fa-spin"></i> Analizando calificaciones...</p>';
+    hold.innerHTML = '<p style="text-align:center; padding:30px;"><i class="fa-solid fa-spinner fa-spin"></i> Analizando calificaciones y actividades...</p>';
     badge.style.display = 'none';
 
     try {
-        // 1. Obtener los alumnos del plantel (filtrando por grado y grupo si aplica)
+        // Helper flexible para hacer match de grado ("1°" vs "1", etc.)
+        const matchGrado = (alGrado, selectedGrado) => {
+            if (!selectedGrado || selectedGrado === 'Todos') return true;
+            if (!alGrado) return false;
+            const strAl = (alGrado + '').trim().toLowerCase();
+            const strSel = (selectedGrado + '').trim().toLowerCase();
+            if (strAl === strSel) return true;
+            const numAl = strAl.replace(/[^0-9]/g, '');
+            const numSel = strSel.replace(/[^0-9]/g, '');
+            if (numAl && numSel && numAl === numSel) return true;
+            return false;
+        };
+
+        // 1. Obtener los alumnos del plantel
         let alQuery = supabaseClient.from('alumnos')
             .select('id, nombre, grado, grupo_id, grupos(nombre)');
 
         if (state.plantelId) {
-            alQuery = alQuery.eq('plantel_id', state.plantelId);
-        }
-
-        if (grado !== 'Todos') {
-            alQuery = alQuery.eq('grado', grado);
-        }
-        if (grupo !== 'Todos') {
-            alQuery = alQuery.eq('grupo_id', grupo);
+            alQuery = alQuery.or(`plantel_id.eq.${state.plantelId},plantel_id.is.null`);
         }
 
         const { data: alumnosData, error: errAl } = await alQuery;
         if (errAl) throw errAl;
 
-        if (!alumnosData || alumnosData.length === 0) {
+        // Filtrar grado y grupo en JS con tolerancia de formato
+        const alumnosFiltrados = (alumnosData || []).filter(al => {
+            if (!matchGrado(al.grado, grado)) return false;
+            if (grupo !== 'Todos' && al.grupo_id !== grupo && (!al.grupos || al.grupos.nombre !== grupo)) return false;
+            return true;
+        });
+
+        if (alumnosFiltrados.length === 0) {
             hold.innerHTML = '<p style="text-align:center; padding:30px; color:var(--success);"><i class="fa-solid fa-check-circle" style="font-size:2rem; display:block; margin-bottom:10px;"></i>No se encontraron alumnos registrados bajo los filtros seleccionados.</p>';
             return;
         }
 
         const mapAlumnosById = {};
-        alumnosData.forEach(al => {
+        alumnosFiltrados.forEach(al => {
             mapAlumnosById[al.id] = {
                 id: al.id,
                 nombre: al.nombre,
-                grado: al.grado,
+                grado: al.grado || '',
                 grupo: al.grupos ? al.grupos.nombre : 'Sin grupo',
                 materias: new Set()
             };
         });
 
         const alumIds = Object.keys(mapAlumnosById);
-        if (alumIds.length === 0) {
-            hold.innerHTML = '<p style="text-align:center; padding:30px; color:var(--success);"><i class="fa-solid fa-check-circle" style="font-size:2rem; display:block; margin-bottom:10px;"></i>No hay alumnos bajo estos filtros.</p>';
-            return;
-        }
 
-        // 2. Obtener calificaciones para estos alumnos y filtrar en JS para eliminar discrepancias de tipos o RLS
+        // 2. Fuente A: Calificaciones Asentadas (Tabla calificaciones)
         let califQuery = supabaseClient.from('calificaciones')
             .select('alumno_id, calificacion, trimestre, materia_nombre, materias(nombre)')
             .in('alumno_id', alumIds);
@@ -3098,27 +3107,71 @@ window.loadApoyoRiesgoData = async () => {
             califQuery = califQuery.eq('trimestre', parseInt(trim));
         }
 
-        const { data: califsData, error: errCal } = await califQuery;
-        if (errCal) throw errCal;
-
-        // Filtrar calificaciones estrictamente reprobatorias (< 6.0)
-        const reprobadas = (califsData || []).filter(c => {
+        const { data: califsData } = await califQuery;
+        (califsData || []).forEach(c => {
             const val = parseFloat(c.calificacion);
-            return !isNaN(val) && val < 6.0 && val > 0;
-        });
-
-        if (reprobadas.length === 0) {
-            hold.innerHTML = '<p style="text-align:center; padding:30px; color:var(--success);"><i class="fa-solid fa-check-circle" style="font-size:2rem; display:block; margin-bottom:10px;"></i>No se detectaron alumnos con calificaciones reprobatorias bajo estos filtros.</p>';
-            return;
-        }
-
-        reprobadas.forEach(row => {
-            if (mapAlumnosById[row.alumno_id]) {
-                const nombreMat = row.materia_nombre || (row.materias ? row.materias.nombre : 'Asignatura');
-                const matTag = (trim === 'Todos' && row.trimestre) ? `${nombreMat} (T${row.trimestre})` : nombreMat;
-                mapAlumnosById[row.alumno_id].materias.add(matTag);
+            if (!isNaN(val) && val < 6.0 && val > 0) {
+                if (mapAlumnosById[c.alumno_id]) {
+                    const nombreMat = c.materia_nombre || (c.materias ? c.materias.nombre : 'Asignatura');
+                    const matTag = (trim === 'Todos' && c.trimestre) ? `${nombreMat} (T${c.trimestre})` : nombreMat;
+                    mapAlumnosById[c.alumno_id].materias.add(matTag);
+                }
             }
         });
+
+        // 3. Fuente B: Evaluaciones de Actividades Continuas (Tabla actividades_maestro + evaluaciones_actividades)
+        let actQuery = supabaseClient.from('actividades_maestro')
+            .select('id, titulo, trimestre, materia, rubro_peso');
+
+        if (state.plantelId) {
+            actQuery = actQuery.or(`plantel_id.eq.${state.plantelId},plantel_id.is.null`);
+        }
+        if (trim !== 'Todos') {
+            actQuery = actQuery.eq('trimestre', parseInt(trim));
+        }
+
+        const { data: actsData } = await actQuery;
+        if (actsData && actsData.length > 0) {
+            const actIds = actsData.map(a => a.id);
+            const { data: evalsData } = await supabaseClient.from('evaluaciones_actividades')
+                .select('alumno_id, actividad_id, calificacion')
+                .in('alumno_id', alumIds)
+                .in('actividad_id', actIds);
+
+            if (evalsData && evalsData.length > 0) {
+                const mapaActis = {};
+                evalsData.forEach(ev => {
+                    const actObj = actsData.find(a => a.id === ev.actividad_id);
+                    if (!actObj) return;
+                    const key = `${ev.alumno_id}_${actObj.materia}_${actObj.trimestre}`;
+                    if (!mapaActis[key]) {
+                        mapaActis[key] = {
+                            alumno_id: ev.alumno_id,
+                            materia: actObj.materia,
+                            trimestre: actObj.trimestre,
+                            suma: 0,
+                            pesoTotal: 0
+                        };
+                    }
+                    const calVal = parseFloat(ev.calificacion) || 0;
+                    const peso = parseFloat(actObj.rubro_peso) || 100;
+                    mapaActis[key].suma += calVal * (peso / 100);
+                    mapaActis[key].pesoTotal += (peso / 100);
+                });
+
+                Object.values(mapaActis).forEach(item => {
+                    if (item.pesoTotal > 0) {
+                        const promPropuesto = item.suma / item.pesoTotal;
+                        if (promPropuesto < 6.0 && promPropuesto > 0) {
+                            if (mapAlumnosById[item.alumno_id]) {
+                                const matTag = (trim === 'Todos' && item.trimestre) ? `${item.materia} (T${item.trimestre})` : item.materia;
+                                mapAlumnosById[item.alumno_id].materias.add(matTag);
+                            }
+                        }
+                    }
+                });
+            }
+        }
 
         const mapaAlumnos = mapAlumnosById;
 
