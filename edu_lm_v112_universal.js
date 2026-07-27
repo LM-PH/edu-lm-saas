@@ -9970,7 +9970,6 @@ window.cargarBoletasGrupo = async () => {
             .in('tipo_accion', ['MODIFICACION_CALIFICACIONES', 'PRORROGA_CALIFICACIONES'])
             .in('estado', ['pendiente', 'aprobada']);
         
-        let tieneSolicitudPendiente = false;
         let tieneSolicitudAprobada = false;
 
         if (reqs && reqs.length > 0) {
@@ -10207,8 +10206,6 @@ window.sellarYEnviarCalificaciones = async () => {
             }
         }
     } catch(e) { console.error("Error validando periodo:", e); }
-    
-    const [idVal, materiaText] = selectVal.split('::');
     const inputs = document.querySelectorAll('.input-calificacion');
     
     if(inputs.length === 0) return alert('No hay alumnos para evaluar.');
