@@ -4331,7 +4331,7 @@ function renderApoyoPrefectura() {
          <h2 class="page-title">Control de Accesos</h2>
          <p class="page-subtitle">Personal de Apoyo | Escáner y Registro</p>
       </div>
-      <button class="btn btn-outline" onclick="window.stopPrefScanner().then(() => window.navigate('/apoyo/dashboard'))" style="border-radius:30px; background:white;">
+      <button class="btn btn-outline" onclick="window.navigate('/apoyo/dashboard')" style="border-radius:30px; background:white;">
          <i class="fa-solid fa-house"></i> Volver al Inicio
       </button>
     </div>
@@ -4745,7 +4745,7 @@ function renderApoyoTSEscaner() {
          <h2 class="page-title">Control de Salidas</h2>
          <p class="page-subtitle">Escáner de Salida de Alumnos</p>
       </div>
-      <button class="btn btn-outline" onclick="window.stopTSScanner().then(() => window.navigate('/apoyo/dashboard'))" style="border-radius:30px; background:white;">
+      <button class="btn btn-outline" onclick="window.navigate('/apoyo/dashboard')" style="border-radius:30px; background:white;">
          <i class="fa-solid fa-house"></i> Volver al Inicio
       </button>
     </div>
@@ -10304,12 +10304,13 @@ window.startPrefScanner = async (mode = 'metralleta') => {
 window.stopPrefScanner = async () => {
     const reader = document.getElementById('reader-prefectura');
     const stopBtn = document.getElementById('btn-stop-pref');
-    const resumeBtn = document.getElementById('btn-resume-pref');
+    const startPanel = document.getElementById('panel-pre-start');
 
     if(window._prefScanner) {
         try {
-            await window._prefScanner.stop();
+            const scanner = window._prefScanner;
             window._prefScanner = null;
+            scanner.stop().catch(()=>{});
         } catch(e) {}
     }
 
@@ -10462,17 +10463,21 @@ window.tsScanMode = 'metralleta';
 window._tsCurrentCamera = "environment";
 window.toggleCameraModeTS = () => {
     window._tsCurrentCamera = window._tsCurrentCamera === "environment" ? "user" : "environment";
-    window.stopTSScanner().then(() => window.startTSScanner(window.tsScanMode));
+    window.stopTSScanner();
+    window.startTSScanner(window.tsScanMode);
 };
 
 window.stopTSScanner = async () => {
     try {
         if(window._tsScanner) {
-            await window._tsScanner.stop().catch(()=>{});
+            const scanner = window._tsScanner;
             window._tsScanner = null;
+            scanner.stop().catch(()=>{});
         }
-        document.getElementById('btn-stop-ts').style.display = 'none';
-        document.getElementById('btn-resume-ts').style.display = 'inline-block';
+        const btnStop = document.getElementById('btn-stop-ts');
+        if(btnStop) btnStop.style.display = 'none';
+        const btnResume = document.getElementById('btn-resume-ts');
+        if(btnResume) btnResume.style.display = 'inline-block';
     } catch(e) { console.error("Error stop TS scanner", e); }
 };
 
