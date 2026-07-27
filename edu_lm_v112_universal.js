@@ -12995,8 +12995,7 @@ window.cargarSabanaGrupo = async () => {
                 } else {
                     const cx = subjectCalifs.find(x => x.trimestre === trim);
                     if(cx) {
-                        const tallerFull = cx.materia_nombre || (cx.materia_id?.nombre) || '';
-                        cols += `<td style="color:var(--text-main)" data-full-materia="${tallerFull}">${cx.calificacion}</td>`;
+                        cols += `<td style="color:var(--text-main)">${cx.calificacion}</td>`;
                         generalSum += Number(cx.calificacion);
                         generalCount++;
                     } else {
@@ -13247,8 +13246,10 @@ window.exportarSabanaCalificaciones = () => {
         rows.forEach((row, index) => {
             const cols = Array.from(row.querySelectorAll('th, td'));
             const rowData = cols.map(col => {
-                // v122: Si tiene el atributo data-full-materia (tecnología), usar ese para el CSV
-                let cellData = col.getAttribute('data-full-materia') || col.innerText.trim();
+                // v122: Usar data-full-materia únicamente para encabezados <th>; las celdas <td> deben emitir la calificación real
+                let cellData = (col.tagName === 'TH' && col.getAttribute('data-full-materia')) 
+                    ? col.getAttribute('data-full-materia') 
+                    : col.innerText.trim();
                 
                 // Si es la versión full para tecnología, agregarle el alias corto (ej. TC)
                 if(/tecnología|tecnologia/gi.test(cellData) && !cellData.includes('(')) {
