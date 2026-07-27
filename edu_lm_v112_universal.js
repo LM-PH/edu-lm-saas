@@ -9380,21 +9380,46 @@ window.cargarBoletasGrupo = async () => {
         const tieneCalificacionesAsentadas = (historial && historial.length > 0);
         let tieneSolicitudPendiente = false;
 
-        if(tieneCalificacionesAsentadas) {
-            const { data: reqs } = await supabaseClient
-                .from('autorizaciones_movimientos')
-                .select('id, payload_json')
+        // Validar si el periodo de captura está bloqueado o su fecha límite ha expirado
+        let esPeriodoExpiradoOBloqueado = false;
+        let motivoPeriodoBloqueado = '';
+
+        try {
+            const { data: periodo } = await supabaseClient
+                .from('periodos_calificaciones')
+                .select('*')
+                .eq('trimestre', currentTrim)
                 .eq('plantel_id', state.plantelId)
-                .eq('tipo_accion', 'MODIFICACION_CALIFICACIONES')
-                .eq('estado', 'pendiente');
-            
-            if(reqs && reqs.length > 0) {
-                tieneSolicitudPendiente = reqs.some(r => 
-                    r.payload_json?.materia === materiaClean && 
-                    r.payload_json?.trimestre === currentTrim && 
-                    (r.payload_json?.grupo_id === gid || r.payload_json?.grupo_id === selectVal)
-                );
+                .maybeSingle();
+
+            if (periodo) {
+                if (periodo.bloqueado) {
+                    esPeriodoExpiradoOBloqueado = true;
+                    motivoPeriodoBloqueado = 'El periodo de captura para este trimestre ha sido BLOQUEADO por la Administración.';
+                } else if (periodo.fecha_limite) {
+                    const deadline = new Date(periodo.fecha_limite);
+                    if (new Date() > deadline) {
+                        esPeriodoExpiradoOBloqueado = true;
+                        motivoPeriodoBloqueado = `La fecha límite de captura (${deadline.toLocaleString('es-MX', { dateStyle:'short', timeStyle:'short' })}) ha expirado.`;
+                    }
+                }
             }
+        } catch(e) { console.error("Error al validar periodo de captura:", e); }
+
+        // Consultar solicitudes pendientes (modificación o prórroga)
+        const { data: reqs } = await supabaseClient
+            .from('autorizaciones_movimientos')
+            .select('id, payload_json, tipo_accion')
+            .eq('plantel_id', state.plantelId)
+            .in('tipo_accion', ['MODIFICACION_CALIFICACIONES', 'PRORROGA_CALIFICACIONES'])
+            .eq('estado', 'pendiente');
+        
+        if (reqs && reqs.length > 0) {
+            tieneSolicitudPendiente = reqs.some(r => 
+                r.payload_json?.materia === materiaClean && 
+                r.payload_json?.trimestre === currentTrim && 
+                (r.payload_json?.grupo_id === gid || r.payload_json?.grupo_id === selectVal)
+            );
         }
         
         // 4. Fetch Actividades (SOLO si no es modo final, ya que en final promediamos T1,T2,T3)
@@ -9503,7 +9528,10 @@ window.cargarBoletasGrupo = async () => {
 
             const promRounded = redondearCalificacionSep(promFinalNum);
             const displayVal = currentSettledVal !== undefined && currentSettledVal !== null ? currentSettledVal : promRounded;
-            const inputAttr = tieneCalificacionesAsentadas 
+            
+            // Bloqueo de inputs si ya se asentaron O si el periodo ha expirado/bloqueado sin tener solicitud aprobada
+            const isInputLocked = tieneCalificacionesAsentadas || (esPeriodoExpiradoOBloqueado && !tieneSolicitudPendiente);
+            const inputAttr = isInputLocked 
                 ? 'disabled readonly style="width:85px; text-align:center; margin:auto; font-weight:bold; border:2px solid var(--border); color:var(--text-muted); background:#f1f5f9; font-size:1.1rem; cursor:not-allowed;"' 
                 : 'style="width:85px; text-align:center; margin:auto; font-weight:bold; border:2px solid var(--primary); color:var(--primary); background:white; font-size:1.1rem;"';
 
@@ -9529,27 +9557,35 @@ window.cargarBoletasGrupo = async () => {
         // Actualizar contenedor del botón según estado de bloqueo
         const contenedorBoton = document.getElementById('contenedorBotonEnviarBoleta');
         if(contenedorBoton) {
-            if(!tieneCalificacionesAsentadas) {
+            const matEscaped = materiaClean.replace(/'/g, "\\'");
+            const selectValEscaped = selectVal.replace(/'/g, "\\'");
+
+            if (tieneSolicitudPendiente) {
                 contenedorBoton.innerHTML = `
-                    <span style="font-size:0.85rem; color:var(--text-muted);">El sistema promedia los rubros de forma ponderada. Edita la calificación final si requieres realizar un ajuste definitivo.</span>
-                    <button class="btn btn-primary btn-lg" onclick="window.sellarYEnviarCalificaciones()">
-                        <i class="fa-solid fa-paper-plane"></i> Sellar y Enviar a Control Escolar
-                    </button>
-                `;
-            } else if(tieneSolicitudPendiente) {
-                contenedorBoton.innerHTML = `
-                    <span style="font-size:0.85rem; color:#d97706; font-weight:600;"><i class="fa-solid fa-hourglass-half"></i> Calificaciones bloqueadas. Tienes una solicitud de modificación en revisión por Administración.</span>
+                    <span style="font-size:0.85rem; color:#d97706; font-weight:600;"><i class="fa-solid fa-hourglass-half"></i> Calificaciones bloqueadas. Tienes una solicitud en revisión por Administración.</span>
                     <button class="btn btn-outline btn-lg" disabled style="opacity:0.75; cursor:not-allowed; border-color:#d97706; color:#d97706; background:#fffbeb;">
                         <i class="fa-solid fa-clock"></i> Solicitud Pendiente de Aprobación
                     </button>
                 `;
-            } else {
-                const matEscaped = materiaClean.replace(/'/g, "\\'");
-                const selectValEscaped = selectVal.replace(/'/g, "\\'");
+            } else if (tieneCalificacionesAsentadas) {
                 contenedorBoton.innerHTML = `
                     <span style="font-size:0.85rem; color:var(--danger); font-weight:600;"><i class="fa-solid fa-lock"></i> Calificaciones asentadas y bloqueadas.</span>
-                    <button class="btn btn-warning btn-lg" style="background:#d97706; color:white; border:none; font-weight:600; padding:10px 20px; border-radius:8px;" onclick="window.solicitarModificacionCalificaciones('${matEscaped}', ${currentTrim}, '${selectValEscaped}')">
+                    <button class="btn btn-warning btn-lg" style="background:#d97706; color:white; border:none; font-weight:600; padding:10px 20px; border-radius:8px;" onclick="window.solicitarModificacionCalificaciones('${matEscaped}', ${currentTrim}, '${selectValEscaped}', 'MODIFICACION')">
                         <i class="fa-solid fa-unlock-keyhole"></i> Solicitar Modificación de Calificaciones
+                    </button>
+                `;
+            } else if (esPeriodoExpiradoOBloqueado) {
+                contenedorBoton.innerHTML = `
+                    <span style="font-size:0.85rem; color:var(--danger); font-weight:600;"><i class="fa-solid fa-clock-rotate-left"></i> ${motivoPeriodoBloqueado}</span>
+                    <button class="btn btn-warning btn-lg" style="background:#dc2626; color:white; border:none; font-weight:600; padding:10px 20px; border-radius:8px;" onclick="window.solicitarModificacionCalificaciones('${matEscaped}', ${currentTrim}, '${selectValEscaped}', 'PRORROGA')">
+                        <i class="fa-solid fa-calendar-plus"></i> Solicitar Apertura Extemporánea de Calificaciones
+                    </button>
+                `;
+            } else {
+                contenedorBoton.innerHTML = `
+                    <span style="font-size:0.85rem; color:var(--text-muted);">El sistema promedia los rubros de forma ponderada. Edita la calificación final si requieres realizar un ajuste definitivo.</span>
+                    <button class="btn btn-primary btn-lg" onclick="window.sellarYEnviarCalificaciones()">
+                        <i class="fa-solid fa-paper-plane"></i> Sellar y Enviar a Control Escolar
                     </button>
                 `;
             }
@@ -9658,8 +9694,13 @@ window.sellarYEnviarCalificaciones = async () => {
     }
 };
 
-window.solicitarModificacionCalificaciones = async (materia, trimestre, grupoId) => {
-    const motivo = prompt(`⚠️ Para solicitar la modificación de calificaciones a la Dirección/Administración, ingresa el motivo del cambio:\n\nAsignatura: ${materia} (${trimestre}° Trimestre)`);
+window.solicitarModificacionCalificaciones = async (materia, trimestre, grupoId, tipoSolicitud = 'MODIFICACION') => {
+    const isProrroga = tipoSolicitud === 'PRORROGA';
+    const tituloPrompt = isProrroga
+        ? `⏰ Solicitud de Prórroga / Apertura Extemporánea\n\nIngresa el motivo por el cual solicitas enviar calificaciones después de la fecha límite para:\nAsignatura: ${materia} (${trimestre}° Trimestre)`
+        : `⚠️ Solicitar Modificación de Calificaciones\n\nIngresa el motivo del cambio para:\nAsignatura: ${materia} (${trimestre}° Trimestre)`;
+
+    const motivo = prompt(tituloPrompt);
     if(motivo === null) return;
     if(!motivo.trim()) return alert("Debes ingresar un motivo válido para realizar la solicitud.");
 
@@ -9670,9 +9711,14 @@ window.solicitarModificacionCalificaciones = async (materia, trimestre, grupoId)
         const { data: prof } = await supabaseClient.from('perfiles').select('nombre').eq('id', u.data.user.id).single();
         const maestroNombre = prof?.nombre || 'Docente';
 
+        const tipoAccion = isProrroga ? 'PRORROGA_CALIFICACIONES' : 'MODIFICACION_CALIFICACIONES';
+        const tituloNotif = isProrroga 
+            ? `⏰ SOLICITUD DE PRÓRROGA / APERTURA EXTEMPORÁNEA: ${materia}` 
+            : `🔓 SOLICITUD DE MODIFICACIÓN DE CALIFICACIONES: ${materia}`;
+
         const { error: errReq } = await supabaseClient.from('autorizaciones_movimientos').insert([{
-            tipo_accion: 'MODIFICACION_CALIFICACIONES',
-            detalles: `El docente ${maestroNombre} solicita modificar calificaciones de ${materia} (${trimestre}° Trimestre). Motivo: ${motivo.trim()}`,
+            tipo_accion: tipoAccion,
+            detalles: `El docente ${maestroNombre} solicita ${isProrroga ? 'prórroga / apertura extemporánea de' : 'modificar'} calificaciones de ${materia} (${trimestre}° Trimestre). Motivo: ${motivo.trim()}`,
             payload_json: {
                 action: 'desbloquear_calificaciones',
                 materia: materia,
@@ -9690,13 +9736,13 @@ window.solicitarModificacionCalificaciones = async (materia, trimestre, grupoId)
 
         await supabaseClient.from('comunicados').insert([{
             autor_id: u.data.user.id,
-            titulo: `🔓 SOLICITUD DE MODIFICACIÓN DE CALIFICACIONES: ${materia}`,
-            mensaje: `El docente ${maestroNombre} ha solicitado la apertura de calificaciones para el ${trimestre}° Trimestre en la materia ${materia}.\n\n📝 Motivo expresado: ${motivo.trim()}\n\nPor favor diríjase al módulo de Autorización de Movimientos para aprobar o rechazar esta solicitud.`,
+            titulo: tituloNotif,
+            mensaje: `El docente ${maestroNombre} ha solicitado ${isProrroga ? 'prórroga / apertura extemporánea' : 'apertura'} de calificaciones para el ${trimestre}° Trimestre en la materia ${materia}.\n\n📝 Motivo expresado: ${motivo.trim()}\n\nPor favor diríjase al módulo de Autorización de Movimientos para aprobar o rechazar esta solicitud.`,
             audiencia: 'Admin',
             plantel_id: state.plantelId
         }]);
 
-        alert("✅ Tu solicitud de modificación ha sido enviada con éxito a Administración.\nUna vez aprobada, podrás editar nuevamente las calificaciones.");
+        alert(`✅ Tu solicitud de ${isProrroga ? 'prórroga' : 'modificación'} ha sido enviada con éxito a Administración.\nUna vez aprobada, podrás capturar y enviar las calificaciones.`);
         window.cargarBoletasGrupo();
     } catch(e) {
         console.error(e);
