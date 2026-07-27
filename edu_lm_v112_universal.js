@@ -6007,7 +6007,8 @@ async function renderPage(path) {
 }
 
 window.registrarPingPlantelConexion = async () => {
-    if(!state.user || !state.user.email) return;
+    // El Creador del Sistema nunca debe registrar una conexión en ningún plantel
+    if(!state.user || !state.user.email || state.isMaster || state.role === 'master') return;
     try {
         const uEmail = state.user.email.toLowerCase().trim();
         let targetPlantelId = state.plantelId || (window.currentUserProfile ? window.currentUserProfile.plantel_id : null);
