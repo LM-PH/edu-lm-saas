@@ -878,6 +878,7 @@ function renderSidebar() {
       { name: 'Historial de Préstamos', path: '/biblioteca/historial', icon: 'fa-calendar-days' },
       { name: 'Reservaciones de Aula', path: '/biblioteca/reservas', icon: 'fa-calendar-plus' },
       { name: 'Bitácora', path: '/biblioteca/bitacora', icon: 'fa-book-journal-whills' },
+      { name: 'Reportes Escolares', path: '/biblioteca/reportes', icon: 'fa-file-signature' },
       { name: 'Avisos Oficiales', path: '/biblioteca/comunicados', icon: 'fa-bullhorn' }
     ]
   };
@@ -5786,6 +5787,7 @@ async function renderPage(path) {
     case '/biblioteca/reservas': return renderBibliotecaReservas();
     case '/biblioteca/comunicados': return renderBibliotecaComunicados();
     case '/biblioteca/bitacora': return renderBibliotecaBitacora();
+    case '/biblioteca/reportes': return renderApoyoReportes();
     case '/maestro/listas': return renderMaestroListas();
     case '/maestro/encuadre': return renderMaestroEncuadre();
     case '/maestro/horario': return renderMaestroHorario();
@@ -15107,6 +15109,15 @@ async function renderBibliotecaDashboard() {
                <div class="stat-label">Bitácora de Hechos</div>
                <div class="stat-value" style="font-size:1.2rem;"><i class="fa-solid fa-pen-clip"></i> Jornada</div>
                <p style="font-size:0.75rem; color:var(--text-muted); margin:0;">Incidencias y recados</p>
+            </div>
+         </div>
+
+         <div class="card stat-card" style="cursor:pointer;" onclick="window.navigate('/biblioteca/reportes')">
+            <div class="stat-icon" style="background:#fff1f2; color:#e11d48;"><i class="fa-solid fa-file-signature"></i></div>
+            <div class="stat-info">
+               <div class="stat-label">Reportes Escolares</div>
+               <div class="stat-value" style="font-size:1.2rem;"><i class="fa-solid fa-triangle-exclamation"></i> Conducta</div>
+               <p style="font-size:0.75rem; color:var(--text-muted); margin:0;">Incidencias de alumnos</p>
             </div>
          </div>
 
