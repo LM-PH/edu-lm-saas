@@ -3667,6 +3667,13 @@ window.guardarAtencionFoco = async () => {
         const u = await supabaseClient.auth.getUser();
         if(!u.data.user) throw new Error("Sin sesión activa");
 
+        let pId = state.plantelId || state.user?.user_metadata?.plantel_id;
+        if(!pId && u.data.user?.id) {
+            const { data: prof } = await supabaseClient.from('perfiles').select('plantel_id').eq('id', u.data.user.id).maybeSingle();
+            pId = prof?.plantel_id;
+            if(pId) state.plantelId = pId;
+        }
+
         // 1. Guardar en Seguimientos Sociales (TS)
         const { error: errSeg } = await supabaseClient.from('seguimientos_sociales').insert([{
             alumno_id: aid,
@@ -3674,7 +3681,7 @@ window.guardarAtencionFoco = async () => {
             asunto: 'Resolución de Citatorio / Incidencia',
             detalle: `PROCEDIMIENTO: ${proc}\n\nCOMPROMISOS: ${comp}`,
             estado: 'finalizado',
-            plantel_id: state.plantelId
+            plantel_id: pId
         }]);
         if(errSeg) throw new Error('Error en seguimientos_sociales: ' + errSeg.message);
         
@@ -3684,16 +3691,14 @@ window.guardarAtencionFoco = async () => {
             maestro_id: u.data.user.id,
             procedimiento: proc,
             compromisos: comp,
-            plantel_id: state.plantelId
+            plantel_id: pId
         }]);
         if(errInt) throw new Error('Error en intervenciones_conducta: ' + errInt.message);
 
         // 3. Resolver reportes pendientes del alumno (ignorar si no hay ninguno)
-        const { error: errRep } = await supabaseClient
-            .from('reportes_conducta')
-            .update({ resuelto: true })
-            .eq('alumno_id', aid)
-            .eq('plantel_id', state.plantelId);
+        let queryRep = supabaseClient.from('reportes_conducta').update({ resuelto: true }).eq('alumno_id', aid);
+        if(pId) queryRep = queryRep.eq('plantel_id', pId);
+        const { error: errRep } = await queryRep;
         if(errRep) console.warn('Advertencia al resolver reportes:', errRep.message);
 
         // 4. Si viene de un citatorio, actualizarlo y eliminarlo
