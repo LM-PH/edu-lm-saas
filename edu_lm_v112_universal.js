@@ -1157,7 +1157,8 @@ window.ejecutarPromocionMasiva = async () => {
                     action: 'promover_grupo',
                     sourceNom: sourceNom,
                     targetNom: targetNom,
-                    tGrado: tGrado
+                    tGrado: tGrado,
+                    ...window.obtenerDatosSolicitanteActual()
                 }
             }]);
             if(errReq) throw errReq;
@@ -1217,7 +1218,8 @@ window.graduarGeneracion = async () => {
                 estado: 'pendiente',
                 payload_json: {
                     action: 'graduar_generacion',
-                    grado: grado
+                    grado: grado,
+                    ...window.obtenerDatosSolicitanteActual()
                 }
             }]);
             if(errReq) throw errReq;
@@ -1276,7 +1278,8 @@ window.darDeBajaAlumno = async (id, nombre) => {
                 payload_json: {
                     action: 'delete_alumno',
                     target_id: id,
-                    nombre: nombre
+                    nombre: nombre,
+                    ...window.obtenerDatosSolicitanteActual()
                 }
             }]);
             if(errReq) throw errReq;
@@ -1325,7 +1328,8 @@ window.promoverGradoAlumno = async (id) => {
                     action: 'promover_alumno',
                     target_id: id,
                     targetNom: nombreCompletoGrupo,
-                    tGrado: nuevoGrado
+                    tGrado: nuevoGrado,
+                    ...window.obtenerDatosSolicitanteActual()
                 }
             }]);
             if(errReq) throw errReq;
@@ -5592,6 +5596,45 @@ window.eliminarTramiteEntregado = async (tramiteId) => {
 // ======================================
 // DIRECTOR / DIRECTIVO WORKFLOW
 // ======================================
+window.obtenerSolicitanteInfo = (item) => {
+    const pj = item.payload_json || {};
+    const nombre = pj.solicitante_nombre || pj.maestro_nombre || 'Usuario del Sistema';
+    
+    let rawRol = (pj.solicitante_rol || '').toLowerCase().trim();
+    if (!rawRol) {
+        const accion = (item.tipo_accion || '').toUpperCase();
+        if (accion.includes('CALIFICACIONES') || pj.maestro_id) {
+            rawRol = 'maestro';
+        } else {
+            rawRol = 'admin';
+        }
+    }
+
+    const roleMap = {
+        'admin': 'Administrativo',
+        'administrativo': 'Administrativo',
+        'directivo': 'Directivo',
+        'director': 'Directivo',
+        'maestro': 'Docente',
+        'docente': 'Docente',
+        'apoyo': 'Trabajo Social / Apoyo',
+        'biblioteca': 'Biblioteca'
+    };
+
+    const rolFormatted = roleMap[rawRol] || rawRol.toUpperCase();
+    return { nombre, rol: rolFormatted, fullDisplay: `${nombre} (${rolFormatted})` };
+};
+
+window.obtenerDatosSolicitanteActual = () => {
+    const uName = state.userName || state.user?.user_metadata?.nombre || state.user?.email || 'Usuario';
+    const uRole = state.role || 'admin';
+    return {
+        solicitante_nombre: uName,
+        solicitante_rol: uRole,
+        maestro_nombre: uName
+    };
+};
+
 window.loadAutorizaciones = async () => {
     const list = document.getElementById('listaAutorizaciones');
     if(!list) return;
@@ -5612,14 +5655,17 @@ window.loadAutorizaciones = async () => {
 
         list.innerHTML = data.map(item => {
             const dateStr = item.creado_en ? new Date(item.creado_en).toLocaleString('es-MX', { dateStyle:'short', timeStyle:'short' }) : 'Reciente';
+            const solInfo = window.obtenerSolicitanteInfo(item);
+
             return `
-            <div style="border:1px solid var(--border); border-radius:8px; padding:16px; margin-bottom:12px; background:white; display:flex; justify-content:space-between; align-items:center; gap:16px; flex-wrap:wrap;">
+            <div style="border:1px solid var(--border); border-radius:12px; padding:16px; margin-bottom:12px; background:white; display:flex; justify-content:space-between; align-items:center; gap:16px; flex-wrap:wrap; box-shadow:0 2px 4px rgba(0,0,0,0.02);">
                 <div>
-                   <div style="display:flex; gap:8px; align-items:center; margin-bottom:8px;">
-                      <span class="badge" style="background:#fee2e2; color:#b91c1c">${item.tipo_accion}</span>
+                   <div style="display:flex; gap:8px; align-items:center; margin-bottom:8px; flex-wrap:wrap;">
+                      <span class="badge" style="background:#eff6ff; color:#1d4ed8; font-weight:700;">${item.tipo_accion}</span>
                       <span style="font-size:0.75rem; color:var(--text-muted)"><i class="fa-regular fa-clock"></i> ${dateStr}</span>
+                      <span style="font-size:0.75rem; color:#475569; background:#f1f5f9; padding:2px 8px; border-radius:10px; font-weight:600;"><i class="fa-solid fa-user-gear"></i> ${solInfo.fullDisplay}</span>
                    </div>
-                   <p style="font-weight:600; margin-bottom:4px; font-size:0.95rem">${item.detalles}</p>
+                   <p style="font-weight:600; margin-bottom:4px; font-size:0.95rem; color:#1e293b;">${item.detalles}</p>
                 </div>
                 <div style="display:flex; gap:8px; flex-shrink:0">
                    <button class="btn btn-sm btn-outline" style="border-color:var(--danger); color:var(--danger)" onclick="window.resolverAutorizacion('${item.id}', 'rechazada')"><i class="fa-solid fa-xmark"></i> Rechazar</button>
@@ -5916,6 +5962,7 @@ window.verDetalleDiaAutorizaciones = (dateKey) => {
         const badgeColor = r.estado === 'aprobada' ? 'background:#dcfce7; color:#166534;' :
                            (r.estado === 'rechazada' ? 'background:#fee2e2; color:#991b1b;' : 'background:#fef9c3; color:#854d0e;');
         const statusIcon = r.estado === 'aprobada' ? 'fa-circle-check' : (r.estado === 'rechazada' ? 'fa-circle-xmark' : 'fa-hourglass-half');
+        const solInfo = window.obtenerSolicitanteInfo(r);
 
         return `
         <div style="background:white; border:1px solid #e2e8f0; border-radius:12px; padding:16px; margin-bottom:12px; box-shadow:0 2px 4px rgba(0,0,0,0.02);">
@@ -5926,7 +5973,8 @@ window.verDetalleDiaAutorizaciones = (dateKey) => {
                 </span>
             </div>
             <p style="font-weight:700; margin:0 0 6px 0; color:#1e293b; font-size:0.95rem;">${r.detalles || 'Sin detalles'}</p>
-            <div style="font-size:0.75rem; color:var(--text-muted); display:flex; gap:16px; flex-wrap:wrap;">
+            <div style="font-size:0.75rem; color:var(--text-muted); display:flex; gap:16px; flex-wrap:wrap; align-items:center;">
+                <span><i class="fa-solid fa-user-gear"></i> Solicitado por: <strong>${solInfo.fullDisplay}</strong></span>
                 <span><i class="fa-regular fa-clock"></i> Creado: ${new Date(r.creado_en).toLocaleString('es-MX')}</span>
                 ${r.fecha_resolucion ? `<span><i class="fa-solid fa-check-double"></i> Resuelto: ${new Date(r.fecha_resolucion).toLocaleString('es-MX')}</span>` : ''}
             </div>
@@ -5981,13 +6029,13 @@ window.renderHistorialAutorizacionesTabla = (list) => {
         const badgeStyle = item.estado === 'aprobada' ? 'background:#dcfce7; color:#166534;' :
                            (item.estado === 'rechazada' ? 'background:#fee2e2; color:#991b1b;' : 'background:#fef9c3; color:#854d0e;');
 
-        const maestroNombre = item.payload_json?.maestro_nombre || 'Docente/Admin';
+        const solInfo = window.obtenerSolicitanteInfo(item);
 
         return `
         <tr style="border-bottom:1px solid #e2e8f0;">
             <td style="padding:10px; font-size:0.8rem; font-family:monospace; color:var(--text-muted);">${createdStr}</td>
             <td style="padding:10px;"><span class="badge" style="background:#eff6ff; color:#1d4ed8; font-weight:700;">${item.tipo_accion}</span></td>
-            <td style="padding:10px; font-weight:600; font-size:0.85rem;">${maestroNombre}</td>
+            <td style="padding:10px; font-weight:600; font-size:0.85rem;">${solInfo.fullDisplay}</td>
             <td style="padding:10px; font-size:0.85rem; color:#334155;">${item.detalles}</td>
             <td style="padding:10px; text-align:center;">
                 <span class="badge" style="${badgeStyle} text-transform:uppercase; font-weight:700;">${item.estado}</span>
@@ -6001,7 +6049,8 @@ window.filtrarHistorialAutorizaciones = (query) => {
     if (!window._allHistorialReqs) return;
     const q = (query || '').toLowerCase().trim();
     const filtered = window._allHistorialReqs.filter(r => {
-        const text = `${r.tipo_accion} ${r.detalles} ${r.estado} ${r.payload_json?.maestro_nombre || ''}`.toLowerCase();
+        const solInfo = window.obtenerSolicitanteInfo(r);
+        const text = `${r.tipo_accion} ${r.detalles} ${r.estado} ${solInfo.fullDisplay}`.toLowerCase();
         return text.includes(q);
     });
     window.renderHistorialAutorizacionesTabla(filtered);
@@ -6018,12 +6067,13 @@ window.imprimirReporteAutorizaciones = () => {
         const createdStr = item.creado_en ? new Date(item.creado_en).toLocaleString('es-MX') : '-';
         const resStr = item.fecha_resolucion ? new Date(item.fecha_resolucion).toLocaleString('es-MX') : '-';
         const estadoText = (item.estado || 'PENDIENTE').toUpperCase();
+        const solInfo = window.obtenerSolicitanteInfo(item);
 
         return `
         <tr style="border-bottom:1px solid #ccc;">
             <td style="padding:6px; border:1px solid #ccc; font-size:0.75rem;">${createdStr}</td>
             <td style="padding:6px; border:1px solid #ccc; font-size:0.75rem; font-weight:bold;">${item.tipo_accion}</td>
-            <td style="padding:6px; border:1px solid #ccc; font-size:0.75rem;">${item.payload_json?.maestro_nombre || 'Docente'}</td>
+            <td style="padding:6px; border:1px solid #ccc; font-size:0.75rem;">${solInfo.fullDisplay}</td>
             <td style="padding:6px; border:1px solid #ccc; font-size:0.75rem;">${item.detalles || '-'}</td>
             <td style="padding:6px; border:1px solid #ccc; font-size:0.75rem; text-align:center; font-weight:bold;">${estadoText}</td>
             <td style="padding:6px; border:1px solid #ccc; font-size:0.75rem; text-align:center;">${resStr}</td>
