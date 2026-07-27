@@ -3045,14 +3045,14 @@ window.loadApoyoRiesgoData = async () => {
     const grupo = document.getElementById('riesgoGrupoSel') ? document.getElementById('riesgoGrupoSel').value : 'Todos';
     const umbral = document.getElementById('riesgoUmbralSel').value || '1+';
 
-    hold.innerHTML = '<p style="text-align:center; padding:30px;"><i class="fa-solid fa-spinner fa-spin"></i> Analizando calificaciones y actividades...</p>';
+    hold.innerHTML = '<p style="text-align:center; padding:30px;"><i class="fa-solid fa-spinner fa-spin"></i> Analizando calificaciones de la escuela...</p>';
     badge.style.display = 'none';
 
     try {
         // Helper flexible para hacer match de grado ("1°" vs "1", etc.)
         const matchGrado = (alGrado, selectedGrado) => {
             if (!selectedGrado || selectedGrado === 'Todos') return true;
-            if (!alGrado) return false;
+            if (alGrado === null || alGrado === undefined) return false;
             const strAl = (alGrado + '').trim().toLowerCase();
             const strSel = (selectedGrado + '').trim().toLowerCase();
             if (strAl === strSel) return true;
@@ -3062,46 +3062,11 @@ window.loadApoyoRiesgoData = async () => {
             return false;
         };
 
-        // 1. Obtener los alumnos del plantel
-        let alQuery = supabaseClient.from('alumnos')
-            .select('id, nombre, grado, grupo_id, grupos(nombre)');
+        const mapaFallas = {}; // alumno_id -> Set(materias)
 
-        if (state.plantelId) {
-            alQuery = alQuery.or(`plantel_id.eq.${state.plantelId},plantel_id.is.null`);
-        }
-
-        const { data: alumnosData, error: errAl } = await alQuery;
-        if (errAl) throw errAl;
-
-        // Filtrar grado y grupo en JS con tolerancia de formato
-        const alumnosFiltrados = (alumnosData || []).filter(al => {
-            if (!matchGrado(al.grado, grado)) return false;
-            if (grupo !== 'Todos' && al.grupo_id !== grupo && (!al.grupos || al.grupos.nombre !== grupo)) return false;
-            return true;
-        });
-
-        if (alumnosFiltrados.length === 0) {
-            hold.innerHTML = '<p style="text-align:center; padding:30px; color:var(--success);"><i class="fa-solid fa-check-circle" style="font-size:2rem; display:block; margin-bottom:10px;"></i>No se encontraron alumnos registrados bajo los filtros seleccionados.</p>';
-            return;
-        }
-
-        const mapAlumnosById = {};
-        alumnosFiltrados.forEach(al => {
-            mapAlumnosById[al.id] = {
-                id: al.id,
-                nombre: al.nombre,
-                grado: al.grado || '',
-                grupo: al.grupos ? al.grupos.nombre : 'Sin grupo',
-                materias: new Set()
-            };
-        });
-
-        const alumIds = Object.keys(mapAlumnosById);
-
-        // 2. Fuente A: Calificaciones Asentadas (Tabla calificaciones)
+        // 1. Fuente A: Calificaciones Asentadas (Tabla calificaciones)
         let califQuery = supabaseClient.from('calificaciones')
-            .select('alumno_id, calificacion, trimestre, materia_nombre, materias(nombre)')
-            .in('alumno_id', alumIds);
+            .select('alumno_id, calificacion, trimestre, materia_nombre, materias(nombre)');
 
         if (trim !== 'Todos') {
             califQuery = califQuery.eq('trimestre', parseInt(trim));
@@ -3109,23 +3074,22 @@ window.loadApoyoRiesgoData = async () => {
 
         const { data: califsData } = await califQuery;
         (califsData || []).forEach(c => {
+            if (!c.alumno_id) return;
             const val = parseFloat(c.calificacion);
-            if (!isNaN(val) && val < 6.0 && val >= 0) {
-                if (mapAlumnosById[c.alumno_id]) {
-                    const nombreMat = c.materia_nombre || (c.materias ? c.materias.nombre : 'Asignatura');
-                    const matTag = (trim === 'Todos' && c.trimestre) ? `${nombreMat} (T${c.trimestre})` : nombreMat;
-                    mapAlumnosById[c.alumno_id].materias.add(matTag);
-                }
+            // Toda calificación menor a 6.0 (incluyendo 0, 0.0, null, NaN o sin calificar)
+            const esReprobada = isNaN(val) ? true : (val < 6.0);
+            if (esReprobada) {
+                if (!mapaFallas[c.alumno_id]) mapaFallas[c.alumno_id] = new Set();
+                const nombreMat = c.materia_nombre || (c.materias ? c.materias.nombre : 'Asignatura');
+                const matTag = (trim === 'Todos' && c.trimestre) ? `${nombreMat} (T${c.trimestre})` : nombreMat;
+                mapaFallas[c.alumno_id].add(matTag);
             }
         });
 
-        // 3. Fuente B: Evaluaciones de Actividades Continuas (Tabla actividades_maestro + evaluaciones_actividades)
+        // 2. Fuente B: Evaluaciones de Actividades Continuas (Tabla actividades_maestro + evaluaciones_actividades)
         let actQuery = supabaseClient.from('actividades_maestro')
             .select('id, titulo, trimestre, materia, rubro_peso');
 
-        if (state.plantelId) {
-            actQuery = actQuery.or(`plantel_id.eq.${state.plantelId},plantel_id.is.null`);
-        }
         if (trim !== 'Todos') {
             actQuery = actQuery.eq('trimestre', parseInt(trim));
         }
@@ -3135,14 +3099,13 @@ window.loadApoyoRiesgoData = async () => {
             const actIds = actsData.map(a => a.id);
             const { data: evalsData } = await supabaseClient.from('evaluaciones_actividades')
                 .select('alumno_id, actividad_id, calificacion')
-                .in('alumno_id', alumIds)
                 .in('actividad_id', actIds);
 
             if (evalsData && evalsData.length > 0) {
                 const mapaActis = {};
                 evalsData.forEach(ev => {
                     const actObj = actsData.find(a => a.id === ev.actividad_id);
-                    if (!actObj) return;
+                    if (!actObj || !ev.alumno_id) return;
                     const key = `${ev.alumno_id}_${actObj.materia}_${actObj.trimestre}`;
                     if (!mapaActis[key]) {
                         mapaActis[key] = {
@@ -3153,20 +3116,19 @@ window.loadApoyoRiesgoData = async () => {
                             pesoTotal: 0
                         };
                     }
-                    const calVal = parseFloat(ev.calificacion) || 0;
+                    const calVal = (ev.calificacion !== null && ev.calificacion !== undefined) ? parseFloat(ev.calificacion) : 0;
                     const peso = parseFloat(actObj.rubro_peso) || 100;
-                    mapaActis[key].suma += calVal * (peso / 100);
+                    mapaActis[key].suma += (isNaN(calVal) ? 0 : calVal) * (peso / 100);
                     mapaActis[key].pesoTotal += (peso / 100);
                 });
 
                 Object.values(mapaActis).forEach(item => {
                     if (item.pesoTotal > 0) {
                         const promPropuesto = item.suma / item.pesoTotal;
-                        if (promPropuesto < 6.0 && promPropuesto >= 0) {
-                            if (mapAlumnosById[item.alumno_id]) {
-                                const matTag = (trim === 'Todos' && item.trimestre) ? `${item.materia} (T${item.trimestre})` : item.materia;
-                                mapAlumnosById[item.alumno_id].materias.add(matTag);
-                            }
+                        if (promPropuesto < 6.0) {
+                            if (!mapaFallas[item.alumno_id]) mapaFallas[item.alumno_id] = new Set();
+                            const matTag = (trim === 'Todos' && item.trimestre) ? `${item.materia} (T${item.trimestre})` : item.materia;
+                            mapaFallas[item.alumno_id].add(matTag);
                         }
                     }
                 });
