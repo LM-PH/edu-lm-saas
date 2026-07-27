@@ -6029,6 +6029,7 @@ async function renderMasterSaaS() {
             const { data: perfs } = await supabaseClient
                 .from('perfiles')
                 .select('id, nombre, rol, fecha_creacion, planteles(nombre)')
+                .neq('rol', 'alumno')
                 .order('fecha_creacion', { ascending: false })
                 .limit(10);
             if(perfs) ultimasConexiones = perfs;
