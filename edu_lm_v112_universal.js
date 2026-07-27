@@ -4538,11 +4538,18 @@ window.loadAsistenciasApoyo = async () => {
     if(!table) return;
 
     try {
+        let pId = state.plantelId || state.user?.user_metadata?.plantel_id;
+        if(!pId && state.user?.id) {
+            const { data: prof } = await supabaseClient.from('perfiles').select('plantel_id').eq('id', state.user.id).maybeSingle();
+            pId = prof?.plantel_id;
+            if(pId) state.plantelId = pId;
+        }
+
         let query = supabaseClient.from('accesos_plantel')
             .select('*, alumnos(nombre, grupo_id)')
-            .eq('plantel_id', state.plantelId)
-            .eq('fecha', fecha)
-            .order('creado_en', {ascending: false});
+            .eq('fecha', fecha);
+            
+        if(pId) query = query.eq('plantel_id', pId);
         
         if (state.path === '/apoyo/ts_escaner') {
             query = query.eq('estado', 'Salida');
@@ -4550,7 +4557,9 @@ window.loadAsistenciasApoyo = async () => {
             query = query.in('estado', ['Asistencia', 'Retardo']);
         }
 
-        const { data: rawData } = await query;
+        const { data: rawData, error } = await query;
+        if(error) console.error("Error al cargar accesos_plantel:", error);
+
         const data = grupoId ? (rawData || []).filter(a => a.alumnos?.grupo_id === grupoId) : (rawData || []);
 
         if(!data || data.length === 0) {
@@ -4563,13 +4572,14 @@ window.loadAsistenciasApoyo = async () => {
             let badgeColor = '#166534';
             if(a.estado === 'Retardo') { badgeBg = '#fef3c7'; badgeColor = '#92400e'; }
             if(a.estado === 'Salida') { badgeBg = '#fffbeb'; badgeColor = '#d97706'; }
+            if(a.estado === 'Inasistencia') { badgeBg = '#fef2f2'; badgeColor = '#991b1b'; }
 
             return `
             <tr>
                 <td style="font-size:0.85rem; padding:10px;">
                     <div style="font-weight:600;">${a.alumnos?.nombre || 'Alumno'}</div>
                 </td>
-                <td style="text-align:center; font-size:0.8rem; color:var(--text-muted);">${new Date(a.creado_en).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</td>
+                <td style="text-align:center; font-size:0.8rem; color:var(--text-muted);">${a.hora || ''}</td>
                 <td style="text-align:right;">
                     <span class="badge" style="background:${badgeBg}; color:${badgeColor}; font-size:0.65rem; border:none; padding:4px 8px; border-radius:6px;">
                         ${a.estado}
