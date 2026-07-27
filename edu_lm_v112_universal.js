@@ -4609,10 +4609,12 @@ window.generarInasistenciasMasivas = async () => {
 
         // ACCIÓN A: Registrar y avisar INASISTENCIAS
         if(faltantes.length > 0) {
+            const horaActual = new Date().toLocaleTimeString('en-GB');
             const inserts = faltantes.map(f => ({
                 alumno_id: f.id,
                 estado: 'Inasistencia',
                 fecha: hoy,
+                hora: horaActual,
                 registrador_id: u.data.user?.id,
                 plantel_id: state.plantelId
             }));
