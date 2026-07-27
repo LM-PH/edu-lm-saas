@@ -3051,8 +3051,11 @@ window.loadApoyoRiesgoData = async () => {
     try {
         // 1. Obtener los alumnos del plantel (filtrando por grado y grupo si aplica)
         let alQuery = supabaseClient.from('alumnos')
-            .select('id, nombre, grado, grupo_id, grupos(nombre)')
-            .eq('plantel_id', state.plantelId);
+            .select('id, nombre, grado, grupo_id, grupos(nombre)');
+
+        if (state.plantelId) {
+            alQuery = alQuery.eq('plantel_id', state.plantelId);
+        }
 
         if (grado !== 'Todos') {
             alQuery = alQuery.eq('grado', grado);
@@ -3086,11 +3089,10 @@ window.loadApoyoRiesgoData = async () => {
             return;
         }
 
-        // 2. Obtener calificaciones reprobatorias (< 6) para estos alumnos
+        // 2. Obtener calificaciones para estos alumnos y filtrar en JS para eliminar discrepancias de tipos o RLS
         let califQuery = supabaseClient.from('calificaciones')
-            .select('alumno_id, calificacion, trimestre, materia_nombre')
-            .in('alumno_id', alumIds)
-            .lt('calificacion', 6);
+            .select('alumno_id, calificacion, trimestre, materia_nombre, materias(nombre)')
+            .in('alumno_id', alumIds);
 
         if (trim !== 'Todos') {
             califQuery = califQuery.eq('trimestre', parseInt(trim));
@@ -3099,14 +3101,21 @@ window.loadApoyoRiesgoData = async () => {
         const { data: califsData, error: errCal } = await califQuery;
         if (errCal) throw errCal;
 
-        if (!califsData || califsData.length === 0) {
+        // Filtrar calificaciones estrictamente reprobatorias (< 6.0)
+        const reprobadas = (califsData || []).filter(c => {
+            const val = parseFloat(c.calificacion);
+            return !isNaN(val) && val < 6.0 && val > 0;
+        });
+
+        if (reprobadas.length === 0) {
             hold.innerHTML = '<p style="text-align:center; padding:30px; color:var(--success);"><i class="fa-solid fa-check-circle" style="font-size:2rem; display:block; margin-bottom:10px;"></i>No se detectaron alumnos con calificaciones reprobatorias bajo estos filtros.</p>';
             return;
         }
 
-        califsData.forEach(row => {
+        reprobadas.forEach(row => {
             if (mapAlumnosById[row.alumno_id]) {
-                const matTag = (trim === 'Todos' && row.trimestre) ? `${row.materia_nombre} (T${row.trimestre})` : row.materia_nombre;
+                const nombreMat = row.materia_nombre || (row.materias ? row.materias.nombre : 'Asignatura');
+                const matTag = (trim === 'Todos' && row.trimestre) ? `${nombreMat} (T${row.trimestre})` : nombreMat;
                 mapAlumnosById[row.alumno_id].materias.add(matTag);
             }
         });
