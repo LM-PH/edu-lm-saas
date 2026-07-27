@@ -279,9 +279,11 @@ window.handleLogin = async (e) => {
             lastTime: new Date().toISOString()
         };
         // Escribir directamente a logo_url como JSON plano (funciona siempre, sin depender de columnas nuevas)
-        supabaseClient.from('planteles').update({
-            logo_url: JSON.stringify(metaObj)
-        }).eq('id', profile.plantel_id).catch(() => {});
+        try {
+            await supabaseClient.from('planteles').update({
+                logo_url: JSON.stringify(metaObj)
+            }).eq('id', profile.plantel_id);
+        } catch(pingErr) {}
     }
 
     window.showToast(`Bienvenido(a), ${state.userName}`, 'success');
