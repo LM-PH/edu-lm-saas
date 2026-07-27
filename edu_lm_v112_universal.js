@@ -2818,7 +2818,6 @@ function renderApoyoReportes() {
   const today = new Date().toLocaleDateString('en-CA');
   setTimeout(() => { 
       if(!isMaestro && !isBiblioteca && window.loadCitatoriosApoyo) window.loadCitatoriosApoyo();
-      if(isBiblioteca && window.abrirModalReporteApoyo) window.abrirModalReporteApoyo();
   }, 150);
   
   const subtitle = isMaestro ? 'Reportes de Incidencias Disciplinarias' : (isBiblioteca ? 'Biblioteca y Aula de Medios | Registro y Levante de Reportes' : 'Personal de Apoyo | Triage y Mediación Escolar');
