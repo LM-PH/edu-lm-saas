@@ -9962,16 +9962,26 @@ window.cargarBoletasGrupo = async () => {
             }
         } catch(e) { console.error("Error al validar periodo de captura:", e); }
 
-        // Consultar solicitudes pendientes (modificación o prórroga)
+        // Consultar solicitudes de modificación o prórroga (pendientes o aprobadas)
         const { data: reqs } = await supabaseClient
             .from('autorizaciones_movimientos')
-            .select('id, payload_json, tipo_accion')
+            .select('id, payload_json, tipo_accion, estado')
             .eq('plantel_id', state.plantelId)
             .in('tipo_accion', ['MODIFICACION_CALIFICACIONES', 'PRORROGA_CALIFICACIONES'])
-            .eq('estado', 'pendiente');
+            .in('estado', ['pendiente', 'aprobada']);
         
+        let tieneSolicitudPendiente = false;
+        let tieneSolicitudAprobada = false;
+
         if (reqs && reqs.length > 0) {
             tieneSolicitudPendiente = reqs.some(r => 
+                r.estado === 'pendiente' &&
+                r.payload_json?.materia === materiaClean && 
+                r.payload_json?.trimestre === currentTrim && 
+                (r.payload_json?.grupo_id === gid || r.payload_json?.grupo_id === selectVal)
+            );
+            tieneSolicitudAprobada = reqs.some(r => 
+                r.estado === 'aprobada' &&
                 r.payload_json?.materia === materiaClean && 
                 r.payload_json?.trimestre === currentTrim && 
                 (r.payload_json?.grupo_id === gid || r.payload_json?.grupo_id === selectVal)
@@ -10085,8 +10095,8 @@ window.cargarBoletasGrupo = async () => {
             const promRounded = redondearCalificacionSep(promFinalNum);
             const displayVal = currentSettledVal !== undefined && currentSettledVal !== null ? currentSettledVal : promRounded;
             
-            // Bloqueo de inputs si ya se asentaron O si el periodo ha expirado/bloqueado sin tener solicitud aprobada
-            const isInputLocked = tieneCalificacionesAsentadas || (esPeriodoExpiradoOBloqueado && !tieneSolicitudPendiente);
+            // Bloqueo de inputs: si la solicitud fue APROBADA por el Director, se DESBLOQUEAN (isInputLocked = false).
+            const isInputLocked = !tieneSolicitudAprobada && (tieneCalificacionesAsentadas || (esPeriodoExpiradoOBloqueado && !tieneSolicitudPendiente));
             const inputAttr = isInputLocked 
                 ? 'disabled readonly style="width:85px; text-align:center; margin:auto; font-weight:bold; border:2px solid var(--border); color:var(--text-muted); background:#f1f5f9; font-size:1.1rem; cursor:not-allowed;"' 
                 : 'style="width:85px; text-align:center; margin:auto; font-weight:bold; border:2px solid var(--primary); color:var(--primary); background:white; font-size:1.1rem;"';
@@ -10116,7 +10126,14 @@ window.cargarBoletasGrupo = async () => {
             const matEscaped = materiaClean.replace(/'/g, "\\'");
             const selectValEscaped = selectVal.replace(/'/g, "\\'");
 
-            if (tieneSolicitudPendiente) {
+            if (tieneSolicitudAprobada) {
+                contenedorBoton.innerHTML = `
+                    <span style="font-size:0.85rem; color:var(--success); font-weight:600;"><i class="fa-solid fa-circle-check"></i> Solicitud APROBADA por Dirección. Tienes permiso activo para capturar, modificar y sellar calificaciones.</span>
+                    <button class="btn btn-primary btn-lg" style="background:var(--success); border-color:var(--success);" onclick="window.sellarYEnviarCalificaciones()">
+                        <i class="fa-solid fa-paper-plane"></i> Sellar y Enviar a Control Escolar
+                    </button>
+                `;
+            } else if (tieneSolicitudPendiente) {
                 contenedorBoton.innerHTML = `
                     <span style="font-size:0.85rem; color:#d97706; font-weight:600;"><i class="fa-solid fa-hourglass-half"></i> Calificaciones bloqueadas. Tienes una solicitud en revisión por Administración.</span>
                     <button class="btn btn-outline btn-lg" disabled style="opacity:0.75; cursor:not-allowed; border-color:#d97706; color:#d97706; background:#fffbeb;">
@@ -10158,17 +10175,34 @@ window.sellarYEnviarCalificaciones = async () => {
     const trim = document.getElementById('capturaTrimestre').value;
     if(!selectVal) return alert('Seleccione una materia/grupo primero.');
 
-    // VALIDACIÓN DE PERIODO (v112+)
+    const [idVal, materiaText] = selectVal.split('::');
+    const materiaClean = (materiaText || '').trim();
+
+    // VALIDACIÓN DE PERIODO Y AUTORIZACIÓN (v112+)
     try {
-        const { data: periodo } = await supabaseClient.from('periodos_calificaciones').select('*').eq('trimestre', trim).eq('plantel_id', state.plantelId).maybeSingle();
-        if(periodo) {
-            if(periodo.bloqueado) {
-                return alert("⚠️ El sistema de envío está BLOQUEADO por la administración para este trimestre.");
-            }
-            if(periodo.fecha_limite) {
-                const deadline = new Date(periodo.fecha_limite);
-                if(new Date() > deadline) {
-                    return alert("⚠️ La fecha límite de envío ha pasado (" + deadline.toLocaleString() + "). Contacta a administración para una prórroga.");
+        const { data: reqsApp } = await supabaseClient
+            .from('autorizaciones_movimientos')
+            .select('id, payload_json')
+            .eq('plantel_id', state.plantelId)
+            .in('tipo_accion', ['MODIFICACION_CALIFICACIONES', 'PRORROGA_CALIFICACIONES'])
+            .eq('estado', 'aprobada');
+
+        const tieneSolicitudAprobada = (reqsApp || []).some(r => 
+            r.payload_json?.materia === materiaClean && 
+            r.payload_json?.trimestre === parseInt(trim)
+        );
+
+        if (!tieneSolicitudAprobada) {
+            const { data: periodo } = await supabaseClient.from('periodos_calificaciones').select('*').eq('trimestre', trim).eq('plantel_id', state.plantelId).maybeSingle();
+            if(periodo) {
+                if(periodo.bloqueado) {
+                    return alert("⚠️ El sistema de envío está BLOQUEADO por la administración para este trimestre.");
+                }
+                if(periodo.fecha_limite) {
+                    const deadline = new Date(periodo.fecha_limite);
+                    if(new Date() > deadline) {
+                        return alert("⚠️ La fecha límite de envío ha pasado (" + deadline.toLocaleString('es-MX') + "). Contacta a administración para una prórroga.");
+                    }
                 }
             }
         }
