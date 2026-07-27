@@ -5895,30 +5895,121 @@ window.loadPersonalDirectivo = async () => {
         if(error) throw error;
 
         if(!data || data.length === 0) {
-            cont.innerHTML = '<div style="text-align:center; color:var(--text-muted)">No hay personal registrado aún.</div>';
+            cont.innerHTML = '<div style="text-align:center; padding:30px; color:var(--text-muted); background:#f8fafc; border-radius:12px; border:1px dashed #e2e8f0;">No hay personal registrado aún en este plantel.</div>';
             return;
         }
 
-        cont.innerHTML = data.map(p => `
-            <div style="display:flex; justify-content:space-between; align-items:center; padding:12px; background:white; border:1px solid var(--border); border-radius:10px;">
-               <div>
-                  <div style="font-weight:600;">${p.nombre || 'Sin nombre'}</div>
-                  <div style="font-size:0.75rem; color:var(--text-muted)">${p.email}</div>
-                  ${p.temp_pass ? `
-                     <div style="margin-top:4px; display:flex; align-items:center; gap:8px;">
-                        <div id="dir-pass-${p.email.replace(/@|\./g,'')}" style="display:none; font-size:0.75rem; color:var(--primary); font-weight:700;">
-                           <i class="fa-solid fa-key"></i> ${p.temp_pass}
-                        </div>
-                        <a href="#" style="font-size:0.7rem; color:var(--primary); font-weight:bold; text-decoration:none;" onclick="event.preventDefault(); const e=document.getElementById('dir-pass-${p.email.replace(/@|\./g,'')}'); e.style.display=(e.style.display==='none'?'block':'none'); this.innerText=(e.style.display==='none'?'Ver Clave':'Ocultar')">Ver Clave</a>
-                     </div>
-                  ` : ''}
-               </div>
-               <span class="badge" style="background:${p.rol === 'directivo' ? '#fee2e2' : (p.rol === 'maestro' ? '#dcfce7' : '#fef9c3')}; color:${p.rol === 'directivo' ? '#991b1b' : (p.rol === 'maestro' ? '#166534' : '#854d0e')}; padding:4px 8px; font-size:0.7rem; font-weight:bold; border-radius:6px; text-transform:uppercase;">
-                   ${p.rol === 'maestro' ? 'MAESTRO' : p.rol.toUpperCase()}
-               </span>
-            </div>
-        `).join('');
-    } catch(e) { cont.innerHTML = 'Error al cargar personal'; }
+        const roleOrder = [
+            { key: 'directivo', title: 'Directivos (Director / Subdirector)', icon: 'fa-user-shield', color: '#991b1b', bg: '#fee2e2' },
+            { key: 'maestro', title: 'Maestros / Docentes', icon: 'fa-chalkboard-user', color: '#166534', bg: '#dcfce7' },
+            { key: 'admin', title: 'Administrativos (Control Escolar)', icon: 'fa-user-tie', color: '#1e40af', bg: '#dbeafe' },
+            { key: 'apoyo', title: 'Personal de Apoyo (Prefectura / Trabajo Social)', icon: 'fa-handshake-angle', color: '#854d0e', bg: '#fef9c3' },
+            { key: 'biblioteca', title: 'Biblioteca / Aula de Medios', icon: 'fa-book-open-reader', color: '#6b21a8', bg: '#f3e8ff' }
+        ];
+
+        const roleGroups = {};
+        roleOrder.forEach(r => { roleGroups[r.key] = []; });
+        
+        data.forEach(p => {
+            const r = p.rol || 'otro';
+            if (!roleGroups[r]) roleGroups[r] = [];
+            roleGroups[r].push(p);
+        });
+
+        const totalCount = data.length;
+        let html = `
+        <div style="margin-bottom:16px; display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
+            <span style="font-size:0.75rem; font-weight:800; color:var(--text-muted); text-transform:uppercase; margin-right:4px;">Categorías:</span>
+            <button class="btn btn-xs active-per-filter" onclick="window.filtrarPersonalDirectivo('ALL', this)" style="border-radius:12px; font-weight:700; padding:4px 12px; background:var(--primary); color:white; border:1px solid var(--primary); cursor:pointer;">
+                Todos (${totalCount})
+            </button>
+            ${roleOrder.map(r => {
+                const count = (roleGroups[r.key] || []).length;
+                if (count === 0) return '';
+                return `
+                <button class="btn btn-xs active-per-filter" onclick="window.filtrarPersonalDirectivo('${r.key}', this)" style="border-radius:12px; font-weight:700; padding:4px 12px; background:transparent; color:${r.color}; border:1px solid ${r.color}; cursor:pointer;">
+                    ${r.title.split(' ')[0]} (${count})
+                </button>`;
+            }).join('')}
+        </div>
+        `;
+
+        roleOrder.forEach(r => {
+            const list = roleGroups[r.key] || [];
+            if (list.length === 0) return;
+
+            list.sort((a, b) => (a.nombre || '').localeCompare(b.nombre || '', 'es', { sensitivity: 'base' }));
+
+            const cardsHtml = list.map(p => {
+                const safeEmailId = (p.email || '').replace(/[^a-zA-Z0-9]/g, '');
+                return `
+                <div style="display:flex; justify-content:space-between; align-items:center; padding:12px 14px; background:white; border:1px solid #e2e8f0; border-radius:12px; transition:box-shadow 0.2s;" onmouseover="this.style.boxShadow='0 2px 8px rgba(0,0,0,0.05)'" onmouseout="this.style.boxShadow='none'">
+                   <div style="display:flex; align-items:center; gap:12px;">
+                      <div style="width:36px; height:36px; border-radius:50%; background:${r.bg}; color:${r.color}; display:flex; align-items:center; justify-content:center; font-weight:bold; font-size:0.95rem; flex-shrink:0;">
+                         ${p.nombre?.charAt(0)?.toUpperCase() || '?'}
+                      </div>
+                      <div>
+                         <div style="font-weight:700; color:#1e293b; font-size:0.9rem;">${p.nombre || 'Sin nombre'}</div>
+                         <div style="font-size:0.75rem; color:var(--text-muted); font-family:monospace;">${p.email}</div>
+                         ${p.temp_pass ? `
+                            <div style="margin-top:4px; display:flex; align-items:center; gap:8px;">
+                               <div id="dir-pass-${safeEmailId}" style="display:none; font-size:0.75rem; color:var(--primary); font-weight:700;">
+                                  <i class="fa-solid fa-key"></i> ${p.temp_pass}
+                               </div>
+                               <a href="#" style="font-size:0.7rem; color:var(--primary); font-weight:bold; text-decoration:none;" onclick="event.preventDefault(); const e=document.getElementById('dir-pass-${safeEmailId}'); e.style.display=(e.style.display==='none'?'block':'none'); this.innerText=(e.style.display==='none'?'Ver Clave':'Ocultar')">Ver Clave</a>
+                            </div>
+                         ` : ''}
+                      </div>
+                   </div>
+                   <span class="badge" style="background:${r.bg}; color:${r.color}; padding:4px 10px; font-size:0.7rem; font-weight:bold; border-radius:12px; text-transform:uppercase; flex-shrink:0;">
+                       ${p.rol ? p.rol.toUpperCase() : 'PERSONAL'}
+                   </span>
+                </div>`;
+            }).join('');
+
+            html += `
+            <div class="per-role-block" data-role="${r.key}" style="margin-bottom:20px;">
+                <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:2px solid ${r.color}; padding-bottom:6px; margin-bottom:12px;">
+                    <h4 style="margin:0; color:${r.color}; font-weight:800; font-size:0.95rem;">
+                        <i class="fa-solid ${r.icon}" style="margin-right:6px;"></i> ${r.title}
+                    </h4>
+                    <span style="font-size:0.75rem; background:${r.bg}; color:${r.color}; padding:2px 8px; border-radius:10px; font-weight:700;">
+                        ${list.length} registrado(s)
+                    </span>
+                </div>
+                <div style="display:flex; flex-direction:column; gap:8px;">
+                    ${cardsHtml}
+                </div>
+            </div>`;
+        });
+
+        cont.innerHTML = html;
+
+    } catch(e) {
+        console.error("Error al cargar personal directivo:", e);
+        cont.innerHTML = '<div style="text-align:center; color:var(--danger); padding:16px;">Error al cargar personal.</div>';
+    }
+};
+
+window.filtrarPersonalDirectivo = (roleKey, btn) => {
+    document.querySelectorAll('.active-per-filter').forEach(b => {
+        b.style.background = 'transparent';
+        b.style.color = 'var(--text-muted)';
+        b.style.borderColor = 'var(--border)';
+    });
+    if (btn) {
+        btn.style.background = 'var(--primary)';
+        btn.style.color = 'white';
+        btn.style.borderColor = 'var(--primary)';
+    }
+
+    document.querySelectorAll('.per-role-block').forEach(el => {
+        if (roleKey === 'ALL' || !roleKey) {
+            el.style.display = 'block';
+        } else {
+            el.style.display = (el.dataset.role === roleKey) ? 'block' : 'none';
+        }
+    });
 };
 
 function generateHTML(content) {
