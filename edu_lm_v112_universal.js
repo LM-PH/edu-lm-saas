@@ -6064,17 +6064,40 @@ window.registrarPingPlantelConexion = async () => {
             lastTime: nowIso
         };
 
-        await supabaseClient.from('planteles').update({
+        // Intentar con columna dedicada; si no existe todavía, usar logo_url como respaldo
+        const { error: upErr } = await supabaseClient.from('planteles').update({
             ultima_conexion_json: metaObj
         }).eq('id', targetPlantelId);
+
+        if (upErr && upErr.code === '42703') {
+            // Columna aún no existe en la BD — guardar como JSON en logo_url
+            await supabaseClient.from('planteles').update({
+                logo_url: '###CONN###' + JSON.stringify(metaObj)
+            }).eq('id', targetPlantelId);
+        }
     } catch(e) {}
 };
 
 async function renderMasterSaaS() {
     try {
-        // Consultar planteles y estadísticas globales
-        const { data: planteles, error } = await supabaseClient.from('planteles').select('id, nombre, ultima_conexion_json, creado_en').order('creado_en', { ascending: false });
-        if(error) throw error;
+        // Consultar planteles — intentar con columna dedicada, caer en logo_url si no existe
+        let planteles, usoFallback = false;
+        const { data: p1, error: e1 } = await supabaseClient
+            .from('planteles').select('id, nombre, ultima_conexion_json, creado_en')
+            .order('creado_en', { ascending: false });
+
+        if (e1 && e1.code === '42703') {
+            // La columna aún no existe: seleccionar logo_url como respaldo
+            usoFallback = true;
+            const { data: p2, error: e2 } = await supabaseClient
+                .from('planteles').select('id, nombre, logo_url, creado_en')
+                .order('creado_en', { ascending: false });
+            if (e2) throw e2;
+            planteles = p2;
+        } else {
+            if (e1) throw e1;
+            planteles = p1;
+        }
 
         let totalAlumnos = 0;
         let totalPersonal = 0;
@@ -6090,7 +6113,17 @@ async function renderMasterSaaS() {
 
         // Procesar la última conexión por plantel (1 persona por escuela)
         const conexionesPorPlantel = planteles.map(p => {
-            const meta = p.ultima_conexion_json || null;
+            let meta = null;
+            if (!usoFallback) {
+                meta = p.ultima_conexion_json || null;
+            } else {
+                // Extraer del campo logo_url con prefijo especial ###CONN###
+                try {
+                    if (p.logo_url && p.logo_url.startsWith('###CONN###')) {
+                        meta = JSON.parse(p.logo_url.replace('###CONN###', ''));
+                    }
+                } catch(e) {}
+            }
             return {
                 id: p.id,
                 plantelNombre: p.nombre,
