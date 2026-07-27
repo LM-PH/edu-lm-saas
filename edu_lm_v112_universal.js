@@ -2899,8 +2899,6 @@ function renderApoyoReportes() {
                     <select id="categoriaReporteApoyo" class="form-input" style="border-radius:10px;">
                         <option value="Conducta">Conducta / Comportamiento</option>
                         <option value="Académico">Académico</option>
-                        <option value="Familiar">Situación Familiar</option>
-                        <option value="Salud">Salud / Emocional</option>
                     </select>
                 </div>
             </div>
