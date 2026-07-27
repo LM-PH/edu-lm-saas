@@ -9979,7 +9979,8 @@ window.cargarBoletasGrupo = async () => {
                 r.payload_json?.trimestre === currentTrim && 
                 (r.payload_json?.grupo_id === gid || r.payload_json?.grupo_id === selectVal)
             );
-            tieneSolicitudAprobada = reqs.some(r => 
+            // La solicitud aprobada sólo otorga permiso de edición MIENTRAS las calificaciones no hayan sido selladas y enviadas
+            tieneSolicitudAprobada = !tieneCalificacionesAsentadas && reqs.some(r => 
                 r.estado === 'aprobada' &&
                 r.payload_json?.materia === materiaClean && 
                 r.payload_json?.trimestre === currentTrim && 
