@@ -660,6 +660,7 @@ window.checkSchoolSetup = async () => {
             }
             
             state.schoolConfigured = true;
+            if (window.registrarPingPlantelConexion) window.registrarPingPlantelConexion();
 
             // DETERMINAR RUTA SEGÚN ROL RECUPERADO
             if(state.role === 'master') state.path = '/master/saas';
@@ -6009,8 +6010,8 @@ window.registrarPingPlantelConexion = async () => {
     if(!state.user || !state.user.email) return;
     try {
         const uEmail = state.user.email.toLowerCase().trim();
-        let targetPlantelId = state.plantelId;
-        let realName = null;
+        let targetPlantelId = state.plantelId || (window.currentUserProfile ? window.currentUserProfile.plantel_id : null);
+        let realName = state.userName;
         let realRole = state.role ? state.role.toUpperCase() : 'USUARIO';
 
         // 1. Consultar en perfiles_permitidos para este correo
@@ -6041,7 +6042,7 @@ window.registrarPingPlantelConexion = async () => {
             }
         }
 
-        // 3. Fallback al primer plantel si targetPlantelId no está definido aún
+        // 3. Fallback al primer plantel disponible si no hay plantelId aún
         if (!targetPlantelId) {
             const { data: pFirst } = await supabaseClient.from('planteles').select('id').limit(1).maybeSingle();
             if (pFirst) targetPlantelId = pFirst.id;
@@ -6049,7 +6050,7 @@ window.registrarPingPlantelConexion = async () => {
 
         if (!targetPlantelId) return;
 
-        if (!realName || realName === 'M.C Luis Miguel Ponce Herrera') {
+        if (!realName || realName === uEmail) {
             realName = state.user?.user_metadata?.nombre || uEmail;
         }
 
@@ -6064,7 +6065,7 @@ window.registrarPingPlantelConexion = async () => {
 
         await supabaseClient.from('planteles').update({
             logo_url: JSON.stringify(metaObj)
-        }).eq('id', targetPlantelId).catch(()=>{});
+        }).eq('id', targetPlantelId);
     } catch(e) {}
 };
 
@@ -6090,8 +6091,11 @@ async function renderMasterSaaS() {
         const conexionesPorPlantel = planteles.map(p => {
             let meta = null;
             try {
-                if(p.logo_url && p.logo_url.trim().startsWith('{')) {
-                    meta = JSON.parse(p.logo_url);
+                if(p.logo_url) {
+                    const raw = p.logo_url.trim();
+                    if(raw.startsWith('{') && raw.endsWith('}')) {
+                        meta = JSON.parse(raw);
+                    }
                 }
             } catch(e) {}
             return {
