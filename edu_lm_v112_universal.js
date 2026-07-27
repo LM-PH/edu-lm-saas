@@ -3135,10 +3135,35 @@ window.loadApoyoRiesgoData = async () => {
             }
         }
 
-        const mapaAlumnos = mapAlumnosById;
+        const alumnoIdsConFallas = Object.keys(mapaFallas);
+        if (alumnoIdsConFallas.length === 0) {
+            hold.innerHTML = '<p style="text-align:center; padding:30px; color:var(--success);"><i class="fa-solid fa-check-circle" style="font-size:2rem; display:block; margin-bottom:10px;"></i>No se detectaron alumnos con calificaciones reprobatorias (menores a 6.0 o en 0) bajo estos filtros.</p>';
+            return;
+        }
 
-        const alumnosEnRiesgo = Object.values(mapaAlumnos)
-            .map(a => ({ ...a, materias: Array.from(a.materias) }))
+        // 3. Obtener los datos de los alumnos que tienen materias reprobadas
+        const { data: alumnosData, error: errAl } = await supabaseClient.from('alumnos')
+            .select('id, nombre, grado, grupo_id, grupos(nombre)')
+            .in('id', alumnoIdsConFallas);
+
+        if (errAl) throw errAl;
+
+        const alumnosEnRiesgo = (alumnosData || [])
+            .filter(al => {
+                if (!matchGrado(al.grado, grado)) return false;
+                if (grupo !== 'Todos' && al.grupo_id !== grupo && (!al.grupos || al.grupos.nombre !== grupo)) return false;
+                return true;
+            })
+            .map(al => {
+                const setMat = mapaFallas[al.id] || new Set();
+                return {
+                    id: al.id,
+                    nombre: al.nombre,
+                    grado: al.grado || '',
+                    grupo: al.grupos ? al.grupos.nombre : 'Sin grupo',
+                    materias: Array.from(setMat)
+                };
+            })
             .filter(a => {
                 if (umbral === '1+') return a.materias.length >= 1;
                 if (umbral === '1-2') return a.materias.length >= 1 && a.materias.length <= 2;
@@ -3147,7 +3172,7 @@ window.loadApoyoRiesgoData = async () => {
             })
             .sort((a,b) => b.materias.length - a.materias.length);
 
-        if(alumnosEnRiesgo.length === 0) {
+        if (alumnosEnRiesgo.length === 0) {
             let msg = umbral === '1-2' ? 'de 1 a 2 materias reprobadas' : (umbral === '3+' ? '3 o más materias reprobadas' : 'materias reprobadas');
             hold.innerHTML = `<p style="text-align:center; padding:30px; color:var(--success);"><i class="fa-solid fa-check-circle" style="font-size:2rem; display:block; margin-bottom:10px;"></i>No hay alumnos con ${msg}.</p>`;
             return;
