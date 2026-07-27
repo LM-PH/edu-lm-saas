@@ -6006,7 +6006,7 @@ async function renderPage(path) {
 }
 
 window.registrarPingPlantelConexion = async () => {
-    if(!state.user || !state.plantelId || state.isMaster) return;
+    if(!state.user || !state.plantelId) return;
     try {
         const uEmail = state.user.email ? state.user.email.toLowerCase().trim() : '';
         if(!uEmail) return;
@@ -6033,11 +6033,13 @@ window.registrarPingPlantelConexion = async () => {
                 .maybeSingle();
             if (prof && prof.nombre) {
                 realName = prof.nombre;
-                if (prof.rol) realRole = prof.rol.toUpperCase();
+                if (prof.rol && prof.rol !== 'master') realRole = prof.rol.toUpperCase();
             }
         }
 
-        if (!realName) realName = state.userName || uEmail;
+        if (!realName) {
+            realName = state.user?.user_metadata?.nombre || uEmail;
+        }
 
         const nowIso = new Date().toISOString();
 
