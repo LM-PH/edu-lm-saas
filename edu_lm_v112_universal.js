@@ -6008,14 +6008,43 @@ async function renderPage(path) {
 window.registrarPingPlantelConexion = async () => {
     if(!state.user || !state.plantelId || state.isMaster) return;
     try {
-        const uNombre = state.userName || state.user?.user_metadata?.nombre || state.user?.email || 'Usuario';
-        const uRol = (state.role || 'USUARIO').toUpperCase();
+        const uEmail = state.user.email ? state.user.email.toLowerCase().trim() : '';
+        if(!uEmail) return;
+
+        let realName = null;
+        let realRole = state.role ? state.role.toUpperCase() : 'USUARIO';
+
+        // 1. Consultar el nombre oficial registrado en perfiles_permitidos
+        const { data: perm } = await supabaseClient
+            .from('perfiles_permitidos')
+            .select('nombre, rol')
+            .eq('email', uEmail)
+            .maybeSingle();
+
+        if (perm && perm.nombre) {
+            realName = perm.nombre;
+            if (perm.rol) realRole = perm.rol.toUpperCase();
+        } else {
+            // 2. Fallback a la tabla perfiles
+            const { data: prof } = await supabaseClient
+                .from('perfiles')
+                .select('nombre, rol')
+                .eq('id', state.user.id)
+                .maybeSingle();
+            if (prof && prof.nombre) {
+                realName = prof.nombre;
+                if (prof.rol) realRole = prof.rol.toUpperCase();
+            }
+        }
+
+        if (!realName) realName = state.userName || uEmail;
+
         const nowIso = new Date().toISOString();
 
         const metaObj = {
-            lastUser: uNombre,
-            lastEmail: state.user?.email,
-            lastRole: uRol,
+            lastUser: realName,
+            lastEmail: uEmail,
+            lastRole: realRole,
             lastTime: nowIso
         };
 
