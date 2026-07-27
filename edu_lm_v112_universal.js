@@ -6013,32 +6013,41 @@ async function renderMasterSaaS() {
 
         let totalAlumnos = 0;
         let totalPersonal = 0;
+        let ultimasConexiones = [];
+
         try {
             const resA = await supabaseClient.from('alumnos').select('*', { count: 'exact', head: true });
             if(resA && resA.count) totalAlumnos = resA.count;
         } catch(e) {}
+
         try {
             const resP = await supabaseClient.from('perfiles_permitidos').select('*', { count: 'exact', head: true });
             if(resP && resP.count) totalPersonal = resP.count;
+        } catch(e) {}
+
+        try {
+            const { data: perfs } = await supabaseClient
+                .from('perfiles')
+                .select('id, nombre, rol, fecha_creacion, planteles(nombre)')
+                .order('fecha_creacion', { ascending: false })
+                .limit(10);
+            if(perfs) ultimasConexiones = perfs;
         } catch(e) {}
 
         return `
         <div class="page-header" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:16px;">
           <div>
             <h2 class="page-title"><i class="fa-solid fa-crown" style="color:#eab308; margin-right:8px;"></i> Centro de Mando del Creador</h2>
-            <p class="page-subtitle">Monitoreo global de planteles, salud de la base de datos y bot de mantenimiento.</p>
+            <p class="page-subtitle">Monitoreo global de planteles, registro de última conexión y salud del robot de mantenimiento.</p>
           </div>
           <div style="display:flex; gap:10px;">
-            <button class="btn btn-outline" onclick="window.probarPingMaster()" style="border-color:var(--primary); color:var(--primary); font-weight:600;">
+            <button class="btn btn-primary" onclick="window.probarPingMaster()" style="font-weight:600;">
                 <i class="fa-solid fa-bolt"></i> Probar Ping DB
-            </button>
-            <button class="btn btn-primary" onclick="window.crearNuevoPlantelModal()">
-                <i class="fa-solid fa-plus"></i> Registrar Escuela
             </button>
           </div>
         </div>
 
-        <!-- MTRICAS GENERALES -->
+        <!-- METRICAS GENERALES -->
         <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap:20px; margin-bottom:28px;">
            <div class="card shadow-sm" style="border-left:5px solid var(--primary); padding:20px;">
               <div style="font-size:0.8rem; color:var(--text-muted); font-weight:700; text-transform:uppercase;">Planteles Activos</div>
@@ -6057,18 +6066,57 @@ async function renderMasterSaaS() {
 
            <div class="card shadow-sm" style="border-left:5px solid #f59e0b; padding:20px;">
               <div style="font-size:0.8rem; color:var(--text-muted); font-weight:700; text-transform:uppercase;">Robot Keep-Alive</div>
-              <div style="font-size:0.95rem; font-weight:700; color:#b45309; margin-top:6px;"><i class="fa-solid fa-robot"></i> Activo (Cada 3 Días)</div>
+              <div style="font-size:0.95rem; font-weight:700; color:#b45309; margin-top:6px;"><i class="fa-solid fa-robot"></i> Programado Cada 3 Días</div>
            </div>
         </div>
 
-        <div class="card" style="margin-bottom:32px; border-left: 6px solid var(--danger); background:#fff5f5;">
-           <div style="display:flex; gap:16px; align-items:center;">
-              <div style="font-size:2.5rem; color:var(--danger);"><i class="fa-solid fa-shield-halved"></i></div>
-              <div>
-                 <strong style="display:block; font-size:1.1rem; color:#c53030;">Modo Creador de Sistema Activo</strong>
-                 <p style="margin:0; font-size:0.9rem; color:#9b2c2c;">Selecciona cualquier plantel para ingresar como Administrador o consultar sus perfiles registrados sin restricciones.</p>
-              </div>
-           </div>
+        <!-- TABLA DE REGISTRO DE ULTIMAS CONEXIONES Y ACTIVIDAD -->
+        <div class="card shadow-md" style="margin-bottom:32px; border-radius:24px;">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px; flex-wrap:wrap; gap:10px;">
+                <h3 style="margin:0; font-size:1.2rem; font-weight:800; color:var(--primary);">
+                    <i class="fa-solid fa-clock-rotate-left"></i> Registro de Últimas Conexiones y Actividad Reciente
+                </h3>
+                <span style="font-size:0.8rem; background:#e0f2fe; color:#0369a1; padding:4px 12px; border-radius:20px; font-weight:700;">
+                    <i class="fa-solid fa-robot"></i> Robot Mantenimiento GitHub: Cada 3 Días
+                </span>
+            </div>
+
+            <div style="overflow-x:auto;">
+                <table class="table" style="width:100%; border-collapse:collapse;">
+                    <thead>
+                        <tr style="background:#f8fafc; border-bottom:2px solid #e2e8f0; text-align:left; font-size:0.8rem; text-transform:uppercase; color:var(--text-muted);">
+                            <th style="padding:12px;">Usuario / Creador</th>
+                            <th style="padding:12px;">Rol en Sistema</th>
+                            <th style="padding:12px;">Escuela / Plantel</th>
+                            <th style="padding:12px;">Última Conexión / Registro</th>
+                            <th style="padding:12px; text-align:center;">Origen</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <!-- Fila del Robot de GitHub -->
+                        <tr style="border-bottom:1px solid #f1f5f9; background:#faf5ff;">
+                            <td style="padding:12px; font-weight:700; color:#6b21a8;">
+                                <i class="fa-solid fa-robot" style="margin-right:6px;"></i> Robot GitHub Keep-Alive
+                            </td>
+                            <td style="padding:12px;"><span style="background:#f3e8ff; color:#7e22ce; padding:2px 8px; border-radius:12px; font-size:0.75rem; font-weight:bold;">AUTOMÁTICO</span></td>
+                            <td style="padding:12px; color:var(--text-muted);">Servicio de Mantenimiento</td>
+                            <td style="padding:12px; font-weight:600; color:#581c87;">Programado Cada 3 Días a las 12:00 UTC</td>
+                            <td style="padding:12px; text-align:center;"><span style="background:#d8b4fe; color:#581c87; padding:2px 8px; border-radius:12px; font-size:0.7rem; font-weight:bold;">GITHUB ACTIONS</span></td>
+                        </tr>
+                        ${ultimasConexiones.length === 0 ? `
+                        <tr><td colspan="5" style="padding:20px; text-align:center; color:var(--text-muted);">No hay conexiones recientes registradas.</td></tr>
+                        ` : ultimasConexiones.map(c => `
+                        <tr style="border-bottom:1px solid #f1f5f9;">
+                            <td style="padding:12px; font-weight:700;">${c.nombre || 'Usuario Registrado'}</td>
+                            <td style="padding:12px;"><span style="background:#f1f5f9; color:var(--text-main); padding:2px 8px; border-radius:12px; font-size:0.75rem; text-transform:uppercase; font-weight:bold;">${c.rol || 'USUARIO'}</span></td>
+                            <td style="padding:12px;">${c.planteles?.nombre || 'Plantel Registrado'}</td>
+                            <td style="padding:12px; font-size:0.85rem; color:var(--text-muted);">${c.fecha_creacion ? new Date(c.fecha_creacion).toLocaleString() : 'Reciente'}</td>
+                            <td style="padding:12px; text-align:center;"><span style="background:#dcfce7; color:#15803d; padding:2px 8px; border-radius:12px; font-size:0.7rem; font-weight:bold;">WEB APP</span></td>
+                        </tr>
+                        `).join('')}
+                    </tbody>
+                </table>
+            </div>
         </div>
 
         <h3 style="margin-bottom:20px; font-size:1.3rem;"><i class="fa-solid fa-school"></i> Planteles Registrados en el Sistema</h3>
@@ -6091,10 +6139,7 @@ async function renderMasterSaaS() {
 
                 <div style="display:flex; gap:12px;">
                    <button class="btn btn-primary" style="flex:1; font-size:0.85rem;" onclick="window.gestionarPlantelSaaS('${p.id}', '${p.nombre}')">
-                      <i class="fa-solid fa-right-to-bracket"></i> Entrar a Escuela
-                   </button>
-                   <button class="btn" style="flex:1; font-size:0.85rem; background:#fee2e2; color:#dc2626; border:1px solid #fecaca;" onclick="window.eliminarPlantelSaaS('${p.id}', '${p.nombre}')">
-                      <i class="fa-solid fa-trash"></i> Dar de Baja
+                      <i class="fa-solid fa-right-to-bracket"></i> Revisar Escuela
                    </button>
                 </div>
              </div>
@@ -6114,25 +6159,6 @@ window.probarPingMaster = async () => {
     } catch(e) {
         window.showToast("❌ Error al probar conexión: " + e.message, "error");
     }
-};
-
-window.crearNuevoPlantelModal = async () => {
-    const nombre = prompt("Ingresa el Nombre Completo de la Nueva Escuela:");
-    if(!nombre || !nombre.trim()) return;
-    const slug = prompt("Ingresa la clave o alias corto (ej. secundaria150):", nombre.toLowerCase().replace(/[^a-z0-9]/g, ''));
-    if(!slug) return;
-
-    try {
-        const { data, error } = await supabaseClient.from('planteles').insert([{
-            nombre: nombre.trim(),
-            slug: slug.trim(),
-            primary_color: '#2563eb'
-        }]).select().single();
-        if(error) throw error;
-
-        window.showToast(`Escuela "${nombre}" dada de alta exitosamente.`, 'success');
-        renderApp();
-    } catch(e) { alert("Error al registrar escuela: " + e.message); }
 };
 
 window.eliminarPlantelSaaS = async (id, nombre) => {
