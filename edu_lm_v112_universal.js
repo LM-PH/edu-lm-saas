@@ -2814,20 +2814,22 @@ window.abrirExpedienteDirecto = (id) => {
 
 function renderApoyoReportes() {
   const isMaestro = state.role === 'maestro' || state.role === 'docente';
+  const isBiblioteca = state.role === 'biblioteca';
   const today = new Date().toLocaleDateString('en-CA');
   setTimeout(() => { 
-      if(!isMaestro && window.loadCitatoriosApoyo) window.loadCitatoriosApoyo();
-  }, 100);
+      if(!isMaestro && !isBiblioteca && window.loadCitatoriosApoyo) window.loadCitatoriosApoyo();
+      if(isBiblioteca && window.abrirModalReporteApoyo) window.abrirModalReporteApoyo();
+  }, 150);
   
-  const subtitle = isMaestro ? 'Reportes de Incidencias Disciplinarias' : 'Personal de Apoyo | Triage y Mediación Escolar';
+  const subtitle = isMaestro ? 'Reportes de Incidencias Disciplinarias' : (isBiblioteca ? 'Biblioteca y Aula de Medios | Registro y Levante de Reportes' : 'Personal de Apoyo | Triage y Mediación Escolar');
   
-  const citatoriosBtn = isMaestro ? '' : `
+  const citatoriosBtn = (isMaestro || isBiblioteca) ? '' : `
         <button class="btn btn-outline" onclick="window.abrirModalCitatorio()" style="padding:10px 20px; border-radius:12px; font-weight:600; display:flex; align-items:center; gap:8px; border:1.5px solid var(--primary); color:var(--primary);">
             <i class="fa-solid fa-envelope-open-text"></i> Crear Citatorio
         </button>
   `;
 
-  const citatoriosSection = isMaestro ? '' : `
+  const citatoriosSection = (isMaestro || isBiblioteca) ? '' : `
         <!-- SECCIÓN 1: CITATORIOS VIGENTES -->
         <div class="card" style="width:100%; border-top:4px solid var(--warning);">
             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px; flex-wrap:wrap; gap:10px;">
@@ -3327,12 +3329,18 @@ window.buscarAlumnosReporteApoyo = async (val, mode = 'reporte') => {
         return;
     }
     try {
-        const { data, error } = await supabaseClient
-            .from('alumnos')
-            .select('id, nombre, matricula, grupos(nombre)')
-            .eq('plantel_id', state.plantelId)
-            .or(`nombre.ilike.%${val}%,matricula.ilike.%${val}%`)
-            .limit(5);
+        let pId = state.plantelId || state.user?.user_metadata?.plantel_id;
+        if(!pId && state.user?.id) {
+            const { data: prof } = await supabaseClient.from('perfiles').select('plantel_id').eq('id', state.user.id).maybeSingle();
+            pId = prof?.plantel_id;
+            if(pId) state.plantelId = pId;
+        }
+
+        let query = supabaseClient.from('alumnos').select('id, nombre, matricula, grupos(nombre)');
+        if(pId) query = query.eq('plantel_id', pId);
+        query = query.or(`nombre.ilike.%${val}%,matricula.ilike.%${val}%`).limit(5);
+
+        const { data, error } = await query;
 
         if(error) throw error;
         if(data && data.length > 0) {
@@ -3340,8 +3348,8 @@ window.buscarAlumnosReporteApoyo = async (val, mode = 'reporte') => {
                 <div style="padding:10px; border-bottom:1px solid var(--border); cursor:pointer; font-size:0.85rem;" 
                      onmouseover="this.style.background='#f0f0f0'" 
                      onmouseout="this.style.background='white'"
-                     onclick="window.seleccionarAlumnoReporteApoyo('${a.id}', '${a.nombre}', '${a.grupos?.nombre || 'S/G'}', '${mode}')">
-                    <b>${a.nombre}</b><br><small style="color:var(--text-muted)">${a.matricula} - ${a.grupos?.nombre || 'S/G'}</small>
+                     onclick="window.seleccionarAlumnoReporteApoyo('${a.id}', '${a.nombre.replace(/'/g, "\\'")}', '${a.grupos?.nombre || 'S/G'}', '${mode}')">
+                    <b>${a.nombre}</b><br><small style="color:var(--text-muted)">${a.matricula || 'Sin matrícula'} - ${a.grupos?.nombre || 'S/G'}</small>
                 </div>
             `).join('');
             resDiv.style.display = 'block';
@@ -3403,6 +3411,8 @@ window.guardarReporteApoyo = async () => {
             metaStr = 'Personal de Apoyo';
         } else if (state.role === 'directivo') {
             metaStr = 'Directivo';
+        } else if (state.role === 'biblioteca') {
+            metaStr = 'Biblioteca / Aula de Medios';
         } else {
             metaStr = state.role ? state.role.charAt(0).toUpperCase() + state.role.slice(1) : 'Personal';
         }
