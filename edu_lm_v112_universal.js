@@ -3028,7 +3028,11 @@ window.handleRiesgoGradoChange = () => {
         selGrupo.value = 'Todos';
     } else {
         container.style.display = 'block';
-        const filtrados = (window._riesgoGruposCacheados || []).filter(g => g.nombre.startsWith(grado));
+        const numGrado = (grado + '').replace(/[^0-9]/g, '');
+        const filtrados = (window._riesgoGruposCacheados || []).filter(g => {
+            const numG = (g.nombre + '').replace(/[^0-9]/g, '');
+            return numGrado ? (numG === numGrado) : g.nombre.startsWith(grado);
+        });
         let html = '<option value="Todos">Todos los grupos del grado</option>';
         filtrados.forEach(g => {
             html += `<option value="${g.id}">${g.nombre}</option>`;
@@ -3049,61 +3053,67 @@ window.loadApoyoRiesgoData = async () => {
     badge.style.display = 'none';
 
     try {
-        // 1. Cargar TODOS los alumnos
-        const { data: alumnosData, error: errAl } = await supabaseClient.from('alumnos')
-            .select('id, nombre, grado, grupo_id, grupos(nombre)')
-            .limit(10000);
-            
-        if (errAl) {
-            console.error("Error al cargar alumnos:", errAl);
-            hold.innerHTML = `<p style="text-align:center; color:var(--danger); padding:20px;">Error al cargar lista de alumnos: ${errAl.message}</p>`;
-            return;
-        }
-
-        if (!alumnosData || alumnosData.length === 0) {
-            hold.innerHTML = '<p style="text-align:center; padding:30px; color:var(--text-muted);"><i class="fa-solid fa-user-slash" style="font-size:2rem; display:block; margin-bottom:10px;"></i>No hay alumnos registrados en el sistema.</p>';
-            return;
-        }
-
-        // Mapa de alumnos por ID
         const mapAlumnosById = {};
-        alumnosData.forEach(al => {
-            mapAlumnosById[al.id] = {
-                id: al.id,
-                nombre: al.nombre,
-                grado: al.grado || '',
-                grupo: al.grupos ? al.grupos.nombre : 'Sin grupo',
-                grupo_id: al.grupo_id,
-                materiasFallas: new Map() // tag -> calificacion
-            };
-        });
 
-        // 2. Cargar TODAS las calificaciones sin restricción de URL length y hasta 50,000 registros
-        const { data: califsData, error: errCal } = await supabaseClient.from('calificaciones')
-            .select('alumno_id, calificacion, trimestre, materia_nombre')
+        // Helper para inicializar alumno en el mapa
+        const ensureAlumno = (id, nombre, gr, grpNom, grpId) => {
+            if (!mapAlumnosById[id]) {
+                mapAlumnosById[id] = {
+                    id: id,
+                    nombre: nombre || 'Alumno',
+                    grado: gr || '',
+                    grupo: grpNom || 'Sin grupo',
+                    grupo_id: grpId || null,
+                    materiasFallas: new Map()
+                };
+            }
+            return mapAlumnosById[id];
+        };
+
+        // 1. Cargar TODAS las calificaciones unidas con datos del alumno
+        let califQuery = supabaseClient.from('calificaciones')
+            .select('alumno_id, calificacion, trimestre, materia_nombre, alumnos!inner(id, nombre, grado, grupo_id, grupos(nombre))')
             .limit(50000);
 
+        if (state.plantelId) {
+            califQuery = califQuery.or(`plantel_id.eq.${state.plantelId},plantel_id.is.null`);
+        }
+
+        if (trim !== 'Todos') {
+            califQuery = califQuery.eq('trimestre', parseInt(trim));
+        }
+
+        const { data: califsData, error: errCal } = await califQuery;
         if (errCal) console.error("Error al cargar calificaciones:", errCal);
 
         (califsData || []).forEach(c => {
-            if (!c.alumno_id || !mapAlumnosById[c.alumno_id]) return;
-            
-            // Validar filtro de trimestre si no es 'Todos'
-            if (trim !== 'Todos' && String(c.trimestre) !== String(trim)) return;
+            if (!c.alumno_id || !c.alumnos) return;
+            const alObj = c.alumnos;
+            const grpName = alObj.grupos ? alObj.grupos.nombre : 'Sin grupo';
+            const alRecord = ensureAlumno(alObj.id, alObj.nombre, alObj.grado, grpName, alObj.grupo_id);
 
             const val = parseFloat(c.calificacion);
-            // REPROBADA: Toda calificación menor a 6.0 (incluyendo 0, 0.0, 5.9, null, NaN)
+            // REPROBADA: toda calificación menor a 6.0 (incluyendo 0, 0.0, 5.9, null, NaN)
             const isReprobatoria = isNaN(val) || val < 6.0;
 
             if (isReprobatoria) {
                 const nombreMat = (c.materia_nombre || 'Asignatura').trim();
                 const tag = (trim === 'Todos' && c.trimestre) ? `${nombreMat} (T${c.trimestre})` : nombreMat;
-                const scoreDisplay = isNaN(val) ? 0 : val;
-                mapAlumnosById[c.alumno_id].materiasFallas.set(tag, scoreDisplay);
+                alRecord.materiasFallas.set(tag, true);
             }
         });
 
-        // 3. Cargar actividades evaluadas (evaluaciones_actividades)
+        // 2. Cargar TODOS los alumnos para asegurar presencia de inscritos
+        const { data: alumnosData } = await supabaseClient.from('alumnos')
+            .select('id, nombre, grado, grupo_id, grupos(nombre)')
+            .limit(10000);
+
+        (alumnosData || []).forEach(al => {
+            const grpName = al.grupos ? al.grupos.nombre : 'Sin grupo';
+            ensureAlumno(al.id, al.nombre, al.grado, grpName, al.grupo_id);
+        });
+
+        // 3. Cargar actividades evaluadas continuas (evaluaciones_actividades)
         const { data: actsData } = await supabaseClient.from('actividades_maestro')
             .select('id, titulo, trimestre, materia, rubro_peso')
             .limit(10000);
@@ -3114,7 +3124,7 @@ window.loadApoyoRiesgoData = async () => {
                 .limit(50000);
 
             if (evalsData && evalsData.length > 0) {
-                // Chequeo A: Evaluaciones individuales en actividades (0 o < 6.0)
+                // Chequeo A: Notas individuales en actividades < 6.0 o en 0
                 evalsData.forEach(ev => {
                     if (!ev.alumno_id || !mapAlumnosById[ev.alumno_id]) return;
                     const actObj = actsData.find(a => a.id === ev.actividad_id);
@@ -3132,7 +3142,7 @@ window.loadApoyoRiesgoData = async () => {
                     }
                 });
 
-                // Chequeo B: Promedio ponderado propuesto del trimestre < 6.0
+                // Chequeo B: Promedio ponderado del trimestre < 6.0
                 const mapaActis = {};
                 evalsData.forEach(ev => {
                     if (!ev.alumno_id || !mapAlumnosById[ev.alumno_id]) return;
@@ -3171,7 +3181,7 @@ window.loadApoyoRiesgoData = async () => {
             }
         }
 
-        // Helper flexible para hacer match de grado ("1°" vs "1", etc.)
+        // Helpers de filtrado
         const matchGrado = (alGrado, selectedGrado) => {
             if (!selectedGrado || selectedGrado === 'Todos') return true;
             if (alGrado === null || alGrado === undefined) return false;
@@ -3184,11 +3194,12 @@ window.loadApoyoRiesgoData = async () => {
             return false;
         };
 
-        // Helper flexible para hacer match de grupo (por ID o por Nombre)
         const matchGrupo = (al, selectedGrupo) => {
             if (!selectedGrupo || selectedGrupo === 'Todos') return true;
             if (al.grupo_id === selectedGrupo) return true;
-            if (al.grupo && (al.grupo + '').trim().toLowerCase() === (selectedGrupo + '').trim().toLowerCase()) return true;
+            const strAlGrp = (al.grupo || '').trim().toLowerCase();
+            const strSelGrp = (selectedGrupo || '').trim().toLowerCase();
+            if (strAlGrp && strSelGrp && (strAlGrp === strSelGrp || strAlGrp.endsWith(strSelGrp) || strSelGrp.endsWith(strAlGrp))) return true;
             return false;
         };
 
