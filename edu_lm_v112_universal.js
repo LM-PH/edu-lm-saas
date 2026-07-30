@@ -2691,8 +2691,8 @@ function renderApoyoRiesgoAcademico() {
          <div class="form-group">
             <label class="form-label">Umbral de Alerta</label>
             <select class="form-select" id="riesgoUmbralSel">
-                <option value="1+" selected>Todos los Alumnos en Riesgo (1 o más materias reprobadas)</option>
-                <option value="1-2">Riesgo Leve (1 a 2 materias reprobadas)</option>
+                <option value="1+">Todos los Alumnos en Riesgo (1 o más materias reprobadas)</option>
+                <option value="1-2">Riesgo Leve (2 materias reprobadas)</option>
                 <option value="3+">Riesgo Crítico (3 o más materias reprobadas)</option>
             </select>
          </div>
@@ -3123,14 +3123,14 @@ window.loadApoyoRiesgoData = async () => {
             .filter(a => a.numReprobadas > 0)
             .filter(a => {
                 if (umbral === '1+') return a.numReprobadas >= 1;
-                if (umbral === '1-2') return a.numReprobadas >= 1 && a.numReprobadas <= 2;
+                if (umbral === '1-2') return a.numReprobadas === 2;
                 if (umbral === '3+') return a.numReprobadas >= 3;
                 return a.numReprobadas >= 1;
             })
             .sort((a, b) => b.numReprobadas - a.numReprobadas);
 
         if (alumnosEnRiesgo.length === 0) {
-            let msg = umbral === '1-2' ? 'de 1 a 2 materias reprobadas' : (umbral === '3+' ? '3 o más materias reprobadas' : 'materias reprobadas o en 0');
+            let msg = umbral === '1-2' ? 'exactamente 2 materias reprobadas' : (umbral === '3+' ? '3 o más materias reprobadas' : 'materias reprobadas o en 0');
             hold.innerHTML = `<p style="text-align:center; padding:30px; color:var(--success);"><i class="fa-solid fa-check-circle" style="font-size:2rem; display:block; margin-bottom:10px;"></i>No hay alumnos con ${msg} bajo estos filtros.</p>`;
             return;
         }
