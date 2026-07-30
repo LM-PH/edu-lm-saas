@@ -17990,7 +17990,7 @@ window.initFlatpickrAvisos = async (isAlumno = false) => {
     
     let { data } = await supabaseClient
         .from('comunicados')
-        .select('fecha_envio, audiencia')
+        .select('fecha_envio, audiencia, titulo')
         .eq('plantel_id', state.plantelId);
 
     if(!data) data = [];
@@ -18014,34 +18014,54 @@ window.initFlatpickrAvisos = async (isAlumno = false) => {
         datesWithComs = data.filter(c => !c.audiencia || audSet.has(c.audiencia))
                             .map(c => getLocalDateStringHelper(c.fecha_envio));
     } else {
-        // Obtener asignaciones si es maestro para abarcar grupos específicos
+        // Obtener asignaciones si es maestro para abarcar grupos específicos y filtrar talleres
         let maestroGrupos = [];
+        let maestroMaterias = [];
         if((userRole === 'maestro' || userRole === 'docente') && uRes.data?.user?.email) {
-            const { data: asigs } = await supabaseClient.from('asignaciones_maestros').select('grupo_id').eq('docente_email', uRes.data.user.email);
-            if(asigs) maestroGrupos = asigs.map(a => a.grupo_id).filter(Boolean);
+            const { data: asigs } = await supabaseClient.from('asignaciones_maestros').select('grupo_id, materia').eq('docente_email', uRes.data.user.email);
+            if(asigs) {
+                maestroGrupos = asigs.map(a => a.grupo_id).filter(Boolean);
+                maestroMaterias = asigs.map(a => a.materia).filter(Boolean);
+            }
         }
 
         datesWithComs = data.filter(c => {
             if(!c.audiencia) return true;
             const aud = c.audiencia;
-            if(['Todos', 'General'].includes(aud)) return true;
-            if(userRole === 'maestro' || userRole === 'docente') {
-                if(['Maestros', 'Personal'].includes(aud)) return true;
-                if(aud === `Maestro_${userId}`) return true;
-                if(aud.startsWith('Maestros_Grupo_')) {
+            let isTargeted = false;
+            
+            if(['Todos', 'General'].includes(aud)) isTargeted = true;
+            else if(userRole === 'maestro' || userRole === 'docente') {
+                if(['Maestros', 'Personal'].includes(aud)) isTargeted = true;
+                else if(aud === `Maestro_${userId}`) isTargeted = true;
+                else if(aud.startsWith('Maestros_Grupo_')) {
                     const gId = aud.replace('Maestros_Grupo_', '');
-                    return maestroGrupos.includes(gId);
+                    isTargeted = maestroGrupos.includes(gId);
                 }
-                if(aud.startsWith('Grupo_')) {
+                else if(aud.startsWith('Grupo_')) {
                     const gId = aud.replace('Grupo_', '');
-                    return maestroGrupos.includes(gId);
+                    isTargeted = maestroGrupos.includes(gId);
                 }
             } else if (userRole === 'directivo' || userRole === 'admin' || userRole === 'administrador' || userRole === 'administrativo') {
-                return true; // Admin/Directivos ven todas las fechas con avisos
+                isTargeted = true; // Admin/Directivos ven todas las fechas con avisos
             } else if (userRole === 'apoyo' || userRole === 'biblioteca') {
-                if(['Personal', 'Maestros'].includes(aud)) return true;
+                if(['Personal', 'Maestros'].includes(aud)) isTargeted = true;
             }
-            return false;
+            
+            if (isTargeted && c.titulo?.startsWith('JUSTIFICANTE MÉDICO:') && c.titulo.includes('[TALLER:')) {
+                const match = c.titulo.match(/\[TALLER:(.+?)\]/);
+                if (match && maestroMaterias.length > 0) {
+                    const reqTaller = match[1].toLowerCase().trim();
+                    const canView = maestroMaterias.some(materia => {
+                        const m = materia.toLowerCase().trim();
+                        if (!m.includes('tecnología') && !m.includes('taller')) return true;
+                        return m.includes(reqTaller) || reqTaller.includes(m) || m === reqTaller;
+                    });
+                    if (!canView) return false;
+                }
+            }
+
+            return isTargeted;
         }).map(c => getLocalDateStringHelper(c.fecha_envio));
     }
     
