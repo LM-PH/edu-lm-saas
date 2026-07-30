@@ -1,4 +1,4 @@
-const CACHE_NAME = 'edulm-cache-v122';
+const CACHE_NAME = 'edulm-cache-v123';
 const ASSETS_TO_CACHE = [
   './',
   './index.html',

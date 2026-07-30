@@ -9020,7 +9020,7 @@ window.loadTimelinePersonal = async (selectedDate) => {
             cont.innerHTML = `
                 <div style="padding:60px; text-align:center; color:var(--text-muted);">
                     <i class="fa-regular fa-calendar-xmark fa-3x" style="opacity:0.2; margin-bottom:15px; display:block;"></i>
-                    <p>No hay avisos oficiales registrados para el día <strong>${new Date(targetDate).toLocaleDateString('es-MX', {dateStyle:'long'})}</strong>.</p>
+                    <p>No hay avisos oficiales registrados para el día <strong>${new Date(targetDate + 'T12:00:00').toLocaleDateString('es-MX', {dateStyle:'long'})}</strong>.</p>
                 </div>`;
             return;
         }
@@ -18001,7 +18001,11 @@ window.initFlatpickrAvisos = async (isAlumno = false) => {
                 if(aud === `Maestro_${userId}` || aud.startsWith('Maestro_')) return true;
                 if(aud.startsWith('Maestros_Grupo_')) {
                     const gId = aud.replace('Maestros_Grupo_', '');
-                    return maestroGrupos.includes(gId) || maestroGrupos.length === 0;
+                    return maestroGrupos.includes(gId);
+                }
+                if(aud.startsWith('Grupo_')) {
+                    const gId = aud.replace('Grupo_', '');
+                    return maestroGrupos.includes(gId);
                 }
             } else if (userRole === 'directivo' || userRole === 'admin' || userRole === 'administrador' || userRole === 'administrativo') {
                 return true; // Admin/Directivos ven todas las fechas con avisos
@@ -18107,9 +18111,6 @@ window.initBitacoraCalendar = async (inputId, cbName) => {
         if (data) {
             // Manejar tanto strings YYYY-MM-DD como timestamps
             datesWithEntries = [...new Set(data.map(d => (d.fecha_referencia || '').split('T')[0]))].filter(d => d);
-            if (datesWithEntries.length > 0) {
-                window.showToast("Cargadas " + datesWithEntries.length + " fechas con apuntes", "info");
-            }
         }
     } catch(e) { console.error('Error fetching bitacora dates', e); }
 
