@@ -278,12 +278,7 @@ window.handleLogin = async (e) => {
             lastRole: (profile.rol || 'USUARIO').toUpperCase(),
             lastTime: new Date().toISOString()
         };
-        // Escribir directamente a logo_url como JSON plano (funciona siempre, sin depender de columnas nuevas)
-        try {
-            await supabaseClient.from('planteles').update({
-                logo_url: JSON.stringify(metaObj)
-            }).eq('id', profile.plantel_id);
-        } catch(pingErr) {}
+        // Eliminado: Código que sobrescribía logo_url con JSON de login
     }
 
     window.showToast(`Bienvenido(a), ${state.userName}`, 'success');
