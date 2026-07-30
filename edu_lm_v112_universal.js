@@ -18068,19 +18068,50 @@ window.initBitacoraCalendar = async (inputId, cbName) => {
     const el = document.getElementById(inputId);
     if(!el) return;
     
+    // Inyectar CSS dinámicamente para asegurar que se aplique (y evitar problemas de caché)
+    if (!document.getElementById('bitacora-dot-style')) {
+        const style = document.createElement('style');
+        style.id = 'bitacora-dot-style';
+        style.innerHTML = `
+            .flatpickr-day { position: relative !important; }
+            .flatpickr-bitacora-dot {
+                display: block;
+                width: 6px;
+                height: 6px;
+                background-color: var(--danger, #dc3545);
+                border-radius: 50%;
+                position: absolute;
+                bottom: 2px;
+                left: 50%;
+                transform: translateX(-50%);
+            }
+        `;
+        document.head.appendChild(style);
+    }
+    
     let datesWithEntries = [];
     try {
         const uid = (await supabaseClient.auth.getUser()).data.user.id;
-        const { data } = await supabaseClient.from('bitacora_maestro')
+        
+        // Dependiendo del rol, tal vez quiera ver los puntos de todas las bitácoras si es Director, o solo los suyos.
+        // Como la bitácora de Maestro/Apoyo es individual, mostramos sus propios registros.
+        // (Pero en Apoyo si es admin/director ve todos, así que filtramos según el rol)
+        let query = supabaseClient.from('bitacora_maestro')
             .select('fecha_referencia')
-            .eq('plantel_id', state.plantelId)
-            .eq('perfil_id', uid);
+            .eq('plantel_id', state.plantelId);
+            
+        if (state.role !== 'admin' && state.role !== 'master' && state.role !== 'director') {
+            query = query.eq('perfil_id', uid);
+        }
+            
+        const { data } = await query;
         
         if (data) {
             datesWithEntries = [...new Set(data.map(d => d.fecha_referencia))];
         }
     } catch(e) { console.error('Error fetching bitacora dates', e); }
 
+    // Inicializar Flatpickr DESPUÉS de obtener las fechas para que onDayCreate funcione
     flatpickr(el, {
         locale: 'es',
         dateFormat: 'Y-m-d',
@@ -18089,7 +18120,8 @@ window.initBitacoraCalendar = async (inputId, cbName) => {
         },
         onDayCreate: function(dObj, dStr, fp, dayElem) {
             const date = dayElem.dateObj;
-            const localDate = new Date(date.getTime() - (date.getTimezoneOffset() * 60000)).toISOString().split('T')[0];
+            const offset = date.getTimezoneOffset() * 60000;
+            const localDate = new Date(date.getTime() - offset).toISOString().split('T')[0];
             
             if (datesWithEntries.includes(localDate)) {
                 dayElem.innerHTML += '<span class="flatpickr-bitacora-dot"></span>';
