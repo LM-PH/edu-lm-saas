@@ -3215,8 +3215,12 @@ window.loadApoyoRiesgoData = async () => {
             })
             .filter(a => a.numReprobadas > 0)
             .filter(al => {
-                if (!matchGrado(al.grado, grado)) return false;
-                if (!matchGrupo(al, grupo)) return false;
+                if (grupo && grupo !== 'Todos') {
+                    return matchGrupo(al, grupo);
+                }
+                if (grado && grado !== 'Todos') {
+                    return matchGrado(al.grado, grado);
+                }
                 return true;
             })
             .filter(a => {
