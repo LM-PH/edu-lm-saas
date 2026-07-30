@@ -3196,10 +3196,19 @@ window.loadApoyoRiesgoData = async () => {
 
         const matchGrupo = (al, selectedGrupo) => {
             if (!selectedGrupo || selectedGrupo === 'Todos') return true;
-            if (al.grupo_id === selectedGrupo) return true;
-            const strAlGrp = (al.grupo || '').trim().toLowerCase();
-            const strSelGrp = (selectedGrupo || '').trim().toLowerCase();
-            if (strAlGrp && strSelGrp && (strAlGrp === strSelGrp || strAlGrp.endsWith(strSelGrp) || strSelGrp.endsWith(strAlGrp))) return true;
+
+            const groupObj = (window._riesgoGruposCacheados || []).find(g => g.id === selectedGrupo);
+            const selectedName = groupObj ? groupObj.nombre : selectedGrupo;
+
+            if (al.grupo_id && al.grupo_id === selectedGrupo) return true;
+
+            const alGrpStr = (al.grupo || '').replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
+            const selGrpStr = (selectedName || '').replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
+
+            if (alGrpStr && selGrpStr && (alGrpStr === selGrpStr || alGrpStr.endsWith(selGrpStr) || selGrpStr.endsWith(alGrpStr))) {
+                return true;
+            }
+
             return false;
         };
 
