@@ -1184,3 +1184,16 @@ body {
   background-color: var(--danger);
   border-radius: 50%;
 }
+
+/* Punto rojo para fechas con bitácora */
+.flatpickr-bitacora-dot {
+    display: block;
+    width: 6px;
+    height: 6px;
+    background-color: var(--danger, #dc3545);
+    border-radius: 50%;
+    position: absolute;
+    bottom: 2px;
+    left: 50%;
+    transform: translateX(-50%);
+}

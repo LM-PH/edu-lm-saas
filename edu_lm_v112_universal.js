@@ -2598,7 +2598,10 @@ function renderMaestroCalificaciones() {
 
 function renderMaestroBitacora() {
   const tD = new Date().toLocaleDateString('en-CA');
-  setTimeout(() => { if(window.cargarBitacora) window.cargarBitacora(tD); }, 100);
+  setTimeout(() => { 
+      if(window.cargarBitacora) window.cargarBitacora(tD); 
+      if(window.initBitacoraCalendar) window.initBitacoraCalendar('fechaBitacora', 'cargarBitacora');
+  }, 100);
   return `
     <div class="page-header" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:15px;">
       <div>
@@ -4324,7 +4327,10 @@ window.emitirJustificanteSalud = async (alumnoId, nombre) => {
 
 function renderApoyoBitacora() {
     const today = new Date().toLocaleDateString('en-CA');
-    setTimeout(() => { if(window.loadApoyoBitacora) window.loadApoyoBitacora(today); }, 100);
+    setTimeout(() => { 
+        if(window.loadApoyoBitacora) window.loadApoyoBitacora(today); 
+        if(window.initBitacoraCalendar) window.initBitacoraCalendar('fechaBitacoraApoyo', 'loadApoyoBitacora');
+    }, 100);
     return `
     <div class="page-header" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:15px;">
       <div>
@@ -16606,7 +16612,10 @@ window.guardarPrestamoBiblioteca = async () => {
 
 function renderBibliotecaBitacora() {
   const tD = new Date().toLocaleDateString('en-CA');
-  setTimeout(() => { if(window.cargarBitacora) window.cargarBitacora(tD); }, 100);
+  setTimeout(() => { 
+      if(window.cargarBitacora) window.cargarBitacora(tD); 
+      if(window.initBitacoraCalendar) window.initBitacoraCalendar('fechaBitacora', 'cargarBitacora');
+  }, 100);
   return `
     <div class="page-header" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:15px;">
       <div>
@@ -18053,3 +18062,38 @@ document.addEventListener("touchend", function(e) {
     _ptrStart.y = 0;
 }, {passive: true});
 
+
+// ---- FLATPICKR BITACORA (Puntos rojos) ----
+window.initBitacoraCalendar = async (inputId, cbName) => {
+    const el = document.getElementById(inputId);
+    if(!el) return;
+    
+    let datesWithEntries = [];
+    try {
+        const uid = (await supabaseClient.auth.getUser()).data.user.id;
+        const { data } = await supabaseClient.from('bitacora_maestro')
+            .select('fecha_referencia')
+            .eq('plantel_id', state.plantelId)
+            .eq('perfil_id', uid);
+        
+        if (data) {
+            datesWithEntries = [...new Set(data.map(d => d.fecha_referencia))];
+        }
+    } catch(e) { console.error('Error fetching bitacora dates', e); }
+
+    flatpickr(el, {
+        locale: 'es',
+        dateFormat: 'Y-m-d',
+        onChange: function(selectedDates, dateStr, instance) {
+            if(window[cbName]) window[cbName](dateStr);
+        },
+        onDayCreate: function(dObj, dStr, fp, dayElem) {
+            const date = dayElem.dateObj;
+            const localDate = new Date(date.getTime() - (date.getTimezoneOffset() * 60000)).toISOString().split('T')[0];
+            
+            if (datesWithEntries.includes(localDate)) {
+                dayElem.innerHTML += '<span class="flatpickr-bitacora-dot"></span>';
+            }
+        }
+    });
+};
