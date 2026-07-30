@@ -18084,6 +18084,7 @@ window.initBitacoraCalendar = async (inputId, cbName) => {
                 bottom: 2px;
                 left: 50%;
                 transform: translateX(-50%);
+                z-index: 10;
             }
         `;
         document.head.appendChild(style);
@@ -18093,9 +18094,6 @@ window.initBitacoraCalendar = async (inputId, cbName) => {
     try {
         const uid = (await supabaseClient.auth.getUser()).data.user.id;
         
-        // Dependiendo del rol, tal vez quiera ver los puntos de todas las bitácoras si es Director, o solo los suyos.
-        // Como la bitácora de Maestro/Apoyo es individual, mostramos sus propios registros.
-        // (Pero en Apoyo si es admin/director ve todos, así que filtramos según el rol)
         let query = supabaseClient.from('bitacora_maestro')
             .select('fecha_referencia')
             .eq('plantel_id', state.plantelId);
@@ -18107,7 +18105,11 @@ window.initBitacoraCalendar = async (inputId, cbName) => {
         const { data } = await query;
         
         if (data) {
-            datesWithEntries = [...new Set(data.map(d => d.fecha_referencia))];
+            // Manejar tanto strings YYYY-MM-DD como timestamps
+            datesWithEntries = [...new Set(data.map(d => (d.fecha_referencia || '').split('T')[0]))].filter(d => d);
+            if (datesWithEntries.length > 0) {
+                window.showToast("Cargadas " + datesWithEntries.length + " fechas con apuntes", "info");
+            }
         }
     } catch(e) { console.error('Error fetching bitacora dates', e); }
 
