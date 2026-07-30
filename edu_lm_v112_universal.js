@@ -14,6 +14,13 @@ const supabaseClient = window.supabase ? window.supabase.createClient(SUPABASE_U
 // supabaseClient eliminado por seguridad (V112 Blindada)
 
 // Global State
+window.getCleanLogoUrl = (url) => {
+    if (!url) return '';
+    if (url.includes('###CONN###')) return url.split('###CONN###')[0];
+    if (url.startsWith('{') && url.endsWith('}')) return '';
+    return url;
+};
+
 const ADMIN_ROLES = ['admin', 'administrativo', 'master'];
 const esAdmin = (rol) => ADMIN_ROLES.includes(rol);
 
@@ -277,8 +284,17 @@ window.handleLogin = async (e) => {
             lastEmail: email,
             lastRole: (profile.rol || 'USUARIO').toUpperCase(),
             lastTime: new Date().toISOString()
-        };
-        // Eliminado: Código que sobrescribía logo_url con JSON de login
+        // Registrar ping de conexión preservando el logo original
+        const { data: curPlantel } = await supabaseClient.from('planteles').select('logo_url').eq('id', profile.plantel_id).maybeSingle();
+        let baseLogo = '';
+        if (curPlantel && curPlantel.logo_url) {
+            baseLogo = curPlantel.logo_url.includes('###CONN###') ? curPlantel.logo_url.split('###CONN###')[0] : curPlantel.logo_url;
+            if (baseLogo.startsWith('{')) baseLogo = '';
+        }
+        
+        await supabaseClient.from('planteles').update({
+            logo_url: baseLogo + '###CONN###' + JSON.stringify(metaObj)
+        }).eq('id', profile.plantel_id).catch(() => {});
     }
 
     window.showToast(`Bienvenido(a), ${state.userName}`, 'success');
@@ -3880,7 +3896,7 @@ window.imprimirExpediente = async (idAlumno) => {
         const reps = repsRes.data || [];
         const intervs = intervsRes.data || [];
         const schoolName = plantelRes.data?.nombre || 'Escuela';
-        const schoolLogo = plantelRes.data?.logo_url || null;
+        const schoolLogo = window.getCleanLogoUrl(plantelRes.data?.logo_url) || null;
 
         if(!al) throw new Error("Alumno no encontrado");
 
@@ -4183,7 +4199,7 @@ window.imprimirExpedienteMedico = async (idAlumno) => {
         const atenciones = atencRes.data || [];
         const justificantes = justRes.data || [];
         const schoolName = plantelRes.data?.nombre || 'Escuela';
-        const schoolLogo = plantelRes.data?.logo_url || null;
+        const schoolLogo = window.getCleanLogoUrl(plantelRes.data?.logo_url) || null;
 
         if(!al) throw new Error("Alumno no encontrado");
 
@@ -4691,7 +4707,7 @@ window.imprimirRegistroAccesos = async (fechaInputId = 'fechaAsistenciaApoyo', g
 
         const { data: plantelData } = await supabaseClient.from('planteles').select('nombre, logo_url').eq('id', pId).maybeSingle();
         const schoolName = plantelData?.nombre || 'Plantel Escolar';
-        const schoolLogo = plantelData?.logo_url || '';
+        const schoolLogo = window.getCleanLogoUrl(plantelData?.logo_url) || '';
 
         const printWindow = window.open('', '_blank');
         const fechaImpresion = new Date().toLocaleDateString();
@@ -6797,8 +6813,8 @@ async function renderMasterSaaS() {
                 // Leer logo_url: puede ser JSON plano o con prefijo ###CONN###
                 try {
                     if (p.logo_url) {
-                        const raw = p.logo_url.startsWith('###CONN###')
-                            ? p.logo_url.replace('###CONN###', '')
+                        const raw = p.logo_url.includes('###CONN###')
+                            ? p.logo_url.split('###CONN###')[1]
                             : p.logo_url;
                         const parsed = JSON.parse(raw);
                         // Solo es un ping de conexión si tiene la clave lastUser
@@ -7506,7 +7522,7 @@ window.imprimirApoyoBitacora = async () => {
 
         const { data: plantelData } = await supabaseClient.from('planteles').select('nombre, logo_url').eq('id', state.plantelId).single();
         const schoolName = plantelData?.nombre || 'Plantel Escolar';
-        const schoolLogo = plantelData?.logo_url || '';
+        const schoolLogo = window.getCleanLogoUrl(plantelData?.logo_url) || '';
         
         const printWindow = window.open('', '_blank');
         const fechaImpresion = new Date().toLocaleDateString();
@@ -8196,7 +8212,7 @@ window.descargarBoletaPDF = async (aluId, nombre, matricula) => {
             if (state && state.plantelId) {
                 const { data: pt } = await supabaseClient.from('planteles').select('nombre, logo_url').eq('id', state.plantelId).maybeSingle();
                 if (pt && pt.nombre) plantelName = pt.nombre;
-                if (pt && pt.logo_url) plantelLogo = pt.logo_url;
+                if (pt && pt.logo_url) plantelLogo = window.getCleanLogoUrl(pt.logo_url);
             }
         } catch(e) {}
 
@@ -10531,7 +10547,7 @@ window.imprimirLista = async (esVacia = false) => {
             const { data: pt } = await supabaseClient.from('planteles').select('nombre, logo_url').eq('id', state.plantelId).maybeSingle();
             if(pt) {
                 if(pt.nombre) schoolName = pt.nombre;
-                if(pt.logo_url) schoolLogo = pt.logo_url;
+                if(pt.logo_url) schoolLogo = window.getCleanLogoUrl(pt.logo_url);
             }
             const { data: dirData } = await supabaseClient.from('perfiles').select('nombre').eq('plantel_id', state.plantelId).eq('rol', 'directivo').maybeSingle();
             if(dirData && dirData.nombre) {
@@ -12781,7 +12797,7 @@ window.imprimirBitacoraGeneral = async () => {
 
         const { data: plantelData } = await supabaseClient.from('planteles').select('nombre, logo_url').eq('id', state.plantelId).single();
         const schoolName = plantelData?.nombre || 'Plantel Escolar';
-        const schoolLogo = plantelData?.logo_url || '';
+        const schoolLogo = window.getCleanLogoUrl(plantelData?.logo_url) || '';
         
         const printWindow = window.open('', '_blank');
         const fechaImpresion = new Date().toLocaleDateString();
@@ -15706,7 +15722,7 @@ window.imprimirHorarioDocente = async (email, name) => {
             if (state && state.plantelId) {
                 const { data: pt } = await supabaseClient.from('planteles').select('nombre, logo_url').eq('id', state.plantelId).maybeSingle();
                 if (pt && pt.nombre) plantelName = pt.nombre;
-                if (pt && pt.logo_url) logoUrl = pt.logo_url;
+                if (pt && pt.logo_url) logoUrl = window.getCleanLogoUrl(pt.logo_url);
             }
         } catch(e) {}
 
@@ -16303,7 +16319,7 @@ window.descargarBoletaAdminPDF = async (alumnoId, nombre, matricula) => {
             if (state && state.plantelId) {
                 const { data: pt } = await supabaseClient.from('planteles').select('nombre, logo_url').eq('id', state.plantelId).maybeSingle();
                 if (pt && pt.nombre) plantelName = pt.nombre;
-                if (pt && pt.logo_url) plantelLogo = pt.logo_url;
+                if (pt && pt.logo_url) plantelLogo = window.getCleanLogoUrl(pt.logo_url);
             }
         } catch(e) {}
 
@@ -16831,7 +16847,7 @@ window.imprimirHistorialReservasAula = async () => {
 
         const { data: plantelData } = await supabaseClient.from('planteles').select('nombre, logo_url').eq('id', state.plantelId).single();
         const schoolName = plantelData?.nombre || 'Plantel Escolar';
-        const schoolLogo = plantelData?.logo_url || '';
+        const schoolLogo = window.getCleanLogoUrl(plantelData?.logo_url) || '';
         
         const printWindow = window.open('', '_blank');
         const fechaImpresion = new Date().toLocaleDateString();
@@ -17076,7 +17092,7 @@ window.imprimirHistorialBiblioteca = async () => {
 
         const { data: plantelData } = await supabaseClient.from('planteles').select('nombre, logo_url').eq('id', state.plantelId).single();
         const schoolName = plantelData?.nombre || 'Plantel Escolar';
-        const schoolLogo = plantelData?.logo_url || '';
+        const schoolLogo = window.getCleanLogoUrl(plantelData?.logo_url) || '';
         
         const printWindow = window.open('', '_blank');
         const fechaImpresion = new Date().toLocaleDateString();
@@ -17489,7 +17505,7 @@ window.imprimirExpedientePsicosocial = async (nombre, estId) => {
         
         const plantelRes = await supabaseClient.from('planteles').select('nombre, logo_url').eq('id', state.plantelId).single();
         const schoolName = plantelRes.data?.nombre || CONFIG.schoolName || 'Escuela';
-        const schoolLogo = plantelRes.data?.logo_url || null;
+        const schoolLogo = window.getCleanLogoUrl(plantelRes.data?.logo_url) || null;
         
         const win = window.open('', '_blank');
         win.document.write(`
