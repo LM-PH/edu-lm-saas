@@ -17982,7 +17982,7 @@ window.initFlatpickrAvisos = async (isAlumno = false) => {
                 if(al.grupo_id) audSet.add('Grupo_' + al.grupo_id);
             }
         }
-        datesWithComs = data.filter(c => !c.audiencia || audSet.has(c.audiencia) || c.audiencia.startsWith('Grupo_') || c.audiencia.startsWith('Alumno_'))
+        datesWithComs = data.filter(c => !c.audiencia || audSet.has(c.audiencia))
                             .map(c => getLocalDateStringHelper(c.fecha_envio));
     } else {
         // Obtener asignaciones si es maestro para abarcar grupos específicos
@@ -17998,7 +17998,7 @@ window.initFlatpickrAvisos = async (isAlumno = false) => {
             if(['Todos', 'General'].includes(aud)) return true;
             if(userRole === 'maestro' || userRole === 'docente') {
                 if(['Maestros', 'Personal'].includes(aud)) return true;
-                if(aud === `Maestro_${userId}` || aud.startsWith('Maestro_')) return true;
+                if(aud === `Maestro_${userId}`) return true;
                 if(aud.startsWith('Maestros_Grupo_')) {
                     const gId = aud.replace('Maestros_Grupo_', '');
                     return maestroGrupos.includes(gId);
