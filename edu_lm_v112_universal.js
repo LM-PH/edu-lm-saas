@@ -3049,15 +3049,10 @@ window.loadApoyoRiesgoData = async () => {
     const grupoSel = document.getElementById('riesgoGrupoSel') ? document.getElementById('riesgoGrupoSel').value : 'Todos';
     const umbral = document.getElementById('riesgoUmbralSel').value || '1+';
 
-    hold.innerHTML = '<p style="text-align:center; padding:30px;"><i class="fa-solid fa-spinner fa-spin"></i> Escaneando calificaciones...</p>';
+    hold.innerHTML = '<p style="text-align:center; padding:30px;"><i class="fa-solid fa-spinner fa-spin"></i> Escaneando calificaciones y promedios reprobatorios...</p>';
     badge.style.display = 'none';
 
     try {
-        const diagLines = [];
-        diagLines.push(`🔧 DIAGNÓSTICO — Filtros: trim=${trim}, grado=${gradoSel}, grupo=${grupoSel}, umbral=${umbral}`);
-        diagLines.push(`🏫 plantelId en state: ${state.plantelId || '(vacío)'}`);
-        diagLines.push(`👥 Grupos cacheados: ${(window._riesgoGruposCacheados||[]).length} → ${(window._riesgoGruposCacheados||[]).map(g=>g.nombre+'('+g.id+')').join(', ')}`);
-
         // ── PASO 1: Alumnos del grupo/grado seleccionado ──
         let alumnosQuery = supabaseClient.from('alumnos')
             .select('id, nombre, grado, grupo_id, grupos(id, nombre)')
@@ -3069,17 +3064,19 @@ window.loadApoyoRiesgoData = async () => {
             const numGrado = (gradoSel + '').replace(/[^0-9]/g, '');
             const grpsDel = (window._riesgoGruposCacheados || []).filter(g => (g.nombre+'').replace(/[^0-9]/g,'') === numGrado);
             if (grpsDel.length > 0) alumnosQuery = alumnosQuery.in('grupo_id', grpsDel.map(g => g.id));
-            diagLines.push(`📐 Grupos del grado ${gradoSel}: ${grpsDel.map(g=>g.nombre).join(', ')} (${grpsDel.length})`);
         }
 
         const { data: alumnosData, error: errAl } = await alumnosQuery;
-        diagLines.push(`👨‍🎓 Alumnos encontrados: ${(alumnosData||[]).length}${errAl ? ' ERROR: '+errAl.message : ''}`);
-        if (alumnosData && alumnosData.length > 0) {
-            diagLines.push(`&nbsp;&nbsp;Muestra: ${alumnosData.slice(0,5).map(a=>a.nombre+'(grpId='+a.grupo_id+')').join(', ')}`);
+
+        if (errAl) {
+            console.error("Error al cargar alumnos:", errAl);
+            hold.innerHTML = `<p style="text-align:center; color:var(--danger); padding:20px;">Error al cargar alumnos: ${errAl.message}</p>`;
+            return;
         }
 
         if (!alumnosData || alumnosData.length === 0) {
-            showDiag(hold, diagLines, '❌ No se encontraron alumnos con ese filtro de grupo.');
+            let msg = umbral === '1-2' ? 'de 1 a 2 materias reprobadas' : (umbral === '3+' ? '3 o más materias reprobadas' : 'materias reprobadas o en 0');
+            hold.innerHTML = `<p style="text-align:center; padding:30px; color:var(--success);"><i class="fa-solid fa-check-circle" style="font-size:2rem; display:block; margin-bottom:10px;"></i>No hay alumnos con ${msg} bajo estos filtros.</p>`;
             return;
         }
 
@@ -3100,33 +3097,11 @@ window.loadApoyoRiesgoData = async () => {
         if (trim !== 'Todos') califQuery = califQuery.eq('trimestre', parseInt(trim));
 
         const { data: califsData, error: errCal } = await califQuery;
-        diagLines.push(`📋 Calificaciones cargadas (con plantel_id): ${(califsData||[]).length}${errCal ? ' ERROR: '+errCal.message : ''}`);
 
-        // TEST A: Sin ningún filtro — ¿puede este usuario leer la tabla?
-        const { data: rawTest, error: rawErr } = await supabaseClient.from('calificaciones').select('alumno_id, plantel_id, calificacion').limit(3);
-        diagLines.push(`🧪 TEST A — Sin filtro (limit 3): ${(rawTest||[]).length} filas${rawErr ? ' ERR: '+rawErr.message : ''}`);
-        if (rawTest && rawTest.length > 0) diagLines.push(`&nbsp;&nbsp;→ plantel_ids: ${rawTest.map(r=>r.plantel_id).join(', ')}`);
+        if (errCal) {
+            console.error("Error al cargar calificaciones:", errCal);
+        }
 
-        // TEST B: Misma estructura que Admin (alumnos!inner join)
-        const { data: adminStyle, error: adminErr } = await supabaseClient.from('calificaciones')
-            .select('alumno_id, calificacion, materia_nombre, alumnos!inner(grupo_id)')
-            .eq('plantel_id', state.plantelId)
-            .eq('alumnos.grupo_id', grupoSel)
-            .eq('trimestre', parseInt(trim))
-            .limit(5);
-        diagLines.push(`🧪 TEST B — Admin-style inner join: ${(adminStyle||[]).length} filas${adminErr ? ' ERR: '+adminErr.message : ''}`);
-        if (adminStyle && adminStyle.length > 0) diagLines.push(`&nbsp;&nbsp;→ Muestra: ${adminStyle.slice(0,3).map(r=>r.materia_nombre+'='+r.calificacion).join(', ')}`);
-
-        // TEST C: or() con plantel_id.is.null (como el código original)
-        const { data: orTest, error: orErr } = await supabaseClient.from('calificaciones')
-            .select('alumno_id, calificacion, plantel_id')
-            .in('alumno_id', alumIds)
-            .or(`plantel_id.eq.${state.plantelId},plantel_id.is.null`)
-            .limit(10);
-        diagLines.push(`🧪 TEST C — OR (plantel=X OR null): ${(orTest||[]).length} filas${orErr ? ' ERR: '+orErr.message : ''}`);
-        if (orTest && orTest.length > 0) diagLines.push(`&nbsp;&nbsp;→ plantel_ids: ${orTest.map(r=>r.plantel_id||'NULL').join(', ')}`);
-
-        let totalReprobadas = 0;
         (califsData || []).forEach(c => {
             if (!c.alumno_id || !mapAlumnosById[c.alumno_id]) return;
             const val = parseFloat(c.calificacion);
@@ -3135,35 +3110,77 @@ window.loadApoyoRiesgoData = async () => {
                 const nombreMat = (c.materia_nombre || 'Asignatura').trim();
                 const tag = (trim === 'Todos' && c.trimestre) ? `${nombreMat} (T${c.trimestre})` : nombreMat;
                 mapAlumnosById[c.alumno_id].materiasFallas.add(tag);
-                totalReprobadas++;
             }
         });
-        diagLines.push(`🔴 Calificaciones reprobadas encontradas: ${totalReprobadas}`);
 
-        const alumnosConFallas = Object.values(mapAlumnosById).filter(a => a.materiasFallas.size > 0);
-        diagLines.push(`⚠️ Alumnos con ≥1 reprobada (antes de filtro umbral): ${alumnosConFallas.length}`);
-        if (alumnosConFallas.length > 0) {
-            diagLines.push(`&nbsp;&nbsp;Muestra: ${alumnosConFallas.slice(0,5).map(a=>a.nombre+'('+a.materiasFallas.size+' rep)').join(', ')}`);
+        // ── PASO 3: Construir lista de alumnos en riesgo ──
+        const alumnosEnRiesgo = Object.values(mapAlumnosById)
+            .map(a => ({
+                ...a,
+                materias: Array.from(a.materiasFallas),
+                numReprobadas: a.materiasFallas.size
+            }))
+            .filter(a => a.numReprobadas > 0)
+            .filter(a => {
+                if (umbral === '1+') return a.numReprobadas >= 1;
+                if (umbral === '1-2') return a.numReprobadas >= 1 && a.numReprobadas <= 2;
+                if (umbral === '3+') return a.numReprobadas >= 3;
+                return a.numReprobadas >= 1;
+            })
+            .sort((a, b) => b.numReprobadas - a.numReprobadas);
+
+        if (alumnosEnRiesgo.length === 0) {
+            let msg = umbral === '1-2' ? 'de 1 a 2 materias reprobadas' : (umbral === '3+' ? '3 o más materias reprobadas' : 'materias reprobadas o en 0');
+            hold.innerHTML = `<p style="text-align:center; padding:30px; color:var(--success);"><i class="fa-solid fa-check-circle" style="font-size:2rem; display:block; margin-bottom:10px;"></i>No hay alumnos con ${msg} bajo estos filtros.</p>`;
+            return;
         }
 
-        showDiag(hold, diagLines, `✅ Diagnóstico completo. Alumnos en riesgo: ${alumnosConFallas.length}`);
-        return;
+        badge.style.display = 'inline-block';
+        badge.innerText = `${alumnosEnRiesgo.length} detectados`;
+
+        let html = `
+            <div style="padding:10px 14px; background:#eff6ff; border:1px solid #bfdbfe; border-radius:8px; margin-bottom:15px; font-size:0.85rem; color:#1e40af;">
+                <i class="fa-solid fa-circle-info"></i> Se detectaron <strong>${alumnosEnRiesgo.length} alumnos</strong> con calificaciones reprobatorias (menores a 6.0 o en 0).
+            </div>
+            <div style="overflow-x:auto;">
+                <table class="risk-table" style="width:100%;">
+                    <thead>
+                        <tr>
+                            <th>Alumno</th>
+                            <th>Grado/Grupo</th>
+                            <th style="text-align:center;">Materias Reprobadas</th>
+                            <th>Asignaturas</th>
+                            <th style="text-align:center;">Acción</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+        `;
+
+        alumnosEnRiesgo.forEach(al => {
+            const badgesMaterias = al.materias.map(m => `<span class="badge" style="background:#fee2e2; color:#991b1b; margin:2px; font-weight:600; border:1px solid #fca5a5;">${m}</span>`).join('');
+            html += `
+                <tr>
+                    <td style="font-weight:600;">${al.nombre}</td>
+                    <td>${al.grado} - ${al.grupo}</td>
+                    <td style="text-align:center;"><span style="font-size:1.2rem; font-weight:bold; color:var(--danger);">${al.numReprobadas}</span></td>
+                    <td style="max-width:300px; line-height:1.6;">${badgesMaterias}</td>
+                    <td style="text-align:center;">
+                        <button class="btn btn-primary btn-sm" onclick="window.navigate('/apoyo/reportes'); setTimeout(()=>{ const el=document.getElementById('searchAlumnoFoco'); if(el){el.value='${al.nombre.replace(/'/g, "\\'")}'; window.searchAlumnoParaReporte();} }, 500);">
+                            <i class="fa-solid fa-calendar-check"></i> Citar / Reporte
+                        </button>
+                    </td>
+                </tr>
+            `;
+        });
+
+        html += '</tbody></table></div>';
+        hold.innerHTML = html;
 
     } catch(err) {
-        hold.innerHTML = `<p style="color:red;padding:20px">Error diagnóstico: ${err.message}</p>`;
+        console.error("Error en loadApoyoRiesgoData:", err);
+        hold.innerHTML = `<p style="text-align:center; color:var(--danger); padding:20px;"><i class="fa-solid fa-triangle-exclamation"></i> Error al calcular el riesgo académico: ${err.message || err}</p>`;
     }
 };
-
-function showDiag(hold, lines, summary) {
-    hold.innerHTML = `
-        <div style="font-family:monospace;font-size:0.78rem;background:#0f172a;color:#e2e8f0;padding:16px;border-radius:10px;line-height:1.8;overflow-x:auto;">
-            <div style="color:#facc15;font-weight:bold;margin-bottom:8px;">🔍 DIAGNÓSTICO RIESGO ACADÉMICO</div>
-            ${lines.map(l=>`<div>${l}</div>`).join('')}
-            <div style="margin-top:12px;padding-top:12px;border-top:1px solid #334155;color:#4ade80;font-weight:bold;">${summary}</div>
-        </div>`;
-}
-
-// (Real implementation handled by diagnostic loadApoyoRiesgoData above)
 
 
 window.loadFocosRojos = async () => {
