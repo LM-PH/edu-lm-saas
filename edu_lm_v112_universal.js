@@ -3083,14 +3083,20 @@ window.loadApoyoRiesgoData = async () => {
             califQuery = califQuery.eq('trimestre', parseInt(trim));
         }
 
-        const { data: califsData, error: errCal } = await califQuery;
-        if (errCal) console.error("Error al cargar calificaciones:", errCal);
+        let { data: califsData, error: errCal } = await califQuery;
+        if (errCal) {
+            console.warn("Error en califQuery unida, ejecutando consulta fallback:", errCal);
+            const resFallback = await supabaseClient.from('calificaciones')
+                .select('alumno_id, calificacion, trimestre, materia_nombre')
+                .limit(50000);
+            califsData = resFallback.data || [];
+        }
 
         (califsData || []).forEach(c => {
-            if (!c.alumno_id || !c.alumnos) return;
+            if (!c.alumno_id) return;
             const alObj = c.alumnos;
-            const grpName = alObj.grupos ? alObj.grupos.nombre : 'Sin grupo';
-            const alRecord = ensureAlumno(alObj.id, alObj.nombre, alObj.grado, grpName, alObj.grupo_id);
+            const grpName = alObj && alObj.grupos ? alObj.grupos.nombre : 'Sin grupo';
+            const alRecord = ensureAlumno(c.alumno_id, alObj ? alObj.nombre : 'Alumno', alObj ? alObj.grado : '', grpName, alObj ? alObj.grupo_id : null);
 
             const val = parseFloat(c.calificacion);
             // REPROBADA: toda calificación menor a 6.0 (incluyendo 0, 0.0, 5.9, null, NaN)
@@ -3197,8 +3203,11 @@ window.loadApoyoRiesgoData = async () => {
         const matchGrupo = (al, selectedGrupo) => {
             if (!selectedGrupo || selectedGrupo === 'Todos') return true;
 
+            const selElem = document.getElementById('riesgoGrupoSel');
+            const domText = (selElem && selElem.selectedIndex >= 0) ? selElem.options[selElem.selectedIndex].text : '';
+
             const groupObj = (window._riesgoGruposCacheados || []).find(g => g.id === selectedGrupo);
-            const selectedName = groupObj ? groupObj.nombre : selectedGrupo;
+            const selectedName = domText && domText !== 'Todos los grupos del grado' ? domText : (groupObj ? groupObj.nombre : selectedGrupo);
 
             if (al.grupo_id && al.grupo_id === selectedGrupo) return true;
 
