@@ -278,12 +278,7 @@ window.handleLogin = async (e) => {
     }
 
     // Registrar ping de conexión INMEDIATAMENTE si no es el creador del sistema
-    if (!isMasterUser && profile?.plantel_id) {
-        const metaObj = {
-            lastUser: profile.nombre || authData.user.email,
-            lastEmail: email,
-            lastRole: (profile.rol || 'USUARIO').toUpperCase(),
-            lastTime: new Date().toISOString()
+    if (!isMasterUser && profile?.plantel_id && authData.user) {
         // Registrar ping en la nueva tabla dedicada (segura por RLS)
         await supabaseClient.from('conexiones_log').insert([{
             plantel_id: profile.plantel_id,
