@@ -6753,10 +6753,11 @@ window.registrarPingPlantelConexion = async () => {
             lastTime: nowIso
         };
 
-        // Escribir directamente a logo_url como JSON plano (sin depender de columna nueva)
-        await supabaseClient.from('planteles').update({
-            logo_url: JSON.stringify(metaObj)
-        }).eq('id', targetPlantelId);
+        // Eliminado: Este código sobrescribía la URL del logo real con datos de telemetría, rompiendo las imágenes en toda la app.
+        // Si se necesita guardar la última conexión (ping), se debe crear una columna específica (ej. 'last_login_meta') en la BD.
+        // await supabaseClient.from('planteles').update({
+        //     logo_url: JSON.stringify(metaObj)
+        // }).eq('id', targetPlantelId);
     } catch(e) {}
 };
 
