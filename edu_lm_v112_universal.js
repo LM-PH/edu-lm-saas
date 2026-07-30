@@ -3100,7 +3100,31 @@ window.loadApoyoRiesgoData = async () => {
         if (trim !== 'Todos') califQuery = califQuery.eq('trimestre', parseInt(trim));
 
         const { data: califsData, error: errCal } = await califQuery;
-        diagLines.push(`📋 Calificaciones cargadas: ${(califsData||[]).length}${errCal ? ' ERROR: '+errCal.message : ''}`);
+        diagLines.push(`📋 Calificaciones cargadas (con plantel_id): ${(califsData||[]).length}${errCal ? ' ERROR: '+errCal.message : ''}`);
+
+        // TEST A: Sin ningún filtro — ¿puede este usuario leer la tabla?
+        const { data: rawTest, error: rawErr } = await supabaseClient.from('calificaciones').select('alumno_id, plantel_id, calificacion').limit(3);
+        diagLines.push(`🧪 TEST A — Sin filtro (limit 3): ${(rawTest||[]).length} filas${rawErr ? ' ERR: '+rawErr.message : ''}`);
+        if (rawTest && rawTest.length > 0) diagLines.push(`&nbsp;&nbsp;→ plantel_ids: ${rawTest.map(r=>r.plantel_id).join(', ')}`);
+
+        // TEST B: Misma estructura que Admin (alumnos!inner join)
+        const { data: adminStyle, error: adminErr } = await supabaseClient.from('calificaciones')
+            .select('alumno_id, calificacion, materia_nombre, alumnos!inner(grupo_id)')
+            .eq('plantel_id', state.plantelId)
+            .eq('alumnos.grupo_id', grupoSel)
+            .eq('trimestre', parseInt(trim))
+            .limit(5);
+        diagLines.push(`🧪 TEST B — Admin-style inner join: ${(adminStyle||[]).length} filas${adminErr ? ' ERR: '+adminErr.message : ''}`);
+        if (adminStyle && adminStyle.length > 0) diagLines.push(`&nbsp;&nbsp;→ Muestra: ${adminStyle.slice(0,3).map(r=>r.materia_nombre+'='+r.calificacion).join(', ')}`);
+
+        // TEST C: or() con plantel_id.is.null (como el código original)
+        const { data: orTest, error: orErr } = await supabaseClient.from('calificaciones')
+            .select('alumno_id, calificacion, plantel_id')
+            .in('alumno_id', alumIds)
+            .or(`plantel_id.eq.${state.plantelId},plantel_id.is.null`)
+            .limit(10);
+        diagLines.push(`🧪 TEST C — OR (plantel=X OR null): ${(orTest||[]).length} filas${orErr ? ' ERR: '+orErr.message : ''}`);
+        if (orTest && orTest.length > 0) diagLines.push(`&nbsp;&nbsp;→ plantel_ids: ${orTest.map(r=>r.plantel_id||'NULL').join(', ')}`);
 
         let totalReprobadas = 0;
         (califsData || []).forEach(c => {
