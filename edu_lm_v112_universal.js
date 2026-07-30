@@ -7769,8 +7769,8 @@ window.registrarJustificanteMedico = async () => {
 
 window.notificarMaestrosJustificante = async (alumnoId, motivo, inicio, fin) => {
     try {
-        // Obtener grupo y nombre del alumno
-        const { data: al, error: alErr } = await supabaseClient.from('alumnos').select('nombre, grupo_id').eq('id', alumnoId).single();
+        // Obtener grupo, nombre y taller del alumno
+        const { data: al, error: alErr } = await supabaseClient.from('alumnos').select('nombre, grupo_id, taller').eq('id', alumnoId).single();
         if(alErr || !al || !al.grupo_id) {
             console.warn("No se pudo obtener el grupo del alumno para notificar.");
             return;
@@ -7778,10 +7778,13 @@ window.notificarMaestrosJustificante = async (alumnoId, motivo, inicio, fin) => 
 
         const mensaje = `Se informa que el alumno(a) **${al.nombre}** cuenta con justificante médico del **${new Date(inicio).toLocaleDateString()}** al **${new Date(fin).toLocaleDateString()}** por motivo de: ${motivo}. Favor de brindar las facilidades académicas necesarias.`;
 
+        // Añadir el taller al título si existe para filtrar correctamente a los maestros de tecnología
+        const tallerTag = al.taller ? ` [TALLER:${al.taller}]` : '';
+
         // Insertar comunicado para el grupo específico
         const { error: comErr } = await supabaseClient.from('comunicados').insert([{
             autor_id: state.user.id,
-            titulo: 'JUSTIFICANTE MÉDICO: ' + al.nombre,
+            titulo: 'JUSTIFICANTE MÉDICO: ' + al.nombre + tallerTag,
             audiencia: 'Maestros_Grupo_' + al.grupo_id,
             mensaje: mensaje,
             plantel_id: state.plantelId
@@ -8930,7 +8933,7 @@ window.loadTimelinePersonal = async (selectedDate) => {
             audArr.push('Maestro_' + userId);
             
             // Cargar asignaciones (grupos específicos y grados completos)
-            const { data: asig } = await supabaseClient.from('asignaciones_maestros').select('grupo_id, target_grado').eq('docente_email', email);
+            const { data: asig } = await supabaseClient.from('asignaciones_maestros').select('grupo_id, target_grado, materia').eq('docente_email', email);
             
             if(asig) {
                 for (const a of asig) {
@@ -8972,6 +8975,32 @@ window.loadTimelinePersonal = async (selectedDate) => {
         // Filtrar avisos de horarios (solo deben verse en el perfil de estudiante)
         if (data && userRole !== 'alumno') {
             data = data.filter(c => !c.titulo?.includes('HORARIO DE CLASE DISPONIBLE'));
+        }
+
+        // Filtrar justificantes médicos para maestros de tecnología (solo ven de sus propios alumnos de taller)
+        if (data && (userRole === 'maestro' || userRole === 'docente') && uRes.data?.user) {
+            const { data: asig } = await supabaseClient.from('asignaciones_maestros').select('materia').eq('docente_email', uRes.data.user.email);
+            if (asig && asig.length > 0) {
+                data = data.filter(c => {
+                    if (c.titulo?.startsWith('JUSTIFICANTE MÉDICO:') && c.titulo.includes('[TALLER:')) {
+                        const match = c.titulo.match(/\[TALLER:(.+?)\]/);
+                        if (match) {
+                            const reqTaller = match[1].toLowerCase().trim();
+                            
+                            // Si el maestro imparte AL MENOS una materia regular (no taller/tecnología), puede verlo todo.
+                            // Si solo imparte talleres/tecnologías, la materia debe coincidir con reqTaller.
+                            const canView = asig.some(a => {
+                                const m = (a.materia || '').toLowerCase().trim();
+                                if (!m.includes('tecnología') && !m.includes('taller')) return true; // Materia regular
+                                return m.includes(reqTaller) || reqTaller.includes(m) || m === reqTaller;
+                            });
+                            
+                            return canView;
+                        }
+                    }
+                    return true;
+                });
+            }
         }
         
         // --- RESOLUCIÓN DE AUDIENCIAS (Humano-Leíble) ---
