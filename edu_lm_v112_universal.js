@@ -3094,6 +3094,7 @@ window.loadApoyoRiesgoData = async () => {
         let califQuery = supabaseClient.from('calificaciones')
             .select('alumno_id, calificacion, materia_nombre, trimestre')
             .in('alumno_id', alumIds)
+            .eq('plantel_id', state.plantelId)
             .limit(50000);
 
         if (trim !== 'Todos') califQuery = califQuery.eq('trimestre', parseInt(trim));
