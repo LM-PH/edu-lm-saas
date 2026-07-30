@@ -947,12 +947,6 @@ function renderSidebar() {
             <p>Cerrar Sesión</p>
           </div>
         </div>
-        ${(state.role === 'admin' || state.role === 'master' || state.role === 'directivo') ? `
-        <div style="text-align:center; margin-top:12px; margin-bottom: 12px;">
-            <button onclick="window.triggerLogoUpload()" style="background:none; border:none; color:var(--text-muted); cursor:pointer; font-size:0.75rem; text-decoration:underline; font-family:inherit;">
-                <i class="fa-solid fa-image"></i> Cambiar Logo de la Escuela
-            </button>
-        </div>` : ''}
       </div>
     </aside>
   `;
@@ -18057,63 +18051,4 @@ document.addEventListener("touchend", function(e) {
     }
     _ptrStart.y = 0;
 }, {passive: true});
-
-// ---- UPLOAD LOGO DESDE SIDEBAR ----
-window.triggerLogoUpload = () => {
-    if (!state.plantelId) return alert("Error: No hay plantel seleccionado.");
-    let input = document.getElementById('hiddenLogoUploader');
-    if (!input) {
-        input = document.createElement('input');
-        input.type = 'file';
-        input.id = 'hiddenLogoUploader';
-        input.accept = 'image/png, image/jpeg';
-        input.style.display = 'none';
-        document.body.appendChild(input);
-        
-        input.addEventListener('change', (e) => {
-            const file = e.target.files[0];
-            if(!file) return;
-            if(!file.type.match(/image.*/)) return alert("Por favor selecciona una imagen válida (JPG o PNG).");
-            
-            const reader = new FileReader();
-            reader.onload = function(re) {
-                const img = new Image();
-                img.onload = async function() {
-                    const canvas = document.createElement('canvas');
-                    let width = img.width;
-                    let height = img.height;
-                    const max_size = 300;
-                    if (width > height) {
-                        if (width > max_size) { height *= max_size / width; width = max_size; }
-                    } else {
-                        if (height > max_size) { width *= max_size / height; height = max_size; }
-                    }
-                    canvas.width = width;
-                    canvas.height = height;
-                    const ctx = canvas.getContext('2d');
-                    ctx.drawImage(img, 0, 0, width, height);
-                    const dataUrl = canvas.toDataURL('image/png', 0.8);
-                    
-                    try {
-                        window.showToast("Subiendo y procesando logo...", "info");
-                        const { error } = await supabaseClient.from('planteles')
-                            .update({ logo_url: dataUrl })
-                            .eq('id', state.plantelId);
-                            
-                        if(error) throw error;
-                        
-                        CONFIG.schoolLogo = dataUrl;
-                        window.showToast("¡Logo actualizado exitosamente!", "success");
-                        setTimeout(() => window.location.reload(), 1500);
-                    } catch(err) {
-                        alert("Error al actualizar el logo: " + err.message);
-                    }
-                };
-                img.src = re.target.result;
-            };
-            reader.readAsDataURL(file);
-        });
-    }
-    input.click();
-};
 
