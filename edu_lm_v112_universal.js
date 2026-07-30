@@ -3171,6 +3171,19 @@ window.loadApoyoRiesgoData = async () => {
             }
         }
 
+        // Helper flexible para hacer match de grado ("1°" vs "1", etc.)
+        const matchGrado = (alGrado, selectedGrado) => {
+            if (!selectedGrado || selectedGrado === 'Todos') return true;
+            if (alGrado === null || alGrado === undefined) return false;
+            const strAl = (alGrado + '').trim().toLowerCase();
+            const strSel = (selectedGrado + '').trim().toLowerCase();
+            if (strAl === strSel) return true;
+            const numAl = strAl.replace(/[^0-9]/g, '');
+            const numSel = strSel.replace(/[^0-9]/g, '');
+            if (numAl && numSel && numAl === numSel) return true;
+            return false;
+        };
+
         // Helper flexible para hacer match de grupo (por ID o por Nombre)
         const matchGrupo = (al, selectedGrupo) => {
             if (!selectedGrupo || selectedGrupo === 'Todos') return true;
@@ -3254,8 +3267,8 @@ window.loadApoyoRiesgoData = async () => {
         hold.innerHTML = html;
 
     } catch(err) {
-        console.error(err);
-        hold.innerHTML = '<p style="text-align:center; color:var(--danger);">Error al calcular el riesgo académico.</p>';
+        console.error("Error en loadApoyoRiesgoData:", err);
+        hold.innerHTML = `<p style="text-align:center; color:var(--danger); padding:20px;"><i class="fa-solid fa-triangle-exclamation"></i> Error al calcular el riesgo académico: ${err.message || err}</p>`;
     }
 };
 
