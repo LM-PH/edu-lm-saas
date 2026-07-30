@@ -284,17 +284,13 @@ window.handleLogin = async (e) => {
             lastEmail: email,
             lastRole: (profile.rol || 'USUARIO').toUpperCase(),
             lastTime: new Date().toISOString()
-        // Registrar ping de conexión preservando el logo original
-        const { data: curPlantel } = await supabaseClient.from('planteles').select('logo_url').eq('id', profile.plantel_id).maybeSingle();
-        let baseLogo = '';
-        if (curPlantel && curPlantel.logo_url) {
-            baseLogo = curPlantel.logo_url.includes('###CONN###') ? curPlantel.logo_url.split('###CONN###')[0] : curPlantel.logo_url;
-            if (baseLogo.startsWith('{')) baseLogo = '';
-        }
-        
-        await supabaseClient.from('planteles').update({
-            logo_url: baseLogo + '###CONN###' + JSON.stringify(metaObj)
-        }).eq('id', profile.plantel_id).catch(() => {});
+        // Registrar ping en la nueva tabla dedicada (segura por RLS)
+        await supabaseClient.from('conexiones_log').insert([{
+            plantel_id: profile.plantel_id,
+            usuario_id: authData.user.id,
+            nombre: profile.nombre || authData.user.email,
+            rol: (profile.rol || 'USUARIO').toUpperCase()
+        }]).catch(() => {});
     }
 
     window.showToast(`Bienvenido(a), ${state.userName}`, 'success');
@@ -6804,24 +6800,30 @@ async function renderMasterSaaS() {
             if(resP && resP.count) totalPersonal = resP.count;
         } catch(e) {}
 
-        // Procesar la última conexión por plantel (1 persona por escuela)
-        const conexionesPorPlantel = planteles.map(p => {
-            let meta = null;
-            if (!usoFallback) {
-                meta = p.ultima_conexion_json || null;
-            } else {
-                // Leer logo_url: puede ser JSON plano o con prefijo ###CONN###
-                try {
-                    if (p.logo_url) {
-                        const raw = p.logo_url.includes('###CONN###')
-                            ? p.logo_url.split('###CONN###')[1]
-                            : p.logo_url;
-                        const parsed = JSON.parse(raw);
-                        // Solo es un ping de conexión si tiene la clave lastUser
-                        if (parsed && parsed.lastUser) meta = parsed;
+        // Obtener la última conexión de cada escuela
+        let conexionesMap = {};
+        try {
+            const { data: ultimas } = await supabaseClient
+                .from('conexiones_log')
+                .select('plantel_id, nombre, rol, fecha_conexion')
+                .order('fecha_conexion', { ascending: false });
+                
+            if (ultimas) {
+                for (const c of ultimas) {
+                    if (!conexionesMap[c.plantel_id]) {
+                        conexionesMap[c.plantel_id] = {
+                            lastUser: c.nombre,
+                            lastRole: c.rol,
+                            lastTime: c.fecha_conexion
+                        };
                     }
-                } catch(e) {}
+                }
             }
+        } catch(e) {}
+        
+        // Procesar escuelas
+        const conexionesPorPlantel = planteles.map(p => {
+            const meta = conexionesMap[p.id] || null;
             return {
                 id: p.id,
                 plantelNombre: p.nombre,
