@@ -148,6 +148,7 @@ window.login = (rawRole) => {
 };
 
 window.logout = async () => {
+    if ('clearAppBadge' in navigator) navigator.clearAppBadge().catch(console.warn);
     await supabaseClient.auth.signOut();
     state.user = null;
     state.role = null;
