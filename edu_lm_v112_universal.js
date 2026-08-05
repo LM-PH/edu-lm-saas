@@ -7374,6 +7374,7 @@ window.updateNotificationBadge = async (clearAll = false) => {
             // Insertar para limpiar el badge
             await supabaseClient.from('comunicados_vistos').upsert(inserts, { onConflict: 'perfil_id, comunicado_id', ignoreDuplicates: true });
             if(badgeEl) badgeEl.style.display = 'none';
+            if ('clearAppBadge' in navigator) navigator.clearAppBadge().catch(console.warn);
             return;
         }
 
@@ -7384,6 +7385,13 @@ window.updateNotificationBadge = async (clearAll = false) => {
             } else {
                 badgeEl.style.display = 'none';
             }
+        }
+
+        // Actualizar burbuja de la app (PWA)
+        if (unread > 0) {
+            if ('setAppBadge' in navigator) navigator.setAppBadge(unread).catch(console.warn);
+        } else {
+            if ('clearAppBadge' in navigator) navigator.clearAppBadge().catch(console.warn);
         }
     } catch (e) {
         console.error("Error updating badge", e);
