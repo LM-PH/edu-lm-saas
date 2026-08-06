@@ -292,6 +292,12 @@ window.handleLogin = async (e) => {
     }
 
     window.showToast(`Bienvenido(a), ${state.userName}`, 'success');
+
+    // SOLUCIÓN iOS: Apple requiere explícitamente permisos de notificación para habilitar las burbujas (App Badges)
+    if ('Notification' in window && Notification.permission !== 'granted' && Notification.permission !== 'denied') {
+        Notification.requestPermission().catch(console.warn);
+    }
+
     window.login(state.role);
 
   } catch (err) {
