@@ -6862,7 +6862,10 @@ async function renderMasterSaaS() {
             <h2 class="page-title"><i class="fa-solid fa-crown" style="color:#eab308; margin-right:8px;"></i> Centro de Mando del Creador</h2>
             <p class="page-subtitle">Monitoreo global en tiempo real: 1 última conexión registrada por plantel.</p>
           </div>
-          <div style="display:flex; gap:10px;">
+          <div style="display:flex; gap:10px; flex-wrap:wrap;">
+            <button class="btn btn-outline" onclick="window.descargarRespaldoCompletoMaster()" style="font-weight:600; background:var(--card-bg, #fff);">
+                <i class="fa-solid fa-download" style="color:var(--primary);"></i> Descargar Respaldo Total
+            </button>
             <button class="btn btn-primary" onclick="window.probarPingMaster()" style="font-weight:600;">
                 <i class="fa-solid fa-bolt"></i> Probar Ping DB
             </button>
@@ -7002,6 +7005,42 @@ window.probarPingMaster = async () => {
         window.showToast(`✅ Base de datos en línea. Respuesta en ${Math.round(t1 - t0)}ms`, "success");
     } catch(e) {
         window.showToast("❌ Error al probar conexión: " + e.message, "error");
+    }
+};
+
+window.descargarRespaldoCompletoMaster = async () => {
+    try {
+        window.showToast("Generando respaldo total de la base de datos...", "info");
+        const tablas = ['planteles', 'perfiles', 'perfiles_permitidos', 'alumnos', 'grupos', 'asignaciones_maestros', 'comunicados', 'calificaciones', 'encuadres', 'bitacora_maestro', 'asistencias', 'salud_alumnos', 'conexiones_log'];
+        
+        let respaldo = {
+            fecha_exportacion: new Date().toISOString(),
+            sistema: "Edu-LM SaaS",
+            datos: {}
+        };
+        
+        for (const t of tablas) {
+            try {
+                const { data } = await supabaseClient.from(t).select('*');
+                respaldo.datos[t] = data || [];
+            } catch(e) {
+                respaldo.datos[t] = [];
+            }
+        }
+        
+        const blob = new Blob([JSON.stringify(respaldo, null, 2)], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `RESPALDO_TOTAL_EDU_LM_${new Date().toISOString().split('T')[0]}.json`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        
+        window.showToast("Respaldo total descargado exitosamente ✅", "success");
+    } catch(err) {
+        alert("Error al generar respaldo: " + err.message);
     }
 };
 
