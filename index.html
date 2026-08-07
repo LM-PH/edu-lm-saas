@@ -41,27 +41,21 @@
     <script src="https://cdn.jsdelivr.net/npm/flatpickr/dist/l10n/es.js"></script>
 
     <!-- Lógica Principal Sincronizada (v114 + Watchdog v1) -->
-    <script src="edu_lm_v112_universal.js?v=764"></script>
+    <script src="edu_lm_v112_universal.js?v=765"></script>
 
-    <!-- Service Worker Registration REACTIVADO PARA ACTUALIZACIÓN FORZOSA -->
+    <!-- Service Worker Registration -->
     <script>
-      // Purga de Service Workers antiguos para forzar v116
-      if ('serviceWorker' in navigator) {
-        navigator.serviceWorker.getRegistrations().then(regs => {
-          for(let reg of regs) reg.unregister();
-        });
-      }
-
       if ('serviceWorker' in navigator) {
         window.addEventListener('load', () => {
-          navigator.serviceWorker.register('./sw.js?v=400')
+          navigator.serviceWorker.register('./sw.js?v=401')
             .then(reg => {
                 console.log('Edu-LM PWA: Service Worker registrado.', reg);
-                // Si hay una actualización, forzar el salto de espera
                 reg.onupdatefound = () => {
                     const installingWorker = reg.installing;
+                    if (!installingWorker) return;
                     installingWorker.onstatechange = () => {
                         if (installingWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                            console.log('Edu-LM PWA: Nueva versión detectada, actualizando...');
                             window.location.reload();
                         }
                     };
