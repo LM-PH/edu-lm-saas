@@ -6828,7 +6828,7 @@ async function renderMasterSaaS() {
             }
         } catch(e) {}
         
-        let robotStatusTexto = 'Programado Diario (12:00 UTC)';
+        let robotStatusTexto = 'Programado Diario (6:00 AM CDMX)';
         let robotColor = '#b45309';
         let robotBorderColor = '#f59e0b';
         if (ultimoRobotTime) {
@@ -6892,7 +6892,7 @@ async function renderMasterSaaS() {
                  <i class="fa-solid fa-robot"></i> ${robotStatusTexto}
               </div>
               <div style="font-size:0.7rem; color:var(--text-muted); margin-top:4px;">
-                 ${ultimoRobotTime ? 'Registrado: ' + new Date(ultimoRobotTime).toLocaleString('es-MX') : 'GitHub Action Activa (12:00 UTC)'}
+                 ${ultimoRobotTime ? 'Registrado: ' + new Date(ultimoRobotTime).toLocaleString('es-MX', { timeZone: 'America/Mexico_City' }) : 'GitHub Action Activa (6:00 AM CDMX)'}
               </div>
            </div>
         </div>
