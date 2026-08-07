@@ -6804,8 +6804,9 @@ async function renderMasterSaaS() {
             if(resP && resP.count) totalPersonal = resP.count;
         } catch(e) {}
 
-        // Obtener la última conexión de cada escuela
+        // Obtener la última conexión de cada escuela y del Robot
         let conexionesMap = {};
+        let ultimoRobotTime = null;
         try {
             const { data: ultimas } = await supabaseClient
                 .from('conexiones_log')
@@ -6814,7 +6815,9 @@ async function renderMasterSaaS() {
                 
             if (ultimas) {
                 for (const c of ultimas) {
-                    if (!conexionesMap[c.plantel_id]) {
+                    if (c.rol === 'ROBOT' || (c.nombre && c.nombre.includes('Robot'))) {
+                        if (!ultimoRobotTime) ultimoRobotTime = c.fecha_conexion;
+                    } else if (c.plantel_id && !conexionesMap[c.plantel_id]) {
                         conexionesMap[c.plantel_id] = {
                             lastUser: c.nombre,
                             lastRole: c.rol,
@@ -6824,6 +6827,22 @@ async function renderMasterSaaS() {
                 }
             }
         } catch(e) {}
+        
+        let robotStatusTexto = 'Programado Diario (12:00 UTC)';
+        let robotColor = '#b45309';
+        let robotBorderColor = '#f59e0b';
+        if (ultimoRobotTime) {
+            const diffMs = new Date() - new Date(ultimoRobotTime);
+            const diffHrs = Math.floor(diffMs / 3600000);
+            if (diffHrs < 36) {
+                robotStatusTexto = `🟢 En línea (Hace ${diffHrs < 1 ? 'menos de 1 hr' : diffHrs + ' hrs'})`;
+                robotColor = '#15803d';
+                robotBorderColor = '#10b981';
+            } else {
+                robotStatusTexto = `⚠️ Último pulso hace ${Math.floor(diffHrs / 24)} días`;
+                robotColor = '#b45309';
+            }
+        }
         
         // Procesar escuelas
         const conexionesPorPlantel = planteles.map(p => {
@@ -6867,9 +6886,14 @@ async function renderMasterSaaS() {
               <div style="font-size:1.8rem; font-weight:900; color:#8b5cf6; margin-top:4px;">${totalPersonal || 0}</div>
            </div>
 
-           <div class="card shadow-sm" style="border-left:5px solid #f59e0b; padding:20px;">
+           <div class="card shadow-sm" style="border-left:5px solid ${robotBorderColor}; padding:20px;">
               <div style="font-size:0.8rem; color:var(--text-muted); font-weight:700; text-transform:uppercase;">Robot Keep-Alive</div>
-              <div style="font-size:0.95rem; font-weight:700; color:#b45309; margin-top:6px;"><i class="fa-solid fa-robot"></i> Programado Cada 3 Días</div>
+              <div style="font-size:0.85rem; font-weight:700; color:${robotColor}; margin-top:6px;">
+                 <i class="fa-solid fa-robot"></i> ${robotStatusTexto}
+              </div>
+              <div style="font-size:0.7rem; color:var(--text-muted); margin-top:4px;">
+                 ${ultimoRobotTime ? 'Registrado: ' + new Date(ultimoRobotTime).toLocaleString('es-MX') : 'GitHub Action Activa (12:00 UTC)'}
+              </div>
            </div>
         </div>
 
