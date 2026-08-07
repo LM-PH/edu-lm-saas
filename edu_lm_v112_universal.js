@@ -18120,16 +18120,28 @@ window.initFlatpickrAvisos = async (isAlumno = false) => {
     });
 };
 
-// Pull to refresh visual e intuitivo
+// Pull to refresh visual e intuitivo (con soporte para scroll interno)
 (function initPullToRefresh() {
     let startY = 0;
     let startX = 0;
     let currentY = 0;
     let isPulling = false;
+    let activeTarget = null;
     let ptrIndicator = null;
     let ptrIcon = null;
     let ptrText = null;
-    const PULL_THRESHOLD = 65; // Distancia acumulada para activar recarga
+    const PULL_THRESHOLD = 80; // Mayor resistencia para exigir un arrastre claro
+
+    function isScrolled(target) {
+        let el = target;
+        while (el && el !== document.body && el !== document.documentElement) {
+            if (el.scrollTop && el.scrollTop > 0) {
+                return true;
+            }
+            el = el.parentElement;
+        }
+        return (window.scrollY || document.documentElement.scrollTop || document.body.scrollTop || 0) > 0;
+    }
 
     function createIndicator() {
         if (document.getElementById('ptr-container')) return;
@@ -18176,9 +18188,11 @@ window.initFlatpickrAvisos = async (isAlumno = false) => {
     }
 
     document.addEventListener("touchstart", function(e) {
-        if (window.scrollY === 0 && e.touches.length === 1) {
+        activeTarget = e.target;
+        if (!isScrolled(activeTarget) && e.touches.length === 1) {
             startY = e.touches[0].clientY;
             startX = e.touches[0].clientX;
+            currentY = startY;
             isPulling = true;
         } else {
             isPulling = false;
@@ -18186,7 +18200,13 @@ window.initFlatpickrAvisos = async (isAlumno = false) => {
     }, { passive: true });
 
     document.addEventListener("touchmove", function(e) {
-        if (!isPulling || window.scrollY > 0) return;
+        if (!isPulling || isScrolled(activeTarget)) {
+            if (isPulling) {
+                isPulling = false;
+                resetIndicator();
+            }
+            return;
+        }
 
         currentY = e.touches[0].clientY;
         let currentX = e.touches[0].clientX;
@@ -18199,10 +18219,10 @@ window.initFlatpickrAvisos = async (isAlumno = false) => {
             return;
         }
 
-        if (dy > 15) {
+        if (dy > 30) {
             if (!ptrIndicator) createIndicator();
             
-            let pullDistance = Math.min(Math.pow(dy - 15, 0.82) * 1.6, 90);
+            let pullDistance = Math.min(Math.pow(dy - 30, 0.8) * 1.5, 95);
             
             ptrIndicator.style.opacity = '1';
             ptrIndicator.style.transition = 'none';
@@ -18227,9 +18247,9 @@ window.initFlatpickrAvisos = async (isAlumno = false) => {
         isPulling = false;
 
         let dy = currentY - startY;
-        let pullDistance = dy > 15 ? Math.min(Math.pow(dy - 15, 0.82) * 1.6, 90) : 0;
+        let pullDistance = dy > 30 ? Math.min(Math.pow(dy - 30, 0.8) * 1.6, 95) : 0;
 
-        if (window.scrollY === 0 && pullDistance >= PULL_THRESHOLD) {
+        if (!isScrolled(activeTarget) && pullDistance >= PULL_THRESHOLD) {
             if (ptrIndicator) {
                 ptrIndicator.style.transition = 'transform 0.2s ease, opacity 0.2s ease';
                 ptrIndicator.style.transform = 'translate(-50%, 20px)';
@@ -18245,6 +18265,7 @@ window.initFlatpickrAvisos = async (isAlumno = false) => {
         }
         startY = 0;
         currentY = 0;
+        activeTarget = null;
     }, { passive: true });
 
     function resetIndicator() {
