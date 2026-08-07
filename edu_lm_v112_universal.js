@@ -18120,30 +18120,141 @@ window.initFlatpickrAvisos = async (isAlumno = false) => {
     });
 };
 
-// Pull to refresh manual para webviews
-let _ptrStart = { x: 0, y: 0 };
-document.addEventListener("touchstart", function(e) {
-    if (window.scrollY === 0) {
-        _ptrStart.x = e.touches[0].clientX;
-        _ptrStart.y = e.touches[0].clientY;
-    }
-}, {passive: true});
+// Pull to refresh visual e intuitivo
+(function initPullToRefresh() {
+    let startY = 0;
+    let startX = 0;
+    let currentY = 0;
+    let isPulling = false;
+    let ptrIndicator = null;
+    let ptrIcon = null;
+    let ptrText = null;
+    const PULL_THRESHOLD = 65; // Distancia acumulada para activar recarga
 
-document.addEventListener("touchend", function(e) {
-    if (window.scrollY === 0 && _ptrStart.y > 0) {
-        let currentY = e.changedTouches[0].clientY;
-        let currentX = e.changedTouches[0].clientX;
-        let yDiff = currentY - _ptrStart.y;
-        let xDiff = Math.abs(currentX - _ptrStart.x);
+    function createIndicator() {
+        if (document.getElementById('ptr-container')) return;
         
-        // Si arrastró hacia abajo más de 120px y no demasiado a los lados
-        if (yDiff > 120 && xDiff < 60) {
-            window.showToast("Actualizando...", "info");
-            setTimeout(() => window.location.reload(), 600);
+        const container = document.createElement('div');
+        container.id = 'ptr-container';
+        container.style.cssText = `
+            position: fixed;
+            top: 0;
+            left: 50%;
+            transform: translate(-50%, -100%);
+            z-index: 99999;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 16px;
+            background: var(--card-bg, #ffffff);
+            color: var(--primary, #2563eb);
+            border: 1px solid var(--border, #e2e8f0);
+            border-radius: 20px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.12);
+            font-size: 0.85rem;
+            font-weight: 500;
+            pointer-events: none;
+            transition: transform 0.15s ease-out, opacity 0.15s ease-out;
+            opacity: 0;
+        `;
+        
+        container.innerHTML = `
+            <i id="ptr-icon" class="fa-solid fa-arrow-down" style="transition: transform 0.2s ease;"></i>
+            <span id="ptr-text">Desliza para actualizar</span>
+        `;
+        
+        document.body.appendChild(container);
+        ptrIndicator = container;
+        ptrIcon = document.getElementById('ptr-icon');
+        ptrText = document.getElementById('ptr-text');
+    }
+
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', createIndicator);
+    } else {
+        createIndicator();
+    }
+
+    document.addEventListener("touchstart", function(e) {
+        if (window.scrollY === 0 && e.touches.length === 1) {
+            startY = e.touches[0].clientY;
+            startX = e.touches[0].clientX;
+            isPulling = true;
+        } else {
+            isPulling = false;
+        }
+    }, { passive: true });
+
+    document.addEventListener("touchmove", function(e) {
+        if (!isPulling || window.scrollY > 0) return;
+
+        currentY = e.touches[0].clientY;
+        let currentX = e.touches[0].clientX;
+        let dy = currentY - startY;
+        let dx = Math.abs(currentX - startX);
+
+        if (dx > Math.abs(dy)) {
+            isPulling = false;
+            resetIndicator();
+            return;
+        }
+
+        if (dy > 15) {
+            if (!ptrIndicator) createIndicator();
+            
+            let pullDistance = Math.min(Math.pow(dy - 15, 0.82) * 1.6, 90);
+            
+            ptrIndicator.style.opacity = '1';
+            ptrIndicator.style.transition = 'none';
+            ptrIndicator.style.transform = `translate(-50%, ${pullDistance - 50}px)`;
+
+            if (pullDistance >= PULL_THRESHOLD) {
+                ptrIcon.className = "fa-solid fa-arrow-up";
+                ptrIcon.style.transform = "rotate(180deg)";
+                ptrText.innerText = "Suelta para actualizar";
+            } else {
+                ptrIcon.className = "fa-solid fa-arrow-down";
+                ptrIcon.style.transform = `rotate(${(pullDistance / PULL_THRESHOLD) * 180}deg)`;
+                ptrText.innerText = "Desliza para actualizar";
+            }
+        } else if (dy <= 0) {
+            resetIndicator();
+        }
+    }, { passive: true });
+
+    document.addEventListener("touchend", function(e) {
+        if (!isPulling) return;
+        isPulling = false;
+
+        let dy = currentY - startY;
+        let pullDistance = dy > 15 ? Math.min(Math.pow(dy - 15, 0.82) * 1.6, 90) : 0;
+
+        if (window.scrollY === 0 && pullDistance >= PULL_THRESHOLD) {
+            if (ptrIndicator) {
+                ptrIndicator.style.transition = 'transform 0.2s ease, opacity 0.2s ease';
+                ptrIndicator.style.transform = 'translate(-50%, 20px)';
+                ptrIcon.className = "fa-solid fa-spinner fa-spin";
+                ptrIcon.style.transform = "none";
+                ptrText.innerText = "Actualizando...";
+            }
+            setTimeout(() => {
+                window.location.reload();
+            }, 300);
+        } else {
+            resetIndicator();
+        }
+        startY = 0;
+        currentY = 0;
+    }, { passive: true });
+
+    function resetIndicator() {
+        if (ptrIndicator) {
+            ptrIndicator.style.transition = 'transform 0.25s ease-out, opacity 0.25s ease-out';
+            ptrIndicator.style.transform = 'translate(-50%, -100%)';
+            ptrIndicator.style.opacity = '0';
         }
     }
-    _ptrStart.y = 0;
-}, {passive: true});
+})();
 
 
 // ---- FLATPICKR BITACORA (Puntos rojos) ----
