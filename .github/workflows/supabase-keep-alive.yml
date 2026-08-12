@@ -2,7 +2,7 @@ name: Supabase Keep Alive
 
 on:
   schedule:
-    # Corre todos los días a las 12:00 UTC automáticamente
+    # Corre todos los días a las 12:00 UTC automáticamente (6:00 AM CDMX)
     - cron: '0 12 * * *'
   workflow_dispatch:
 
@@ -10,8 +10,16 @@ jobs:
   ping-supabase:
     runs-on: ubuntu-latest
     steps:
-      - name: Hacer ping a Supabase para evitar pausa
+      - name: Hacer ping a Supabase y registrar pulso en DB
         run: |
-          echo "Haciendo petición a la base de datos..."
+          echo "Haciendo petición de salud a la base de datos..."
           curl -s -o /dev/null -w "%{http_code}" https://eexgjaydpuioncenlsmv.supabase.co/auth/v1/health
-          echo " Ping completado exitosamente. Supabase ha registrado actividad."
+          
+          echo "Registrando pulso del robot en conexiones_log..."
+          curl -s -X POST "https://eexgjaydpuioncenlsmv.supabase.co/rest/v1/conexiones_log" \
+            -H "apikey: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVleGdqYXlkcHVpb25jZW5sc212Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQ4NTM0MDAsImV4cCI6MjEwMDQyOTQwMH0.vrJGn_Bg04OBBntL-w21-I27XuvO61HcUNrphMYYSlY" \
+            -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVleGdqYXlkcHVpb25jZW5sc212Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQ4NTM0MDAsImV4cCI6MjEwMDQyOTQwMH0.vrJGn_Bg04OBBntL-w21-I27XuvO61HcUNrphMYYSlY" \
+            -H "Content-Type: application/json" \
+            -H "Prefer: return=minimal" \
+            -d '[{"nombre": "Robot Keep-Alive (GitHub Action)", "rol": "ROBOT"}]'
+          echo "Pulso registrado exitosamente."
