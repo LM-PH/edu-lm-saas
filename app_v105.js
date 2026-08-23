@@ -2712,6 +2712,26 @@ window.showAlumnoExpediente = async (idAlumno) => {
 
             <div style="padding:20px; display:flex; flex-direction:column; gap:30px;">
                 
+                <!-- Sección Datos del Alumno -->
+                <section>
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; border-bottom:2px solid var(--info); padding-bottom:5px;">
+                        <h4 style="margin:0;">
+                            <i class="fa-solid fa-id-card"></i> Datos del Alumno
+                        </h4>
+                        <button class="btn btn-outline btn-xs" style="border-color:var(--primary); color:var(--primary);" onclick="window.openActualizarDatosAlumno('${al.id}')">
+                            <i class="fa-solid fa-pen"></i> Actualizar
+                        </button>
+                    </div>
+                    <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px; font-size:0.85rem;">
+                        <div><strong style="color:var(--text-muted)">CURP:</strong> ${al.curp || 'N/A'}</div>
+                        <div><strong style="color:var(--text-muted)">Edad:</strong> ${al.edad ? al.edad + ' años' : 'N/A'}</div>
+                        <div><strong style="color:var(--text-muted)">Sexo:</strong> ${al.sexo || 'N/A'}</div>
+                        <div><strong style="color:var(--text-muted)">Estatura:</strong> ${al.estatura ? al.estatura + ' m' : 'N/A'}</div>
+                        <div><strong style="color:var(--text-muted)">Peso:</strong> ${al.peso ? al.peso + ' kg' : 'N/A'}</div>
+                        <div><strong style="color:var(--text-muted)">Talla Calzado:</strong> ${al.talla_zapato || 'N/A'}</div>
+                    </div>
+                </section>
+
                 <!-- Sección Conducta -->
                 <section>
                     <h4 style="margin-bottom:12px; border-bottom:2px solid var(--warning); padding-bottom:5px;">
@@ -2750,6 +2770,122 @@ window.showAlumnoExpediente = async (idAlumno) => {
     } catch(e) { 
         console.error(e);
         content.innerHTML = `<div style="padding:40px; text-align:center; color:var(--danger)"><p>Error: ${e.message}</p></div>`; 
+    }
+};
+
+window.openActualizarDatosAlumno = async (idAlumno) => {
+    try {
+        const { data: al, error } = await supabaseClient.from('alumnos').select('id, nombre, curp, edad, sexo, estatura, peso, talla_zapato').eq('id', idAlumno).single();
+        if(error) throw error;
+        
+        // Crear modal dinámicamente si no existe
+        let modal = document.getElementById('modalActualizarDatosAlumno');
+        if(!modal) {
+            modal = document.createElement('div');
+            modal.id = 'modalActualizarDatosAlumno';
+            modal.className = 'modal-backdrop';
+            modal.style = 'position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); z-index:9999; display:none; place-items:center;';
+            modal.innerHTML = `
+                <div class="card" style="background:#fff; width:90%; max-width:500px; padding:20px; border-radius:8px; max-height:90vh; overflow-y:auto; position:relative;">
+                    <button class="btn-close" onclick="document.getElementById('modalActualizarDatosAlumno').style.display='none'" style="position:absolute; top:15px; right:15px; border:none; background:none; font-size:1.5rem; cursor:pointer;">&times;</button>
+                    <h3 style="margin-top:0;">Actualizar Datos del Alumno</h3>
+                    <p id="updDatosAlumnoNombre" style="color:var(--text-muted); font-size:0.9rem; margin-bottom:20px;"></p>
+                    <form id="formActualizarDatosAlumno" onsubmit="window.submitActualizarDatosAlumno(event)">
+                        <input type="hidden" id="updDatosAlumnoId">
+                        <div class="form-group">
+                            <label>CURP</label>
+                            <input type="text" id="updCurp" class="form-input" style="text-transform: uppercase;">
+                        </div>
+                        <div class="form-group" style="display:grid; grid-template-columns:1fr 1fr; gap:15px;">
+                            <div>
+                                <label>Edad</label>
+                                <input type="number" id="updEdad" class="form-input" min="1" max="100">
+                            </div>
+                            <div>
+                                <label>Sexo</label>
+                                <select id="updSexo" class="form-input">
+                                    <option value="">Seleccione...</option>
+                                    <option value="Masculino">Masculino</option>
+                                    <option value="Femenino">Femenino</option>
+                                    <option value="Otro">Otro</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="form-group" style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:15px;">
+                            <div>
+                                <label>Estatura (m)</label>
+                                <input type="number" step="0.01" id="updEstatura" class="form-input">
+                            </div>
+                            <div>
+                                <label>Peso (kg)</label>
+                                <input type="number" step="0.1" id="updPeso" class="form-input">
+                            </div>
+                            <div>
+                                <label>Talla Calzado</label>
+                                <input type="text" id="updTallaZapato" class="form-input">
+                            </div>
+                        </div>
+                        <div style="margin-top:20px; text-align:right;">
+                            <button type="button" class="btn btn-outline" onclick="document.getElementById('modalActualizarDatosAlumno').style.display='none'">Cancelar</button>
+                            <button type="submit" class="btn btn-primary" id="btnGuardarDatosAlumno">Guardar Cambios</button>
+                        </div>
+                    </form>
+                </div>
+            `;
+            document.body.appendChild(modal);
+        }
+
+        // Prellenar form
+        document.getElementById('updDatosAlumnoId').value = al.id;
+        document.getElementById('updDatosAlumnoNombre').textContent = al.nombre;
+        document.getElementById('updCurp').value = al.curp || '';
+        document.getElementById('updEdad').value = al.edad || '';
+        document.getElementById('updSexo').value = al.sexo || '';
+        document.getElementById('updEstatura').value = al.estatura || '';
+        document.getElementById('updPeso').value = al.peso || '';
+        document.getElementById('updTallaZapato').value = al.talla_zapato || '';
+
+        modal.style.display = 'grid';
+
+    } catch(e) {
+        console.error(e);
+        alert('Error al cargar datos del alumno: ' + e.message);
+    }
+};
+
+window.submitActualizarDatosAlumno = async (e) => {
+    e.preventDefault();
+    const btn = document.getElementById('btnGuardarDatosAlumno');
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Guardando...';
+
+    try {
+        const id = document.getElementById('updDatosAlumnoId').value;
+        const curp = document.getElementById('updCurp').value.toUpperCase().trim() || null;
+        const edad = document.getElementById('updEdad').value ? parseInt(document.getElementById('updEdad').value) : null;
+        const sexo = document.getElementById('updSexo').value || null;
+        const estatura = document.getElementById('updEstatura').value ? parseFloat(document.getElementById('updEstatura').value) : null;
+        const peso = document.getElementById('updPeso').value ? parseFloat(document.getElementById('updPeso').value) : null;
+        const talla_zapato = document.getElementById('updTallaZapato').value.trim() || null;
+
+        const { error } = await supabaseClient.from('alumnos').update({
+            curp, edad, sexo, estatura, peso, talla_zapato
+        }).eq('id', id);
+
+        if(error) throw error;
+
+        document.getElementById('modalActualizarDatosAlumno').style.display = 'none';
+        alert('Datos actualizados correctamente.');
+        
+        // Recargar el expediente para reflejar los cambios
+        window.showAlumnoExpediente(id);
+
+    } catch(err) {
+        console.error(err);
+        alert('Error al guardar: ' + err.message);
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = 'Guardar Cambios';
     }
 };
 
