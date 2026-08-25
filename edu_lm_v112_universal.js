@@ -3058,23 +3058,8 @@ window.loadMisReportes = async () => {
             .limit(50);
             
         if (state.role === 'maestro' || state.role === 'docente') {
-            const { data: asig } = await supabaseClient.from('asignaciones_maestros')
-                .select('grupo_id')
-                .eq('docente_email', state.user.email)
-                .eq('plantel_id', state.plantelId);
-            
-            if (asig && asig.length > 0) {
-                const groupIds = asig.map(a => a.grupo_id).filter(Boolean);
-                if (groupIds.length > 0) {
-                    query = query.in('alumnos.grupo_id', groupIds);
-                } else {
-                    container.innerHTML = '<div style="text-align:center; padding:30px; color:var(--text-muted); grid-column:1/-1;">No tienes grupos asignados actualmente.</div>';
-                    return;
-                }
-            } else {
-                container.innerHTML = '<div style="text-align:center; padding:30px; color:var(--text-muted); grid-column:1/-1;">No tienes grupos asignados actualmente.</div>';
-                return;
-            }
+            // Removemos el filtro por grupo_id para permitir que los maestros de Talleres (sin grupo_id) vean sus reportes. 
+            // El filtro por 'autor_id' (línea 3055) ya garantiza que solo vean los que ellos mismos escribieron.
         }
             
         const { data, error } = await query;
@@ -9675,7 +9660,7 @@ window.agregarActividad = async () => {
            maestro_id: user.id,
            titulo: titulo,
            descripcion: desc,
-           materia: materia,
+           materia: (materia || '').trim(),
            grupo_id: grupo_id,
            target_grado: target_grado,
            rubro_name: rubroName,
@@ -9914,18 +9899,19 @@ window.cargarAlumnosLista = async () => {
             const currentTrim = state.selectedMaestroTrimestre || 1;
             const isModoFinal = currentTrim === 'final';
 
-            let actsQuery = supabaseClient.from('actividades_maestro').select('id, titulo, rubro_name, rubro_peso, trimestre').eq('plantel_id', state.plantelId);
+            let actsQuery = supabaseClient.from('actividades_maestro').select('id, titulo, rubro_name, rubro_peso, trimestre, materia').eq('plantel_id', state.plantelId);
             if(isTec) {
-                actsQuery = actsQuery.eq('target_grado', targetGrado).eq('materia', materia);
+                actsQuery = actsQuery.eq('target_grado', targetGrado);
             } else {
-                actsQuery = actsQuery.eq('grupo_id', gid).eq('materia', materia);
+                actsQuery = actsQuery.eq('grupo_id', gid);
             }
 
             if (!isModoFinal) {
                 actsQuery = actsQuery.eq('trimestre', currentTrim);
             }
             
-            const { data: acts } = await actsQuery.order('fecha_creacion');
+            const { data: rawActs } = await actsQuery.order('fecha_creacion');
+            const acts = (rawActs || []).filter(a => (a.materia || '').trim().toLowerCase() === (materia || '').trim().toLowerCase());
             const hasActs = acts && acts.length > 0;
             
             if(isModoFinal) {
@@ -10380,10 +10366,9 @@ window.cargarBoletasGrupo = async () => {
         let hasActs = false;
         if(!isModoFinal) {
             let actsQuery = supabaseClient.from('actividades_maestro')
-                .select('id, titulo, rubro_name, rubro_peso')
+                .select('id, titulo, rubro_name, rubro_peso, materia')
                 .eq('plantel_id', state.plantelId)
-                .eq('trimestre', currentTrim) 
-                .eq('materia', materiaText);
+                .eq('trimestre', currentTrim);
                 
             if(isTec) {
                 actsQuery = actsQuery.eq('target_grado', targetGrado);
@@ -10391,7 +10376,9 @@ window.cargarBoletasGrupo = async () => {
                 actsQuery = actsQuery.eq('grupo_id', gid);
             }
             const { data: resActs } = await actsQuery;
-            if(resActs) acts = resActs;
+            if(resActs) {
+                acts = resActs.filter(a => (a.materia || '').trim().toLowerCase() === materiaClean.toLowerCase());
+            }
             hasActs = acts.length > 0;
         }
         
