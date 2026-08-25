@@ -9911,7 +9911,8 @@ window.cargarAlumnosLista = async () => {
             }
             
             const { data: rawActs } = await actsQuery.order('fecha_creacion');
-            const acts = (rawActs || []).filter(a => (a.materia || '').trim().toLowerCase() === (materia || '').trim().toLowerCase());
+            const norm = (s) => (s||'').normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim().toLowerCase();
+            const acts = (rawActs || []).filter(a => norm(a.materia) === norm(materia));
             const hasActs = acts && acts.length > 0;
             
             if(isModoFinal) {
@@ -10377,7 +10378,8 @@ window.cargarBoletasGrupo = async () => {
             }
             const { data: resActs } = await actsQuery;
             if(resActs) {
-                acts = resActs.filter(a => (a.materia || '').trim().toLowerCase() === materiaClean.toLowerCase());
+                const norm = (s) => (s||'').normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim().toLowerCase();
+                acts = resActs.filter(a => norm(a.materia) === norm(materiaClean));
             }
             hasActs = acts.length > 0;
         }
@@ -10433,23 +10435,35 @@ window.cargarBoletasGrupo = async () => {
                 // Cálculo de Seguimiento del trimestre actual
                 if(hasActs) {
                     let rubroGroups = {};
+                    let hasRubros = false;
+                    let sumNotas = 0;
+                    
                     acts.forEach(act => {
                         const cellEval = evals.find(e => e.alumno_id === al.id && e.actividad_id === act.id);
                         let val = cellEval ? (parseFloat(cellEval.calificacion)||0) : 0;
+                        let isValida = cellEval && cellEval.calificacion !== undefined && cellEval.calificacion !== null;
                         
-                        // Robustez: asegurar que el rubro existe
-                        let rName = act.rubro_name || "Otros";
-                        if(!rubroGroups[rName]) rubroGroups[rName] = { suma:0, count:0, peso: parseFloat(act.rubro_peso)||0 };
+                        if(isValida) sumNotas += val;
                         
-                        rubroGroups[rName].count++;
-                        if(cellEval) rubroGroups[rName].suma += val;
+                        if(act.rubro_name) {
+                            hasRubros = true;
+                            let rName = act.rubro_name;
+                            if(!rubroGroups[rName]) rubroGroups[rName] = { suma:0, count:0, peso: parseFloat(act.rubro_peso)||0 };
+                            
+                            rubroGroups[rName].count++;
+                            if(isValida) rubroGroups[rName].suma += val;
+                        }
                     });
 
-                    Object.keys(rubroGroups).forEach(k => {
-                        let rg = rubroGroups[k];
-                        let promRubro = rg.count > 0 ? (rg.suma / rg.count) : 0;
-                        promFinalNum += promRubro * (rg.peso / 100);
-                    });
+                    if(hasRubros) {
+                        Object.keys(rubroGroups).forEach(k => {
+                            let rg = rubroGroups[k];
+                            let promRubro = rg.count > 0 ? (rg.suma / rg.count) : 0;
+                            promFinalNum += promRubro * (rg.peso / 100);
+                        });
+                    } else {
+                        promFinalNum = acts.length > 0 ? (sumNotas / acts.length) : 0;
+                    }
                 }
                 currentSettledVal = historial?.find(h => h.alumno_id === al.id)?.calificacion;
             }
