@@ -2856,6 +2856,7 @@ function renderApoyoReportes() {
   const today = new Date().toLocaleDateString('en-CA');
   setTimeout(() => { 
       if(!isMaestro && !isBiblioteca && window.loadCitatoriosApoyo) window.loadCitatoriosApoyo();
+      if((isMaestro || isBiblioteca) && window.loadMisReportes) window.loadMisReportes();
   }, 150);
   
   const subtitle = isMaestro ? 'Reportes de Incidencias Disciplinarias' : (isBiblioteca ? 'Biblioteca y Aula de Medios | Registro y Levante de Reportes' : 'Personal de Apoyo | Triage y Mediación Escolar');
@@ -2891,6 +2892,26 @@ function renderApoyoReportes() {
         </div>
   `;
 
+  const misReportesSection = (isMaestro || isBiblioteca) ? `
+        <!-- SECCIÓN 2: MIS REPORTES (MAESTRO) -->
+        <div class="card" style="width:100%; border-top:4px solid var(--primary);">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px; flex-wrap:wrap; gap:10px;">
+                <div>
+                    <h3 style="margin-bottom:4px;"><i class="fa-solid fa-list-check text-primary"></i> Mis Reportes</h3>
+                    <p style="font-size:0.85rem; color:var(--text-muted);">Seguimiento de los reportes que has levantado.</p>
+                </div>
+                <div>
+                    <button class="btn btn-outline btn-sm" onclick="window.loadMisReportes()">
+                        <i class="fa-solid fa-sync"></i> Actualizar
+                    </button>
+                </div>
+            </div>
+            <div id="contenedorMisReportes" style="display:grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap:20px;">
+                <div style="text-align:center; padding:30px; color:var(--text-muted); grid-column:1/-1;"><i class="fa-solid fa-spinner fa-spin"></i> Cargando tus reportes...</div>
+            </div>
+        </div>
+  ` : '';
+
   return `
     <div class="page-header" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:16px;">
       <div>
@@ -2907,6 +2928,7 @@ function renderApoyoReportes() {
 
     <div style="display:grid; grid-template-columns: 1fr; gap:30px; margin-top:20px;">
         ${citatoriosSection}
+        ${misReportesSection}
     </div>
 
     <!-- Modal de Creación de Reporte -->
@@ -3019,6 +3041,57 @@ function renderApoyoReportes() {
 // ========================
 // APOYO DATA LOADERS
 // ========================
+
+window.loadMisReportes = async () => {
+    const container = document.getElementById('contenedorMisReportes');
+    if(!container) return;
+    container.innerHTML = '<div style="text-align:center; padding:30px; color:var(--text-muted); grid-column:1/-1;"><i class="fa-solid fa-spinner fa-spin"></i> Cargando tus reportes...</div>';
+    try {
+        const u = await supabaseClient.auth.getUser();
+        if(!u.data.user) return;
+        
+        const { data, error } = await supabaseClient.from('reportes_conducta')
+            .select('id, descripcion, gravedad, resuelto, created_at, alumnos(nombre, matricula)')
+            .eq('autor_id', u.data.user.id)
+            .eq('plantel_id', state.plantelId)
+            .order('created_at', { ascending: false })
+            .limit(50);
+            
+        if(error) throw error;
+        
+        if(!data || data.length === 0) {
+            container.innerHTML = '<div style="text-align:center; padding:30px; color:var(--text-muted); grid-column:1/-1;">No has levantado ningún reporte aún.</div>';
+            return;
+        }
+        
+        let html = '';
+        data.forEach(r => {
+            const fecha = new Date(r.created_at).toLocaleDateString();
+            const badgeCls = r.resuelto ? 'success' : (r.gravedad === 'Grave' ? 'danger' : (r.gravedad === 'Moderado' ? 'warning' : 'info'));
+            const alumnoNombre = r.alumnos ? r.alumnos.nombre : 'Alumno Desconocido';
+            const alumnoMat = r.alumnos ? r.alumnos.matricula : 'N/A';
+            html += `
+                <div class="card" style="border-left:4px solid var(--${badgeCls}); padding:15px; background:white; position:relative; box-shadow:0 2px 5px rgba(0,0,0,0.05);">
+                    <div style="font-size:0.8rem; color:var(--text-muted); margin-bottom:8px;"><i class="fa-regular fa-calendar"></i> ${fecha}</div>
+                    <div style="font-weight:bold; margin-bottom:4px; font-size:1.05rem;">${alumnoNombre}</div>
+                    <div style="font-size:0.85rem; color:var(--text-muted); margin-bottom:8px;">Matrícula: ${alumnoMat}</div>
+                    <div style="font-size:0.9rem; color:var(--text); margin-bottom:12px;">${r.descripcion}</div>
+                    <div style="display:flex; justify-content:space-between; align-items:center;">
+                        <span class="badge" style="background:var(--${badgeCls}); color:white; font-size:0.75rem;">${r.gravedad}</span>
+                        <span style="font-size:0.8rem; color:${r.resuelto ? 'var(--success)' : 'var(--warning)'}; font-weight:bold;">
+                            <i class="fa-solid ${r.resuelto ? 'fa-check-double' : 'fa-hourglass-half'}"></i> ${r.resuelto ? 'Atendido' : 'Pendiente'}
+                        </span>
+                    </div>
+                </div>
+            `;
+        });
+        container.innerHTML = html;
+        
+    } catch(e) {
+        console.error("Error loading mis reportes", e);
+        container.innerHTML = '<div style="text-align:center; padding:30px; color:var(--danger); grid-column:1/-1;">Error al cargar reportes.</div>';
+    }
+};
 
 window.loadApoyoRiesgoFiltros = async () => {
     try {
@@ -11570,8 +11643,7 @@ window.toggleAsistenciaModo = async (modo) => {
             .select('*').eq('grupo_id', String(window.currentAulaGrupoId)).eq('materia', materia).eq('fecha', hoy).eq('plantel_id', state.plantelId).maybeSingle();
 
         if(sesion && sesion.estado === 'cerrado') {
-            window.showToast("Esta sesión ya está cerrada definitivamente.", "error");
-            return;
+            // Permitimos reabrirla para corregir errores.
         }
 
         if(window._currentAsistenciaModo === modo) {
@@ -11627,7 +11699,7 @@ window.guardarAsistenciaQR = async (matricula, grupoId) => {
         ]);
         const sesion = sessionRes.data;
         const alumno = studentRes.data;
-        if(!sesion || sesion.estado === 'cerrado') { window.showToast("⚠️ Pase de lista cerrado.", "error"); return; }
+        if(!sesion) { window.showToast("⚠️ Pase de lista no encontrado.", "error"); return; }
         if(!alumno) { window.showToast("Alumno no encontrado", "error"); return; }
 
         // VALIDACIÓN DE PERTENENCIA
@@ -12409,8 +12481,6 @@ window.updateSessionUI = async () => {
         } else if(estado === 'cerrado') {
             label = '🔴 SESIÓN FINALIZADA (Faltas Aplicadas)';
             color = 'var(--danger)';
-            if(btnPuntual) btnPuntual.disabled = true;
-            if(btnRetardo) btnRetardo.disabled = true;
             if(btnCerrar) btnCerrar.style.display = 'none';
         }
 
