@@ -3050,29 +3050,51 @@ window.loadMisReportes = async () => {
         const u = await supabaseClient.auth.getUser();
         if(!u.data.user) return;
         
-        const { data, error } = await supabaseClient.from('reportes_conducta')
-            .select('id, descripcion, gravedad, resuelto, created_at, alumnos(nombre, matricula)')
+        let query = supabaseClient.from('reportes_conducta')
+            .select('id, descripcion, gravedad, resuelto, fecha, alumnos!inner(nombre, matricula, grupo_id)')
             .eq('autor_id', u.data.user.id)
             .eq('plantel_id', state.plantelId)
-            .order('created_at', { ascending: false })
+            .order('fecha', { ascending: false })
             .limit(50);
             
+        if (state.role === 'maestro' || state.role === 'docente') {
+            const { data: asig } = await supabaseClient.from('asignaciones_maestros')
+                .select('grupo_id')
+                .eq('docente_email', state.user.email)
+                .eq('plantel_id', state.plantelId);
+            
+            if (asig && asig.length > 0) {
+                const groupIds = asig.map(a => a.grupo_id).filter(Boolean);
+                if (groupIds.length > 0) {
+                    query = query.in('alumnos.grupo_id', groupIds);
+                } else {
+                    container.innerHTML = '<div style="text-align:center; padding:30px; color:var(--text-muted); grid-column:1/-1;">No tienes grupos asignados actualmente.</div>';
+                    return;
+                }
+            } else {
+                container.innerHTML = '<div style="text-align:center; padding:30px; color:var(--text-muted); grid-column:1/-1;">No tienes grupos asignados actualmente.</div>';
+                return;
+            }
+        }
+            
+        const { data, error } = await query;
         if(error) throw error;
         
         if(!data || data.length === 0) {
-            container.innerHTML = '<div style="text-align:center; padding:30px; color:var(--text-muted); grid-column:1/-1;">No has levantado ningún reporte aún.</div>';
+            container.innerHTML = '<div style="text-align:center; padding:30px; color:var(--text-muted); grid-column:1/-1;">No has levantado ningún reporte a tus alumnos aún.</div>';
             return;
         }
         
         let html = '';
         data.forEach(r => {
-            const fecha = new Date(r.created_at).toLocaleDateString();
+            const fechaVal = r.fecha || r.created_at;
+            const fechaDate = fechaVal ? new Date(fechaVal).toLocaleDateString() : 'N/A';
             const badgeCls = r.resuelto ? 'success' : (r.gravedad === 'Grave' ? 'danger' : (r.gravedad === 'Moderado' ? 'warning' : 'info'));
             const alumnoNombre = r.alumnos ? r.alumnos.nombre : 'Alumno Desconocido';
             const alumnoMat = r.alumnos ? r.alumnos.matricula : 'N/A';
             html += `
                 <div class="card" style="border-left:4px solid var(--${badgeCls}); padding:15px; background:white; position:relative; box-shadow:0 2px 5px rgba(0,0,0,0.05);">
-                    <div style="font-size:0.8rem; color:var(--text-muted); margin-bottom:8px;"><i class="fa-regular fa-calendar"></i> ${fecha}</div>
+                    <div style="font-size:0.8rem; color:var(--text-muted); margin-bottom:8px;"><i class="fa-regular fa-calendar"></i> ${fechaDate}</div>
                     <div style="font-weight:bold; margin-bottom:4px; font-size:1.05rem;">${alumnoNombre}</div>
                     <div style="font-size:0.85rem; color:var(--text-muted); margin-bottom:8px;">Matrícula: ${alumnoMat}</div>
                     <div style="font-size:0.9rem; color:var(--text); margin-bottom:12px;">${r.descripcion}</div>
