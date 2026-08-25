@@ -11680,7 +11680,7 @@ window.toggleAsistenciaModo = async (modo) => {
         
         await supabaseClient.from('asistencia_sesiones').upsert({
             grupo_id: String(window.currentAulaGrupoId), 
-            materia: window.currentAulaMateria || 'N/A', 
+            materia: materia, 
             fecha: hoy, 
             maestro_id: u.data.user.id, 
             estado: dbEstado,
@@ -12456,10 +12456,11 @@ window.updateSessionUI = async () => {
     
     try {
         const hoy = new Date().toLocaleDateString('en-CA');
+        const materia = (window.currentAulaMateria || 'N/A').trim();
         const { data: sesion } = await supabaseClient.from('asistencia_sesiones')
             .select('estado')
             .eq('grupo_id', String(window.currentAulaGrupoId))
-            .eq('materia', window.currentAulaMateria || 'N/A')
+            .eq('materia', materia)
             .eq('fecha', hoy)
             .eq('plantel_id', state.plantelId)
             .maybeSingle();
