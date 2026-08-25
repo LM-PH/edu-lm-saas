@@ -17078,8 +17078,8 @@ async function renderBibliotecaReservas() {
     return `
       <div class="page-header" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:15px;">
          <div>
-            <h2 class="page-title"><i class="fa-solid fa-calendar-plus"></i> Reservaciones Aula de Medios</h2>
-            <p class="page-subtitle">Control de reservaciones y registro de atención en aula de medios.</p>
+            <h2 class="page-title"><i class="fa-solid fa-calendar-plus"></i> Reservaciones de Espacios</h2>
+            <p class="page-subtitle">Control de reservaciones y registro de atención en Aula de Medios y Laboratorios.</p>
          </div>
          <button class="btn btn-outline" style="border-color:var(--primary); color:var(--primary); display:flex; align-items:center; gap:8px;" onclick="window.imprimirHistorialReservasAula()">
              <i class="fa-solid fa-print"></i> Imprimir Historial de Uso
@@ -17136,6 +17136,7 @@ window.loadBibliotecaReservas = async (isBib = false) => {
                <div style="border-left:4px solid ${r.atendido ? '#10b981' : 'var(--primary)'}; background:${r.atendido ? '#f0fdf4' : '#f8fafc'}; padding:16px; margin-bottom:12px; border-radius:0 8px 8px 0; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px;">
                   <div>
                      <div style="font-weight:700; font-size:1.1rem; color:var(--text-main); margin-bottom:4px;">${hI} - ${hF} hrs</div>
+                     <div style="font-size:0.8rem; font-weight:600; color:var(--primary); margin-bottom:4px;"><i class="fa-solid fa-location-dot"></i> ${r.area || 'Aula de Medios'}</div>
                      <div style="font-size:0.9rem; color:#475569; font-weight:500;"><i class="fa-solid fa-chalkboard-user" style="color:var(--text-muted)"></i> Maestro: ${r.perfiles?.nombre || 'Desconocido'}</div>
                      ${r.proposito ? `<div style="font-size:0.8rem; color:var(--text-muted); margin-top:4px;"><i class="fa-regular fa-comment-dots"></i> ${r.proposito}</div>` : ''}
                   </div>
@@ -17198,7 +17199,7 @@ window.imprimirHistorialReservasAula = async () => {
             return `
             <div class="item-box ${r.atendido ? 'success' : 'pending'}">
                 <div class="item-header">
-                    <strong>Horario: ${hI} - ${hF} hrs</strong>
+                    <strong>Horario: ${hI} - ${hF} hrs | ${r.area || 'Aula de Medios'}</strong>
                     <span>Estatus: <strong>${estado}</strong></span>
                 </div>
                 <p><strong>Maestro Solicitante:</strong> ${r.perfiles?.nombre || 'No registrado'}</p>
@@ -17284,14 +17285,22 @@ async function renderMaestroAulaMedios() {
     setTimeout(() => { window.loadBibliotecaReservas(false); }, 100);
     return `
       <div class="page-header">
-         <h2 class="page-title"><i class="fa-solid fa-desktop"></i> Reservar Aula de Medios</h2>
-         <p style="opacity:0.8; margin:0;">Consulta disponibilidad y aparta el aula para tu clase.</p>
+         <h2 class="page-title"><i class="fa-solid fa-desktop"></i> Reservar Espacios Educativos</h2>
+         <p style="opacity:0.8; margin:0;">Consulta disponibilidad y aparta el Aula de Medios o Laboratorio de Ciencias para tu clase.</p>
       </div>
       
       <div style="display:flex; gap:24px; align-items:flex-start; flex-wrap:wrap;">
          <div class="card" style="flex:1; min-width:300px;">
             <h3 style="margin-bottom:15px">Nueva Reservación</h3>
             
+            <div class="form-group">
+               <label class="form-label">Espacio a Reservar</label>
+               <select id="mReservaEspacio" class="form-select" onchange="window.loadBibliotecaReservas(false)">
+                   <option value="Aula de Medios">Aula de Medios</option>
+                   <option value="Laboratorio de Ciencias">Laboratorio de Ciencias</option>
+               </select>
+            </div>
+
             <div class="form-group">
                <label class="form-label">Fecha</label>
                <input type="date" id="mReservaFecha" class="form-input" value="${new Date().toISOString().split('T')[0]}" onchange="document.getElementById('maestroReservaFecha').value = this.value; window.loadBibliotecaReservas(false)">
@@ -17333,6 +17342,7 @@ async function renderMaestroAulaMedios() {
 }
 
 window.maestroGuardarReserva = async () => {
+    const espacio = document.getElementById('mReservaEspacio') ? document.getElementById('mReservaEspacio').value : 'Aula de Medios';
     const fecha = document.getElementById('mReservaFecha').value;
     const inicio = document.getElementById('mReservaInicio').value;
     const fin = document.getElementById('mReservaFin').value;
@@ -17343,17 +17353,25 @@ window.maestroGuardarReserva = async () => {
     
     try {
         // Verificar empalmes
-        const { data: empalmes, error: errEmp } = await supabaseClient.from('biblioteca_reservas')
+        let query = supabaseClient.from('biblioteca_reservas')
             .select('id')
             .eq('plantel_id', state.plantelId)
             .eq('fecha', fecha)
             .lte('hora_inicio', fin)
             .gte('hora_fin', inicio);
             
+        if (espacio === 'Aula de Medios') {
+            query = query.or('area.eq.Aula de Medios,area.is.null');
+        } else {
+            query = query.eq('area', espacio);
+        }
+            
+        const { data: empalmes, error: errEmp } = await query;
+            
         if(errEmp) throw errEmp;
         
         if(empalmes && empalmes.length > 0) {
-            return window.showToast("¡El aula ya está reservada en ese horario!", "error");
+            return window.showToast("¡El " + espacio + " ya está reservado en ese horario!", "error");
         }
         
         // Guardar
@@ -17363,6 +17381,7 @@ window.maestroGuardarReserva = async () => {
             hora_inicio: inicio,
             hora_fin: fin,
             proposito: proposito,
+            area: espacio,
             plantel_id: state.plantelId
         }]);
         
