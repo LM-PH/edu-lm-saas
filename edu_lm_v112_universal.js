@@ -12731,15 +12731,16 @@ window.renderRubros = () => {
     let suma = 0;
     
     window.rubros.forEach(r => {
-        suma += r.val;
         html += `
-          <div class="encuadre-row" style="position:relative; margin-left: 20px;">
-            <button onclick="window.quitarRubro(${r.id})" style="position:absolute; left:-35px; top:20px; color:var(--danger); background:none; border:none; cursor:pointer;" title="Quitar Rubro"><i class="fa-solid fa-circle-minus"></i></button>
-            <div class="encuadre-title">${r.name}</div>
-            <div class="encuadre-slider">
-              <input type="range" min="0" max="100" value="${r.val}" oninput="window.handleSliderInput(this, ${r.id})">
+          <div class="encuadre-row" style="position:relative; margin-left: 20px; display: flex; align-items: center; gap: 10px; margin-bottom: 12px;">
+            <button onclick="window.quitarRubro(${r.id})" style="position:absolute; left:-35px; top:50%; transform:translateY(-50%); color:var(--danger); background:none; border:none; cursor:pointer;" title="Quitar Rubro"><i class="fa-solid fa-circle-minus"></i></button>
+            <div class="encuadre-title" style="flex: 1; font-weight: 600; font-size: 0.95rem;">${r.name}</div>
+            <div class="encuadre-slider" style="flex: 2; display: flex; align-items: center; gap: 10px;">
+              <input type="range" id="slider_${r.id}" min="0" max="100" value="${r.val}" style="flex: 1;" oninput="window.handleSliderInput(this, ${r.id})">
             </div>
-            <div class="encuadre-value" style="color: ${r.color}">${r.val}%</div>
+            <div class="encuadre-value" style="display: flex; align-items: center; gap: 4px;">
+              <input type="number" id="num_${r.id}" min="0" max="100" value="${r.val}" style="width: 70px; border: 1.5px solid var(--border); border-radius: 8px; padding: 6px; font-weight: bold; color: ${r.color}; text-align: center; font-size: 1rem;" oninput="window.handleNumberInput(this, ${r.id})"> <span style="font-weight:bold; color:var(--text-muted);">%</span>
+            </div>
           </div>
         `;
     });
@@ -12747,7 +12748,15 @@ window.renderRubros = () => {
     if(window.rubros.length === 0) html = '<p style="text-align:center; color:var(--text-muted); padding:20px;">No hay rubros de evaluación.</p>';
     
     container.innerHTML = html;
-    totalEl.innerText = suma + '%';
+    window.actualizarTotalEncuadreUI();
+};
+
+window.actualizarTotalEncuadreUI = () => {
+    const totalEl = document.getElementById('encuadreTotal');
+    const btn = document.getElementById('btnEnviarEncuadre');
+    let suma = window.rubros.reduce((acc, r) => acc + r.val, 0);
+    
+    if(totalEl) totalEl.innerText = suma + '%';
     
     if(suma === 100) {
        totalEl.style.color = 'var(--success)';
@@ -12763,15 +12772,37 @@ window.renderRubros = () => {
 };
 
 window.handleSliderInput = (input, id) => {
-    let val = parseInt(input.value);
+    let val = parseInt(input.value) || 0;
     let sumOthers = window.rubros.reduce((acc, r) => r.id !== id ? acc + r.val : acc, 0);
     if(sumOthers + val > 100) {
         val = 100 - sumOthers;
         input.value = val;
     }
     const target = window.rubros.find(r => r.id === id);
-    target.val = val;
-    window.renderRubros();
+    if(target) target.val = val;
+    
+    const numInput = document.getElementById('num_' + id);
+    if(numInput) numInput.value = val;
+    
+    window.actualizarTotalEncuadreUI();
+};
+
+window.handleNumberInput = (input, id) => {
+    let val = parseInt(input.value) || 0;
+    if (val < 0) { val = 0; input.value = val; }
+    
+    let sumOthers = window.rubros.reduce((acc, r) => r.id !== id ? acc + r.val : acc, 0);
+    if(sumOthers + val > 100) {
+        val = 100 - sumOthers;
+        input.value = val;
+    }
+    const target = window.rubros.find(r => r.id === id);
+    if(target) target.val = val;
+    
+    const slider = document.getElementById('slider_' + id);
+    if(slider) slider.value = val;
+    
+    window.actualizarTotalEncuadreUI();
 };
 
 window.loadGruposEncuadre = async () => {
