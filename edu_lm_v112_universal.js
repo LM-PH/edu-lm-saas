@@ -11446,7 +11446,7 @@ function attachDOMEvents() {
           const curp = document.getElementById('curp').value;
           const nombre = document.getElementById('nombre').value;
           const edad = document.getElementById('edad').value;
-          const email = document.getElementById('contactoAcceso').value;
+          const email = document.getElementById('contactoAcceso').value.trim().toLowerCase();
           const grado = document.getElementById('gradoInput').value;
           const grupoNom = document.getElementById('grupoInput').value;
           const estatura = document.getElementById('estatura')?.value;
