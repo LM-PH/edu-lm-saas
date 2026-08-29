@@ -18208,9 +18208,9 @@ function renderAlumnoPsicosocial() {
         htmlInputs = preguntas.map(p => {
             let inputHtml = "";
             if(p.tipo === 'text') {
-                inputHtml = `<input type="text" id="ans_${p.id}" name="${p.titulo}" class="form-input psico-ans-input" required>`;
+                inputHtml = `<input type="text" id="ans_${p.id}" name="${p.titulo}" class="form-input psico-ans-input" style="text-transform: uppercase;" required>`;
             } else if(p.tipo === 'textarea') {
-                inputHtml = `<textarea id="ans_${p.id}" name="${p.titulo}" class="form-input psico-ans-input" style="height:60px;" required></textarea>`;
+                inputHtml = `<textarea id="ans_${p.id}" name="${p.titulo}" class="form-input psico-ans-input" style="height:60px; text-transform: uppercase;" required></textarea>`;
             } else if(p.tipo === 'select') {
                 let opts = p.opciones.split(',').map(o => `<option value="${o.trim()}">${o.trim()}</option>`).join('');
                 inputHtml = `<select id="ans_${p.id}" name="${p.titulo}" class="form-input psico-ans-input" required><option value="">Seleccione...</option>${opts}</select>`;
@@ -18268,13 +18268,19 @@ window.enviarRespuestasPsicosocial = async (e) => {
     const respuestas = {};
     const preguntas = window.psicoCuestionarioActual ? window.psicoCuestionarioActual.preguntas_json : [];
     
+    const normalizeText = (text) => {
+        if (typeof text !== 'string') return text;
+        return text.toUpperCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/\s+/g, ' ').trim();
+    };
+
     preguntas.forEach(p => {
         if(p.tipo === 'checkbox') {
             const checked = document.querySelectorAll(`input[name="ans_${p.id}"]:checked`);
-            respuestas[p.titulo] = Array.from(checked).map(c => c.value);
+            // Los checkboxes son opciones cerradas, pero por si acaso las normalizamos
+            respuestas[p.titulo] = Array.from(checked).map(c => normalizeText(c.value));
         } else {
             const el = document.getElementById(`ans_${p.id}`);
-            if(el) respuestas[p.titulo] = el.value;
+            if(el) respuestas[p.titulo] = normalizeText(el.value);
         }
     });
 
