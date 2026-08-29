@@ -7636,13 +7636,15 @@ window.updateNotificationBadge = async (clearAll = false) => {
             audArr.push('Maestros', 'Personal', 'Alumnos');
         }
 
-        let query = supabaseClient.from('comunicados').select('id').in('audiencia', audArr).eq('plantel_id', state.plantelId);
+        let query = supabaseClient.from('comunicados').select('id, tipo, titulo').in('audiencia', audArr).eq('plantel_id', state.plantelId);
         if(creadoEn) query = query.gte('fecha_envio', creadoEn);
 
         const { data: coms, error } = await query;
         if(error || !coms) return;
 
         const comIds = coms.map(c => c.id);
+        const comsReqFirma = coms.filter(c => c.tipo === 'aviso_firma_boleta' || (c.titulo && c.titulo.toLowerCase().includes('encuadre')));
+        const idsReqFirma = comsReqFirma.map(c => c.id);
         const badgeEl = document.getElementById('notif-badge-avisos');
         
         if(comIds.length === 0) {
@@ -7652,16 +7654,16 @@ window.updateNotificationBadge = async (clearAll = false) => {
 
         const { data: vistos } = await supabaseClient.from('comunicados_vistos').select('comunicado_id').eq('perfil_id', pId).in('comunicado_id', comIds);
         const vistosIds = vistos ? vistos.map(v => v.comunicado_id) : [];
-        const unread = comIds.length - vistosIds.length;
+        let unread = comIds.length - vistosIds.length;
         
         if (clearAll && unread > 0) {
-            const missingIds = comIds.filter(id => !vistosIds.includes(id));
-            const inserts = missingIds.map(id => ({ perfil_id: pId, comunicado_id: id }));
-            // Insertar para limpiar el badge
-            await supabaseClient.from('comunicados_vistos').upsert(inserts, { onConflict: 'perfil_id, comunicado_id', ignoreDuplicates: true });
-            if(badgeEl) badgeEl.style.display = 'none';
-            if ('clearAppBadge' in navigator) navigator.clearAppBadge().catch(console.warn);
-            return;
+            const missingIds = comIds.filter(id => !vistosIds.includes(id) && !idsReqFirma.includes(id));
+            if(missingIds.length > 0) {
+                const inserts = missingIds.map(id => ({ perfil_id: pId, comunicado_id: id }));
+                // Insertar para limpiar el badge de comunicados regulares
+                await supabaseClient.from('comunicados_vistos').upsert(inserts, { onConflict: 'perfil_id, comunicado_id', ignoreDuplicates: true });
+            }
+            unread = comIds.filter(id => !vistosIds.includes(id) && !missingIds.includes(id)).length;
         }
 
         if(badgeEl) {
