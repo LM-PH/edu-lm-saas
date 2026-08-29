@@ -1646,6 +1646,9 @@ function renderAdminCalificaciones() {
            </div>
         </div>
         <div style="text-align:right; margin-top:24px; border-top:1px solid var(--border); padding-top:16px; display:flex; justify-content:flex-end; gap:12px;">
+           <button class="btn btn-outline" style="color:#d97706; border-color:#d97706;" onclick="window.limpiarFirmasFalsasTimeline('boleta')">
+              <i class="fa-solid fa-broom"></i> Corregir Firmas Automáticas de Boletas
+           </button>
            <button id="btnNotifBoletas" class="btn btn-primary btn-outline" style="display:none;" onclick="window.notificarRevisionSabana()">
               <i class="fa-solid fa-bell"></i> Notificar a los Padres
            </button>
@@ -2541,8 +2544,8 @@ function renderMaestroEncuadre() {
          <i class="fa-solid fa-trash-can"></i> Limpiar Registro de Envío y Avisos (Reinicio Total)
       </button>
       
-      <button class="btn btn-outline btn-xs" style="width: 100%; margin-top:12px; color:#d97706; border-color:#d97706;" onclick="window.limpiarFirmasFalsasTimeline()">
-         <i class="fa-solid fa-broom"></i> Corregir Firmas Automáticas de Boletas y Encuadres
+      <button class="btn btn-outline btn-xs" style="width: 100%; margin-top:12px; color:#d97706; border-color:#d97706;" onclick="window.limpiarFirmasFalsasTimeline('encuadre')">
+         <i class="fa-solid fa-broom"></i> Corregir Firmas Automáticas de Encuadres
       </button>
     </div>
 
@@ -18693,15 +18696,24 @@ window.initBitacoraCalendar = async (inputId, cbName) => {
     });
 };
 
-window.limpiarFirmasFalsasTimeline = async () => {
-    if(!confirm("¿Deseas limpiar las firmas automáticas erróneas? Esto devolverá los avisos a estado Pendiente para los alumnos que no han firmado realmente.")) return;
+window.limpiarFirmasFalsasTimeline = async (tipo_firma) => {
+    const textoConfirmacion = tipo_firma === 'encuadre' ? "Encuadres" : (tipo_firma === 'boleta' ? "Boletas" : "Boletas y Encuadres");
+    if(!confirm(`¿Deseas limpiar las firmas automáticas erróneas de ${textoConfirmacion}? Esto devolverá los avisos a estado Pendiente para los alumnos que no han firmado realmente.`)) return;
     
     try {
-        console.log("Iniciando limpieza de firmas falsas...");
+        console.log(`Iniciando limpieza de firmas falsas de ${textoConfirmacion}...`);
+        
+        let orQuery = 'tipo.eq.aviso_firma_boleta,titulo.ilike.%encuadre%';
+        if (tipo_firma === 'encuadre') {
+            orQuery = 'titulo.ilike.%encuadre%';
+        } else if (tipo_firma === 'boleta') {
+            orQuery = 'tipo.eq.aviso_firma_boleta';
+        }
+
         const { data: comsReqFirma } = await supabaseClient
             .from('comunicados')
             .select('id, tipo, titulo')
-            .or('tipo.eq.aviso_firma_boleta,titulo.ilike.%encuadre%');
+            .or(orQuery);
             
         if (!comsReqFirma || comsReqFirma.length === 0) {
             alert("No se encontraron avisos que requieran firma en la base de datos.");
