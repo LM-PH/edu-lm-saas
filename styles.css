@@ -280,8 +280,9 @@ body {
 .mobile-app {
   width: 100%;
   max-width: 420px;
-  min-height: 850px;
-  margin: 30px auto;
+  height: 100%;
+  max-height: 850px;
+  margin: 0 auto;
   background: var(--surface);
   border-radius: 30px;
   box-shadow: var(--shadow-lg), 0 0 0 10px #e2e8f0;
@@ -290,6 +291,15 @@ body {
   flex-direction: column;
   position: relative;
   animation: fadeIn 0.5s ease-out;
+}
+
+@media (max-height: 900px) {
+  .mobile-app {
+    margin: 0 auto;
+    border-radius: 0;
+    box-shadow: none;
+    max-height: 100%;
+  }
 }
 
 @media (max-width: 768px) {
@@ -323,6 +333,7 @@ body {
   flex: 1;
   min-height: 0;
   padding: 20px;
+  padding-bottom: calc(40px + env(safe-area-inset-bottom));
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
   background: var(--secondary-bg);
