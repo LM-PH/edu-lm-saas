@@ -2540,6 +2540,10 @@ function renderMaestroEncuadre() {
       <button id="btnResetEncuadre" class="btn btn-outline btn-xs" style="width: 100%; margin-top:12px; color:var(--danger); border-color:var(--danger); display:none;" onclick="window.resetEstadoEncuadre()">
          <i class="fa-solid fa-trash-can"></i> Limpiar Registro de Envío y Avisos (Reinicio Total)
       </button>
+      
+      <button class="btn btn-outline btn-xs" style="width: 100%; margin-top:12px; color:#d97706; border-color:#d97706;" onclick="window.limpiarFirmasFalsasTimeline()">
+         <i class="fa-solid fa-broom"></i> Corregir Firmas Automáticas de Boletas y Encuadres
+      </button>
     </div>
 
     <!-- Panel de Firmantes -->
