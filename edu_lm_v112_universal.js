@@ -18692,3 +18692,35 @@ window.initBitacoraCalendar = async (inputId, cbName) => {
         }
     });
 };
+
+window.limpiarFirmasFalsasTimeline = async () => {
+    if(!confirm("¿Deseas limpiar las firmas automáticas erróneas? Esto devolverá los avisos a estado Pendiente para los alumnos que no han firmado realmente.")) return;
+    
+    try {
+        console.log("Iniciando limpieza de firmas falsas...");
+        const { data: comsReqFirma } = await supabaseClient
+            .from('comunicados')
+            .select('id, tipo, titulo')
+            .or('tipo.eq.aviso_firma_boleta,titulo.ilike.%encuadre%');
+            
+        if (!comsReqFirma || comsReqFirma.length === 0) {
+            alert("No se encontraron avisos que requieran firma en la base de datos.");
+            return;
+        }
+        const idsReqFirma = comsReqFirma.map(c => c.id);
+        
+        // Asumiendo que el usuario admin (Rector/Maestro) tiene permiso RLS para borrar.
+        const { error, count } = await supabaseClient
+            .from('comunicados_vistos')
+            .delete({ count: 'exact' })
+            .in('comunicado_id', idsReqFirma);
+            
+        if(error) {
+            alert("Error al limpiar: " + error.message + "\n\nNota: Es posible que tu cuenta no tenga permisos para borrar registros de otros usuarios.");
+        } else {
+            alert("Limpieza completada exitosamente. Los avisos han vuelto a estado Pendiente.");
+        }
+    } catch(err) {
+        alert("Ocurrió un error inesperado: " + err.message);
+    }
+};
