@@ -913,6 +913,32 @@ EXCEPTION WHEN OTHERS THEN
 END;
 $$;
 
+-- NUEVO RPC PARA ELIMINAR USUARIOS (Para Bajas)
+CREATE OR REPLACE FUNCTION public.eliminar_usuario_admin(
+  p_email text
+)
+RETURNS json
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path TO 'public', 'auth', 'extensions'
+AS $$
+DECLARE
+  v_user_id uuid;
+BEGIN
+  SELECT id INTO v_user_id FROM auth.users WHERE email = p_email LIMIT 1;
+  
+  IF v_user_id IS NOT NULL THEN
+    DELETE FROM auth.identities WHERE user_id = v_user_id;
+    DELETE FROM auth.users WHERE id = v_user_id;
+    RETURN json_build_object('success', true, 'mensaje', 'Usuario eliminado de Auth');
+  ELSE
+    RETURN json_build_object('success', true, 'mensaje', 'El usuario no existía en Auth');
+  END IF;
+EXCEPTION WHEN OTHERS THEN
+  RETURN json_build_object('success', false, 'error', SQLERRM);
+END;
+$$;
+
 -- =======================================================
 -- TABLA ASIGNACIONES MAESTROS (Para relacionar docentes con materias y grupos)
 -- =======================================================

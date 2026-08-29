@@ -1279,6 +1279,8 @@ window.darDeBajaAlumno = async (id, nombre) => {
             if(error) throw error;
             if(alu && alu.contacto_email) {
                 await supabaseClient.from('perfiles_permitidos').delete().eq('email', alu.contacto_email);
+                // NUEVO: Eliminar de auth.users para que pueda volver a ser registrado sin chocar
+                await supabaseClient.rpc('eliminar_usuario_admin', { p_email: alu.contacto_email });
             }
             alert('Alumno dado de baja exitosamente.');
         } else {
