@@ -999,8 +999,8 @@ function renderAdminInscripcion() {
           <div class="form-group" style="margin-bottom:0;">
             <label class="form-label">Sexo</label>
             <select id="sexo" class="form-select">
-               <option value="H">Hombre</option>
-               <option value="M">Mujer</option>
+               <option value="Masculino">Hombre (Masculino)</option>
+               <option value="Femenino">Mujer (Femenino)</option>
             </select>
           </div>
         </div>
@@ -11563,6 +11563,7 @@ function attachDOMEvents() {
           const curp = document.getElementById('curp').value;
           const nombre = document.getElementById('nombre').value;
           const edad = document.getElementById('edad').value;
+          const sexo = document.getElementById('sexo')?.value || null;
           const email = document.getElementById('contactoAcceso').value.trim().toLowerCase();
           const grado = document.getElementById('gradoInput').value;
           const grupoNom = document.getElementById('grupoInput').value;
