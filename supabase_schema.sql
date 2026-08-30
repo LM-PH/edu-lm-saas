@@ -361,6 +361,67 @@ CREATE POLICY "Alumno puede actualizar su estudio" ON public.estudios_psicosocia
     USING (alumno_id IN (SELECT id FROM alumnos WHERE perfil_id = auth.uid()))
     WITH CHECK (alumno_id IN (SELECT id FROM alumnos WHERE perfil_id = auth.uid()));
 
+-- =======================================================
+-- TABLAS: FICHAS DE SALUD Y EMERGENCIAS ESCOLARES
+-- =======================================================
+
+CREATE TABLE public.cuestionarios_salud (
+    id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+    plantel_id uuid NOT NULL,
+    titulo text NOT NULL,
+    preguntas_json jsonb NOT NULL,
+    creado_en timestamp with time zone DEFAULT now(),
+    creado_por uuid REFERENCES public.perfiles(id) ON DELETE SET NULL
+);
+
+ALTER TABLE public.cuestionarios_salud ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Permitir accesos a staff cuestionarios salud" ON public.cuestionarios_salud
+    FOR ALL
+    USING (
+        (SELECT rol FROM perfiles WHERE perfiles.id = auth.uid()) IN ('admin', 'directivo', 'apoyo')
+    )
+    WITH CHECK (
+        (SELECT rol FROM perfiles WHERE perfiles.id = auth.uid()) IN ('admin', 'directivo', 'apoyo')
+    );
+
+CREATE POLICY "Alumno puede leer cuestionarios salud" ON public.cuestionarios_salud
+    FOR SELECT
+    USING (true);
+
+CREATE TABLE public.fichas_salud (
+    id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+    alumno_id uuid REFERENCES public.alumnos(id) ON DELETE CASCADE,
+    cuestionario_id uuid REFERENCES public.cuestionarios_salud(id) ON DELETE CASCADE,
+    plantel_id uuid NOT NULL,
+    estado text DEFAULT 'pendiente',
+    respuestas jsonb,
+    notas_privadas text,
+    fecha_envio timestamp with time zone DEFAULT now(),
+    fecha_respuesta timestamp with time zone,
+    creado_por uuid REFERENCES public.perfiles(id) ON DELETE SET NULL
+);
+
+ALTER TABLE public.fichas_salud ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Permitir accesos a staff fichas salud" ON public.fichas_salud
+    FOR ALL
+    USING (
+        (SELECT rol FROM perfiles WHERE perfiles.id = auth.uid()) IN ('admin', 'directivo', 'apoyo')
+    )
+    WITH CHECK (
+        (SELECT rol FROM perfiles WHERE perfiles.id = auth.uid()) IN ('admin', 'directivo', 'apoyo')
+    );
+
+CREATE POLICY "Alumno puede leer su ficha de salud" ON public.fichas_salud
+    FOR SELECT
+    USING (alumno_id IN (SELECT id FROM alumnos WHERE perfil_id = auth.uid()));
+
+CREATE POLICY "Alumno puede actualizar su ficha de salud" ON public.fichas_salud
+    FOR UPDATE
+    USING (alumno_id IN (SELECT id FROM alumnos WHERE perfil_id = auth.uid()))
+    WITH CHECK (alumno_id IN (SELECT id FROM alumnos WHERE perfil_id = auth.uid()));
+
 -- Bucket para adjuntos de comunicados
 INSERT INTO storage.buckets (id, name, public) VALUES ('comunicados_adjuntos', 'comunicados_adjuntos', true);
 

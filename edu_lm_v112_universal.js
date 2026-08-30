@@ -883,6 +883,7 @@ function renderSidebar() {
       { name: 'Reportes Escolares', path: '/apoyo/reportes', icon: 'fa-file-signature' },
       { name: 'Expediente Salud', path: '/apoyo/salud', icon: 'fa-notes-medical' },
       { name: 'Estudio Biopsicosocial', path: '/apoyo/psicosocial', icon: 'fa-brain' },
+      { name: 'Fichas de Salud (Alumnos)', path: '/apoyo/fichas_salud', icon: 'fa-heart-pulse' },
       { name: 'Bitácora Diaria', path: '/apoyo/bitacora', icon: 'fa-book-journal-whills' },
       { name: 'Escáner Entrada', path: '/apoyo/prefectura', icon: 'fa-qrcode' },
       { name: 'Escáner de Salida', path: '/apoyo/ts_escaner', icon: 'fa-person-walking-arrow-right' },
@@ -3899,15 +3900,17 @@ window.showAlumnoExpediente = async (idAlumno) => {
     
     try {
         const id = String(idAlumno).trim();
-        const [alRes, repsRes, intervsRes] = await Promise.all([
+        const [alRes, repsRes, intervsRes, saludRes] = await Promise.all([
             supabaseClient.from('alumnos').select('*, grupos(nombre)').eq('id', id).single(),
             supabaseClient.from('reportes_conducta').select('*, perfiles(nombre)').eq('alumno_id', id).order('fecha', { ascending: false }),
-            supabaseClient.from('intervenciones_conducta').select('*').eq('alumno_id', id).order('fecha', { ascending: false })
+            supabaseClient.from('intervenciones_conducta').select('*').eq('alumno_id', id).order('fecha', { ascending: false }),
+            supabaseClient.from('fichas_salud').select('*').eq('alumno_id', id).order('fecha_envio', { ascending: false }).limit(1)
         ]);
 
         const al = alRes.data;
         const reps = repsRes.data || [];
         const intervs = intervsRes.data || [];
+        const fichaSalud = (saludRes.data && saludRes.data.length > 0) ? saludRes.data[0] : null;
 
         if(!al) throw new Error("Alumno no encontrado");
 
@@ -3941,6 +3944,31 @@ window.showAlumnoExpediente = async (idAlumno) => {
                         <div><strong style="color:var(--text-muted)">Peso:</strong> ${al.peso ? al.peso + ' kg' : 'N/A'}</div>
                         <div><strong style="color:var(--text-muted)">Talla Calzado:</strong> ${al.talla_zapato || 'N/A'}</div>
                     </div>
+                </section>
+
+                <!-- Sección Salud y Emergencias -->
+                <section>
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; border-bottom:2px solid var(--danger); padding-bottom:5px;">
+                        <h4 style="margin:0; color:var(--danger);">
+                            <i class="fa-solid fa-heart-pulse"></i> Ficha Médica y Emergencias
+                        </h4>
+                    </div>
+                    ${fichaSalud ? `
+                        <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px; font-size:0.85rem;">
+                            ${Object.keys(fichaSalud.respuestas || {}).map(k => `
+                                <div style="background:#fffdf7; padding:10px; border-radius:8px; border:1px solid #ffeeba;">
+                                    <strong style="color:var(--text-muted)">${k}:</strong><br>
+                                    <span style="color:var(--danger); font-weight:bold;">${Array.isArray(fichaSalud.respuestas[k]) ? fichaSalud.respuestas[k].join(', ') : fichaSalud.respuestas[k]}</span>
+                                </div>
+                            `).join('')}
+                        </div>
+                        ${fichaSalud.notas_privadas ? `
+                            <div style="margin-top:10px; font-size:0.85rem; background:#f8f9fa; padding:10px; border-radius:8px; border-left:4px solid var(--danger);">
+                                <strong>Notas Médicas (Staff):</strong><br>
+                                ${fichaSalud.notas_privadas}
+                            </div>
+                        ` : ''}
+                    ` : '<p style="color:var(--text-muted); font-style:italic;">No hay ficha médica registrada para este alumno.</p>'}
                 </section>
 
                 <!-- Sección Conducta -->
@@ -5476,6 +5504,16 @@ window.loadCredencialAlumno = async () => {
             return;
         }
 
+        // CHEQUEO DE FICHA DE SALUD PENDIENTE
+        const { data: saludData } = await supabaseClient.from('fichas_salud').select('id, estado, cuestionarios_salud(titulo, preguntas_json)').eq('alumno_id', data.id).eq('estado', 'pendiente').limit(1);
+        if(saludData && saludData.length > 0) {
+            window.saludPendienteGlobal = saludData[0].id;
+            window.saludCuestionarioActual = saludData[0].cuestionarios_salud;
+            document.getElementById('app').innerHTML = renderAlumnoFichaSalud();
+            if(window.loadAlumnoSaludForm) window.loadAlumnoSaludForm();
+            return;
+        }
+
         // Generar QR
         qrCont.innerHTML = '';
         if(window.qrcode) {
@@ -6917,6 +6955,7 @@ async function renderPage(path) {
     case '/apoyo/reportes': return renderApoyoReportes();
     case '/apoyo/salud': return renderApoyoSalud();
     case '/apoyo/psicosocial': return renderApoyoPsicosocial();
+    case '/apoyo/fichas_salud': return renderApoyoFichasSalud();
     case '/apoyo/bitacora': return renderApoyoBitacora();
     case '/apoyo/prefectura': return renderApoyoPrefectura();
     case '/apoyo/ts_escaner': return renderApoyoTSEscaner();
@@ -18724,4 +18763,375 @@ window.initBitacoraCalendar = async (inputId, cbName) => {
             }
         }
     });
+};
+
+
+// =====================================================================
+// MÓDULO FICHAS DE SALUD Y EMERGENCIAS (TRABAJO SOCIAL & ALUMNO)
+// =====================================================================
+
+function renderApoyoFichasSalud() {
+    return `
+    <div class="page-header">
+        <h2 class="page-title"><i class="fa-solid fa-heart-pulse" style="color:var(--danger)"></i> Fichas de Salud y Emergencias</h2>
+        <p class="page-subtitle">Gestión de cuestionarios médicos obligatorios para estudiantes.</p>
+    </div>
+
+    <div class="tabs" style="margin-bottom:20px;">
+        <button class="tab-btn active" onclick="window.switchTabFichaSalud(this, 'tab-salud-enviar')">Crear y Enviar</button>
+        <button class="tab-btn" onclick="window.switchTabFichaSalud(this, 'tab-salud-expediente')">Revisión Individual</button>
+    </div>
+
+    <!-- TAB ENVIAR -->
+    <div id="tab-salud-enviar" class="tab-content" style="display:block;">
+        <div class="card" style="padding:20px;">
+            <h3 style="margin-top:0;">Crear y Enviar Ficha Médica</h3>
+            <p style="color:var(--text-muted); font-size:0.9rem;">Diseña el cuestionario de salud. Al enviarlo, bloqueará el acceso al portal del alumno hasta que lo respondan.</p>
+            
+            <div style="margin-bottom:15px; margin-top:15px;">
+                <label style="font-weight:bold;">Título de la Ficha:</label>
+                <input type="text" id="saludBuilderTitulo" class="form-input" placeholder="Ej. Ficha Médica 2026" value="Ficha de Salud y Emergencias Escolares">
+            </div>
+
+            <div style="background:#f8f9fa; border:1px solid var(--border); border-radius:8px; padding:15px; margin-bottom:20px;">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px;">
+                    <h4 style="margin:0;">Preguntas de la Ficha</h4>
+                    <button class="btn btn-sm btn-outline" onclick="window.saludBuilderAddQuestion()"><i class="fa-solid fa-plus"></i> Añadir Pregunta</button>
+                </div>
+                <div id="saludBuilderPreguntas" style="display:flex; flex-direction:column; gap:5px;">
+                    <!-- Preguntas predeterminadas se agregarán por JS -->
+                </div>
+            </div>
+            
+            <div style="margin:20px 0; display:flex; gap:15px; align-items:flex-end;">
+                <div style="flex:1;">
+                    <label style="font-weight:bold;">Filtro de Envío:</label>
+                    <select id="saludFiltroEnvio" class="form-input" onchange="window.updatePsicoEspecifInput('saludFiltroEnvio', 'saludEnvioInputContainer', 'saludEspecifEnvio')">
+                        <option value="todos">Todos los alumnos del plantel</option>
+                        <option value="grado">Por Grado</option>
+                        <option value="grupo">Por Grupo</option>
+                        <option value="alumno">Por Alumno (ID o Nombre)</option>
+                    </select>
+                </div>
+                <div style="flex:1;">
+                    <label style="font-weight:bold;">Específico (Grado, Grupo, Nombre/ID):</label>
+                    <div id="saludEnvioInputContainer">
+                        <input type="text" id="saludEspecifEnvio" class="form-input" placeholder="No aplica para 'Todos'" disabled>
+                    </div>
+                </div>
+                <div>
+                    <button class="btn btn-danger" onclick="window.enviarFichaSalud()"><i class="fa-solid fa-paper-plane"></i> Guardar y Enviar a Alumnos</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- TAB REVISIÓN INDIVIDUAL -->
+    <div id="tab-salud-expediente" class="tab-content" style="display:none;">
+        <div class="card" style="padding:20px;">
+            <h3 style="margin-top:0;">Ficha Médica del Alumno</h3>
+            <div style="display:flex; gap:10px; margin-bottom:20px;">
+                <input type="text" id="busquedaSaludIndividualInput" class="form-input" placeholder="Buscar alumno por nombre o matrícula..." onkeyup="window.buscarAlumnoSalud(this.value)" style="flex:1;">
+            </div>
+            <div id="resSaludIndividualAlu" style="position:relative; z-index:10; background:white; width:100%; border-radius:8px; box-shadow:var(--shadow); display:none; max-height:200px; overflow-y:auto; margin-top:-10px; margin-bottom:20px; border:1px solid var(--border);"></div>
+
+            <div id="saludExpedienteView" style="display:none; margin-top:20px; border-top:1px solid var(--border); padding-top:20px;">
+                <!-- Aqui se renderiza el expediente -->
+            </div>
+        </div>
+    </div>
+    <script>
+        setTimeout(() => {
+            if(document.getElementById('saludBuilderPreguntas') && document.getElementById('saludBuilderPreguntas').children.length === 0){
+                window.saludBuilderAddQuestion('Tipo de Sangre');
+                window.saludBuilderAddQuestion('Alergias Conocidas');
+                window.saludBuilderAddQuestion('Padecimientos Crónicos');
+                window.saludBuilderAddQuestion('Contacto de Emergencia 1 (Nombre y Teléfono)');
+                window.saludBuilderAddQuestion('Contacto de Emergencia 2 (Nombre y Teléfono)');
+            }
+        }, 100);
+    </script>
+    `;
+}
+
+window.switchTabFichaSalud = (btn, tabId) => {
+    document.querySelectorAll('.tab-btn').forEach(b => {
+        if(b.parentElement.previousElementSibling?.innerText.includes('Fichas de Salud')) b.classList.remove('active');
+    });
+    document.querySelectorAll('.tab-content').forEach(c => {
+        if (c.id && c.id.startsWith('tab-salud')) {
+            c.style.display = 'none';
+        }
+    });
+    btn.classList.add('active');
+    document.getElementById(tabId).style.display = 'block';
+};
+
+window.saludBuilderAddQuestion = (val = '') => {
+    const c = document.getElementById('saludBuilderPreguntas');
+    const div = document.createElement('div');
+    div.style.display = 'flex'; div.style.gap = '10px'; div.style.marginBottom = '5px';
+    div.innerHTML = `
+        <input type="text" class="form-input salud-question-input" style="flex:1; margin:0;" placeholder="Escribe la pregunta médica..." value="${val}">
+        <select class="form-input salud-question-type" style="width:150px; margin:0;">
+            <option value="text">Texto Corto</option>
+            <option value="textarea">Texto Largo</option>
+        </select>
+        <button class="btn btn-sm btn-outline" style="color:var(--danger); border-color:var(--danger);" onclick="this.parentElement.remove()"><i class="fa-solid fa-trash"></i></button>
+    `;
+    c.appendChild(div);
+};
+
+window.enviarFichaSalud = async () => {
+    const titulo = document.getElementById('saludBuilderTitulo').value.trim();
+    if(!titulo) return window.showToast('Ponle título a la ficha médica', 'error');
+
+    const qs = Array.from(document.querySelectorAll('.salud-question-input')).map((el, i) => {
+        return {
+            pregunta: el.value.trim(),
+            tipo: el.nextElementSibling.value
+        };
+    }).filter(q => q.pregunta !== '');
+
+    if(qs.length === 0) return window.showToast('Agrega al menos una pregunta médica', 'error');
+
+    const filtro = document.getElementById('saludFiltroEnvio').value;
+    const esp = document.getElementById('saludEspecifEnvio').value.trim();
+
+    if(filtro !== 'todos' && !esp) return window.showToast('Escribe el valor específico para el filtro', 'error');
+
+    if(!confirm('¿Estás seguro de enviar esta ficha médica obligatoria? Bloqueará el acceso a los alumnos seleccionados.')) return;
+
+    window.showToast('Creando ficha...', 'info');
+
+    try {
+        const { data: cData, error: cErr } = await supabaseClient.from('cuestionarios_salud').insert([{
+            plantel_id: state.plantelId,
+            titulo: titulo,
+            preguntas_json: qs
+        }]).select('id').single();
+
+        if(cErr) throw cErr;
+        const cuestId = cData.id;
+
+        let alus = [];
+        if(filtro === 'todos') {
+            const { data } = await supabaseClient.from('alumnos').select('id').eq('plantel_id', state.plantelId);
+            alus = data || [];
+        } else if (filtro === 'grado') {
+            const { data } = await supabaseClient.from('alumnos').select('id').eq('plantel_id', state.plantelId).eq('grado', esp);
+            alus = data || [];
+        } else if (filtro === 'grupo') {
+            const { data } = await supabaseClient.from('alumnos').select('id, grupos(nombre)').eq('plantel_id', state.plantelId);
+            alus = (data || []).filter(a => String(a.grupo_id) === esp || a.grupos?.nombre?.toLowerCase().includes(esp.toLowerCase()));
+        } else if (filtro === 'alumno') {
+            const { data } = await supabaseClient.from('alumnos').select('id, matricula, nombre').eq('plantel_id', state.plantelId);
+            alus = (data || []).filter(a => a.id === esp || String(a.matricula) === esp || a.nombre.toLowerCase().includes(esp.toLowerCase()));
+        }
+
+        if(alus.length === 0) return window.showToast('No se encontraron alumnos para ese filtro.', 'warning');
+
+        const inserts = alus.map(a => ({
+            alumno_id: a.id,
+            cuestionario_id: cuestId,
+            plantel_id: state.plantelId,
+            estado: 'pendiente'
+        }));
+
+        const { error: insErr } = await supabaseClient.from('fichas_salud').insert(inserts);
+        if(insErr) throw insErr;
+
+        window.showToast(`Ficha de salud enviada a ${alus.length} alumno(s).`, 'success');
+        document.getElementById('saludBuilderPreguntas').innerHTML = '';
+        document.getElementById('saludBuilderTitulo').value = 'Ficha de Salud y Emergencias Escolares';
+        
+    } catch(e) {
+        console.error(e);
+        window.showToast('Error al enviar ficha: ' + e.message, 'error');
+    }
+};
+
+window.buscarAlumnoSalud = async (term) => {
+    const res = document.getElementById('resSaludIndividualAlu');
+    if(!term || term.length < 3) { res.style.display = 'none'; return; }
+    
+    try {
+        const { data, error } = await supabaseClient.from('alumnos').select('id, nombre, matricula, grupos(nombre)').ilike('nombre', `%${term}%`).limit(5);
+        if(error || !data) return;
+        
+        if(data.length === 0) { res.innerHTML = '<div style="padding:10px;">Sin resultados</div>'; res.style.display = 'block'; return; }
+        
+        res.innerHTML = data.map(a => `
+            <div style="padding:10px; border-bottom:1px solid var(--border); cursor:pointer;" onclick="window.selectAlumnoFichaSalud('${a.id}', '${a.nombre}')">
+                <strong style="color:var(--danger)">${a.nombre}</strong> <small style="color:var(--text-muted)">(${a.grupos?.nombre || 'Sin Grupo'}) - ${a.matricula}</small>
+            </div>
+        `).join('');
+        res.style.display = 'block';
+    } catch(e) { console.error(e); }
+};
+
+window.selectAlumnoFichaSalud = async (id, nombre) => {
+    document.getElementById('resSaludIndividualAlu').style.display = 'none';
+    document.getElementById('busquedaSaludIndividualInput').value = nombre;
+    const view = document.getElementById('saludExpedienteView');
+    view.innerHTML = '<div style="text-align:center;"><i class="fa-solid fa-spinner fa-spin"></i> Cargando ficha de salud...</div>';
+    view.style.display = 'block';
+
+    try {
+        const { data, error } = await supabaseClient.from('fichas_salud').select('*').eq('alumno_id', id).order('fecha_envio', {ascending: false}).limit(1);
+        
+        if(error || !data || data.length === 0) {
+            view.innerHTML = `<div class="alert alert-warning">No hay una ficha de salud registrada ni pendiente para ${nombre}.</div>`;
+            return;
+        }
+        
+        const est = data[0];
+        
+        if(est.estado === 'pendiente') {
+            view.innerHTML = `<div class="alert alert-warning">La ficha médica fue enviada el ${new Date(est.fecha_envio).toLocaleDateString()}, pero la familia aún no la ha respondido.</div>`;
+            return;
+        }
+
+        const r = est.respuestas || {};
+        let repHTML = '';
+        Object.keys(r).forEach(k => {
+            let val = Array.isArray(r[k]) ? r[k].join(', ') : r[k];
+            repHTML += `<div style="background:#fffdf7; padding:10px; border-radius:8px; border:1px solid #ffeeba;"><strong>${k}:</strong><br> <span style="color:var(--danger); font-weight:bold;">${val || '---'}</span></div>`;
+        });
+        
+        view.innerHTML = `
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px;">
+                <h3 style="margin:0; color:var(--danger);"><i class="fa-solid fa-heart-pulse"></i> Ficha Médica Contestada</h3>
+                <div>
+                    <span class="badge" style="background:var(--danger); color:white;">Completado el ${new Date(est.fecha_respuesta).toLocaleDateString()}</span>
+                </div>
+            </div>
+            
+            <div class="grid" style="grid-template-columns: 1fr 1fr; gap:15px; margin-bottom:20px;">
+                ${repHTML}
+            </div>
+
+            <div style="background:#f8f9fa; border:1px solid var(--border); padding:15px; border-radius:8px;">
+                <h4 style="margin-top:0;"><i class="fa-solid fa-user-nurse"></i> Notas del Personal Médico / Trabajo Social</h4>
+                <textarea id="saludNota_${est.id}" class="form-input" style="height:100px; margin-bottom:10px;" placeholder="Registrar alergias observadas, medicamentos o instrucciones especiales...">${est.notas_privadas || ''}</textarea>
+                <button class="btn btn-sm btn-primary" onclick="window.guardarNotaSalud('${est.id}')">Guardar Notas Médicas</button>
+            </div>
+        `;
+    } catch(e) { console.error(e); }
+};
+
+window.guardarNotaSalud = async (id) => {
+    const txt = document.getElementById(`saludNota_${id}`).value;
+    window.showToast('Guardando...', 'info');
+    try {
+        const { error } = await supabaseClient.from('fichas_salud').update({ notas_privadas: txt }).eq('id', id);
+        if(error) throw error;
+        window.showToast('Notas médicas guardadas', 'success');
+    } catch(e) { console.error(e); window.showToast('Error al guardar', 'error'); }
+};
+
+
+function renderAlumnoFichaSalud() {
+    return `
+    <div style="min-height: 100vh; display:flex; justify-content:center; align-items:center; background:var(--bg); padding:20px;">
+        <div class="card" style="max-width:800px; width:100%; border-top: 5px solid var(--danger);">
+            <div style="text-align:center; margin-bottom:20px;">
+                <i class="fa-solid fa-heart-pulse" style="font-size:3rem; color:var(--danger); margin-bottom:10px;"></i>
+                <h2 style="margin:0; color:var(--text-main);" id="saludAlumnoTitulo">Ficha Médica</h2>
+                <p style="color:var(--text-muted);">Es obligatorio llenar esta ficha de salud para poder acceder al sistema escolar.</p>
+            </div>
+            <div id="saludAlumnoFormContainer" style="display:flex; flex-direction:column; gap:15px; margin-bottom:20px;">
+                <!-- Dinámico -->
+            </div>
+            <div style="text-align:right;">
+                <button class="btn btn-danger" onclick="window.enviarRespuestasSalud()"><i class="fa-solid fa-paper-plane"></i> Enviar Ficha Médica</button>
+            </div>
+        </div>
+    </div>
+    `;
+}
+
+window.loadAlumnoSaludForm = () => {
+    const c = window.saludCuestionarioActual;
+    if(!c) return;
+    document.getElementById('saludAlumnoTitulo').innerText = c.titulo;
+    const cont = document.getElementById('saludAlumnoFormContainer');
+    
+    let html = '';
+    (c.preguntas_json || []).forEach((q, i) => {
+        let inputHtml = '';
+        if(q.tipo === 'textarea') {
+            inputHtml = `<textarea id="saludResp_${i}" class="form-input" style="height:80px;" placeholder="Escribe tu respuesta aquí..."></textarea>`;
+        } else {
+            inputHtml = `<input type="text" id="saludResp_${i}" class="form-input" placeholder="Escribe tu respuesta aquí...">`;
+        }
+        
+        html += `
+        <div style="background:#f8f9fa; border:1px solid var(--border); padding:15px; border-radius:8px;">
+            <label style="font-weight:bold; display:block; margin-bottom:8px; color:var(--text-main);">${i+1}. ${q.pregunta}</label>
+            ${inputHtml}
+        </div>
+        `;
+    });
+    cont.innerHTML = html;
+};
+
+window.enviarRespuestasSalud = async () => {
+    const c = window.saludCuestionarioActual;
+    if(!c) return;
+    
+    let respuestas = {};
+    let faltan = false;
+    
+    (c.preguntas_json || []).forEach((q, i) => {
+        const val = document.getElementById(`saludResp_${i}`).value.trim();
+        if(!val) faltan = true;
+        // Limpieza básica solicitada antes (mayúsculas, sin acentos)
+        let v = val.toUpperCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/\s+/g, ' ').trim();
+        
+        const map = {
+            "HASMA": "ASMA",
+            "NINGUNA": "NINGUNO",
+            "NADA": "NINGUNO",
+            "NO": "NINGUNO",
+            "NA": "NINGUNO",
+            "N/A": "NINGUNO",
+            "NINGUN": "NINGUNO",
+            "DIABETIS": "DIABETES",
+            "MAMA": "MADRE",
+            "PAPA": "PADRE",
+            "TDA": "TDAH"
+        };
+        if(map[v]) v = map[v];
+        
+        if (v.includes('RITA')) v = 'RITA CETINA';
+        if (v === 'IMS' || v === 'IMSS' || v === 'EL IMSS' || v === 'SEGURO SOCIAL') v = 'IMSS';
+        if (v === 'ISTE' || v === 'HISTE' || v === 'ISSTE' || v === 'ISSSTE' || v === 'EL ISSSTE') v = 'ISSSTE';
+
+        respuestas[q.pregunta] = v || val.toUpperCase();
+    });
+    
+    if(faltan) {
+        return window.showToast('Por favor, responde TODAS las preguntas antes de enviar.', 'warning');
+    }
+    
+    window.showToast('Enviando...', 'info');
+    try {
+        const { error } = await supabaseClient.from('fichas_salud').update({
+            estado: 'completado',
+            respuestas: respuestas,
+            fecha_respuesta: new Date().toISOString()
+        }).eq('id', window.saludPendienteGlobal);
+        
+        if(error) throw error;
+        
+        window.showToast('¡Ficha Médica enviada exitosamente!', 'success');
+        setTimeout(() => {
+            window.location.reload();
+        }, 1500);
+        
+    } catch(e) {
+        console.error(e);
+        window.showToast('Error al enviar respuestas', 'error');
+    }
 };
