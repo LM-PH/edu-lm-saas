@@ -18922,7 +18922,7 @@ window.enviarFichaSalud = async () => {
             const { data } = await supabaseClient.from('alumnos').select('id').eq('plantel_id', state.plantelId).eq('grado', esp);
             alus = data || [];
         } else if (filtro === 'grupo') {
-            const { data } = await supabaseClient.from('alumnos').select('id, grupos(nombre)').eq('plantel_id', state.plantelId);
+            const { data } = await supabaseClient.from('alumnos').select('id, grupo_id, grupos(nombre)').eq('plantel_id', state.plantelId);
             alus = (data || []).filter(a => String(a.grupo_id) === esp || a.grupos?.nombre?.toLowerCase().includes(esp.toLowerCase()));
         } else if (filtro === 'alumno') {
             const { data } = await supabaseClient.from('alumnos').select('id, matricula, nombre').eq('plantel_id', state.plantelId);
