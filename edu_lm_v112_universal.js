@@ -3960,7 +3960,7 @@ window.showAlumnoExpediente = async (idAlumno, context = 'completo') => {
                 <button class="btn-close" onclick="document.getElementById('expedienteDrawer').style.display='none'" style="position:absolute; top:12px; right:12px; border:none; background:none; font-size:1.4rem; cursor:pointer;">&times;</button>
                 <div style="width:70px; height:70px; border-radius:50%; background:var(--primary); color:white; display:grid; place-items:center; margin:0 auto 10px auto; font-size:1.8rem; font-weight:bold;">${al.nombre.substring(0,1)}</div>
                 <h3 style="margin:0;">${al.nombre}</h3>
-                <p style="color:var(--text-muted); margin:4px 0 0 0; font-size:0.85rem;">Matrícula: ${al.matricula} | Grupo: ${al.grupos?.nombre || 'S/G'}</p>
+                <p style="color:var(--text-muted); margin:4px 0 0 0; font-size:0.85rem;">Matrícula: ${al.matricula} | Grado: ${al.grado || 'S/G'} | Grupo: ${al.grupos?.nombre ? al.grupos.nombre.split('°').pop() : 'S/G'}</p>
             </div>
 
             <div style="padding:20px; display:flex; flex-direction:column; gap:30px;">
@@ -4259,7 +4259,7 @@ window.imprimirExpediente = async (idAlumno, modo = 'completo') => {
                             <strong>Nombre:</strong> ${al.nombre}<br>
                             <strong>Matrícula:</strong> ${al.matricula}<br>
                             <strong>Grado:</strong> ${al.grado || 'S/G'}<br>
-                            <strong>Grupo:</strong> ${al.grupos?.nombre || 'S/G'}
+                            <strong>Grupo:</strong> ${al.grupos?.nombre ? al.grupos.nombre.split('°').pop() : 'S/G'}
                         </div>
                         <div>
                             <strong>CURP:</strong> ${al.curp || 'N/A'}<br>
@@ -4593,7 +4593,7 @@ window.imprimirExpedienteMedico = async (idAlumno) => {
                             <strong>Grado:</strong> ${al.grado || 'S/G'}
                         </div>
                         <div style="text-align:right;">
-                            <strong>Grupo:</strong> ${al.grupos?.nombre || 'S/G'}<br>
+                            <strong>Grupo:</strong> ${al.grupos?.nombre ? al.grupos.nombre.split('°').pop() : 'S/G'}<br>
                             <strong>Fecha de Impresión:</strong> ${fechaImpresion}
                         </div>
                     </div>
