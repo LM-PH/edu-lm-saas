@@ -18160,7 +18160,12 @@ window.loadPsicosocialStats = async () => {
                             const groupPsicoAnswer = (rawVal) => {
                                 if (typeof rawVal !== 'string') return rawVal;
                                 let v = rawVal.toUpperCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/\s+/g, ' ').trim();
-                                const map = {
+                                
+                                    if (v.includes('RITA')) return 'RITA CETINA';
+                                    if (v === 'IMS' || v === 'IMSS' || v === 'EL IMSS' || v === 'SEGURO SOCIAL') return 'IMSS';
+                                    if (v === 'ISTE' || v === 'HISTE' || v === 'ISSTE' || v === 'ISSSTE' || v === 'EL ISSSTE') return 'ISSSTE';
+
+                                    const map = {
                                     "HASMA": "ASMA",
                                     "NINGUNA": "NINGUNO",
                                     "NADA": "NINGUNO",
