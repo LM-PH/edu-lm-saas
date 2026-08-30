@@ -4150,11 +4150,12 @@ window.submitActualizarDatosAlumno = async (e) => {
         const peso = document.getElementById('updPeso').value ? parseFloat(document.getElementById('updPeso').value) : null;
         const talla_zapato = document.getElementById('updTallaZapato').value.trim() || null;
 
-        const { error } = await supabaseClient.from('alumnos').update({
+        const { data, error } = await supabaseClient.from('alumnos').update({
             curp, edad, sexo, estatura, peso, talla_zapato
-        }).eq('id', id);
+        }).eq('id', id).select();
 
         if(error) throw error;
+        if(!data || data.length === 0) throw new Error("No se pudo actualizar el registro. Verifica los permisos de acceso o el estado de tu sesión.");
 
         document.getElementById('modalActualizarDatosAlumno').style.display = 'none';
         alert('Datos actualizados correctamente.');
