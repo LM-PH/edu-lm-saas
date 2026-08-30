@@ -4131,11 +4131,12 @@ window.submitActualizarDatosAlumno = async (e) => {
 window.imprimirExpediente = async (idAlumno) => {
     try {
         const id = String(idAlumno).trim();
-        const [alRes, repsRes, intervsRes, plantelRes] = await Promise.all([
+        const [alRes, repsRes, intervsRes, plantelRes, saludRes] = await Promise.all([
             supabaseClient.from('alumnos').select('*, grupos(nombre)').eq('id', id).single(),
             supabaseClient.from('reportes_conducta').select('*, perfiles(nombre)').eq('alumno_id', id).order('fecha', { ascending: false }),
             supabaseClient.from('intervenciones_conducta').select('*').eq('alumno_id', id).order('fecha', { ascending: false }),
-            supabaseClient.from('planteles').select('nombre, logo_url').eq('id', state.plantelId).single()
+            supabaseClient.from('planteles').select('nombre, logo_url').eq('id', state.plantelId).single(),
+            supabaseClient.from('fichas_salud').select('*').eq('alumno_id', id).order('fecha_envio', { ascending: false }).limit(1)
         ]);
 
         const al = alRes.data;
@@ -4143,6 +4144,7 @@ window.imprimirExpediente = async (idAlumno) => {
         const intervs = intervsRes.data || [];
         const schoolName = plantelRes.data?.nombre || 'Escuela';
         const schoolLogo = window.getCleanLogoUrl(plantelRes.data?.logo_url) || null;
+        const fichaSalud = (saludRes.data && saludRes.data.length > 0) ? saludRes.data[0] : null;
 
         if(!al) throw new Error("Alumno no encontrado");
 
@@ -4219,6 +4221,24 @@ window.imprimirExpediente = async (idAlumno) => {
                             <strong>Fecha de Impresión:</strong> ${fechaImpresion}
                         </div>
                     </div>
+
+                    ${fichaSalud ? `
+                    <div class="section-title" style="color:#dc2626; border-bottom-color:#fca5a5;">Ficha Médica y Emergencias</div>
+                    <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px; margin-bottom:20px;">
+                        ${Object.keys(fichaSalud.respuestas || {}).map(k => `
+                            <div class="item-box" style="margin-bottom:0;">
+                                <strong>${k}:</strong><br>
+                                <span style="color:#dc2626;">${Array.isArray(fichaSalud.respuestas[k]) ? fichaSalud.respuestas[k].join(', ') : fichaSalud.respuestas[k]}</span>
+                            </div>
+                        `).join('')}
+                    </div>
+                    ${fichaSalud.notas_privadas ? `
+                        <div class="item-box" style="border-left: 4px solid #dc2626; background: #fef2f2;">
+                            <strong>Notas Médicas (Staff):</strong><br>
+                            ${fichaSalud.notas_privadas}
+                        </div>
+                    ` : ''}
+                    ` : ''}
 
                     <div class="section-title">Historial de Conducta y Reportes</div>
                     ${repsHtml}
@@ -19002,8 +19022,9 @@ window.selectAlumnoFichaSalud = async (id, nombre) => {
         view.innerHTML = `
             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px;">
                 <h3 style="margin:0; color:var(--danger);"><i class="fa-solid fa-heart-pulse"></i> Ficha Médica Contestada</h3>
-                <div>
+                <div style="display:flex; gap:10px; align-items:center;">
                     <span class="badge" style="background:var(--danger); color:white;">Completado el ${new Date(est.fecha_respuesta).toLocaleDateString()}</span>
+                    <button class="btn btn-sm btn-outline" onclick="window.imprimirExpediente('${id}')" style="border-color:var(--danger); color:var(--danger);"><i class="fa-solid fa-print"></i> Imprimir Expediente (Salud + Conducta)</button>
                 </div>
             </div>
             
