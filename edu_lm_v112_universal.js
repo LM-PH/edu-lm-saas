@@ -4227,7 +4227,7 @@ window.imprimirExpediente = async (idAlumno, modo = 'completo') => {
                         .header h1 { margin: 0; color: #1e40af; font-size: 20px; text-transform: uppercase; }
                         .header p { margin: 5px 0; font-size: 14px; color: #555; font-weight: bold; }
                         .logo-img { max-height: 80px; margin-bottom: 10px; object-fit: contain; }
-                        .student-info { background: #f8fafc; border: 1px solid #e2e8f0; padding: 20px; border-radius: 8px; margin-bottom: 30px; display: grid; grid-template-columns: 1fr 1fr; gap: 15px; font-size: 14px; }
+                        .student-info { background: #f8fafc; border: 1px solid #e2e8f0; padding: 20px; border-radius: 8px; margin-bottom: 30px; display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 15px; font-size: 14px; }
                         .section-title { font-size: 18px; color: #1e40af; border-bottom: 2px solid #cbd5e1; padding-bottom: 5px; margin-top: 30px; margin-bottom: 15px; text-transform: uppercase; }
                         .item-box { border: 1px solid #cbd5e1; padding: 12px; border-radius: 6px; margin-bottom: 12px; page-break-inside: avoid; }
                         .item-box.grave { border-left: 4px solid #ef4444; }
@@ -4257,11 +4257,19 @@ window.imprimirExpediente = async (idAlumno, modo = 'completo') => {
                         <div>
                             <strong>Nombre:</strong> ${al.nombre}<br>
                             <strong>Matrícula:</strong> ${al.matricula}<br>
-                            <strong>Grado:</strong> ${al.grado || 'S/G'}
+                            <strong>Grado:</strong> ${al.grado || 'S/G'}<br>
+                            <strong>Grupo:</strong> ${al.grupos?.nombre || 'S/G'}
+                        </div>
+                        <div>
+                            <strong>CURP:</strong> ${al.curp || 'N/A'}<br>
+                            <strong>Sexo:</strong> ${al.sexo || 'N/A'}<br>
+                            <strong>Edad:</strong> ${al.edad ? al.edad + ' años' : 'N/A'}
                         </div>
                         <div style="text-align:right;">
-                            <strong>Grupo:</strong> ${al.grupos?.nombre || 'S/G'}<br>
-                            <strong>Fecha de Impresión:</strong> ${fechaImpresion}
+                            <strong>Estatura:</strong> ${al.estatura ? al.estatura + ' m' : 'N/A'}<br>
+                            <strong>Peso:</strong> ${al.peso ? al.peso + ' kg' : 'N/A'}<br>
+                            <strong>Calzado:</strong> ${al.talla_zapato || 'N/A'}<br>
+                            <span style="color:#64748b; font-size:12px;">Impreso: ${fechaImpresion}</span>
                         </div>
                     </div>
 
