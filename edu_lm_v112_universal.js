@@ -18156,10 +18156,34 @@ window.loadPsicosocialStats = async () => {
                         const stats = res.reduce((acc, curr) => {
                             let val = curr[k];
                             if(val === undefined || val === '') return acc;
+
+                            const groupPsicoAnswer = (rawVal) => {
+                                if (typeof rawVal !== 'string') return rawVal;
+                                let v = rawVal.toUpperCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/\s+/g, ' ').trim();
+                                const map = {
+                                    "HASMA": "ASMA",
+                                    "NINGUNA": "NINGUNO",
+                                    "NADA": "NINGUNO",
+                                    "NO": "NINGUNO",
+                                    "NA": "NINGUNO",
+                                    "N/A": "NINGUNO",
+                                    "NINGUN": "NINGUNO",
+                                    "DIABETIS": "DIABETES",
+                                    "MAMA": "MADRE",
+                                    "PAPA": "PADRE",
+                                    "TDA": "TDAH"
+                                };
+                                return map[v] || v;
+                            };
+
                             if(Array.isArray(val)) {
-                                val.forEach(v => { acc[v] = (acc[v] || 0) + 1; });
+                                val.forEach(v => { 
+                                    let gv = groupPsicoAnswer(v);
+                                    acc[gv] = (acc[gv] || 0) + 1; 
+                                });
                             } else {
-                                acc[val] = (acc[val] || 0) + 1;
+                                let gv = groupPsicoAnswer(val);
+                                acc[gv] = (acc[gv] || 0) + 1;
                             }
                             return acc;
                         }, {});
