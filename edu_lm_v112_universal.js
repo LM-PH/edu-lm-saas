@@ -2930,6 +2930,20 @@ function renderApoyoReportes() {
     </div>
 
     <div style="display:grid; grid-template-columns: 1fr; gap:30px; margin-top:20px;">
+        <!-- SECCIÓN DE BÚSQUEDA DE EXPEDIENTE DISCIPLINARIO -->
+        <div class="card" style="width:100%; border-top:4px solid var(--primary);">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px; flex-wrap:wrap; gap:10px;">
+                <div>
+                    <h3 style="margin-bottom:4px;"><i class="fa-solid fa-folder-open text-primary"></i> Buscar Expediente de Conducta</h3>
+                    <p style="font-size:0.85rem; color:var(--text-muted);">Busca un alumno para ver e imprimir su historial de reportes e intervenciones.</p>
+                </div>
+            </div>
+            <div style="position:relative;">
+                <input type="text" id="busquedaExpedienteReportesInput" class="form-input" placeholder="Buscar alumno por nombre o matrícula..." onkeyup="window.buscarAlumnoExpedienteReportes(this.value)">
+                <div id="resBusquedaExpedienteReportes" style="position:absolute; top:100%; left:0; right:0; z-index:100; background:white; border-radius:0 0 8px 8px; box-shadow:var(--shadow-lg); display:none; max-height:200px; overflow-y:auto; border:1px solid var(--border);"></div>
+            </div>
+        </div>
+
         ${citatoriosSection}
         ${misReportesSection}
     </div>
@@ -3044,6 +3058,31 @@ function renderApoyoReportes() {
 // ========================
 // APOYO DATA LOADERS
 // ========================
+
+window.buscarAlumnoExpedienteReportes = async (term) => {
+    const res = document.getElementById('resBusquedaExpedienteReportes');
+    if(!term || term.length < 3) { res.style.display = 'none'; return; }
+    
+    try {
+        const { data, error } = await supabaseClient.from('alumnos').select('id, nombre, matricula, grupos(nombre)').ilike('nombre', `%${term}%`).limit(5);
+        if(error || !data) return;
+        
+        if(data.length === 0) { res.innerHTML = '<div style="padding:10px;">Sin resultados</div>'; res.style.display = 'block'; return; }
+        
+        res.innerHTML = data.map(a => `
+            <div style="padding:10px; border-bottom:1px solid var(--border); cursor:pointer;" onclick="window.selectAlumnoExpedienteReportes('${a.id}', '${a.nombre}')">
+                <strong style="color:var(--primary)">${a.nombre}</strong> <small style="color:var(--text-muted)">(${a.grupos?.nombre || 'Sin Grupo'}) - ${a.matricula}</small>
+            </div>
+        `).join('');
+        res.style.display = 'block';
+    } catch(e) { console.error(e); }
+};
+
+window.selectAlumnoExpedienteReportes = (id, nombre) => {
+    document.getElementById('resBusquedaExpedienteReportes').style.display = 'none';
+    document.getElementById('busquedaExpedienteReportesInput').value = '';
+    if(window.showAlumnoExpediente) window.showAlumnoExpediente(id, 'conducta');
+};
 
 window.loadMisReportes = async () => {
     const container = document.getElementById('contenedorMisReportes');
@@ -3890,7 +3929,7 @@ window.guardarAtencionFoco = async () => {
     }
 };
 
-window.showAlumnoExpediente = async (idAlumno) => {
+window.showAlumnoExpediente = async (idAlumno, context = 'completo') => {
     const drawer = document.getElementById('expedienteDrawer');
     const content = document.getElementById('expedienteContent');
     if(!drawer || !content) return;
@@ -3917,7 +3956,7 @@ window.showAlumnoExpediente = async (idAlumno) => {
         content.innerHTML = `
             <!-- Encabezado -->
             <div style="padding:24px; border-bottom:1px solid var(--border); background: var(--page-bg); text-align:center; position:relative;">
-                <button class="btn btn-outline btn-sm" onclick="window.imprimirExpediente('${al.id}')" style="position:absolute; top:12px; right:45px; border-color:var(--primary); color:var(--primary);"><i class="fa-solid fa-print"></i> Imprimir</button>
+                <button class="btn btn-outline btn-sm" onclick="window.imprimirExpediente('${al.id}', '${context}')" style="position:absolute; top:12px; right:45px; border-color:var(--primary); color:var(--primary);"><i class="fa-solid fa-print"></i> Imprimir</button>
                 <button class="btn-close" onclick="document.getElementById('expedienteDrawer').style.display='none'" style="position:absolute; top:12px; right:12px; border:none; background:none; font-size:1.4rem; cursor:pointer;">&times;</button>
                 <div style="width:70px; height:70px; border-radius:50%; background:var(--primary); color:white; display:grid; place-items:center; margin:0 auto 10px auto; font-size:1.8rem; font-weight:bold;">${al.nombre.substring(0,1)}</div>
                 <h3 style="margin:0;">${al.nombre}</h3>
@@ -3946,6 +3985,7 @@ window.showAlumnoExpediente = async (idAlumno) => {
                     </div>
                 </section>
 
+                ${(context === 'completo' || context === 'salud') ? `
                 <!-- Sección Salud y Emergencias -->
                 <section>
                     <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; border-bottom:2px solid var(--danger); padding-bottom:5px;">
@@ -3970,7 +4010,9 @@ window.showAlumnoExpediente = async (idAlumno) => {
                         ` : ''}
                     ` : '<p style="color:var(--text-muted); font-style:italic;">No hay ficha médica registrada para este alumno.</p>'}
                 </section>
+                ` : ''}
 
+                ${(context === 'completo' || context === 'conducta') ? `
                 <!-- Sección Conducta -->
                 <section>
                     <h4 style="margin-bottom:12px; border-bottom:2px solid var(--warning); padding-bottom:5px;">
@@ -4002,6 +4044,7 @@ window.showAlumnoExpediente = async (idAlumno) => {
                         `).join('') : '<p style="color:var(--text-muted); font-style:italic;">No hay acuerdos firmados.</p>'}
                     </div>
                 </section>
+                ` : ''}
 
             </div>
         `;
@@ -4128,7 +4171,7 @@ window.submitActualizarDatosAlumno = async (e) => {
     }
 };
 
-window.imprimirExpediente = async (idAlumno) => {
+window.imprimirExpediente = async (idAlumno, modo = 'completo') => {
     try {
         const id = String(idAlumno).trim();
         const [alRes, repsRes, intervsRes, plantelRes, saludRes] = await Promise.all([
@@ -4222,29 +4265,33 @@ window.imprimirExpediente = async (idAlumno) => {
                         </div>
                     </div>
 
-                    ${fichaSalud ? `
-                    <div class="section-title" style="color:#dc2626; border-bottom-color:#fca5a5;">Ficha Médica y Emergencias</div>
-                    <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px; margin-bottom:20px;">
-                        ${Object.keys(fichaSalud.respuestas || {}).map(k => `
-                            <div class="item-box" style="margin-bottom:0;">
-                                <strong>${k}:</strong><br>
-                                <span style="color:#dc2626;">${Array.isArray(fichaSalud.respuestas[k]) ? fichaSalud.respuestas[k].join(', ') : fichaSalud.respuestas[k]}</span>
-                            </div>
-                        `).join('')}
-                    </div>
-                    ${fichaSalud.notas_privadas ? `
-                        <div class="item-box" style="border-left: 4px solid #dc2626; background: #fef2f2;">
-                            <strong>Notas Médicas (Staff):</strong><br>
-                            ${fichaSalud.notas_privadas}
+                    ${(modo === 'completo' || modo === 'salud') ? `
+                        ${fichaSalud ? `
+                        <div class="section-title" style="color:#dc2626; border-bottom-color:#fca5a5;">Ficha Médica y Emergencias</div>
+                        <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px; margin-bottom:20px;">
+                            ${Object.keys(fichaSalud.respuestas || {}).map(k => `
+                                <div class="item-box" style="margin-bottom:0;">
+                                    <strong>${k}:</strong><br>
+                                    <span style="color:#dc2626;">${Array.isArray(fichaSalud.respuestas[k]) ? fichaSalud.respuestas[k].join(', ') : fichaSalud.respuestas[k]}</span>
+                                </div>
+                            `).join('')}
                         </div>
-                    ` : ''}
+                        ${fichaSalud.notas_privadas ? `
+                            <div class="item-box" style="border-left: 4px solid #dc2626; background: #fef2f2;">
+                                <strong>Notas Médicas (Staff):</strong><br>
+                                ${fichaSalud.notas_privadas}
+                            </div>
+                        ` : ''}
+                        ` : ''}
                     ` : ''}
 
-                    <div class="section-title">Historial de Conducta y Reportes</div>
-                    ${repsHtml}
+                    ${(modo === 'completo' || modo === 'conducta') ? `
+                        <div class="section-title">Historial de Conducta y Reportes</div>
+                        ${repsHtml}
 
-                    <div class="section-title">Intervenciones y Compromisos</div>
-                    ${intervsHtml}
+                        <div class="section-title">Intervenciones y Compromisos</div>
+                        ${intervsHtml}
+                    ` : ''}
 
                     <div class="footer-signatures">
                         <div class="sig-line">
@@ -19024,7 +19071,7 @@ window.selectAlumnoFichaSalud = async (id, nombre) => {
                 <h3 style="margin:0; color:var(--danger);"><i class="fa-solid fa-heart-pulse"></i> Ficha Médica Contestada</h3>
                 <div style="display:flex; gap:10px; align-items:center;">
                     <span class="badge" style="background:var(--danger); color:white;">Completado el ${new Date(est.fecha_respuesta).toLocaleDateString()}</span>
-                    <button class="btn btn-sm btn-outline" onclick="window.imprimirExpediente('${id}')" style="border-color:var(--danger); color:var(--danger);"><i class="fa-solid fa-print"></i> Imprimir Expediente (Salud + Conducta)</button>
+                    <button class="btn btn-sm btn-outline" onclick="window.imprimirExpediente('${id}', 'salud')" style="border-color:var(--danger); color:var(--danger);"><i class="fa-solid fa-print"></i> Imprimir Ficha Médica</button>
                 </div>
             </div>
             
