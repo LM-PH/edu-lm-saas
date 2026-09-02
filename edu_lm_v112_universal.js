@@ -884,6 +884,7 @@ function renderSidebar() {
       { name: 'Bitácora Diaria', path: '/apoyo/bitacora', icon: 'fa-book-journal-whills' },
       { name: 'Escáner Entrada', path: '/apoyo/prefectura', icon: 'fa-qrcode' },
       { name: 'Escáner de Salida', path: '/apoyo/ts_escaner', icon: 'fa-person-walking-arrow-right' },
+      { name: 'Firma por QR', path: '/apoyo/firma-qr', icon: 'fa-qrcode' },
       { name: 'Avisos Oficiales', path: '/apoyo/comunicados', icon: 'fa-bullhorn' },
     ],
     directivo: [
@@ -1358,9 +1359,14 @@ window.promoverGradoAlumno = async (id) => {
 
 function renderAdminExpediente() {
   return `
-    <div class="page-header">
-      <h2 class="page-title">Expediente Digital</h2>
-      <p class="page-subtitle">Gestión y consulta de documentos oficiales del estudiante.</p>
+    <div class="page-header" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
+      <div>
+        <h2 class="page-title">Expediente Digital</h2>
+        <p class="page-subtitle">Gestión y consulta de documentos oficiales del estudiante.</p>
+      </div>
+      <button class="btn btn-outline" style="border-color:var(--primary); color:var(--primary);" onclick="window.descargarArchivoMuertoZIP()" id="btnDownloadArchivoMuerto">
+        <i class="fa-solid fa-file-zipper"></i> Archivo Muerto (ZIP)
+      </button>
     </div>
 
 
@@ -1431,11 +1437,26 @@ function renderAdminExpediente() {
             </div>
           </div>
           
+          <!-- Constancia de Regularizacion -->
+          <div class="doc-card" id="card-regularizacion">
+            <input type="file" id="file-regularizacion" accept="application/pdf" style="display:none" onchange="window.uploadExpedienteDoc(this, 'regularizacion')">
+            <i class="fa-solid fa-file-circle-check doc-icon" style="font-size: 32px; margin-bottom: 4px;"></i>
+            <h4 style="font-size: 0.9rem; margin-bottom: 4px;">Constancia de Reg.</h4>
+            <div id="badge-regularizacion" class="badge" style="margin-bottom:8px; background:var(--page-bg); color:var(--text-muted); font-size: 0.65rem;">Pendiente</div>
+            <div class="doc-actions" style="display:flex; flex-direction:column; gap:6px; width:100%; margin-top: auto;">
+                <button class="btn btn-primary btn-xs btn-doc" onclick="document.getElementById('file-regularizacion').click()" style="width: 100%"><i class="fa-solid fa-upload"></i> Subir PDF</button>
+                <div id="ver-regularizacion-container" style="display:none; gap:6px; width: 100%;">
+                    <a id="btn-ver-regularizacion" href="#" target="_blank" class="btn btn-outline btn-xs" style="flex:1"><i class="fa-solid fa-eye"></i> Ver</a>
+                    <button id="btn-del-regularizacion" class="btn btn-outline btn-xs" style="flex:1; border-color:var(--danger); color:var(--danger)"><i class="fa-solid fa-trash"></i></button>
+                </div>
+            </div>
+          </div>
+          
           <!-- Boletas (MULTIPLE) -->
           <div class="doc-card" id="card-boleta" style="border: 2px dashed var(--primary-light); background: var(--surface-hover); min-height: 250px;">
             <input type="file" id="file-extra" accept="application/pdf" style="display:none" onchange="window.uploadExpedienteDoc(this, 'boleta')">
             <i class="fa-solid fa-file-signature doc-icon" style="font-size: 32px; margin-bottom: 4px;"></i>
-            <h4 style="font-size: 0.9rem; margin-bottom: 4px;">Boletines y Evaluaciones</h4>
+            <h4 style="font-size: 0.9rem; margin-bottom: 4px;">Boletas y Evaluaciones</h4>
             <div id="badge-boleta" class="badge" style="margin-bottom:8px; background:transparent; color: var(--text-muted); font-size: 0.65rem;">Historial de evaluaciones</div>
             <div class="doc-actions" style="display:flex; flex-direction:column; gap:6px; width:100%; margin-top: auto;">
                 <button class="btn btn-primary btn-xs btn-doc" onclick="document.getElementById('file-extra').click()" style="width: 100%"><i class="fa-solid fa-plus"></i> Nueva Boleta</button>
@@ -1448,6 +1469,76 @@ function renderAdminExpediente() {
     </div>
   `;
 }
+
+window.descargarArchivoMuertoZIP = async () => {
+    const btn = document.getElementById('btnDownloadArchivoMuerto');
+    const orig = btn.innerHTML;
+    btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Generando ZIP...';
+    btn.disabled = true;
+
+    try {
+        if (typeof JSZip === 'undefined') {
+            throw new Error("La librería JSZip no está cargada.");
+        }
+        
+        const { data: egresados, error } = await window.supabaseClient.from('alumnos')
+            .select('id, matricula, nombre, grado, grupo_id(nombre)')
+            .eq('plantel_id', window.state.plantelId)
+            .eq('estatus', 'egresado');
+
+        if (error) throw error;
+        if (!egresados || egresados.length === 0) {
+            window.showToast("No se encontraron egresados en este plantel.", "warning");
+            btn.innerHTML = orig;
+            btn.disabled = false;
+            return;
+        }
+
+        const zip = new JSZip();
+        const rootFolder = zip.folder("Archivo_Muerto_Egresados");
+        let docsCount = 0;
+
+        for (const alu of egresados) {
+            const gradoName = alu.grado || 'SinGrado';
+            const grupoName = (alu.grupo_id && alu.grupo_id.nombre) ? alu.grupo_id.nombre : 'SinGrupo';
+            const aluName = (alu.nombre || 'Desconocido').replace(/[^a-zA-Z0-9]/g, '_');
+            
+            const { data: files } = await window.supabaseClient.storage.from('expedientes').list(alu.id);
+            if (files && files.length > 0) {
+                const aluFolder = rootFolder.folder(`${gradoName}_${grupoName}/${aluName}_${alu.matricula}`);
+                
+                for (const f of files) {
+                    if (f.name === '.emptyFolderPlaceholder') continue;
+                    
+                    const { data: blob } = await window.supabaseClient.storage.from('expedientes').download(`${alu.id}/${f.name}`);
+                    if (blob) {
+                        aluFolder.file(f.name, blob);
+                        docsCount++;
+                    }
+                }
+            }
+        }
+
+        if (docsCount === 0) {
+            window.showToast("No hay documentos subidos de los alumnos egresados.", "warning");
+        } else {
+            const content = await zip.generateAsync({ type: "blob" });
+            const url = URL.createObjectURL(content);
+            const a = document.createElement("a");
+            a.href = url;
+            a.download = `Archivo_Muerto_${new Date().toISOString().split('T')[0]}.zip`;
+            a.click();
+            window.showToast(`ZIP descargado con ${docsCount} documentos.`, "success");
+        }
+
+    } catch(e) {
+        console.error("Error al generar ZIP:", e);
+        window.showToast("Error al generar el Archivo Muerto.", "error");
+    }
+
+    btn.innerHTML = orig;
+    btn.disabled = false;
+};
 
 function renderAdminGrupos() {
   setTimeout(() => {
@@ -1550,17 +1641,15 @@ function renderAdminGrupos() {
 window.switchAdminCalificacionesTab = (tab) => {
     const btnConcentrado = document.getElementById('btn-tab-concentrado');
     const btnEstadisticas = document.getElementById('btn-tab-estadisticas');
+    
+    const allBtns = [btnConcentrado, btnEstadisticas].filter(Boolean);
     const btnFirmaQR = document.getElementById('btn-tab-firma-qr');
     
     const allBtns = [btnConcentrado, btnEstadisticas, btnFirmaQR].filter(Boolean);
     allBtns.forEach(b => { b.className = 'btn btn-outline'; b.style.background = 'white'; });
 
-    const allViews = ['view-concentrado','view-estadisticas','view-firma-qr'];
+    const allViews = ['view-concentrado','view-estadisticas', 'view-firma-qr'];
     allViews.forEach(v => { const el = document.getElementById(v); if(el) el.style.display = 'none'; });
-
-    if(tab !== 'firma-qr') {
-        if(window._stopFirmaQRScanner) window._stopFirmaQRScanner();
-    }
 
     if(tab === 'concentrado') {
         if(btnConcentrado) { btnConcentrado.className = 'btn btn-primary'; btnConcentrado.style.background = ''; }
@@ -1569,14 +1658,9 @@ window.switchAdminCalificacionesTab = (tab) => {
     } else if(tab === 'estadisticas') {
         if(btnEstadisticas) { btnEstadisticas.className = 'btn btn-primary'; btnEstadisticas.style.background = ''; }
         const el = document.getElementById('view-estadisticas');
-        if(el) el.style.display = 'flex';
-        if(window.loadAdminEstadisticasFiltros) window.loadAdminEstadisticasFiltros();
-    } else if(tab === 'firma-qr') {
-        if(btnFirmaQR) { btnFirmaQR.className = 'btn btn-primary'; btnFirmaQR.style.background = ''; }
-        const el = document.getElementById('view-firma-qr');
-        if(el) el.style.display = 'flex';
-        if(window.initFirmaBoletasQR) window.initFirmaBoletasQR();
+        if(el) { el.style.display = 'flex'; el.style.animation = 'fadeIn 0.4s'; }
     }
+
 };
 
 window.handleAlcanceEstadisticaChange = () => {
@@ -1604,7 +1688,6 @@ function renderAdminCalificaciones() {
       <div style="display:flex; gap:10px; flex-wrap:wrap;">
           <button id="btn-tab-concentrado" class="btn btn-primary" onclick="window.switchAdminCalificacionesTab('concentrado')"><i class="fa-solid fa-list-check"></i> Concentrado por Grupo</button>
           <button id="btn-tab-estadisticas" class="btn btn-outline" onclick="window.switchAdminCalificacionesTab('estadisticas')" style="background:white;"><i class="fa-solid fa-chart-pie"></i> Estadística de Aprobación</button>
-          <button id="btn-tab-firma-qr" class="btn btn-outline" onclick="window.switchAdminCalificacionesTab('firma-qr')" style="background:white;"><i class="fa-solid fa-qrcode"></i> Firma por QR</button>
       </div>
     </div>
 
@@ -1671,6 +1754,7 @@ function renderAdminCalificaciones() {
                 <option value="1">Trimestre 1</option>
                 <option value="2">Trimestre 2</option>
                 <option value="3">Trimestre 3</option>
+                <option value="Final">Estadística Final</option>
             </select>
          </div>
          
@@ -1719,51 +1803,6 @@ function renderAdminCalificaciones() {
       </div>
     </div>
 
-    <!-- VISTA 3: FIRMA POR QR -->
-    <div id="view-firma-qr" style="display:none; gap:24px; flex-wrap:wrap;">
-      <!-- Panel Izquierdo: Escáner Rápido -->
-      <div class="card" style="flex:1; min-width:320px; align-self:flex-start;">
-        <h3 style="margin-bottom:8px;"><i class="fa-solid fa-bolt" style="color:#d97706;"></i> Escáner Rápido de Firma</h3>
-        <p style="font-size:0.82rem; color:var(--text-muted); margin-bottom:12px;">Selecciona el trimestre y escanea. El aviso se envía <strong>automáticamente</strong> al padre/tutor.</p>
-        
-        <div class="form-group" style="margin-bottom:12px;">
-          <label class="form-label" style="font-size:0.8rem;">Trimestre activo</label>
-          <select class="form-select" id="firmaTrimestreSel" style="font-weight:700; font-size:1rem; border:2px solid var(--primary);">
-            <option value="Trimestre 1">Trimestre 1</option>
-            <option value="Trimestre 2">Trimestre 2</option>
-            <option value="Trimestre 3">Trimestre 3</option>
-          </select>
-        </div>
-
-        <div id="firmaQrReader" style="width:100%; border-radius:12px; overflow:hidden; border:2px solid var(--border);"></div>
-        <p id="firmaQrStatus" style="text-align:center; font-size:0.85rem; color:var(--text-muted); margin-top:10px; min-height:20px;"></p>
-
-        <!-- Log de escaneos rápidos -->
-        <div id="firmaQrScanLog" style="margin-top:12px; max-height:250px; overflow-y:auto;"></div>
-
-        <!-- Hidden info panel para compatibilidad -->
-        <div id="firmaAlumnoInfo" style="display:none;">
-          <span id="firmaAlumnoNombre"></span>
-          <span id="firmaAlumnoGrupo"></span>
-          <span id="firmaTrimNombrePreview"></span>
-        </div>
-      </div>
-
-      <!-- Panel Derecho: Historial de Firmas Registradas -->
-      <div class="card" style="flex:2; min-width:360px;">
-        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; flex-wrap:wrap; gap:10px;">
-          <h3 style="margin:0;"><i class="fa-solid fa-clock-rotate-left" style="color:var(--primary);"></i> Historial de Firmas</h3>
-          <div style="display:flex; gap:10px; align-items:center;">
-             <select class="form-select" id="firmaFiltroGrupo" onchange="window.loadHistorialFirmas()" style="padding:4px 8px; font-size:0.85rem; border-radius:6px; min-width:120px;">
-                <option value="">Todos los grupos</option>
-             </select>
-             <button class="btn btn-outline btn-sm" onclick="window.loadHistorialFirmas()"><i class="fa-solid fa-rotate-right"></i> Actualizar</button>
-          </div>
-        </div>
-        <div id="firmaHistorialContainer">
-          <p style="text-align:center; color:var(--text-muted); padding:30px 0;"><i class="fa-solid fa-signature" style="font-size:2.5rem; display:block; margin-bottom:10px; opacity:0.3;"></i>Las firmas registradas aparecerán aquí.</p>
-        </div>
-      </div>
     </div>
   `;
 }
@@ -5298,6 +5337,62 @@ window.actualizarUIPortalTS = () => {
     indicator.style.background = "var(--warning)";
     indicator.style.boxShadow = "0 0 10px var(--warning)";
 };
+function renderApoyoFirmaQR() {
+  setTimeout(() => { if(window.initFirmaBoletasQR) window.initFirmaBoletasQR(); }, 300);
+  return `
+    <div class="page-header">
+      <h2 class="page-title">Firma por QR</h2>
+      <p class="page-subtitle">Escaneo y registro de firmas de boleta de calificaciones.</p>
+    </div>
+    
+    <div id="view-firma-qr" style="display:flex; gap:24px; flex-wrap:wrap;">
+      <!-- Panel Izquierdo: Escáner Rápido -->
+      <div class="card" style="flex:1; min-width:320px; align-self:flex-start;">
+        <h3 style="margin-bottom:8px;"><i class="fa-solid fa-bolt" style="color:#d97706;"></i> Escáner Rápido de Firma</h3>
+        <p style="font-size:0.82rem; color:var(--text-muted); margin-bottom:12px;">Selecciona el trimestre y escanea. El aviso se envía <strong>automáticamente</strong> al padre/tutor.</p>
+        
+        <div class="form-group" style="margin-bottom:12px;">
+          <label class="form-label" style="font-size:0.8rem;">Trimestre activo</label>
+          <select class="form-select" id="firmaTrimestreSel" style="font-weight:700; font-size:1rem; border:2px solid var(--primary);">
+            <option value="Trimestre 1">Trimestre 1</option>
+            <option value="Trimestre 2">Trimestre 2</option>
+            <option value="Trimestre 3">Trimestre 3</option>
+          </select>
+        </div>
+
+        <div id="firmaQrReader" style="width:100%; border-radius:12px; overflow:hidden; border:2px solid var(--border);"></div>
+        <p id="firmaQrStatus" style="text-align:center; font-size:0.85rem; color:var(--text-muted); margin-top:10px; min-height:20px;"></p>
+
+        <!-- Log de escaneos rápidos -->
+        <div id="firmaQrScanLog" style="margin-top:12px; max-height:250px; overflow-y:auto;"></div>
+
+        <!-- Hidden info panel para compatibilidad -->
+        <div id="firmaAlumnoInfo" style="display:none;">
+          <span id="firmaAlumnoNombre"></span>
+          <span id="firmaAlumnoGrupo"></span>
+          <span id="firmaTrimNombrePreview"></span>
+        </div>
+      </div>
+
+      <!-- Panel Derecho: Historial de Firmas Registradas -->
+      <div class="card" style="flex:2; min-width:360px;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; flex-wrap:wrap; gap:10px;">
+          <h3 style="margin:0;"><i class="fa-solid fa-clock-rotate-left" style="color:var(--primary);"></i> Historial de Firmas</h3>
+          <div style="display:flex; gap:10px; align-items:center;">
+             <select class="form-select" id="firmaFiltroGrupo" onchange="window.loadHistorialFirmas()" style="padding:4px 8px; font-size:0.85rem; border-radius:6px; min-width:120px;">
+                <option value="">Todos los grupos</option>
+             </select>
+             <button class="btn btn-outline btn-sm" onclick="window.loadHistorialFirmas()"><i class="fa-solid fa-rotate-right"></i> Actualizar</button>
+          </div>
+        </div>
+        <div id="firmaHistorialContainer">
+          <p style="text-align:center; color:var(--text-muted); padding:30px 0;"><i class="fa-solid fa-signature" style="font-size:2.5rem; display:block; margin-bottom:10px; opacity:0.3;"></i>Las firmas registradas aparecerán aquí.</p>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
 
 function renderApoyoTSEscaner() {
   setTimeout(() => { 
@@ -7034,6 +7129,7 @@ async function renderPage(path) {
     case '/apoyo/bitacora': return renderApoyoBitacora();
     case '/apoyo/prefectura': return renderApoyoPrefectura();
     case '/apoyo/ts_escaner': return renderApoyoTSEscaner();
+    case '/apoyo/firma-qr': return renderApoyoFirmaQR();
     case '/apoyo/comunicados': return renderPersonalComunicados('Apoyo');
     case '/alumno/credencial': return renderAlumnoCredencial();
     case '/alumno/psicosocial': return renderAlumnoPsicosocial();
@@ -8444,6 +8540,17 @@ window.loadBoletasAlumno = async () => {
         const periodos = [...new Set((califs || []).map(c => c.trimestre))].sort((a,b) => b-a);
         let tablesHtml = periodos.map(p => {
             const pCalifs = califs.filter(c => c.trimestre === p);
+            const orderPriority = ['español', 'inglés', 'matemáticas', 'ciencias', 'biología', 'física', 'química', 'geografía', 'historia', 'formación cívica y ética', 'f.c. y e.', 'educación física', 'edu. fisica', 'artes', 'tecnología'];
+            pCalifs.sort((a, b) => {
+                const matA = (a.materia_nombre || '').toLowerCase();
+                const matB = (b.materia_nombre || '').toLowerCase();
+                let indexA = orderPriority.findIndex(s => matA.includes(s));
+                let indexB = orderPriority.findIndex(s => matB.includes(s));
+                if (indexA === -1) indexA = 999;
+                if (indexB === -1) indexB = 999;
+                if (indexA !== indexB) return indexA - indexB;
+                return matA.localeCompare(matB);
+            });
             const prom = (pCalifs.reduce((acc, curr) => acc + curr.calificacion, 0) / pCalifs.length).toFixed(1);
             const pNum = parseFloat(prom);
 
@@ -13491,6 +13598,17 @@ window.cargarSabanaGrupo = async () => {
             else matSet.add(mName);
         });
         const materiasObj = Array.from(matSet);
+        const orderPriority = ['español', 'inglés', 'matemáticas', 'ciencias', 'biología', 'física', 'química', 'geografía', 'historia', 'formación cívica y ética', 'f.c. y e.', 'educación física', 'edu. fisica', 'artes', 'tecnología'];
+        materiasObj.sort((a, b) => {
+            const matA = a.toLowerCase();
+            const matB = b.toLowerCase();
+            let indexA = orderPriority.findIndex(s => matA.includes(s));
+            let indexB = orderPriority.findIndex(s => matB.includes(s));
+            if (indexA === -1) indexA = 999;
+            if (indexB === -1) indexB = 999;
+            if (indexA !== indexB) return indexA - indexB;
+            return matA.localeCompare(matB);
+        });
 
         if (materiasObj.length === 0) {
             hold.innerHTML = '<div style="color:var(--text-muted); font-size:0.9rem;">Los maestros de este grupo aún no han enviado sus actas de calificación.</div>';
@@ -13625,10 +13743,10 @@ window.generarEstadisticaAprobacion = async () => {
 
     try {
         let query = supabaseClient.from('calificaciones')
-            .select('calificacion, materia_nombre, alumnos!inner(grado, grupo_id)')
+            .select('alumno_id, calificacion, materia_nombre, alumnos!inner(grado, grupo_id)')
             .eq('plantel_id', state.plantelId);
 
-        if(trim !== 'Todos') {
+        if(trim !== 'Todos' && trim !== 'Final') {
             query = query.eq('trimestre', parseInt(trim));
         }
 
@@ -13651,21 +13769,49 @@ window.generarEstadisticaAprobacion = async () => {
         let totalReprobados = 0;
         const statsMateria = {};
 
-        data.forEach(row => {
-            const calif = parseFloat(row.calificacion);
-            const mat = row.materia_nombre || 'Sin Asignatura';
+        if (trim === 'Final') {
+            const alumnoMateriaMap = {};
+            data.forEach(row => {
+                const mat = row.materia_nombre || 'Sin Asignatura';
+                const key = `${row.alumno_id}_${mat}`;
+                if (!alumnoMateriaMap[key]) {
+                    alumnoMateriaMap[key] = { mat: mat, sum: 0, count: 0 };
+                }
+                alumnoMateriaMap[key].sum += parseFloat(row.calificacion);
+                alumnoMateriaMap[key].count++;
+            });
             
-            if(!statsMateria[mat]) statsMateria[mat] = { total: 0, aprobados: 0, reprobados: 0 };
-            
-            statsMateria[mat].total++;
-            if(calif >= 6) {
-                totalAprobados++;
-                statsMateria[mat].aprobados++;
-            } else {
-                totalReprobados++;
-                statsMateria[mat].reprobados++;
-            }
-        });
+            Object.values(alumnoMateriaMap).forEach(am => {
+                const mat = am.mat;
+                const prom = am.sum / am.count;
+                
+                if(!statsMateria[mat]) statsMateria[mat] = { total: 0, aprobados: 0, reprobados: 0 };
+                statsMateria[mat].total++;
+                if (prom >= 6) {
+                    totalAprobados++;
+                    statsMateria[mat].aprobados++;
+                } else {
+                    totalReprobados++;
+                    statsMateria[mat].reprobados++;
+                }
+            });
+        } else {
+            data.forEach(row => {
+                const calif = parseFloat(row.calificacion);
+                const mat = row.materia_nombre || 'Sin Asignatura';
+                
+                if(!statsMateria[mat]) statsMateria[mat] = { total: 0, aprobados: 0, reprobados: 0 };
+                
+                statsMateria[mat].total++;
+                if(calif >= 6) {
+                    totalAprobados++;
+                    statsMateria[mat].aprobados++;
+                } else {
+                    totalReprobados++;
+                    statsMateria[mat].reprobados++;
+                }
+            });
+        }
 
         const totalEvaluaciones = totalAprobados + totalReprobados;
         const pctReprobacionGeneral = totalEvaluaciones > 0 ? ((totalReprobados / totalEvaluaciones) * 100).toFixed(1) : 0;
@@ -16700,6 +16846,17 @@ window.descargarBoletaAdminPDF = async (alumnoId, nombre, matricula) => {
         let gradesHtml = '';
         Object.keys(porTrimestre).sort().forEach(trim => {
             const materias = porTrimestre[trim];
+            const orderPriority = ['español', 'inglés', 'matemáticas', 'ciencias', 'biología', 'física', 'química', 'geografía', 'historia', 'formación cívica y ética', 'f.c. y e.', 'educación física', 'edu. fisica', 'artes', 'tecnología'];
+            materias.sort((a, b) => {
+                const matA = (a.materia_nombre || a.materia_id?.nombre || '').toLowerCase();
+                const matB = (b.materia_nombre || b.materia_id?.nombre || '').toLowerCase();
+                let indexA = orderPriority.findIndex(s => matA.includes(s));
+                let indexB = orderPriority.findIndex(s => matB.includes(s));
+                if (indexA === -1) indexA = 999;
+                if (indexB === -1) indexB = 999;
+                if (indexA !== indexB) return indexA - indexB;
+                return matA.localeCompare(matB);
+            });
             let suma = 0;
             let rows = '';
             materias.forEach(m => {
