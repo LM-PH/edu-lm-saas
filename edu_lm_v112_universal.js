@@ -888,7 +888,6 @@ function renderSidebar() {
     ],
     directivo: [
       { name: 'Autorizaciones', path: '/directivo/autorizaciones', icon: 'fa-stamp' },
-      { name: 'Gestión de Personal', path: '/directivo/gestion-personal', icon: 'fa-id-card-clip' },
       { name: 'Maestros y Materias', path: '/directivo/maestros', icon: 'fa-chalkboard-user' },
       { name: 'Grupos y Asignación', path: '/directivo/grupos', icon: 'fa-users-gear' },
       { name: 'Horarios de Clase', path: '/directivo/horarios', icon: 'fa-calendar-days' },
