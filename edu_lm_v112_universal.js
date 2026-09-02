@@ -137,7 +137,7 @@ window.login = (rawRole) => {
     
     // Default paths per role
     if(role === 'master') state.path = '/master/saas';
-    else if(role === 'admin') state.path = '/admin/maestros';
+    else if(role === 'admin') state.path = '/admin/inscripcion';
     else if(role === 'directivo') state.path = '/directivo/autorizaciones';
     else if(role === 'maestro') state.path = '/maestro/aula';
     else if(role === 'apoyo') state.path = '/apoyo/dashboard';
@@ -691,7 +691,7 @@ window.checkSchoolSetup = async () => {
             // DETERMINAR RUTA SEGÚN ROL RECUPERADO
             if(state.role === 'master') state.path = '/master/saas';
             else if(state.role === 'directivo') state.path = '/directivo/autorizaciones';
-            else if(state.role === 'admin') state.path = '/admin/maestros';
+            else if(state.role === 'admin') state.path = '/admin/inscripcion';
             else if(state.role === 'maestro') state.path = '/maestro/aula';
             else if(state.role === 'apoyo') state.path = '/apoyo/dashboard';
             else if(state.role === 'alumno') state.path = '/alumno/credencial';
@@ -854,11 +854,8 @@ function renderSidebar() {
       ] : [])
     ],
     admin: [
-      { name: 'Maestros y Materias', path: '/admin/maestros', icon: 'fa-chalkboard-user' },
-      { name: 'Grupos y Asignación', path: '/admin/grupos', icon: 'fa-users-gear' },
       { name: 'Inscripción', path: '/admin/inscripcion', icon: 'fa-user-plus' },
       { name: 'Expediente Digital', path: '/admin/expediente', icon: 'fa-folder-open' },
-      { name: 'Horarios de Clase', path: '/admin/horarios', icon: 'fa-calendar-days' },
       { name: 'Calendario de Evaluación', path: '/admin/calendario', icon: 'fa-calendar-check' },
       { name: 'Boletas y Calificaciones', path: '/admin/calificaciones', icon: 'fa-star-half-stroke' },
       { name: 'Trámites y Constancias', path: '/admin/tramites', icon: 'fa-file-signature' },
@@ -892,6 +889,9 @@ function renderSidebar() {
     directivo: [
       { name: 'Autorizaciones', path: '/directivo/autorizaciones', icon: 'fa-stamp' },
       { name: 'Gestión de Personal', path: '/directivo/gestion-personal', icon: 'fa-id-card-clip' },
+      { name: 'Maestros y Materias', path: '/directivo/maestros', icon: 'fa-chalkboard-user' },
+      { name: 'Grupos y Asignación', path: '/directivo/grupos', icon: 'fa-users-gear' },
+      { name: 'Horarios de Clase', path: '/directivo/horarios', icon: 'fa-calendar-days' },
       { name: 'Comunicados Oficiales', path: '/directivo/comunicados', icon: 'fa-bullhorn' }
     ],
     alumno: [
@@ -6987,7 +6987,7 @@ async function renderPage(path) {
     case '/': 
         // PRIORIDAD MAESTRA v138
         if(state.role === 'master') return renderMasterSaaS();
-        if(esAdmin(state.role)) return renderAdminMaestros();
+        if(esAdmin(state.role)) return renderAdminInscripcion();
         if(state.role === 'directivo') return renderDirectivoAutorizaciones();
         if(state.role === 'maestro') return renderMaestroAula();
         if(state.role === 'apoyo') return renderApoyoDashboard();
@@ -7001,11 +7001,11 @@ async function renderPage(path) {
     case '/master/gestion-perfiles': return (state.isMaster) ? await renderMasterGestionPerfiles() : '<h2>Acceso Denegado</h2>';
     case '/admin/inscripcion': return renderAdminInscripcion();
     case '/admin/expediente': return renderAdminExpediente();
-    case '/admin/grupos': return renderAdminGrupos();
-    case '/admin/maestros': return renderAdminMaestros();
+    case '/directivo/grupos': return renderAdminGrupos();
+    case '/directivo/maestros': return renderAdminMaestros();
     case '/admin/calificaciones': return renderAdminCalificaciones();
     case '/admin/tramites': return renderAdminTramites();
-    case '/admin/horarios': return renderAdminHorarios();
+    case '/directivo/horarios': return renderAdminHorarios();
     case '/admin/calendario': return renderAdminCalendario();
     case '/admin/comunicados': return renderAdminComunicados();
     case '/maestro/aula': return renderMaestroAula();
