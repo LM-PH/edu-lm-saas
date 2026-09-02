@@ -1643,12 +1643,9 @@ window.switchAdminCalificacionesTab = (tab) => {
     const btnEstadisticas = document.getElementById('btn-tab-estadisticas');
     
     const allBtns = [btnConcentrado, btnEstadisticas].filter(Boolean);
-    const btnFirmaQR = document.getElementById('btn-tab-firma-qr');
-    
-    const allBtns = [btnConcentrado, btnEstadisticas, btnFirmaQR].filter(Boolean);
     allBtns.forEach(b => { b.className = 'btn btn-outline'; b.style.background = 'white'; });
 
-    const allViews = ['view-concentrado','view-estadisticas', 'view-firma-qr'];
+    const allViews = ['view-concentrado','view-estadisticas'];
     allViews.forEach(v => { const el = document.getElementById(v); if(el) el.style.display = 'none'; });
 
     if(tab === 'concentrado') {
