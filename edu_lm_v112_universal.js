@@ -1471,7 +1471,8 @@ function renderAdminExpediente() {
 }
 
 window.abrirModalArchivoMuerto = async () => {
-    let { data: grupos } = await supabaseClient.from('grupos').select('id, nombre, grado').eq('plantel_id', state.plantelId);
+    let { data: grupos, error } = await supabaseClient.from('grupos').select('id, nombre').eq('plantel_id', state.plantelId);
+    if(error) console.error("Error cargando grupos:", error);
     grupos = grupos || [];
     
     const modalId = 'modalArchivoMuerto';
@@ -1513,7 +1514,11 @@ window.abrirModalArchivoMuerto = async () => {
                 <label class="form-label">Filtrar por Grupo</label>
                 <select class="form-select" id="amGrupoSel">
                     <option value="">Todos los Grupos</option>
-                    ${grupos.map(g => `<option value="${g.id}" data-grado="${g.grado}">${g.nombre}</option>`).join('')}
+                    ${grupos.map(g => {
+                        const m = g.nombre.match(/\d+/);
+                        const grado = m ? m[0] : '';
+                        return `<option value="${g.id}" data-grado="${grado}">${g.nombre}</option>`;
+                    }).join('')}
                 </select>
             </div>
             <div style="display:flex; justify-content:flex-end; gap:12px;">
