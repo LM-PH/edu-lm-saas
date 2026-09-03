@@ -6317,7 +6317,7 @@ window.loadHistorialTramitesAdmin = async () => {
         }
 
         cont.innerHTML = data.map(t => {
-            const emision = t.fecha_emision ? new Date(t.fecha_emision).toLocaleDateString('es-MX', { dateStyle: 'medium' }) : '---';
+            const fechaVal = t.fecha_emision || t.creado_en; const emision = fechaVal ? new Date(fechaVal).toLocaleDateString('es-MX', { dateStyle: 'medium' }) : '---';
             const alumno = t.alumnos ? `${t.alumnos.nombre} (${t.alumnos.matricula})` : 'Alumno desconocido';
             const emisor = t.admin_id ? (mapPerfs[t.admin_id] || 'Administrador') : 'Administrador';
             
@@ -19702,9 +19702,10 @@ window.loadCalendarioTramites = async (year, month) => {
 
         const dateMap = {};
         (allReqs || []).forEach(r => {
-            if (r.fecha_emision) {
+            const fVal = r.fecha_emision || r.creado_en;
+            if (fVal) {
                 // Parse as local date string to avoid timezone shift
-                const d = new Date(r.fecha_emision);
+                const d = new Date(fVal);
                 const dateKey = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
                 if (!dateMap[dateKey]) dateMap[dateKey] = [];
                 dateMap[dateKey].push(r);
@@ -19775,7 +19776,7 @@ window.mostrarDetalleTramitesDia = (dateKey) => {
     if (!cont) return;
     const all = window._calTramitesState.data || [];
     const evs = all.filter(r => {
-        const d = new Date(r.fecha_emision);
+        const d = new Date(r.fecha_emision || r.creado_en);
         const dk = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
         return dk === dateKey;
     });
@@ -19811,7 +19812,7 @@ window.imprimirReporteTramitesMes = async () => {
 
     // Filter current month
     const mesData = data.filter(r => {
-        const d = new Date(r.fecha_emision);
+        const d = new Date(r.fecha_emision || r.creado_en);
         return d.getFullYear() === year && d.getMonth() === month;
     });
 
@@ -19826,8 +19827,9 @@ window.imprimirReporteTramitesMes = async () => {
         const printWindow = window.open('', '_blank');
         
         let trs = mesData.map(t => {
-            const dateStr = new Date(t.fecha_emision).toLocaleDateString();
-            const timeStr = new Date(t.fecha_emision).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+            const dVal = t.fecha_emision || t.creado_en;
+            const dateStr = new Date(dVal).toLocaleDateString();
+            const timeStr = new Date(dVal).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
             const alu = t.alumnos ? t.alumnos.nombre : '---';
             const mat = t.alumnos ? t.alumnos.matricula : '---';
             return `
