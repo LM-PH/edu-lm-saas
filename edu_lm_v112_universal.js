@@ -696,7 +696,7 @@ window.checkSchoolSetup = async () => {
             if (isActuallyMaster) {
                 CONFIG.schoolName = 'Administración Global SaaS';
             } else {
-                CONFIG.schoolName = (profile.planteles?.nombre || 'Edu-LM') + (profile.planteles?.cct ? ' - CCT: ' + profile.planteles?.cct : '');
+                CONFIG.schoolName = profile.planteles?.nombre || 'Edu-LM';
             }
             
             state.schoolConfigured = true;
@@ -4447,7 +4447,7 @@ window.imprimirExpediente = async (idAlumno, modo = 'completo') => {
         const al = alRes.data;
         const reps = repsRes.data || [];
         const intervs = intervsRes.data || [];
-        const schoolName = (plantelRes.data?.nombre || 'Escuela') + (plantelRes.data?.cct ? ' - CCT: ' + plantelRes.data?.cct : '');
+        const schoolName = (plantelRes.data?.nombre || 'Escuela') + (plantelRes.data?.cct ? '<br><span style="font-size:0.75em; color:#555; font-weight:normal;">C.C.T. ' + plantelRes.data?.cct + '</span>' : '');
         const schoolLogo = window.getCleanLogoUrl(plantelRes.data?.logo_url) || null;
         const fichaSalud = (saludRes.data && saludRes.data.length > 0) ? saludRes.data[0] : null;
 
@@ -4781,7 +4781,7 @@ window.imprimirExpedienteMedico = async (idAlumno) => {
         const al = alRes.data;
         const atenciones = atencRes.data || [];
         const justificantes = justRes.data || [];
-        const schoolName = (plantelRes.data?.nombre || 'Escuela') + (plantelRes.data?.cct ? ' - CCT: ' + plantelRes.data?.cct : '');
+        const schoolName = (plantelRes.data?.nombre || 'Escuela') + (plantelRes.data?.cct ? '<br><span style="font-size:0.75em; color:#555; font-weight:normal;">C.C.T. ' + plantelRes.data?.cct + '</span>' : '');
         const schoolLogo = window.getCleanLogoUrl(plantelRes.data?.logo_url) || null;
 
         if(!al) throw new Error("Alumno no encontrado");
@@ -5289,7 +5289,7 @@ window.imprimirRegistroAccesos = async (fechaInputId = 'fechaAsistenciaApoyo', g
         });
 
         const { data: plantelData } = await supabaseClient.from('planteles').select('nombre, logo_url, cct').eq('id', pId).maybeSingle();
-        const schoolName = (plantelData?.nombre || 'Plantel Escolar') + (plantelData?.cct ? ' - CCT: ' + plantelData?.cct : '');
+        const schoolName = (plantelData?.nombre || 'Plantel Escolar') + (plantelData?.cct ? '<br><span style="font-size:0.75em; color:#555; font-weight:normal;">C.C.T. ' + plantelData?.cct + '</span>' : '');
         const schoolLogo = window.getCleanLogoUrl(plantelData?.logo_url) || '';
 
         const printWindow = window.open('', '_blank');
@@ -8286,7 +8286,7 @@ window.imprimirApoyoBitacora = async () => {
         }
 
         const { data: plantelData } = await supabaseClient.from('planteles').select('nombre, logo_url, cct').eq('id', state.plantelId).single();
-        const schoolName = (plantelData?.nombre || 'Plantel Escolar') + (plantelData?.cct ? ' - CCT: ' + plantelData?.cct : '');
+        const schoolName = (plantelData?.nombre || 'Plantel Escolar') + (plantelData?.cct ? '<br><span style="font-size:0.75em; color:#555; font-weight:normal;">C.C.T. ' + plantelData?.cct + '</span>' : '');
         const schoolLogo = window.getCleanLogoUrl(plantelData?.logo_url) || '';
         
         const printWindow = window.open('', '_blank');
@@ -8988,7 +8988,7 @@ window.descargarBoletaPDF = async (aluId, nombre, matricula) => {
         try {
             if (state && state.plantelId) {
                 const { data: pt } = await supabaseClient.from('planteles').select('nombre, logo_url, cct').eq('id', state.plantelId).maybeSingle();
-                if (pt && pt.nombre) plantelName = pt.nombre + (pt.cct ? ' - CCT: ' + pt.cct : '');
+                if (pt && pt.nombre) plantelName = pt.nombre + (pt.cct ? '<br><span style="font-size:0.75em; color:#555; font-weight:normal;">C.C.T. ' + pt.cct + '</span>' : '');
                 if (pt && pt.logo_url) plantelLogo = window.getCleanLogoUrl(pt.logo_url);
             }
         } catch(e) {}
@@ -11339,7 +11339,7 @@ window.imprimirLista = async (esVacia = false) => {
         if(state.plantelId) {
             const { data: pt } = await supabaseClient.from('planteles').select('nombre, logo_url, cct').eq('id', state.plantelId).maybeSingle();
             if(pt) {
-                if(pt.nombre) schoolName = pt.nombre + (pt.cct ? ' - CCT: ' + pt.cct : '');
+                if(pt.nombre) schoolName = pt.nombre + (pt.cct ? '<br><span style="font-size:0.75em; color:#555; font-weight:normal;">C.C.T. ' + pt.cct + '</span>' : '');
                 if(pt.logo_url) schoolLogo = window.getCleanLogoUrl(pt.logo_url);
             }
             const { data: dirData } = await supabaseClient.from('perfiles').select('nombre').eq('plantel_id', state.plantelId).eq('rol', 'directivo').maybeSingle();
@@ -13619,7 +13619,7 @@ window.imprimirBitacoraGeneral = async () => {
         }
 
         const { data: plantelData } = await supabaseClient.from('planteles').select('nombre, logo_url, cct').eq('id', state.plantelId).single();
-        const schoolName = (plantelData?.nombre || 'Plantel Escolar') + (plantelData?.cct ? ' - CCT: ' + plantelData?.cct : '');
+        const schoolName = (plantelData?.nombre || 'Plantel Escolar') + (plantelData?.cct ? '<br><span style="font-size:0.75em; color:#555; font-weight:normal;">C.C.T. ' + plantelData?.cct + '</span>' : '');
         const schoolLogo = window.getCleanLogoUrl(plantelData?.logo_url) || '';
         
         const printWindow = window.open('', '_blank');
@@ -16584,7 +16584,7 @@ window.imprimirHorarioDocente = async (email, name) => {
         try {
             if (state && state.plantelId) {
                 const { data: pt } = await supabaseClient.from('planteles').select('nombre, logo_url, cct').eq('id', state.plantelId).maybeSingle();
-                if (pt && pt.nombre) plantelName = pt.nombre + (pt.cct ? ' - CCT: ' + pt.cct : '');
+                if (pt && pt.nombre) plantelName = pt.nombre + (pt.cct ? '<br><span style="font-size:0.75em; color:#555; font-weight:normal;">C.C.T. ' + pt.cct + '</span>' : '');
                 if (pt && pt.logo_url) logoUrl = window.getCleanLogoUrl(pt.logo_url);
             }
         } catch(e) {}
@@ -17193,7 +17193,7 @@ window.descargarBoletaAdminPDF = async (alumnoId, nombre, matricula) => {
         try {
             if (state && state.plantelId) {
                 const { data: pt } = await supabaseClient.from('planteles').select('nombre, logo_url, cct').eq('id', state.plantelId).maybeSingle();
-                if (pt && pt.nombre) plantelName = pt.nombre + (pt.cct ? ' - CCT: ' + pt.cct : '');
+                if (pt && pt.nombre) plantelName = pt.nombre + (pt.cct ? '<br><span style="font-size:0.75em; color:#555; font-weight:normal;">C.C.T. ' + pt.cct + '</span>' : '');
                 if (pt && pt.logo_url) plantelLogo = window.getCleanLogoUrl(pt.logo_url);
             }
         } catch(e) {}
@@ -17722,7 +17722,7 @@ window.imprimirHistorialReservasAula = async () => {
         }
 
         const { data: plantelData } = await supabaseClient.from('planteles').select('nombre, logo_url, cct').eq('id', state.plantelId).single();
-        const schoolName = (plantelData?.nombre || 'Plantel Escolar') + (plantelData?.cct ? ' - CCT: ' + plantelData?.cct : '');
+        const schoolName = (plantelData?.nombre || 'Plantel Escolar') + (plantelData?.cct ? '<br><span style="font-size:0.75em; color:#555; font-weight:normal;">C.C.T. ' + plantelData?.cct + '</span>' : '');
         const schoolLogo = window.getCleanLogoUrl(plantelData?.logo_url) || '';
         
         const printWindow = window.open('', '_blank');
@@ -17985,7 +17985,7 @@ window.imprimirHistorialBiblioteca = async () => {
         }
 
         const { data: plantelData } = await supabaseClient.from('planteles').select('nombre, logo_url, cct').eq('id', state.plantelId).single();
-        const schoolName = (plantelData?.nombre || 'Plantel Escolar') + (plantelData?.cct ? ' - CCT: ' + plantelData?.cct : '');
+        const schoolName = (plantelData?.nombre || 'Plantel Escolar') + (plantelData?.cct ? '<br><span style="font-size:0.75em; color:#555; font-weight:normal;">C.C.T. ' + plantelData?.cct + '</span>' : '');
         const schoolLogo = window.getCleanLogoUrl(plantelData?.logo_url) || '';
         
         const printWindow = window.open('', '_blank');
