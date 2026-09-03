@@ -1471,7 +1471,7 @@ function renderAdminExpediente() {
 }
 
 window.abrirModalArchivoMuerto = async () => {
-    let { data: grupos } = await window.supabaseClient.from('grupos').select('id, nombre, grado').eq('plantel_id', window.state.plantelId);
+    let { data: grupos } = await supabaseClient.from('grupos').select('id, nombre, grado').eq('plantel_id', state.plantelId);
     grupos = grupos || [];
     
     const modalId = 'modalArchivoMuerto';
@@ -1481,7 +1481,16 @@ window.abrirModalArchivoMuerto = async () => {
     const div = document.createElement('div');
     div.id = modalId;
     div.className = 'modal-backdrop';
+    div.style.position = 'fixed';
+    div.style.top = '0';
+    div.style.left = '0';
+    div.style.width = '100vw';
+    div.style.height = '100vh';
+    div.style.backgroundColor = 'rgba(0,0,0,0.5)';
+    div.style.zIndex = '9999';
     div.style.display = 'flex';
+    div.style.justifyContent = 'center';
+    div.style.alignItems = 'center';
     div.innerHTML = `
         <div class="modal-content" style="max-width:500px; padding:24px;">
             <h3>Descargar Archivo Muerto</h3>
@@ -1544,9 +1553,9 @@ window.ejecutarDescargaAM = async (btn) => {
     try {
         if (typeof JSZip === 'undefined') throw new Error("La librería JSZip no está cargada.");
         
-        let query = window.supabaseClient.from('alumnos')
+        let query = supabaseClient.from('alumnos')
             .select('id, matricula, nombre, grado, grupo_id(nombre)')
-            .eq('plantel_id', window.state.plantelId)
+            .eq('plantel_id', state.plantelId)
             .eq('estatus', 'egresado');
 
         if(grado) query = query.eq('grado', grado);
@@ -1571,13 +1580,13 @@ window.ejecutarDescargaAM = async (btn) => {
             const grupoName = (alu.grupo_id && alu.grupo_id.nombre) ? alu.grupo_id.nombre : 'SinGrupo';
             const aluName = (alu.nombre || 'Desconocido').replace(/[^a-zA-Z0-9]/g, '_');
             
-            const { data: files } = await window.supabaseClient.storage.from('expedientes').list(alu.id);
+            const { data: files } = await supabaseClient.storage.from('expedientes').list(alu.id);
             if (files && files.length > 0) {
                 const aluFolder = rootFolder.folder(`${gradoName}_${grupoName}/${aluName}_${alu.matricula}`);
                 for (const f of files) {
                     if (f.name === '.emptyFolderPlaceholder') continue;
                     
-                    const { data: blob } = await window.supabaseClient.storage.from('expedientes').download(`${alu.id}/${f.name}`);
+                    const { data: blob } = await supabaseClient.storage.from('expedientes').download(`${alu.id}/${f.name}`);
                     if (blob) {
                         aluFolder.file(f.name, blob);
                         docsCount++;
