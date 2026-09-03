@@ -5903,7 +5903,7 @@ window.solicitarTramiteAlumno = async () => {
         }]);
 
         if(error) throw error;
-        alert(`✅ Trámite "${tipo}" solicitado correctamente. El área administrativa lo procesará a la brevedad.`);
+        alert(`✅ Trámite "${tipoFinal}" solicitado correctamente. El área administrativa lo procesará a la brevedad.`);
         window.loadMisTramites();
     } catch(e) {
         console.error(e);
