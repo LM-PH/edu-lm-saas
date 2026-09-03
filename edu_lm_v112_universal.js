@@ -6272,7 +6272,7 @@ window.switchTramiteView = async (view) => {
                 .from('tramites')
                 .select('*, alumnos(nombre, matricula)')
                 .eq('plantel_id', state.plantelId)
-                .eq('estado', 'Subido')
+                .in('estado', ['Subido', 'Entregado'])
                 .order('fecha_emision', { ascending: false });
 
             if(error) throw error;
@@ -6286,12 +6286,12 @@ window.switchTramiteView = async (view) => {
                 const alumno = t.alumnos ? `${t.alumnos.nombre} (${t.alumnos.matricula})` : 'Alumno desconocido';
                 return `
                 <div style="background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:12px 14px; position:relative;">
-                    <div style="font-weight:600; font-size:0.9rem; color:var(--text-main); margin-bottom:4px;">${t.tipo}</div>
+                    <div style="font-weight:600; font-size:0.9rem; color:var(--text-main); margin-bottom:4px;">${t.tipo} ${t.estado === 'Entregado' ? '<span class="badge" style="background:#e6f4ea; color:#1e8e3e; font-size:0.6rem; margin-left:6px;">Físico</span>' : '<span class="badge" style="background:#e8f0fe; color:#1a73e8; font-size:0.6rem; margin-left:6px;">Digital</span>'}</div>
                     <div style="font-size:0.75rem; color:var(--text-muted); margin-bottom:8px;"><i class="fa-solid fa-user"></i> ${alumno}</div>
                     <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:6px;">
                         <span style="font-size:0.7rem; color:var(--text-muted)">Emitido: ${emision}</span>
                         <div style="display:flex; gap:6px;">
-                            <a href="${t.archivo_url}" target="_blank" class="btn btn-outline btn-xs" style="color:var(--success); border-color:var(--success);"><i class="fa-solid fa-eye"></i> Ver PDF</a>
+                            ${t.archivo_url ? `<a href="${t.archivo_url}" target="_blank" class="btn btn-outline btn-xs" style="color:var(--success); border-color:var(--success);"><i class="fa-solid fa-eye"></i> Ver PDF</a>` : ''}
                             <button class="btn btn-outline btn-xs" style="color:#d97706; border-color:#d97706;" onclick="window.eliminarTramiteEntregado('${t.id}')"><i class="fa-solid fa-rotate-left"></i> Anular Entrega</button>
                         </div>
                     </div>
