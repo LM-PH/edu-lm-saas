@@ -1482,7 +1482,7 @@ window.abrirModalArchivoMuerto = async () => {
     div.id = modalId;
     div.className = 'modal-backdrop';
     div.style.display = 'flex';
-    div.innerHTML = \`
+    div.innerHTML = `
         <div class="modal-content" style="max-width:500px; padding:24px;">
             <h3>Descargar Archivo Muerto</h3>
             <p style="font-size:0.85rem; color:var(--text-muted); margin-bottom:16px;">
@@ -1504,15 +1504,15 @@ window.abrirModalArchivoMuerto = async () => {
                 <label class="form-label">Filtrar por Grupo</label>
                 <select class="form-select" id="amGrupoSel">
                     <option value="">Todos los Grupos</option>
-                    \${grupos.map(g => \`<option value="\${g.id}" data-grado="\${g.grado}">\${g.nombre}</option>\`).join('')}
+                    ${grupos.map(g => `<option value="${g.id}" data-grado="${g.grado}">${g.nombre}</option>`).join('')}
                 </select>
             </div>
             <div style="display:flex; justify-content:flex-end; gap:12px;">
-                <button class="btn btn-outline" onclick="document.getElementById('\${modalId}').remove()">Cancelar</button>
+                <button class="btn btn-outline" onclick="document.getElementById('${modalId}').remove()">Cancelar</button>
                 <button class="btn btn-primary" onclick="window.ejecutarDescargaAM(this)">Generar ZIP</button>
             </div>
         </div>
-    \`;
+    `;
     document.body.appendChild(div);
 
     window.actualizarGruposAM = () => {
@@ -1573,11 +1573,11 @@ window.ejecutarDescargaAM = async (btn) => {
             
             const { data: files } = await window.supabaseClient.storage.from('expedientes').list(alu.id);
             if (files && files.length > 0) {
-                const aluFolder = rootFolder.folder(\`\${gradoName}_\${grupoName}/\${aluName}_\${alu.matricula}\`);
+                const aluFolder = rootFolder.folder(`${gradoName}_${grupoName}/${aluName}_${alu.matricula}`);
                 for (const f of files) {
                     if (f.name === '.emptyFolderPlaceholder') continue;
                     
-                    const { data: blob } = await window.supabaseClient.storage.from('expedientes').download(\`\${alu.id}/\${f.name}\`);
+                    const { data: blob } = await window.supabaseClient.storage.from('expedientes').download(`${alu.id}/${f.name}`);
                     if (blob) {
                         aluFolder.file(f.name, blob);
                         docsCount++;
@@ -1593,10 +1593,10 @@ window.ejecutarDescargaAM = async (btn) => {
             const url = URL.createObjectURL(content);
             const a = document.createElement("a");
             a.href = url;
-            const filename = \`Archivo_Muerto_\${grado||'Todos'}_\${grupoId||'Todos'}.zip\`;
+            const filename = `Archivo_Muerto_${grado||'Todos'}_${grupoId||'Todos'}.zip`;
             a.download = filename;
             a.click();
-            window.showToast(\`ZIP descargado con \${docsCount} documentos.\`, "success");
+            window.showToast(`ZIP descargado con ${docsCount} documentos.`, "success");
             document.getElementById('modalArchivoMuerto').remove();
         }
 
