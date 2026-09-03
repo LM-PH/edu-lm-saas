@@ -3051,7 +3051,7 @@ function renderApoyoReportes() {
   const today = new Date().toLocaleDateString('en-CA');
   setTimeout(() => { 
       if(!isMaestro && !isBiblioteca && window.loadCitatoriosApoyo) window.loadCitatoriosApoyo();
-      if((isMaestro || isBiblioteca) && window.loadMisReportes) window.loadMisReportes();
+      // Ocultamos la auto-carga de mis reportes; ahora es por búsqueda
   }, 150);
   
   const subtitle = isMaestro ? 'Reportes de Incidencias Disciplinarias' : (isBiblioteca ? 'Biblioteca y Aula de Medios | Registro y Levante de Reportes' : 'Personal de Apoyo | Triage y Mediación Escolar');
@@ -3096,13 +3096,21 @@ function renderApoyoReportes() {
                     <p style="font-size:0.85rem; color:var(--text-muted);">Seguimiento de los reportes que has levantado.</p>
                 </div>
                 <div>
-                    <button class="btn btn-outline btn-sm" onclick="window.loadMisReportes()">
+                    <button class="btn btn-outline btn-sm" onclick="window.buscarMisReportes(document.getElementById('busquedaMisReportesInput').value)">
                         <i class="fa-solid fa-sync"></i> Actualizar
                     </button>
                 </div>
             </div>
+            
+            <div style="margin-bottom: 20px;">
+                <input type="text" id="busquedaMisReportesInput" class="form-input" placeholder="Buscar en mis reportes por nombre de alumno o matrícula..." onkeyup="window.buscarMisReportes(this.value)">
+            </div>
+
             <div id="contenedorMisReportes" style="display:grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap:20px;">
-                <div style="text-align:center; padding:30px; color:var(--text-muted); grid-column:1/-1;"><i class="fa-solid fa-spinner fa-spin"></i> Cargando tus reportes...</div>
+                <div style="text-align:center; padding:30px; color:var(--text-muted); grid-column:1/-1;">
+                    <i class="fa-solid fa-search" style="font-size:2rem; margin-bottom:10px; display:block;"></i>
+                    Utiliza el buscador de arriba para encontrar los reportes que has levantado.
+                </div>
             </div>
         </div>
   ` : '';
@@ -3257,13 +3265,15 @@ window.buscarAlumnoExpedienteReportes = async (term) => {
     
     try {
         const { data, error } = await supabaseClient.from('alumnos')
-            .select('id, nombre, matricula, grupos(nombre)')
+            .select('id, nombre, matricula, grupo_id')
             .eq('plantel_id', state.plantelId)
             .or(`nombre.ilike.%${term}%,matricula.ilike.%${term}%`)
             .limit(10);
             
         if(error) {
             console.error("Error buscando alumnos:", error);
+            res.innerHTML = '<div style="padding:10px; color:var(--danger);">Error al buscar (' + error.message + ')</div>'; 
+            res.style.display = 'block';
             return;
         }
         
@@ -3275,11 +3285,13 @@ window.buscarAlumnoExpedienteReportes = async (term) => {
         
         res.innerHTML = data.map(a => `
             <div style="padding:10px; border-bottom:1px solid var(--border); cursor:pointer;" onclick="window.selectAlumnoExpedienteReportes('${a.id}', '${a.nombre.replace(/'/g, "\\'")}')">
-                <strong style="color:var(--primary)">${a.nombre}</strong> <small style="color:var(--text-muted)">(${a.grupos?.nombre || 'Sin Grupo'}) - ${a.matricula}</small>
+                <strong style="color:var(--primary)">${a.nombre}</strong> <small style="color:var(--text-muted)">- ${a.matricula}</small>
             </div>
         `).join('');
         res.style.display = 'block';
-    } catch(e) { console.error(e); }
+    } catch(e) { 
+        console.error("Excepción en buscarAlumnoExpedienteReportes:", e); 
+    }
 };
 
 window.selectAlumnoExpedienteReportes = (id, nombre) => {
@@ -3288,27 +3300,46 @@ window.selectAlumnoExpedienteReportes = (id, nombre) => {
     if(window.showAlumnoExpediente) window.showAlumnoExpediente(id, 'conducta');
 };
 
-window.loadMisReportes = async () => {
+window.buscarMisReportes = async (term = '') => {
     const container = document.getElementById('contenedorMisReportes');
     if(!container) return;
-    container.innerHTML = '<div style="text-align:center; padding:30px; color:var(--text-muted); grid-column:1/-1;"><i class="fa-solid fa-spinner fa-spin"></i> Cargando tus reportes...</div>';
+    
+    if(!term || term.trim().length === 0) {
+        container.innerHTML = '<div style="text-align:center; padding:30px; color:var(--text-muted); grid-column:1/-1;"><i class="fa-solid fa-search" style="font-size:2rem; margin-bottom:10px; display:block;"></i>Utiliza el buscador de arriba para encontrar los reportes que has levantado.</div>';
+        return;
+    }
+
+    container.innerHTML = '<div style="text-align:center; padding:30px; color:var(--text-muted); grid-column:1/-1;"><i class="fa-solid fa-spinner fa-spin"></i> Buscando...</div>';
+    
     try {
         const u = await supabaseClient.auth.getUser();
         if(!u.data.user) return;
         
-        let query = supabaseClient.from('reportes_conducta')
+        // Primero buscamos los alumnos que coincidan con el término
+        const { data: alumnosMatch, error: errAlum } = await supabaseClient
+            .from('alumnos')
+            .select('id')
+            .eq('plantel_id', state.plantelId)
+            .or(`nombre.ilike.%${term}%,matricula.ilike.%${term}%`)
+            .limit(20);
+            
+        if(errAlum) throw errAlum;
+        
+        if(!alumnosMatch || alumnosMatch.length === 0) {
+            container.innerHTML = '<div style="text-align:center; padding:30px; color:var(--text-muted); grid-column:1/-1;">No se encontraron reportes tuyos para ese alumno.</div>';
+            return;
+        }
+        
+        const ids = alumnosMatch.map(a => a.id);
+        
+        const { data, error } = await supabaseClient.from('reportes_conducta')
             .select('id, descripcion, gravedad, resuelto, fecha, alumnos!inner(nombre, matricula, grupo_id)')
             .eq('autor_id', u.data.user.id)
             .eq('plantel_id', state.plantelId)
+            .in('alumno_id', ids)
             .order('fecha', { ascending: false })
             .limit(50);
             
-        if (state.role === 'maestro' || state.role === 'docente') {
-            // Removemos el filtro por grupo_id para permitir que los maestros de Talleres (sin grupo_id) vean sus reportes. 
-            // El filtro por 'autor_id' (línea 3055) ya garantiza que solo vean los que ellos mismos escribieron.
-        }
-            
-        const { data, error } = await query;
         if(error) throw error;
         
         if(!data || data.length === 0) {
