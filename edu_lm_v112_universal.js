@@ -8635,10 +8635,11 @@ window.loadBoletasAlumno = async () => {
         const periodos = [...new Set((califs || []).map(c => c.trimestre))].sort((a,b) => b-a);
         let tablesHtml = periodos.map(p => {
             const pCalifs = califs.filter(c => c.trimestre === p);
-            const orderPriority = ['español', 'inglés', 'matemáticas', 'ciencias', 'biología', 'física', 'química', 'geografía', 'historia', 'formación cívica y ética', 'f.c. y e.', 'educación física', 'edu. fisica', 'artes', 'tecnología'];
+            const orderPriority = ['espanol', 'ingles', 'matematicas', 'ciencias', 'biologia', 'fisica', 'quimica', 'geografia', 'historia', 'formacion civica', 'f.c.', 'educacion fisica', 'edu. fisica', 'artes', 'tecnologia'];
+            const normalize = s => s.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
             pCalifs.sort((a, b) => {
-                const matA = (a.materia_nombre || '').toLowerCase();
-                const matB = (b.materia_nombre || '').toLowerCase();
+                const matA = normalize(a.materia_nombre || '');
+                const matB = normalize(b.materia_nombre || '');
                 let indexA = orderPriority.findIndex(s => matA.includes(s));
                 let indexB = orderPriority.findIndex(s => matB.includes(s));
                 if (indexA === -1) indexA = 999;
@@ -13693,10 +13694,11 @@ window.cargarSabanaGrupo = async () => {
             else matSet.add(mName);
         });
         const materiasObj = Array.from(matSet);
-        const orderPriority = ['español', 'inglés', 'matemáticas', 'ciencias', 'biología', 'física', 'química', 'geografía', 'historia', 'formación cívica y ética', 'f.c. y e.', 'educación física', 'edu. fisica', 'artes', 'tecnología'];
+        const orderPriority = ['espanol', 'ingles', 'matematicas', 'ciencias', 'biologia', 'fisica', 'quimica', 'geografia', 'historia', 'formacion civica', 'f.c.', 'educacion fisica', 'edu. fisica', 'artes', 'tecnologia'];
+        const normalize = s => s.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
         materiasObj.sort((a, b) => {
-            const matA = a.toLowerCase();
-            const matB = b.toLowerCase();
+            const matA = normalize(a);
+            const matB = normalize(b);
             let indexA = orderPriority.findIndex(s => matA.includes(s));
             let indexB = orderPriority.findIndex(s => matB.includes(s));
             if (indexA === -1) indexA = 999;
@@ -16941,10 +16943,11 @@ window.descargarBoletaAdminPDF = async (alumnoId, nombre, matricula) => {
         let gradesHtml = '';
         Object.keys(porTrimestre).sort().forEach(trim => {
             const materias = porTrimestre[trim];
-            const orderPriority = ['español', 'inglés', 'matemáticas', 'ciencias', 'biología', 'física', 'química', 'geografía', 'historia', 'formación cívica y ética', 'f.c. y e.', 'educación física', 'edu. fisica', 'artes', 'tecnología'];
+            const orderPriority = ['espanol', 'ingles', 'matematicas', 'ciencias', 'biologia', 'fisica', 'quimica', 'geografia', 'historia', 'formacion civica', 'f.c.', 'educacion fisica', 'edu. fisica', 'artes', 'tecnologia'];
+            const normalize = s => s.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
             materias.sort((a, b) => {
-                const matA = (a.materia_nombre || a.materia_id?.nombre || '').toLowerCase();
-                const matB = (b.materia_nombre || b.materia_id?.nombre || '').toLowerCase();
+                const matA = normalize(a.materia_nombre || a.materia_id?.nombre || '');
+                const matB = normalize(b.materia_nombre || b.materia_id?.nombre || '');
                 let indexA = orderPriority.findIndex(s => matA.includes(s));
                 let indexB = orderPriority.findIndex(s => matB.includes(s));
                 if (indexA === -1) indexA = 999;
