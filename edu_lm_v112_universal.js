@@ -6253,57 +6253,91 @@ window.selectAlumnoTramite = (id, nombre, matricula, tipoTramite, tramiteRelacio
 window.switchTramiteView = async (view) => {
     const btnP = document.getElementById('btnTabPendientes');
     const btnH = document.getElementById('btnTabHistorial');
+    const btnC = document.getElementById('btnTabCalendario');
     const header = document.getElementById('headerVistaTramite');
     const cont = document.getElementById('tramitesRecibidosContenedor');
+    const contCal = document.getElementById('tramitesCalendarioContenedor');
     if(!btnP || !btnH || !header || !cont) return;
 
     if(view === 'pendientes') {
         btnP.classList.replace('btn-outline', 'btn-primary');
         btnH.classList.replace('btn-primary', 'btn-outline');
+        if(btnC) btnC.classList.replace('btn-primary', 'btn-outline');
+        cont.style.display = 'grid';
+        if(contCal) contCal.style.display = 'none';
+        header.style.display = 'block';
         header.innerHTML = `<h3 style="margin-bottom:8px;"><i class="fa-solid fa-inbox text-primary"></i> Bandeja de Solicitudes Pendientes</h3>
                             <p style="font-size:0.85rem; color:var(--text-muted); margin-bottom:20px;">Atiende los requerimientos activos de los estudiantes.</p>`;
         window.loadTramitesAdmin();
-    } else {
+    } else if (view === 'historial') {
         btnH.classList.replace('btn-outline', 'btn-primary');
         btnP.classList.replace('btn-primary', 'btn-outline');
+        if(btnC) btnC.classList.replace('btn-primary', 'btn-outline');
+        cont.style.display = 'grid';
+        if(contCal) contCal.style.display = 'none';
+        header.style.display = 'block';
         header.innerHTML = `<h3 style="margin-bottom:8px;"><i class="fa-solid fa-calendar-check text-success"></i> Historial de Trámites Entregados</h3>
                             <p style="font-size:0.85rem; color:var(--text-muted); margin-bottom:20px;">Registro cronológico de documentos oficiales enviados.</p>`;
-        
-        cont.innerHTML = '<p style="text-align:center; padding:20px;"><i class="fa-solid fa-spinner fa-spin"></i> Cargando historial...</p>';
-        try {
-            const { data, error } = await supabaseClient
-                .from('tramites')
-                .select('*, alumnos(nombre, matricula)')
-                .eq('plantel_id', state.plantelId)
-                .in('estado', ['Subido', 'Entregado'])
-                .order('fecha_emision', { ascending: false });
+        window.loadHistorialTramitesAdmin();
+    } else if (view === 'calendario') {
+        if(btnC) btnC.classList.replace('btn-outline', 'btn-primary');
+        btnP.classList.replace('btn-primary', 'btn-outline');
+        btnH.classList.replace('btn-primary', 'btn-outline');
+        cont.style.display = 'none';
+        if(contCal) contCal.style.display = 'block';
+        header.style.display = 'none';
+        const d = new Date();
+        window.loadCalendarioTramites(d.getFullYear(), d.getMonth());
+    }
+};
 
-            if(error) throw error;
-            if(!data || data.length ===0) {
-                cont.innerHTML = '<p style="text-align:center; padding:30px; color:var(--text-muted)">No hay historial de trámites todavía.</p>';
-                return;
-            }
+window.loadHistorialTramitesAdmin = async () => {
+    const cont = document.getElementById('tramitesRecibidosContenedor');
+    if(!cont) return;
+    cont.innerHTML = '<p style="text-align:center; padding:20px;"><i class="fa-solid fa-spinner fa-spin"></i> Cargando historial...</p>';
+    try {
+        const { data, error } = await supabaseClient
+            .from('tramites')
+            .select('*, alumnos(nombre, matricula)')
+            .eq('plantel_id', state.plantelId)
+            .in('estado', ['Subido', 'Entregado'])
+            .order('fecha_emision', { ascending: false });
 
-            cont.innerHTML = data.map(t => {
-                const emision = t.fecha_emision ? new Date(t.fecha_emision).toLocaleDateString('es-MX', { dateStyle: 'medium' }) : '---';
-                const alumno = t.alumnos ? `${t.alumnos.nombre} (${t.alumnos.matricula})` : 'Alumno desconocido';
-                return `
-                <div style="background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:12px 14px; position:relative;">
-                    <div style="font-weight:600; font-size:0.9rem; color:var(--text-main); margin-bottom:4px;">${t.tipo} ${t.estado === 'Entregado' ? '<span class="badge" style="background:#e6f4ea; color:#1e8e3e; font-size:0.6rem; margin-left:6px;">Físico</span>' : '<span class="badge" style="background:#e8f0fe; color:#1a73e8; font-size:0.6rem; margin-left:6px;">Digital</span>'}</div>
-                    <div style="font-size:0.75rem; color:var(--text-muted); margin-bottom:8px;"><i class="fa-solid fa-user"></i> ${alumno}</div>
-                    <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:6px;">
-                        <span style="font-size:0.7rem; color:var(--text-muted)">Emitido: ${emision}</span>
-                        <div style="display:flex; gap:6px;">
-                            ${t.archivo_url ? `<a href="${t.archivo_url}" target="_blank" class="btn btn-outline btn-xs" style="color:var(--success); border-color:var(--success);"><i class="fa-solid fa-eye"></i> Ver PDF</a>` : ''}
-                            <button class="btn btn-outline btn-xs" style="color:#d97706; border-color:#d97706;" onclick="window.eliminarTramiteEntregado('${t.id}')"><i class="fa-solid fa-rotate-left"></i> Anular Entrega</button>
-                        </div>
-                    </div>
-                </div>`;
-            }).join('');
-        } catch(e) {
-            console.error(e);
-            cont.innerHTML = '<p style="color:var(--danger)">Error al cargar el historial.</p>';
+        if(error) throw error;
+        if(!data || data.length ===0) {
+            cont.innerHTML = '<p style="text-align:center; padding:30px; color:var(--text-muted)">No hay historial de trámites todavía.</p>';
+            return;
         }
+
+        const adminIds = [...new Set(data.map(t => t.admin_id).filter(Boolean))];
+        const mapPerfs = {};
+        if (adminIds.length > 0) {
+            const { data: perfs } = await supabaseClient.from('perfiles').select('id, nombre').in('id', adminIds);
+            (perfs || []).forEach(p => mapPerfs[p.id] = p.nombre);
+        }
+
+        cont.innerHTML = data.map(t => {
+            const emision = t.fecha_emision ? new Date(t.fecha_emision).toLocaleDateString('es-MX', { dateStyle: 'medium' }) : '---';
+            const alumno = t.alumnos ? `${t.alumnos.nombre} (${t.alumnos.matricula})` : 'Alumno desconocido';
+            const emisor = t.admin_id ? (mapPerfs[t.admin_id] || 'Administrador') : 'Administrador';
+            
+            return `
+            <div style="background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:12px 14px; position:relative;">
+                <div style="font-weight:600; font-size:0.9rem; color:var(--text-main); margin-bottom:4px;">${t.tipo} ${t.estado === 'Entregado' ? '<span class="badge" style="background:#e6f4ea; color:#1e8e3e; font-size:0.6rem; margin-left:6px;">Físico</span>' : '<span class="badge" style="background:#e8f0fe; color:#1a73e8; font-size:0.6rem; margin-left:6px;">Digital</span>'}</div>
+                <div style="font-size:0.75rem; color:var(--text-muted); margin-bottom:4px;"><i class="fa-solid fa-user"></i> ${alumno}</div>
+                <div style="font-size:0.75rem; color:var(--text-muted); margin-bottom:8px;"><i class="fa-solid fa-stamp"></i> Emitido por: ${emisor}</div>
+                <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:6px;">
+                    <span style="font-size:0.7rem; color:var(--text-muted)">Emitido: ${emision}</span>
+                    <div style="display:flex; gap:6px;">
+                        ${t.archivo_url ? `<a href="${t.archivo_url}" target="_blank" class="btn btn-outline btn-xs" style="color:var(--success); border-color:var(--success);"><i class="fa-solid fa-eye"></i> Ver PDF</a>` : ''}
+                        <button class="btn btn-outline btn-xs" style="color:#d97706; border-color:#d97706;" onclick="window.eliminarTramiteEntregado('${t.id}')"><i class="fa-solid fa-rotate-left"></i> Anular Entrega</button>
+                    </div>
+                </div>
+            </div>`;
+        }).join('');
+    } catch(e) {
+        console.error(e);
+        cont.innerHTML = '<p style="color:var(--danger)">Error al cargar el historial.</p>';
     }
 };
 
