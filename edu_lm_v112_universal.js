@@ -3256,13 +3256,25 @@ window.buscarAlumnoExpedienteReportes = async (term) => {
     if(!term || term.length < 3) { res.style.display = 'none'; return; }
     
     try {
-        const { data, error } = await supabaseClient.from('alumnos').select('id, nombre, matricula, grupos(nombre)').ilike('nombre', `%${term}%`).limit(5);
-        if(error || !data) return;
+        const { data, error } = await supabaseClient.from('alumnos')
+            .select('id, nombre, matricula, grupos(nombre)')
+            .eq('plantel_id', state.plantelId)
+            .or(`nombre.ilike.%${term}%,matricula.ilike.%${term}%`)
+            .limit(10);
+            
+        if(error) {
+            console.error("Error buscando alumnos:", error);
+            return;
+        }
         
-        if(data.length === 0) { res.innerHTML = '<div style="padding:10px;">Sin resultados</div>'; res.style.display = 'block'; return; }
+        if(!data || data.length === 0) { 
+            res.innerHTML = '<div style="padding:10px; color:var(--text-muted);">Sin resultados</div>'; 
+            res.style.display = 'block'; 
+            return; 
+        }
         
         res.innerHTML = data.map(a => `
-            <div style="padding:10px; border-bottom:1px solid var(--border); cursor:pointer;" onclick="window.selectAlumnoExpedienteReportes('${a.id}', '${a.nombre}')">
+            <div style="padding:10px; border-bottom:1px solid var(--border); cursor:pointer;" onclick="window.selectAlumnoExpedienteReportes('${a.id}', '${a.nombre.replace(/'/g, "\\'")}')">
                 <strong style="color:var(--primary)">${a.nombre}</strong> <small style="color:var(--text-muted)">(${a.grupos?.nombre || 'Sin Grupo'}) - ${a.matricula}</small>
             </div>
         `).join('');
