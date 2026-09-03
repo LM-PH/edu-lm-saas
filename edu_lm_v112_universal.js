@@ -3115,7 +3115,23 @@ function renderApoyoReportes() {
         </div>
   ` : '';
 
-  return `
+    const buscarExpedienteSection = (isMaestro) ? '' : `
+        <!-- SECCIÓN DE BÚSQUEDA DE EXPEDIENTE DISCIPLINARIO -->
+        <div class="card" style="width:100%; border-top:4px solid var(--primary);">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px; flex-wrap:wrap; gap:10px;">
+                <div>
+                    <h3 style="margin-bottom:4px;"><i class="fa-solid fa-folder-open text-primary"></i> Buscar Expediente de Conducta</h3>
+                    <p style="font-size:0.85rem; color:var(--text-muted);">Busca un alumno para ver e imprimir su historial de reportes e intervenciones.</p>
+                </div>
+            </div>
+            <div style="position:relative;">
+                <input type="text" id="busquedaExpedienteReportesInput" class="form-input" placeholder="Buscar alumno por nombre o matrícula..." onkeyup="window.buscarAlumnoExpedienteReportes(this.value)">
+                <div id="resBusquedaExpedienteReportes" style="position:absolute; top:100%; left:0; right:0; z-index:100; background:white; border-radius:0 0 8px 8px; box-shadow:var(--shadow-lg); display:none; max-height:200px; overflow-y:auto; border:1px solid var(--border);"></div>
+            </div>
+        </div>
+    `;
+
+    return `
     <div class="page-header" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:16px;">
       <div>
         <h2 class="page-title">Incidencias y Conducta</h2>
@@ -3130,20 +3146,7 @@ function renderApoyoReportes() {
     </div>
 
     <div style="display:grid; grid-template-columns: 1fr; gap:30px; margin-top:20px;">
-        <!-- SECCIÓN DE BÚSQUEDA DE EXPEDIENTE DISCIPLINARIO -->
-        <div class="card" style="width:100%; border-top:4px solid var(--primary);">
-            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px; flex-wrap:wrap; gap:10px;">
-                <div>
-                    <h3 style="margin-bottom:4px;"><i class="fa-solid fa-folder-open text-primary"></i> Buscar Expediente de Conducta</h3>
-                    <p style="font-size:0.85rem; color:var(--text-muted);">Busca un alumno para ver e imprimir su historial de reportes e intervenciones.</p>
-                </div>
-            </div>
-            <div style="position:relative;">
-                <input type="text" id="busquedaExpedienteReportesInput" class="form-input" placeholder="Buscar alumno por nombre o matrícula..." onkeyup="window.buscarAlumnoExpedienteReportes(this.value)">
-                <div id="resBusquedaExpedienteReportes" style="position:absolute; top:100%; left:0; right:0; z-index:100; background:white; border-radius:0 0 8px 8px; box-shadow:var(--shadow-lg); display:none; max-height:200px; overflow-y:auto; border:1px solid var(--border);"></div>
-            </div>
-        </div>
-
+        ${buscarExpedienteSection}
         ${citatoriosSection}
         ${misReportesSection}
     </div>
