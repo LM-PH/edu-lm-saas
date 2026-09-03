@@ -1364,7 +1364,7 @@ function renderAdminExpediente() {
         <h2 class="page-title">Expediente Digital</h2>
         <p class="page-subtitle">Gestión y consulta de documentos oficiales del estudiante.</p>
       </div>
-      <button class="btn btn-outline" style="border-color:var(--primary); color:var(--primary);" onclick="window.descargarArchivoMuertoZIP()" id="btnDownloadArchivoMuerto">
+      <button class="btn btn-outline" style="border-color:var(--primary); color:var(--primary);" onclick="window.abrirModalArchivoMuerto()" id="btnDownloadArchivoMuerto">
         <i class="fa-solid fa-file-zipper"></i> Archivo Muerto (ZIP)
       </button>
     </div>
@@ -1470,25 +1470,93 @@ function renderAdminExpediente() {
   `;
 }
 
-window.descargarArchivoMuertoZIP = async () => {
-    const btn = document.getElementById('btnDownloadArchivoMuerto');
+window.abrirModalArchivoMuerto = async () => {
+    let { data: grupos } = await window.supabaseClient.from('grupos').select('id, nombre, grado').eq('plantel_id', window.state.plantelId);
+    grupos = grupos || [];
+    
+    const modalId = 'modalArchivoMuerto';
+    let existing = document.getElementById(modalId);
+    if(existing) existing.remove();
+
+    const div = document.createElement('div');
+    div.id = modalId;
+    div.className = 'modal-backdrop';
+    div.style.display = 'flex';
+    div.innerHTML = \`
+        <div class="modal-content" style="max-width:500px; padding:24px;">
+            <h3>Descargar Archivo Muerto</h3>
+            <p style="font-size:0.85rem; color:var(--text-muted); margin-bottom:16px;">
+               Selecciona los filtros para descargar el archivo de egresados.
+            </p>
+            <div class="form-group" style="margin-bottom:16px;">
+                <label class="form-label">Filtrar por Grado</label>
+                <select class="form-select" id="amGradoSel" onchange="window.actualizarGruposAM()">
+                    <option value="">Todos los Grados</option>
+                    <option value="1">1</option>
+                    <option value="2">2</option>
+                    <option value="3">3</option>
+                    <option value="4">4</option>
+                    <option value="5">5</option>
+                    <option value="6">6</option>
+                </select>
+            </div>
+            <div class="form-group" style="margin-bottom:24px;">
+                <label class="form-label">Filtrar por Grupo</label>
+                <select class="form-select" id="amGrupoSel">
+                    <option value="">Todos los Grupos</option>
+                    \${grupos.map(g => \`<option value="\${g.id}" data-grado="\${g.grado}">\${g.nombre}</option>\`).join('')}
+                </select>
+            </div>
+            <div style="display:flex; justify-content:flex-end; gap:12px;">
+                <button class="btn btn-outline" onclick="document.getElementById('\${modalId}').remove()">Cancelar</button>
+                <button class="btn btn-primary" onclick="window.ejecutarDescargaAM(this)">Generar ZIP</button>
+            </div>
+        </div>
+    \`;
+    document.body.appendChild(div);
+
+    window.actualizarGruposAM = () => {
+        const grado = document.getElementById('amGradoSel').value;
+        const select = document.getElementById('amGrupoSel');
+        Array.from(select.options).forEach(opt => {
+            if(opt.value === "") {
+                opt.style.display = 'block';
+                return;
+            }
+            if(!grado || opt.getAttribute('data-grado') === grado) {
+                opt.style.display = 'block';
+            } else {
+                opt.style.display = 'none';
+            }
+        });
+        select.value = "";
+    };
+};
+
+window.ejecutarDescargaAM = async (btn) => {
     const orig = btn.innerHTML;
-    btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Generando ZIP...';
+    btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Generando...';
     btn.disabled = true;
+    
+    const grado = document.getElementById('amGradoSel').value;
+    const grupoId = document.getElementById('amGrupoSel').value;
 
     try {
-        if (typeof JSZip === 'undefined') {
-            throw new Error("La librería JSZip no está cargada.");
-        }
+        if (typeof JSZip === 'undefined') throw new Error("La librería JSZip no está cargada.");
         
-        const { data: egresados, error } = await window.supabaseClient.from('alumnos')
+        let query = window.supabaseClient.from('alumnos')
             .select('id, matricula, nombre, grado, grupo_id(nombre)')
             .eq('plantel_id', window.state.plantelId)
             .eq('estatus', 'egresado');
 
-        if (error) throw error;
-        if (!egresados || egresados.length === 0) {
-            window.showToast("No se encontraron egresados en este plantel.", "warning");
+        if(grado) query = query.eq('grado', grado);
+        if(grupoId) query = query.eq('grupo_id', grupoId);
+
+        const { data: egresados, error } = await query;
+        if(error) throw error;
+        
+        if(!egresados || egresados.length === 0) {
+            window.showToast("No se encontraron egresados con estos filtros.", "warning");
             btn.innerHTML = orig;
             btn.disabled = false;
             return;
@@ -1505,12 +1573,11 @@ window.descargarArchivoMuertoZIP = async () => {
             
             const { data: files } = await window.supabaseClient.storage.from('expedientes').list(alu.id);
             if (files && files.length > 0) {
-                const aluFolder = rootFolder.folder(`${gradoName}_${grupoName}/${aluName}_${alu.matricula}`);
-                
+                const aluFolder = rootFolder.folder(\`\${gradoName}_\${grupoName}/\${aluName}_\${alu.matricula}\`);
                 for (const f of files) {
                     if (f.name === '.emptyFolderPlaceholder') continue;
                     
-                    const { data: blob } = await window.supabaseClient.storage.from('expedientes').download(`${alu.id}/${f.name}`);
+                    const { data: blob } = await window.supabaseClient.storage.from('expedientes').download(\`\${alu.id}/\${f.name}\`);
                     if (blob) {
                         aluFolder.file(f.name, blob);
                         docsCount++;
@@ -1519,21 +1586,23 @@ window.descargarArchivoMuertoZIP = async () => {
             }
         }
 
-        if (docsCount === 0) {
-            window.showToast("No hay documentos subidos de los alumnos egresados.", "warning");
+        if(docsCount === 0) {
+            window.showToast("No hay documentos subidos para los alumnos seleccionados.", "warning");
         } else {
             const content = await zip.generateAsync({ type: "blob" });
             const url = URL.createObjectURL(content);
             const a = document.createElement("a");
             a.href = url;
-            a.download = `Archivo_Muerto_${new Date().toISOString().split('T')[0]}.zip`;
+            const filename = \`Archivo_Muerto_\${grado||'Todos'}_\${grupoId||'Todos'}.zip\`;
+            a.download = filename;
             a.click();
-            window.showToast(`ZIP descargado con ${docsCount} documentos.`, "success");
+            window.showToast(\`ZIP descargado con \${docsCount} documentos.\`, "success");
+            document.getElementById('modalArchivoMuerto').remove();
         }
 
     } catch(e) {
-        console.error("Error al generar ZIP:", e);
-        window.showToast("Error al generar el Archivo Muerto.", "error");
+        console.error(e);
+        window.showToast("Error al generar el Archivo Muerto: " + e.message, "error");
     }
 
     btn.innerHTML = orig;
