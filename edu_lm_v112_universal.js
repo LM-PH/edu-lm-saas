@@ -8635,15 +8635,15 @@ window.loadBoletasAlumno = async () => {
         const periodos = [...new Set((califs || []).map(c => c.trimestre))].sort((a,b) => b-a);
         let tablesHtml = periodos.map(p => {
             const pCalifs = califs.filter(c => c.trimestre === p);
-            const orderPriority = ['espanol', 'ingles', 'matematicas', 'ciencias', 'biologia', 'fisica', 'quimica', 'geografia', 'historia', 'formacion civica', 'f.c.', 'educacion fisica', 'edu. fisica', 'artes', 'tecnologia'];
+            const orderPriorityMap = [{k:'espanol',i:1},{k:'ingles',i:2},{k:'matematicas',i:3},{k:'ciencias',i:4},{k:'biologia',i:4},{k:'quimica',i:4},{k:'educacion fisica',i:8},{k:'edu. fisica',i:8},{k:'fisica',i:4},{k:'geografia',i:5},{k:'historia',i:6},{k:'formacion civica',i:7},{k:'f.c.',i:7},{k:'artes',i:9},{k:'tecnologia',i:10}];
             const normalize = s => s.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
             pCalifs.sort((a, b) => {
                 const matA = normalize(a.materia_nombre || '');
                 const matB = normalize(b.materia_nombre || '');
-                let indexA = orderPriority.findIndex(s => matA.includes(s));
-                let indexB = orderPriority.findIndex(s => matB.includes(s));
-                if (indexA === -1) indexA = 999;
-                if (indexB === -1) indexB = 999;
+                let matchA = orderPriorityMap.find(x => matA.includes(x.k));
+                let matchB = orderPriorityMap.find(x => matB.includes(x.k));
+                let indexA = matchA ? matchA.i : 999;
+                let indexB = matchB ? matchB.i : 999;
                 if (indexA !== indexB) return indexA - indexB;
                 return matA.localeCompare(matB);
             });
@@ -13694,15 +13694,15 @@ window.cargarSabanaGrupo = async () => {
             else matSet.add(mName);
         });
         const materiasObj = Array.from(matSet);
-        const orderPriority = ['espanol', 'ingles', 'matematicas', 'ciencias', 'biologia', 'fisica', 'quimica', 'geografia', 'historia', 'formacion civica', 'f.c.', 'educacion fisica', 'edu. fisica', 'artes', 'tecnologia'];
+        const orderPriorityMap = [{k:'espanol',i:1},{k:'ingles',i:2},{k:'matematicas',i:3},{k:'ciencias',i:4},{k:'biologia',i:4},{k:'quimica',i:4},{k:'educacion fisica',i:8},{k:'edu. fisica',i:8},{k:'fisica',i:4},{k:'geografia',i:5},{k:'historia',i:6},{k:'formacion civica',i:7},{k:'f.c.',i:7},{k:'artes',i:9},{k:'tecnologia',i:10}];
         const normalize = s => s.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
         materiasObj.sort((a, b) => {
             const matA = normalize(a);
             const matB = normalize(b);
-            let indexA = orderPriority.findIndex(s => matA.includes(s));
-            let indexB = orderPriority.findIndex(s => matB.includes(s));
-            if (indexA === -1) indexA = 999;
-            if (indexB === -1) indexB = 999;
+            let matchA = orderPriorityMap.find(x => matA.includes(x.k));
+            let matchB = orderPriorityMap.find(x => matB.includes(x.k));
+            let indexA = matchA ? matchA.i : 999;
+            let indexB = matchB ? matchB.i : 999;
             if (indexA !== indexB) return indexA - indexB;
             return matA.localeCompare(matB);
         });
@@ -16943,15 +16943,15 @@ window.descargarBoletaAdminPDF = async (alumnoId, nombre, matricula) => {
         let gradesHtml = '';
         Object.keys(porTrimestre).sort().forEach(trim => {
             const materias = porTrimestre[trim];
-            const orderPriority = ['espanol', 'ingles', 'matematicas', 'ciencias', 'biologia', 'fisica', 'quimica', 'geografia', 'historia', 'formacion civica', 'f.c.', 'educacion fisica', 'edu. fisica', 'artes', 'tecnologia'];
+            const orderPriorityMap = [{k:'espanol',i:1},{k:'ingles',i:2},{k:'matematicas',i:3},{k:'ciencias',i:4},{k:'biologia',i:4},{k:'quimica',i:4},{k:'educacion fisica',i:8},{k:'edu. fisica',i:8},{k:'fisica',i:4},{k:'geografia',i:5},{k:'historia',i:6},{k:'formacion civica',i:7},{k:'f.c.',i:7},{k:'artes',i:9},{k:'tecnologia',i:10}];
             const normalize = s => s.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
             materias.sort((a, b) => {
                 const matA = normalize(a.materia_nombre || a.materia_id?.nombre || '');
                 const matB = normalize(b.materia_nombre || b.materia_id?.nombre || '');
-                let indexA = orderPriority.findIndex(s => matA.includes(s));
-                let indexB = orderPriority.findIndex(s => matB.includes(s));
-                if (indexA === -1) indexA = 999;
-                if (indexB === -1) indexB = 999;
+                let matchA = orderPriorityMap.find(x => matA.includes(x.k));
+                let matchB = orderPriorityMap.find(x => matB.includes(x.k));
+                let indexA = matchA ? matchA.i : 999;
+                let indexB = matchB ? matchB.i : 999;
                 if (indexA !== indexB) return indexA - indexB;
                 return matA.localeCompare(matB);
             });
