@@ -8988,7 +8988,7 @@ window.descargarBoletaPDF = async (aluId, nombre, matricula) => {
         try {
             if (state && state.plantelId) {
                 const { data: pt } = await supabaseClient.from('planteles').select('nombre, logo_url, cct').eq('id', state.plantelId).maybeSingle();
-                if (pt && pt.nombre) plantelName = pt.nombre;
+                if (pt && pt.nombre) plantelName = pt.nombre + (pt.cct ? ' - CCT: ' + pt.cct : '');
                 if (pt && pt.logo_url) plantelLogo = window.getCleanLogoUrl(pt.logo_url);
             }
         } catch(e) {}
@@ -11339,7 +11339,7 @@ window.imprimirLista = async (esVacia = false) => {
         if(state.plantelId) {
             const { data: pt } = await supabaseClient.from('planteles').select('nombre, logo_url, cct').eq('id', state.plantelId).maybeSingle();
             if(pt) {
-                if(pt.nombre) schoolName = pt.nombre;
+                if(pt.nombre) schoolName = pt.nombre + (pt.cct ? ' - CCT: ' + pt.cct : '');
                 if(pt.logo_url) schoolLogo = window.getCleanLogoUrl(pt.logo_url);
             }
             const { data: dirData } = await supabaseClient.from('perfiles').select('nombre').eq('plantel_id', state.plantelId).eq('rol', 'directivo').maybeSingle();
@@ -16584,7 +16584,7 @@ window.imprimirHorarioDocente = async (email, name) => {
         try {
             if (state && state.plantelId) {
                 const { data: pt } = await supabaseClient.from('planteles').select('nombre, logo_url, cct').eq('id', state.plantelId).maybeSingle();
-                if (pt && pt.nombre) plantelName = pt.nombre;
+                if (pt && pt.nombre) plantelName = pt.nombre + (pt.cct ? ' - CCT: ' + pt.cct : '');
                 if (pt && pt.logo_url) logoUrl = window.getCleanLogoUrl(pt.logo_url);
             }
         } catch(e) {}
@@ -17193,7 +17193,7 @@ window.descargarBoletaAdminPDF = async (alumnoId, nombre, matricula) => {
         try {
             if (state && state.plantelId) {
                 const { data: pt } = await supabaseClient.from('planteles').select('nombre, logo_url, cct').eq('id', state.plantelId).maybeSingle();
-                if (pt && pt.nombre) plantelName = pt.nombre;
+                if (pt && pt.nombre) plantelName = pt.nombre + (pt.cct ? ' - CCT: ' + pt.cct : '');
                 if (pt && pt.logo_url) plantelLogo = window.getCleanLogoUrl(pt.logo_url);
             }
         } catch(e) {}
