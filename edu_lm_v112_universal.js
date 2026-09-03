@@ -1560,8 +1560,7 @@ window.ejecutarDescargaAM = async (btn) => {
         
         let query = supabaseClient.from('alumnos')
             .select('id, matricula, nombre, grado, grupo_id(nombre)')
-            .eq('plantel_id', state.plantelId)
-            .eq('estatus', 'egresado');
+            .eq('plantel_id', state.plantelId);
 
         if(grado) query = query.eq('grado', grado);
         if(grupoId) query = query.eq('grupo_id', grupoId);
