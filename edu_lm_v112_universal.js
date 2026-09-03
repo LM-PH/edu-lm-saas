@@ -2220,12 +2220,19 @@ function renderAdminComunicados() {
         </div>
         <div class="form-group">
           <label class="form-label">Audiencia Destino a Notificar</label>
-          <select id="selComAudiencia" class="form-select">
+          <select id="selComAudiencia" class="form-select" onchange="window.toggleComunicadoAlumnoSearch()">
             <option value="Maestros">Maestros</option>
             <option value="Personal">Maestros, personal de apoyo y biblioteca</option>
-            <option value="Alumnos">Alumnos</option>
+            <option value="Alumnos">Alumnos (Todos)</option>
+            <option value="AlumnoIndividual">Un solo alumno (Individual)</option>
             <option value="General">Toda la comunidad</option>
           </select>
+        </div>
+        <div class="form-group" id="divComAlumnoSearch" style="display:none; position:relative;">
+          <label class="form-label">Buscar Alumno (Nombre o Matrícula)</label>
+          <input type="text" id="inComAlumnoSearch" class="form-input" placeholder="Escribe para buscar..." onkeyup="window.buscarAlumnoComunicado(this.value)">
+          <div id="resComAlumnoSearch" style="position:absolute; top:100%; left:0; right:0; background:var(--surface); border:1px solid var(--border); border-radius:5px; z-index:100; max-height:200px; overflow-y:auto; display:none;"></div>
+          <input type="hidden" id="inComSelectedAlumnoId">
         </div>
         <div class="form-group">
           <label class="form-label">Mensaje Detallado</label>
@@ -2269,8 +2276,7 @@ window.loadComunicadosAdmin = async (fechaFiltro = null) => {
             .order('fecha_envio', { ascending: false })
             .limit(30);
 
-        // Mostrar comunicados generales (todos los valores posibles de audiencia institucional)
-        query = query.in('audiencia', ['General', 'Todos', 'Maestros', 'Alumnos', 'Apoyo', 'Personal']);
+        // Sin filtro .in() de audiencia para que el admin pueda ver todos los comunicados, incluyendo individuales
 
         if(state.plantelId) {
             query = query.eq('plantel_id', state.plantelId);
@@ -2302,6 +2308,12 @@ window.loadComunicadosAdmin = async (fechaFiltro = null) => {
         cont.innerHTML = data.map(c => {
             const date = new Date(c.fecha_envio).toLocaleString('es-MX', { dateStyle: 'medium', timeStyle: 'short' });
             const autor = c.perfiles?.nombre || 'Sistema';
+            
+            let audText = c.audiencia;
+            if (audText && audText.startsWith('Alumno_')) audText = "Alumno Específico";
+            else if (audText && audText.startsWith('Grupo_')) audText = "Grupo Específico";
+            else if (audText && audText.startsWith('Maestro_')) audText = "Maestro Específico";
+            
             const color = tipoColores[c.audiencia] || 'var(--text-muted)';
             const btnAdjunto = c.archivo_url
                 ? `<a href="${c.archivo_url}" target="_blank" class="btn btn-outline btn-xs" style="margin-top:8px; border-color:var(--primary); color:var(--primary); display:inline-flex; gap:4px; align-items:center;"><i class="fa-solid fa-paperclip"></i> Ver adjunto</a>`
@@ -2310,7 +2322,7 @@ window.loadComunicadosAdmin = async (fechaFiltro = null) => {
             <div style="border-left:4px solid ${color}; padding:12px 14px; background:var(--page-bg); border-radius:8px; border:1px solid var(--border);">
                 <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:6px; gap:8px; flex-wrap:wrap;">
                     <span style="font-weight:600; color:var(--text-main); font-size:0.95rem;">${c.titulo}</span>
-                    <span style="font-size:0.7rem; background:${color}22; color:${color}; padding:2px 8px; border-radius:20px; white-space:nowrap; font-weight:600;">${c.audiencia}</span>
+                    <span style="font-size:0.7rem; background:${color}22; color:${color}; padding:2px 8px; border-radius:20px; white-space:nowrap; font-weight:600;">${audText}</span>
                 </div>
                 <p style="font-size:0.85rem; color:var(--text-main); margin:0 0 8px 0; white-space:pre-wrap;">${c.mensaje}</p>
                 <div style="font-size:0.75rem; color:var(--text-muted);">
@@ -2327,12 +2339,57 @@ window.loadComunicadosAdmin = async (fechaFiltro = null) => {
     }
 };
 
+window.toggleComunicadoAlumnoSearch = () => {
+    const aud = document.getElementById('selComAudiencia').value;
+    const div = document.getElementById('divComAlumnoSearch');
+    if(aud === 'AlumnoIndividual') {
+        div.style.display = 'block';
+    } else {
+        div.style.display = 'none';
+        document.getElementById('inComSelectedAlumnoId').value = '';
+        document.getElementById('inComAlumnoSearch').value = '';
+    }
+};
+
+window.buscarAlumnoComunicado = async (term) => {
+    const resDiv = document.getElementById('resComAlumnoSearch');
+    if(!term || term.length < 3) {
+        resDiv.style.display = 'none';
+        return;
+    }
+    
+    const { data } = await supabaseClient
+        .from('alumnos')
+        .select('id, nombre, matricula')
+        .eq('plantel_id', state.plantelId)
+        .or(`nombre.ilike.%${term}%,matricula.ilike.%${term}%`)
+        .limit(10);
+        
+    if(!data || data.length === 0) {
+        resDiv.innerHTML = '<div style="padding:10px; color:var(--text-muted);">Sin resultados</div>';
+    } else {
+        resDiv.innerHTML = data.map(a => `
+            <div style="padding:10px; cursor:pointer; border-bottom:1px solid var(--border);" 
+                 onclick="document.getElementById('inComSelectedAlumnoId').value='${a.id}'; document.getElementById('inComAlumnoSearch').value='${a.nombre.replace(/'/g,"\\'")} (${a.matricula})'; document.getElementById('resComAlumnoSearch').style.display='none';">
+                <strong>${a.nombre}</strong> <span style="font-size:0.8rem; color:var(--text-muted);">${a.matricula}</span>
+            </div>
+        `).join('');
+    }
+    resDiv.style.display = 'block';
+};
+
 window.publicarComunicado = async () => {
     const titulo = document.getElementById('inComTitulo').value.trim();
-    const audiencia = document.getElementById('selComAudiencia').value;
+    let audiencia = document.getElementById('selComAudiencia').value;
     const mensaje = document.getElementById('inComMensaje').value.trim();
     const fileInput = document.getElementById('inComArchivo');
     const btn = document.getElementById('btnPublicarComunicado');
+
+    if(audiencia === 'AlumnoIndividual') {
+        const alId = document.getElementById('inComSelectedAlumnoId').value;
+        if(!alId) return alert("Por favor busca y selecciona un alumno.");
+        audiencia = `Alumno_${alId}`;
+    }
 
     if(!titulo || !mensaje) {
         alert("Por favor completa el título y el mensaje del comunicado.");
