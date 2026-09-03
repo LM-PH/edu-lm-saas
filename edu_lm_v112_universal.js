@@ -196,7 +196,7 @@ window.handleLogin = async (e) => {
     // 2. Recuperar el perfil real de la base de datos para ver quién es
     let { data: profile, error: profErr } = await supabaseClient
         .from('perfiles')
-        .select('*, planteles(id, nombre)')
+        .select('*, planteles(id, nombre, cct)')
         .eq('id', authData.user.id)
         .maybeSingle();
 
@@ -424,6 +424,14 @@ function renderSetupScreen() {
                            spellcheck="false" autocomplete="off">
                 </div>
                 <div class="form-group" style="margin-bottom:20px;">
+                    <label class="form-label" style="font-weight:600; margin-bottom:8px; display:block;">Clave de la Escuela (CCT)</label>
+                    <input type="text" id="setupCct" class="form-input" 
+                           style="height:60px; text-align:center; border-radius:12px; font-size:16px;" 
+                           placeholder="EJ: 12DST0034K" 
+                           oninput="this.value = this.value.toUpperCase()"
+                           spellcheck="false" autocomplete="off">
+                </div>
+                <div class="form-group" style="margin-bottom:20px;">
                     <label class="form-label" style="font-weight:600; margin-bottom:8px; display:block;">Nombre del Director</label>
                     <input type="text" id="setupDirector" class="form-input" 
                            style="height:60px; text-align:center; border-radius:12px; font-size:16px;" 
@@ -581,12 +589,13 @@ window.validarEscuelaYaRegistrada = async () => {
 window.realizarSetupInicial = async () => {
     const btn = event?.currentTarget;
     const esc = document.getElementById('setupEscuela').value.trim();
+    const cct = document.getElementById('setupCct')?.value?.trim() || '';
     const dir = document.getElementById('setupDirector').value.trim();
     const cor = document.getElementById('setupCorreo').value.trim().toLowerCase();
     const pas = document.getElementById('setupPass').value.trim();
     const logoBase64 = document.getElementById('setupLogoBase64') ? document.getElementById('setupLogoBase64').value : null;
 
-    if(!esc || !dir || !cor || !pas) return alert("Por favor completa todos los campos, incluyendo la contraseña.");
+    if(!esc || !dir || !cor || !pas) return alert("Por favor completa todos los campos principales.");
     if(pas.length < 6) return alert("La contraseña debe tener al menos 6 caracteres.");
     
     if(btn) {
@@ -627,7 +636,12 @@ window.realizarSetupInicial = async () => {
             return;
         }
 
-        // 4. El perfil ya fue creado por el backend en el RPC.
+        // 4. El perfil ya fue creado. Si se ingresó CCT, actualizar tabla planteles
+        if(cct) {
+            try {
+                await supabaseClient.from('planteles').update({ cct: cct }).eq('nombre', esc);
+            } catch(e) { console.warn("No se pudo actualizar el CCT:", e); }
+        }
 
         window.showToast("¡Plantel registrado con éxito!", "success");
         setTimeout(() => { window.location.reload(); }, 1000);
@@ -654,7 +668,7 @@ window.checkSchoolSetup = async () => {
         // 1. Ver si hay un usuario logueado
         if(session && session.user) {
             const { data: profile } = await supabaseClient.from('perfiles')
-                .select('plantel_id, rol, nombre, es_master, planteles(id, nombre)')
+                .select('plantel_id, rol, nombre, es_master, planteles(id, nombre, cct)')
                 .eq('id', session.user.id)
                 .maybeSingle();
             
@@ -682,7 +696,7 @@ window.checkSchoolSetup = async () => {
             if (isActuallyMaster) {
                 CONFIG.schoolName = 'Administración Global SaaS';
             } else {
-                CONFIG.schoolName = profile.planteles?.nombre || 'Edu-LM';
+                CONFIG.schoolName = (profile.planteles?.nombre || 'Edu-LM') + (profile.planteles?.cct ? ' - CCT: ' + profile.planteles?.cct : '');
             }
             
             state.schoolConfigured = true;
@@ -4426,14 +4440,14 @@ window.imprimirExpediente = async (idAlumno, modo = 'completo') => {
             supabaseClient.from('alumnos').select('*, grupos(nombre)').eq('id', id).single(),
             supabaseClient.from('reportes_conducta').select('*, perfiles(nombre)').eq('alumno_id', id).order('fecha', { ascending: false }),
             supabaseClient.from('intervenciones_conducta').select('*').eq('alumno_id', id).order('fecha', { ascending: false }),
-            supabaseClient.from('planteles').select('nombre, logo_url').eq('id', state.plantelId).single(),
+            supabaseClient.from('planteles').select('nombre, logo_url, cct').eq('id', state.plantelId).single(),
             supabaseClient.from('fichas_salud').select('*').eq('alumno_id', id).order('fecha_envio', { ascending: false }).limit(1)
         ]);
 
         const al = alRes.data;
         const reps = repsRes.data || [];
         const intervs = intervsRes.data || [];
-        const schoolName = plantelRes.data?.nombre || 'Escuela';
+        const schoolName = (plantelRes.data?.nombre || 'Escuela') + (plantelRes.data?.cct ? ' - CCT: ' + plantelRes.data?.cct : '');
         const schoolLogo = window.getCleanLogoUrl(plantelRes.data?.logo_url) || null;
         const fichaSalud = (saludRes.data && saludRes.data.length > 0) ? saludRes.data[0] : null;
 
@@ -4761,13 +4775,13 @@ window.imprimirExpedienteMedico = async (idAlumno) => {
             supabaseClient.from('alumnos').select('*, grupos(nombre)').eq('id', id).single(),
             supabaseClient.from('expedientes_salud').select('*, perfiles(nombre)').eq('alumno_id', id).order('creado_en', { ascending: false }),
             supabaseClient.from('justificantes_medicos').select('*, perfiles(nombre)').eq('alumno_id', id).order('fecha_emision', { ascending: false }),
-            supabaseClient.from('planteles').select('nombre, logo_url').eq('id', state.plantelId).single()
+            supabaseClient.from('planteles').select('nombre, logo_url, cct').eq('id', state.plantelId).single()
         ]);
 
         const al = alRes.data;
         const atenciones = atencRes.data || [];
         const justificantes = justRes.data || [];
-        const schoolName = plantelRes.data?.nombre || 'Escuela';
+        const schoolName = (plantelRes.data?.nombre || 'Escuela') + (plantelRes.data?.cct ? ' - CCT: ' + plantelRes.data?.cct : '');
         const schoolLogo = window.getCleanLogoUrl(plantelRes.data?.logo_url) || null;
 
         if(!al) throw new Error("Alumno no encontrado");
@@ -5274,8 +5288,8 @@ window.imprimirRegistroAccesos = async (fechaInputId = 'fechaAsistenciaApoyo', g
             return (a.alumnos?.nombre || '').localeCompare(b.alumnos?.nombre || '');
         });
 
-        const { data: plantelData } = await supabaseClient.from('planteles').select('nombre, logo_url').eq('id', pId).maybeSingle();
-        const schoolName = plantelData?.nombre || 'Plantel Escolar';
+        const { data: plantelData } = await supabaseClient.from('planteles').select('nombre, logo_url, cct').eq('id', pId).maybeSingle();
+        const schoolName = (plantelData?.nombre || 'Plantel Escolar') + (plantelData?.cct ? ' - CCT: ' + plantelData?.cct : '');
         const schoolLogo = window.getCleanLogoUrl(plantelData?.logo_url) || '';
 
         const printWindow = window.open('', '_blank');
@@ -7459,7 +7473,7 @@ async function renderMasterSaaS() {
     try {
         // Siempre leer logo_url (JSON plano)
         const { data: planteles, error: e1 } = await supabaseClient
-            .from('planteles').select('id, nombre, logo_url, creado_en')
+            .from('planteles').select('id, nombre, logo_url, cct, creado_en')
             .order('creado_en', { ascending: false });
         if (e1) throw e1;
         const usoFallback = true; // siempre modo logo_url
@@ -8271,8 +8285,8 @@ window.imprimirApoyoBitacora = async () => {
             return alert("No hay registros tuyos para esta fecha.");
         }
 
-        const { data: plantelData } = await supabaseClient.from('planteles').select('nombre, logo_url').eq('id', state.plantelId).single();
-        const schoolName = plantelData?.nombre || 'Plantel Escolar';
+        const { data: plantelData } = await supabaseClient.from('planteles').select('nombre, logo_url, cct').eq('id', state.plantelId).single();
+        const schoolName = (plantelData?.nombre || 'Plantel Escolar') + (plantelData?.cct ? ' - CCT: ' + plantelData?.cct : '');
         const schoolLogo = window.getCleanLogoUrl(plantelData?.logo_url) || '';
         
         const printWindow = window.open('', '_blank');
@@ -8973,7 +8987,7 @@ window.descargarBoletaPDF = async (aluId, nombre, matricula) => {
         let plantelLogo = null;
         try {
             if (state && state.plantelId) {
-                const { data: pt } = await supabaseClient.from('planteles').select('nombre, logo_url').eq('id', state.plantelId).maybeSingle();
+                const { data: pt } = await supabaseClient.from('planteles').select('nombre, logo_url, cct').eq('id', state.plantelId).maybeSingle();
                 if (pt && pt.nombre) plantelName = pt.nombre;
                 if (pt && pt.logo_url) plantelLogo = window.getCleanLogoUrl(pt.logo_url);
             }
@@ -11323,7 +11337,7 @@ window.imprimirLista = async (esVacia = false) => {
     let directorName = 'DIRECCIÓN ESCOLAR / RESPONSABLE DIRECTO';
     try {
         if(state.plantelId) {
-            const { data: pt } = await supabaseClient.from('planteles').select('nombre, logo_url').eq('id', state.plantelId).maybeSingle();
+            const { data: pt } = await supabaseClient.from('planteles').select('nombre, logo_url, cct').eq('id', state.plantelId).maybeSingle();
             if(pt) {
                 if(pt.nombre) schoolName = pt.nombre;
                 if(pt.logo_url) schoolLogo = window.getCleanLogoUrl(pt.logo_url);
@@ -13604,8 +13618,8 @@ window.imprimirBitacoraGeneral = async () => {
             return alert("No hay registros tuyos para esta fecha.");
         }
 
-        const { data: plantelData } = await supabaseClient.from('planteles').select('nombre, logo_url').eq('id', state.plantelId).single();
-        const schoolName = plantelData?.nombre || 'Plantel Escolar';
+        const { data: plantelData } = await supabaseClient.from('planteles').select('nombre, logo_url, cct').eq('id', state.plantelId).single();
+        const schoolName = (plantelData?.nombre || 'Plantel Escolar') + (plantelData?.cct ? ' - CCT: ' + plantelData?.cct : '');
         const schoolLogo = window.getCleanLogoUrl(plantelData?.logo_url) || '';
         
         const printWindow = window.open('', '_blank');
@@ -16569,7 +16583,7 @@ window.imprimirHorarioDocente = async (email, name) => {
         let logoUrl = null;
         try {
             if (state && state.plantelId) {
-                const { data: pt } = await supabaseClient.from('planteles').select('nombre, logo_url').eq('id', state.plantelId).maybeSingle();
+                const { data: pt } = await supabaseClient.from('planteles').select('nombre, logo_url, cct').eq('id', state.plantelId).maybeSingle();
                 if (pt && pt.nombre) plantelName = pt.nombre;
                 if (pt && pt.logo_url) logoUrl = window.getCleanLogoUrl(pt.logo_url);
             }
@@ -17178,7 +17192,7 @@ window.descargarBoletaAdminPDF = async (alumnoId, nombre, matricula) => {
         let plantelLogo = null;
         try {
             if (state && state.plantelId) {
-                const { data: pt } = await supabaseClient.from('planteles').select('nombre, logo_url').eq('id', state.plantelId).maybeSingle();
+                const { data: pt } = await supabaseClient.from('planteles').select('nombre, logo_url, cct').eq('id', state.plantelId).maybeSingle();
                 if (pt && pt.nombre) plantelName = pt.nombre;
                 if (pt && pt.logo_url) plantelLogo = window.getCleanLogoUrl(pt.logo_url);
             }
@@ -17707,8 +17721,8 @@ window.imprimirHistorialReservasAula = async () => {
             return alert("No hay reservaciones registradas para la fecha seleccionada.");
         }
 
-        const { data: plantelData } = await supabaseClient.from('planteles').select('nombre, logo_url').eq('id', state.plantelId).single();
-        const schoolName = plantelData?.nombre || 'Plantel Escolar';
+        const { data: plantelData } = await supabaseClient.from('planteles').select('nombre, logo_url, cct').eq('id', state.plantelId).single();
+        const schoolName = (plantelData?.nombre || 'Plantel Escolar') + (plantelData?.cct ? ' - CCT: ' + plantelData?.cct : '');
         const schoolLogo = window.getCleanLogoUrl(plantelData?.logo_url) || '';
         
         const printWindow = window.open('', '_blank');
@@ -17970,8 +17984,8 @@ window.imprimirHistorialBiblioteca = async () => {
             return alert("No se registraron préstamos en esta fecha.");
         }
 
-        const { data: plantelData } = await supabaseClient.from('planteles').select('nombre, logo_url').eq('id', state.plantelId).single();
-        const schoolName = plantelData?.nombre || 'Plantel Escolar';
+        const { data: plantelData } = await supabaseClient.from('planteles').select('nombre, logo_url, cct').eq('id', state.plantelId).single();
+        const schoolName = (plantelData?.nombre || 'Plantel Escolar') + (plantelData?.cct ? ' - CCT: ' + plantelData?.cct : '');
         const schoolLogo = window.getCleanLogoUrl(plantelData?.logo_url) || '';
         
         const printWindow = window.open('', '_blank');
@@ -18383,7 +18397,7 @@ window.imprimirExpedientePsicosocial = async (nombre, estId) => {
         const title = data.cuestionarios_psicosociales?.titulo || "Estudio Biopsicosocial";
         const notasHTML = data.notas_privadas ? `<h3 style="margin-top:30px;">Notas Confidenciales</h3><p style="white-space:pre-wrap;">${data.notas_privadas}</p>` : '';
         
-        const plantelRes = await supabaseClient.from('planteles').select('nombre, logo_url').eq('id', state.plantelId).single();
+        const plantelRes = await supabaseClient.from('planteles').select('nombre, logo_url, cct').eq('id', state.plantelId).single();
         const schoolName = plantelRes.data?.nombre || CONFIG.schoolName || 'Escuela';
         const schoolLogo = window.getCleanLogoUrl(plantelRes.data?.logo_url) || null;
         
