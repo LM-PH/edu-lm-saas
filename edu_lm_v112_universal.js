@@ -15002,7 +15002,7 @@ window.loadExpedienteDocs = async (aluId) => {
         }
 
         // 1. PROCESAR DOCUMENTOS FIJOS
-        for(const f of ['acta', 'curp', 'certificado']) {
+        for(const f of ['acta', 'curp', 'certificado', 'regularizacion']) {
             const badge = document.getElementById('badge-' + f);
             const cont = document.getElementById('ver-' + f + '-container');
             const btnVer = document.getElementById('btn-ver-' + f);
