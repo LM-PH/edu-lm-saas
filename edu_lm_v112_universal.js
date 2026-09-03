@@ -5854,10 +5854,15 @@ function renderAlumnoTramites() {
         <div class="card" style="margin-bottom:24px;">
            <label class="form-label">Solicitar Nuevo Documento</label>
            <select id="selNuevoTramite" class="form-select" style="margin-bottom:12px;">
-               <option value="Constancia de Estudios Simple">Constancia de Estudios Simple</option>
-               <option value="Constancia de Estudios con Promedio">Constancia de Estudios con Promedio</option>
-               <option value="Historial Académico Formal">Historial Académico Formal (Kárdex)</option>
-               <option value="Reposición de Credencial Escolar">Reposición de Credencial Escolar</option>
+               <option value="Constancia de estudio simple">Constancia de estudio simple</option>
+               <option value="Constancia de estudios con promedio">Constancia de estudios con promedio</option>
+               <option value="Boleta de calificación del trimestre">Boleta de calificación del trimestre</option>
+               <option value="Reposición de credencial escolar">Reposición de credencial escolar</option>
+           </select>
+           <label class="form-label">Modalidad de Entrega</label>
+           <select id="selModalidadEntrega" class="form-select" style="margin-bottom:12px;">
+               <option value="Digital">Digital (Documento PDF)</option>
+               <option value="Presencial">Presencial al alumno</option>
            </select>
            <button class="btn btn-primary" style="width:100%" onclick="window.solicitarTramiteAlumno()">Solicitar Trámite</button>
            <button class="btn btn-outline" style="width:100%; margin-top:10px" onclick="window.loadMisTramites()">Recargar Listado</button>
@@ -5871,8 +5876,12 @@ function renderAlumnoTramites() {
 // ---- TRÁMITES ALUMNO ----
 
 window.solicitarTramiteAlumno = async () => {
-    const tipo = document.getElementById('selNuevoTramite')?.value;
-    if(!tipo) return alert("Selecciona un tipo de trámite.");
+    const tipoRaw = document.getElementById('selNuevoTramite')?.value;
+    const mod = document.getElementById('selModalidadEntrega')?.value || 'Digital';
+    if(!tipoRaw) return alert("Selecciona un tipo de trámite.");
+    
+    const tipoFinal = tipoRaw + (mod === 'Presencial' ? ' (Entrega Presencial)' : ' (Entrega Digital)');
+
     try {
         const uRes = await supabaseClient.auth.getUser();
         if(!uRes.data?.user) return alert("Sesión expirada.");
@@ -5888,7 +5897,7 @@ window.solicitarTramiteAlumno = async () => {
 
         const { error } = await supabaseClient.from('tramites').insert([{
             alumno_id: alumno.id,
-            tipo: tipo,
+            tipo: tipoFinal,
             estado: 'Pendiente',
             plantel_id: state.plantelId
         }]);
@@ -5934,8 +5943,8 @@ window.loadMisTramites = async () => {
             return;
         }
 
-        const colores = { Pendiente: 'var(--warning)', Subido: 'var(--success)' };
-        const iconos = { Pendiente: 'fa-clock', Subido: 'fa-check-circle' };
+        const colores = { Pendiente: 'var(--warning)', Subido: 'var(--success)', Entregado: 'var(--success)' };
+        const iconos = { Pendiente: 'fa-clock', Subido: 'fa-check-circle', Entregado: 'fa-handshake' };
 
         cont.innerHTML = data.map(t => {
             const fecha = new Date(t.creado_en).toLocaleDateString('es-MX', { dateStyle: 'medium' });
@@ -5983,17 +5992,31 @@ window.loadTramitesAdmin = async () => {
             return;
         }
 
-        const colores = { Pendiente: 'var(--warning)', Subido: 'var(--success)' };
+        const colores = { Pendiente: 'var(--warning)', Subido: 'var(--success)', Entregado: 'var(--success)' };
 
         cont.innerHTML = data.map(t => {
             const fecha = new Date(t.creado_en).toLocaleDateString('es-MX', { dateStyle: 'medium' });
             const alumnoNombre = t.alumnos ? `${t.alumnos.nombre} (${t.alumnos.matricula})` : 'Alumno desconocido';
             const color = colores[t.estado] || 'var(--text-muted)';
-            const btnSubir = t.estado === 'Pendiente'
-                ? `<button class="btn btn-success btn-xs" style="margin-top:8px;" onclick="window.selectAlumnoTramite('${t.alumno_id}', '${(t.alumnos?.nombre||'').replace(/'/g,"\\'")}', '${t.alumnos?.matricula||''}', '${t.tipo}', '${t.id}');">
-                    <i class="fa-solid fa-upload"></i> Atender Solicitud
-                   </button>`
-                : `<a href="${t.archivo_url}" target="_blank" class="btn btn-outline btn-xs" style="margin-top:8px; color:var(--success); border-color:var(--success);"><i class="fa-solid fa-eye"></i> Ver documento</a>`;
+            const isPresencial = t.tipo.includes('Entrega Presencial');
+            let btnSubir = '';
+            
+            if (t.estado === 'Pendiente') {
+                if (isPresencial) {
+                    btnSubir = `<button class="btn btn-primary btn-xs" style="margin-top:8px;" onclick="window.marcarTramiteEntregado('${t.id}')">
+                        <i class="fa-solid fa-handshake"></i> Marcar como Entregado
+                    </button>`;
+                } else {
+                    btnSubir = `<button class="btn btn-success btn-xs" style="margin-top:8px;" onclick="window.selectAlumnoTramite('${t.alumno_id}', '${(t.alumnos?.nombre||'').replace(/'/g,"\\'")}', '${t.alumnos?.matricula||''}', '${t.tipo}', '${t.id}');">
+                        <i class="fa-solid fa-upload"></i> Atender Solicitud
+                    </button>`;
+                }
+            } else {
+                if (!isPresencial && t.archivo_url) {
+                    btnSubir = `<a href="${t.archivo_url}" target="_blank" class="btn btn-outline btn-xs" style="margin-top:8px; color:var(--success); border-color:var(--success);"><i class="fa-solid fa-eye"></i> Ver documento</a>`;
+                }
+            }
+
             return `
             <div style="background:var(--surface); border:1px solid var(--border); border-left:4px solid ${color}; border-radius:10px; padding:14px 16px; margin-bottom:12px;">
                 <div style="display:flex; justify-content:space-between; align-items:flex-start; flex-wrap:wrap; gap:6px;">
