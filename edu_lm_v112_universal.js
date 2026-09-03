@@ -2276,7 +2276,8 @@ window.loadComunicadosAdmin = async (fechaFiltro = null) => {
             .order('fecha_envio', { ascending: false })
             .limit(30);
 
-        // Sin filtro .in() de audiencia para que el admin pueda ver todos los comunicados, incluyendo individuales
+        // Mostrar comunicados generales Y los comunicados individuales manuales (AvisoOficial)
+        query = query.or('audiencia.in.(General,Todos,Maestros,Alumnos,Apoyo,Personal),tipo.eq.AvisoOficial');
 
         if(state.plantelId) {
             query = query.eq('plantel_id', state.plantelId);
@@ -2431,6 +2432,7 @@ window.publicarComunicado = async () => {
             .from('comunicados')
             .insert([{
                 autor_id: session.user.id,
+                tipo: 'AvisoOficial',
                 titulo,
                 audiencia,
                 mensaje,
