@@ -1496,7 +1496,7 @@ window.abrirModalArchivoMuerto = async () => {
         <div class="modal-content" style="max-width:500px; padding:24px;">
             <h3>Descargar Archivo Muerto</h3>
             <p style="font-size:0.85rem; color:var(--text-muted); margin-bottom:16px;">
-               Selecciona los filtros para descargar el archivo de egresados.
+               Selecciona los filtros para descargar el respaldo de expedientes.
             </p>
             <div class="form-group" style="margin-bottom:16px;">
                 <label class="form-label">Filtrar por Grado</label>
@@ -1565,21 +1565,21 @@ window.ejecutarDescargaAM = async (btn) => {
         if(grado) query = query.eq('grado', grado);
         if(grupoId) query = query.eq('grupo_id', grupoId);
 
-        const { data: egresados, error } = await query;
+        const { data: alumnosData, error } = await query;
         if(error) throw error;
         
-        if(!egresados || egresados.length === 0) {
-            window.showToast("No se encontraron egresados con estos filtros.", "warning");
+        if(!alumnosData || alumnosData.length === 0) {
+            window.showToast("No se encontraron alumnos con estos filtros.", "warning");
             btn.innerHTML = orig;
             btn.disabled = false;
             return;
         }
 
         const zip = new JSZip();
-        const rootFolder = zip.folder("Archivo_Muerto_Egresados");
+        const rootFolder = zip.folder("Respaldo_Expedientes");
         let docsCount = 0;
 
-        for (const alu of egresados) {
+        for (const alu of alumnosData) {
             const gradoName = alu.grado || 'SinGrado';
             const grupoName = (alu.grupo_id && alu.grupo_id.nombre) ? alu.grupo_id.nombre : 'SinGrupo';
             const aluName = (alu.nombre || 'Desconocido').replace(/[^a-zA-Z0-9]/g, '_');
