@@ -1935,6 +1935,9 @@ function renderAdminTramites() {
          <button id="btnTabHistorial" class="btn btn-outline" onclick="window.switchTramiteView('historial')" style="border-radius:10px; padding:8px 20px;">
             <i class="fa-solid fa-calendar-check"></i> Historial de Entregas
          </button>
+         <button id="btnTabCalendario" class="btn btn-outline" onclick="window.switchTramiteView('calendario')" style="border-radius:10px; padding:8px 20px;">
+            <i class="fa-solid fa-calendar-days"></i> Calendario
+         </button>
       </div>
 
       <div class="card" style="width:100%; border-top:4px solid var(--primary);">
@@ -1946,6 +1949,7 @@ function renderAdminTramites() {
          <div id="tramitesRecibidosContenedor" style="display:grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap:16px;">
             <p style="color:var(--text-muted)">Cargando datos...</p>
          </div>
+         <div id="tramitesCalendarioContenedor" style="display:none; width:100%;"></div>
       </div>
     </div>
 
@@ -6166,7 +6170,7 @@ window.loadTramitesAdmin = async () => {
 window.marcarTramiteEntregado = async (tramiteId) => {
     if(!confirm("¿Confirmas que el documento solicitado fue entregado presencialmente al alumno?")) return;
     try {
-        const { error } = await supabaseClient.from('tramites').update({ estado: 'Entregado' }).eq('id', tramiteId);
+        const { error } = await supabaseClient.from('tramites').update({ estado: 'Entregado', admin_id: state.user.id }).eq('id', tramiteId);
         if(error) throw error;
         window.showToast("Trámite marcado como entregado.", "success");
         if(window.loadTramitesAdmin) window.loadTramitesAdmin();
@@ -6206,8 +6210,7 @@ window.subirTramiteManual = async () => {
 
         const { error: updErr } = await supabaseClient.from('tramites')
             .update({ 
-                estado: 'Subido', 
-                archivo_url: publicUrl,
+                estado: 'Subido', archivo_url: publicUrl, admin_id: state.user.id,
                 fecha_emision: new Date().toISOString()
             })
             .eq('id', tramiteId);
@@ -19628,5 +19631,225 @@ window.enviarRespuestasSalud = async () => {
     } catch(e) {
         console.error(e);
         window.showToast('Error al enviar respuestas', 'error');
+    }
+};
+
+
+
+window._calTramitesState = { year: new Date().getFullYear(), month: new Date().getMonth(), data: [] };
+
+window.navCalendarioTramites = (step) => {
+    let { year, month } = window._calTramitesState;
+    month += step;
+    if (month > 11) { month = 0; year++; }
+    if (month < 0) { month = 11; year--; }
+    window.loadCalendarioTramites(year, month);
+};
+
+window.loadCalendarioTramites = async (year, month) => {
+    window._calTramitesState.year = year;
+    window._calTramitesState.month = month;
+    const cont = document.getElementById('tramitesCalendarioContenedor');
+    if (!cont) return;
+
+    cont.innerHTML = '<div style="text-align:center; padding:30px; color:var(--text-muted)"><i class="fa-solid fa-spinner fa-spin"></i> Cargando calendario...</div>';
+
+    try {
+        const { data: allReqs, error } = await supabaseClient
+            .from('tramites')
+            .select('*, alumnos(nombre, matricula)')
+            .eq('plantel_id', state.plantelId)
+            .eq('admin_id', state.user.id)
+            .in('estado', ['Subido', 'Entregado'])
+            .order('fecha_emision', { ascending: false });
+
+        if (error) throw error;
+        window._calTramitesState.data = allReqs || [];
+
+        const dateMap = {};
+        (allReqs || []).forEach(r => {
+            if (r.fecha_emision) {
+                // Parse as local date string to avoid timezone shift
+                const d = new Date(r.fecha_emision);
+                const dateKey = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+                if (!dateMap[dateKey]) dateMap[dateKey] = [];
+                dateMap[dateKey].push(r);
+            }
+        });
+
+        const months = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
+        const firstDay = new Date(year, month, 1).getDay();
+        const daysInMonth = new Date(year, month + 1, 0).getDate();
+
+        let gridHtml = `
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px;">
+            <h3 style="margin:0;"><i class="fa-solid fa-calendar-days text-primary"></i> Mi Calendario de Trámites</h3>
+            <button class="btn btn-outline" onclick="window.imprimirReporteTramitesMes()"><i class="fa-solid fa-print"></i> Imprimir Reporte Mensual</button>
+        </div>
+        <div style="background:white; border-radius:12px; border:1px solid #edf2f7; padding:20px; box-shadow:0 2px 8px rgba(0,0,0,0.03);">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px; flex-wrap:wrap; gap:10px;">
+                <button class="btn btn-outline btn-xs" onclick="window.navCalendarioTramites(-1)">
+                    <i class="fa-solid fa-chevron-left"></i> Mes Anterior
+                </button>
+                <h3 style="margin:0; font-weight:800; color:#1e293b; font-size:1.1rem;">
+                     ${months[month]} ${year}
+                </h3>
+                <button class="btn btn-outline btn-xs" onclick="window.navCalendarioTramites(1)">
+                    Mes Siguiente <i class="fa-solid fa-chevron-right"></i>
+                </button>
+            </div>
+
+            <div style="display:grid; grid-template-columns: repeat(7, 1fr); gap:6px; text-align:center; font-size:0.8rem; font-weight:700; color:var(--text-muted); margin-bottom:8px;">
+                <div>Dom</div><div>Lun</div><div>Mar</div><div>Mié</div><div>Jue</div><div>Vie</div><div>Sáb</div>
+            </div>
+
+            <div style="display:grid; grid-template-columns: repeat(7, 1fr); gap:6px;">
+        `;
+
+        for (let i = 0; i < firstDay; i++) {
+            gridHtml += `<div style="padding:10px; border-radius:8px; background:#f8fafc; border:1px dashed #e2e8f0; opacity:0.5;"></div>`;
+        }
+
+        for (let day = 1; day <= daysInMonth; day++) {
+            const dateKey = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+            const evs = dateMap[dateKey] || [];
+            
+            const isToday = (new Date().toDateString() === new Date(year, month, day).toDateString());
+            let cellStyle = "padding:10px; border-radius:8px; border:1px solid #e2e8f0; min-height:80px; position:relative; cursor:pointer; background:white; transition:all 0.2s ease;";
+            
+            if (isToday) cellStyle += "border-color:var(--primary); box-shadow:0 0 0 2px rgba(99,102,241,0.2);";
+            if (evs.length > 0) cellStyle += "background:#f0f9ff; border-color:#bae6fd;";
+
+            gridHtml += `
+                <div style="${cellStyle}" onmouseover="this.style.transform='translateY(-2px)';" onmouseout="this.style.transform='translateY(0)';" onclick="window.mostrarDetalleTramitesDia('${dateKey}')">
+                    <div style="font-weight:700; color:${isToday ? 'var(--primary)' : '#475569'}; margin-bottom:4px; font-size:0.9rem;">${day}</div>
+                    ${evs.length > 0 ? `<div style="font-size:0.7rem; font-weight:700; color:#0369a1; background:#e0f2fe; padding:2px 6px; border-radius:4px; display:inline-block;">${evs.length} trámites</div>` : ''}
+                </div>
+            `;
+        }
+        gridHtml += '</div></div><div id="detalleTramitesDia"></div>';
+        cont.innerHTML = gridHtml;
+
+    } catch (e) {
+        console.error("Error al cargar calendario de trámites:", e);
+        cont.innerHTML = '<div style="color:var(--danger); text-align:center; padding:20px;">Error al cargar el calendario.</div>';
+    }
+};
+
+window.mostrarDetalleTramitesDia = (dateKey) => {
+    const cont = document.getElementById('detalleTramitesDia');
+    if (!cont) return;
+    const all = window._calTramitesState.data || [];
+    const evs = all.filter(r => {
+        const d = new Date(r.fecha_emision);
+        const dk = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+        return dk === dateKey;
+    });
+
+    if (evs.length === 0) {
+        cont.innerHTML = '<div style="padding:20px; text-align:center; color:var(--text-muted); margin-top:15px; border:1px dashed #cbd5e1; border-radius:8px;">No procesaste trámites en este día.</div>';
+        return;
+    }
+
+    const htmlList = evs.map(t => {
+        const alumno = t.alumnos ? `${t.alumnos.nombre} (${t.alumnos.matricula})` : 'Alumno desconocido';
+        return `
+        <div style="background:white; border:1px solid #e2e8f0; border-left:4px solid var(--primary); padding:10px 15px; border-radius:8px; margin-bottom:10px; box-shadow:0 1px 3px rgba(0,0,0,0.05);">
+            <div style="display:flex; justify-content:space-between; align-items:start;">
+                <div>
+                    <div style="font-weight:700; color:#1e293b; margin-bottom:4px;">${t.tipo} ${t.estado === 'Entregado' ? '<span style="font-size:0.7rem; color:#16a34a; background:#dcfce7; padding:2px 6px; border-radius:10px; margin-left:5px;">Físico</span>' : '<span style="font-size:0.7rem; color:#2563eb; background:#dbeafe; padding:2px 6px; border-radius:10px; margin-left:5px;">Digital</span>'}</div>
+                    <div style="font-size:0.8rem; color:#64748b;"><i class="fa-solid fa-user"></i> ${alumno}</div>
+                </div>
+                ${t.archivo_url ? `<a href="${t.archivo_url}" target="_blank" class="btn btn-xs btn-outline" style="color:var(--primary); border-color:var(--primary);"><i class="fa-solid fa-file-pdf"></i> Ver</a>` : ''}
+            </div>
+        </div>`;
+    }).join('');
+
+    cont.innerHTML = `<div style="margin-top:20px;">
+        <h4 style="margin-bottom:15px; color:#334155; font-weight:700;"><i class="fa-solid fa-list-check"></i> Trámites del día ${dateKey}</h4>
+        ${htmlList}
+    </div>`;
+};
+
+window.imprimirReporteTramitesMes = async () => {
+    const { year, month, data } = window._calTramitesState;
+    if (!data || data.length === 0) return alert("No hay trámites procesados por ti en este mes.");
+
+    // Filter current month
+    const mesData = data.filter(r => {
+        const d = new Date(r.fecha_emision);
+        return d.getFullYear() === year && d.getMonth() === month;
+    });
+
+    if (mesData.length === 0) return alert("No hay trámites procesados en el mes seleccionado.");
+
+    try {
+        const { data: plantelData } = await supabaseClient.from('planteles').select('nombre, logo_url, cct').eq('id', state.plantelId).single();
+        const schoolName = (plantelData?.nombre || 'Plantel Escolar') + (plantelData?.cct ? '<br><span style="font-size:0.75em; color:#555; font-weight:normal;">C.C.T. ' + plantelData.cct + '</span>' : '');
+        const schoolLogo = window.getCleanLogoUrl(plantelData?.logo_url) || '';
+        const months = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
+        
+        const printWindow = window.open('', '_blank');
+        
+        let trs = mesData.map(t => {
+            const dateStr = new Date(t.fecha_emision).toLocaleDateString();
+            const timeStr = new Date(t.fecha_emision).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+            const alu = t.alumnos ? t.alumnos.nombre : '---';
+            const mat = t.alumnos ? t.alumnos.matricula : '---';
+            return `
+            <tr>
+                <td style="padding:8px; border-bottom:1px solid #ccc;">${dateStr} ${timeStr}</td>
+                <td style="padding:8px; border-bottom:1px solid #ccc;">${t.tipo}</td>
+                <td style="padding:8px; border-bottom:1px solid #ccc;">${alu}</td>
+                <td style="padding:8px; border-bottom:1px solid #ccc;">${mat}</td>
+                <td style="padding:8px; border-bottom:1px solid #ccc;">${t.estado}</td>
+            </tr>`;
+        }).join('');
+
+        const html = `
+        <html>
+            <head>
+                <title>Reporte de Trámites - ${months[month]} ${year}</title>
+                <style>
+                    body { font-family: Arial, sans-serif; padding: 20px; color: #333; }
+                    .header { text-align: center; margin-bottom: 20px; border-bottom: 2px solid #000; padding-bottom: 10px; }
+                    .logo-img { max-height: 80px; margin-bottom: 10px; object-fit: contain; }
+                    h2, h3 { margin: 5px 0; }
+                    table { width: 100%; border-collapse: collapse; margin-top: 20px; font-size: 0.9rem; }
+                    th { background: #f0f0f0; padding: 10px; text-align: left; border-bottom: 2px solid #333; }
+                </style>
+            </head>
+            <body>
+                <div class="header">
+                    ${schoolLogo ? `<img src="${schoolLogo}" class="logo-img" alt="Logo">` : ''}
+                    <h2>${schoolName}</h2>
+                    <h3>Reporte Mensual de Trámites Procesados</h3>
+                    <p style="margin:5px 0;"><strong>Periodo:</strong> ${months[month]} ${year}</p>
+                    <p style="margin:5px 0;"><strong>Emitido por:</strong> ${state.userName || 'Administrativo'}</p>
+                </div>
+                
+                <p><strong>Total de trámites:</strong> ${mesData.length}</p>
+                
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Fecha</th>
+                            <th>Tipo de Trámite</th>
+                            <th>Alumno</th>
+                            <th>Matrícula</th>
+                            <th>Entrega</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${trs}
+                    </tbody>
+                </table>
+                <script>window.onload = function() { window.print(); }</script>
+            </body>
+        </html>`;
+        printWindow.document.write(html);
+        printWindow.document.close();
+    } catch(e) {
+        alert("Error al imprimir: " + e.message);
     }
 };
