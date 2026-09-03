@@ -3261,14 +3261,21 @@ function renderApoyoReportes() {
 
 window.buscarAlumnoExpedienteReportes = async (term) => {
     const res = document.getElementById('resBusquedaExpedienteReportes');
-    if(!term || term.length < 3) { res.style.display = 'none'; return; }
+    if(!term || term.length < 2) { res.style.display = 'none'; return; }
     
     try {
-        const { data, error } = await supabaseClient.from('alumnos')
-            .select('id, nombre, matricula, grupo_id')
-            .eq('plantel_id', state.plantelId)
-            .or(`nombre.ilike.%${term}%,matricula.ilike.%${term}%`)
-            .limit(10);
+        let pId = state.plantelId || state.user?.user_metadata?.plantel_id;
+        if(!pId && state.user?.id) {
+            const { data: prof } = await supabaseClient.from('perfiles').select('plantel_id').eq('id', state.user.id).maybeSingle();
+            pId = prof?.plantel_id;
+            if(pId) state.plantelId = pId;
+        }
+
+        let query = supabaseClient.from('alumnos').select('id, nombre, matricula, grupos(nombre)');
+        if(pId) query = query.eq('plantel_id', pId);
+        query = query.or(`nombre.ilike.%${term}%,matricula.ilike.%${term}%`).limit(10);
+
+        const { data, error } = await query;
             
         if(error) {
             console.error("Error buscando alumnos:", error);
@@ -3278,19 +3285,21 @@ window.buscarAlumnoExpedienteReportes = async (term) => {
         }
         
         if(!data || data.length === 0) { 
-            res.innerHTML = '<div style="padding:10px; color:var(--text-muted);">Sin resultados</div>'; 
+            res.innerHTML = '<div style="padding:10px; color:var(--text-muted);">Sin resultados para "' + term + '"</div>'; 
             res.style.display = 'block'; 
             return; 
         }
         
         res.innerHTML = data.map(a => `
             <div style="padding:10px; border-bottom:1px solid var(--border); cursor:pointer;" onclick="window.selectAlumnoExpedienteReportes('${a.id}', '${a.nombre.replace(/'/g, "\\'")}')">
-                <strong style="color:var(--primary)">${a.nombre}</strong> <small style="color:var(--text-muted)">- ${a.matricula}</small>
+                <strong style="color:var(--primary)">${a.nombre}</strong> <small style="color:var(--text-muted)">(${a.grupos?.nombre || 'S/G'}) - ${a.matricula || 'Sin matrícula'}</small>
             </div>
         `).join('');
         res.style.display = 'block';
     } catch(e) { 
         console.error("Excepción en buscarAlumnoExpedienteReportes:", e); 
+        res.innerHTML = '<div style="padding:10px; color:var(--danger);">Excepción interna al buscar</div>';
+        res.style.display = 'block';
     }
 };
 
