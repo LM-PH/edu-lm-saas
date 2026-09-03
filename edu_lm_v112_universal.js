@@ -1562,8 +1562,25 @@ window.ejecutarDescargaAM = async (btn) => {
             .select('id, matricula, nombre, grado, grupo_id(nombre)')
             .eq('plantel_id', state.plantelId);
 
-        if(grado) query = query.eq('grado', grado);
-        if(grupoId) query = query.eq('grupo_id', grupoId);
+        if(grupoId) {
+            query = query.eq('grupo_id', grupoId);
+        } else if(grado) {
+            // Find all groups for this grade
+            const selectHtml = document.getElementById('amGrupoSel');
+            const matchingGroupIds = Array.from(selectHtml.options)
+                .filter(opt => opt.value !== "" && opt.getAttribute('data-grado') === grado)
+                .map(opt => opt.value);
+            
+            if (matchingGroupIds.length > 0) {
+                query = query.in('grupo_id', matchingGroupIds);
+            } else {
+                // If there are no groups for this grade, it means there are no students
+                window.showToast("No se encontraron grupos para el grado seleccionado.", "warning");
+                btn.innerHTML = orig;
+                btn.disabled = false;
+                return;
+            }
+        }
 
         const { data: alumnosData, error } = await query;
         if(error) throw error;
