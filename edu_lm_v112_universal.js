@@ -6035,6 +6035,18 @@ window.loadTramitesAdmin = async () => {
         cont.innerHTML = '<p style="color:var(--danger); text-align:center; padding:20px;"><i class="fa-solid fa-triangle-exclamation"></i> Error al cargar solicitudes.</p>';
     }
 };
+window.marcarTramiteEntregado = async (tramiteId) => {
+    if(!confirm("¿Confirmas que el documento solicitado fue entregado presencialmente al alumno?")) return;
+    try {
+        const { error } = await supabaseClient.from('tramites').update({ estado: 'Entregado' }).eq('id', tramiteId);
+        if(error) throw error;
+        window.showToast("Trámite marcado como entregado.", "success");
+        if(window.loadTramitesAdmin) window.loadTramitesAdmin();
+    } catch(e) {
+        console.error(e);
+        window.showToast("Error al actualizar estado.", "danger");
+    }
+};
 
 window.subirTramiteManual = async () => {
     const aluId = document.getElementById('tramiteAlumnoId').value;
