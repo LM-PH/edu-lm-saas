@@ -1747,7 +1747,6 @@ function renderAdminCalificaciones() {
          <div class="form-group">
             <label class="form-label">Trimestre</label>
             <select class="form-select" id="adminTrimestreEstadisticaSel">
-                <option value="Todos">Todos los Trimestres</option>
                 <option value="1">Trimestre 1</option>
                 <option value="2">Trimestre 2</option>
                 <option value="3">Trimestre 3</option>
@@ -13743,7 +13742,7 @@ window.generarEstadisticaAprobacion = async () => {
             .select('alumno_id, calificacion, materia_nombre, alumnos!inner(grado, grupo_id)')
             .eq('plantel_id', state.plantelId);
 
-        if(trim !== 'Todos' && trim !== 'Final') {
+        if(trim !== 'Final') {
             query = query.eq('trimestre', parseInt(trim));
         }
 
