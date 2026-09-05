@@ -20209,7 +20209,6 @@ window.confirmarInscripcionMasiva = async () => {
             if (!resolvedGrupoId) {
                 const { data: newGr, error: eGr } = await supabaseClient.from('grupos').insert([{
                     nombre: fullGrupoNom,
-                    grado: gradoNom,
                     plantel_id: finalPlantel
                 }]).select('id').single();
                 
