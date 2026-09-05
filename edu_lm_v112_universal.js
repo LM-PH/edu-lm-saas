@@ -20310,6 +20310,10 @@ window.confirmarInscripcionMasiva = async () => {
 // NUEVO MÓDULO: EXPEDIENTE DE DOCENTES
 // ==========================================
 async function renderSecretariaExpedientes() {
+    setTimeout(() => {
+        if(window.loadExpedientesDocentes) window.loadExpedientesDocentes();
+    }, 150);
+
     return `
     <div class="fade-in" style="padding: 20px;">
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 20px;">
@@ -20356,11 +20360,6 @@ async function renderSecretariaExpedientes() {
             </div>
         </div>
     </div>
-    <script>
-        setTimeout(() => {
-            loadExpedientesDocentes();
-        }, 100);
-    </script>
     `;
 }
 
