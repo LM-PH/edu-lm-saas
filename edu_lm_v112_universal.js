@@ -770,61 +770,6 @@ function renderRoleSelector() {
         ${forceLogout}
          </div>
 
-    <!-- Modal Carga Masiva -->
-    <div id="modalCargaMasiva" class="modal" style="display:none; position:fixed; z-index:100; left:0; top:0; width:100%; height:100%; background:rgba(0,0,0,0.5); backdrop-filter:blur(4px); overflow-y:auto;">
-      <div class="card shadow-lg" style="margin: 5% auto; width: 95%; max-width: 1000px; padding: 24px; position:relative; min-height:400px;">
-          <button onclick="document.getElementById('modalCargaMasiva').style.display='none'" style="position:absolute; right:15px; top:15px; background:none; border:none; color:var(--text-muted); cursor:pointer;"><i class="fa-solid fa-xmark fa-xl"></i></button>
-          <h3 style="margin-bottom:12px; color:var(--primary);"><i class="fa-solid fa-users-viewfinder"></i> Carga Masiva de Alumnos</h3>
-          <p style="font-size:0.85rem; color:var(--text-muted); margin-bottom:20px;">Sube un archivo de Excel (.xlsx) o CSV con el formato correcto para inscribir múltiples alumnos al mismo tiempo.</p>
-          
-          <div style="display:flex; gap:10px; margin-bottom:20px; flex-wrap:wrap;">
-              <button class="btn btn-outline" style="border-color:var(--success); color:var(--success)" onclick="window.descargarPlantillaMasiva()">
-                  <i class="fa-solid fa-download"></i> Descargar Plantilla Excel
-              </button>
-              <div style="position:relative; display:inline-block; flex:1; min-width:200px;">
-                  <input type="file" id="fileCargaMasiva" accept=".csv, .xlsx, .xls" style="position:absolute; opacity:0; width:100%; height:100%; cursor:pointer;" onchange="window.procesarArchivoMasiva(event)">
-                  <div class="btn btn-primary" style="width:100%; text-align:center; pointer-events:none;">
-                      <i class="fa-solid fa-upload"></i> Seleccionar Archivo
-                  </div>
-              </div>
-          </div>
-          
-          <div id="masivaPreviewContainer" style="display:none;">
-              <h4 style="margin-bottom:10px;">Vista Previa y Asignación (<span id="masivaCount">0</span> alumnos)</h4>
-              <p style="font-size:0.8rem; color:var(--danger); margin-bottom:10px;">Verifica o ajusta el Grado, Grupo y Tecnología de cada alumno antes de confirmar.</p>
-              
-              <div style="overflow-x:auto; max-height:400px; border:1px solid var(--border); border-radius:8px; margin-bottom:20px;">
-                  <table style="width:100%; border-collapse:collapse; font-size:0.8rem;">
-                      <thead style="background:#f8fafc; position:sticky; top:0; z-index:10; box-shadow:0 1px 2px rgba(0,0,0,0.05);">
-                          <tr>
-                              <th style="padding:10px; text-align:left; border-bottom:2px solid var(--border);">Nombre</th>
-                              <th style="padding:10px; text-align:left; border-bottom:2px solid var(--border);">CURP</th>
-                              <th style="padding:10px; text-align:left; border-bottom:2px solid var(--border);">Sexo / Edad</th>
-                              <th style="padding:10px; text-align:left; border-bottom:2px solid var(--border);">Grado</th>
-                              <th style="padding:10px; text-align:left; border-bottom:2px solid var(--border);">Grupo</th>
-                              <th style="padding:10px; text-align:left; border-bottom:2px solid var(--border);">Tecnología / Taller</th>
-                          </tr>
-                      </thead>
-                      <tbody id="masivaTableBody"></tbody>
-                  </table>
-              </div>
-
-              <div id="masivaProgressContainer" style="display:none; margin-bottom:20px;">
-                  <div style="display:flex; justify-content:space-between; font-size:0.8rem; font-weight:bold; margin-bottom:5px;">
-                      <span>Progreso de Inscripción...</span>
-                      <span id="masivaProgressText">0 / 0</span>
-                  </div>
-                  <div style="width:100%; height:10px; background:var(--border); border-radius:5px; overflow:hidden;">
-                      <div id="masivaProgressBar" style="width:0%; height:100%; background:var(--primary); transition:width 0.2s;"></div>
-                  </div>
-              </div>
-
-              <button id="btnConfirmarMasiva" class="btn btn-success btn-lg" style="width:100%;" onclick="window.confirmarInscripcionMasiva()">
-                  <i class="fa-solid fa-check-double"></i> Inscribir Todos los Alumnos
-              </button>
-          </div>
-      </div>
-    </div>
 
     </div>
   `;
@@ -1183,6 +1128,62 @@ function renderAdminInscripcion() {
           </button>
        </div>
     </div>
+    <!-- Modal Carga Masiva -->
+    <div id="modalCargaMasiva" class="modal" style="display:none; position:fixed; z-index:100; left:0; top:0; width:100%; height:100%; background:rgba(0,0,0,0.5); backdrop-filter:blur(4px); overflow-y:auto;">
+      <div class="card shadow-lg" style="margin: 5% auto; width: 95%; max-width: 1000px; padding: 24px; position:relative; min-height:400px;">
+          <button onclick="document.getElementById('modalCargaMasiva').style.display='none'" style="position:absolute; right:15px; top:15px; background:none; border:none; color:var(--text-muted); cursor:pointer;"><i class="fa-solid fa-xmark fa-xl"></i></button>
+          <h3 style="margin-bottom:12px; color:var(--primary);"><i class="fa-solid fa-users-viewfinder"></i> Carga Masiva de Alumnos</h3>
+          <p style="font-size:0.85rem; color:var(--text-muted); margin-bottom:20px;">Sube un archivo de Excel (.xlsx) o CSV con el formato correcto para inscribir múltiples alumnos al mismo tiempo.</p>
+          
+          <div style="display:flex; gap:10px; margin-bottom:20px; flex-wrap:wrap;">
+              <button class="btn btn-outline" style="border-color:var(--success); color:var(--success)" onclick="window.descargarPlantillaMasiva()">
+                  <i class="fa-solid fa-download"></i> Descargar Plantilla Excel
+              </button>
+              <div style="position:relative; display:inline-block; flex:1; min-width:200px;">
+                  <input type="file" id="fileCargaMasiva" accept=".csv, .xlsx, .xls" style="position:absolute; opacity:0; width:100%; height:100%; cursor:pointer;" onchange="window.procesarArchivoMasiva(event)">
+                  <div class="btn btn-primary" style="width:100%; text-align:center; pointer-events:none;">
+                      <i class="fa-solid fa-upload"></i> Seleccionar Archivo
+                  </div>
+              </div>
+          </div>
+          
+          <div id="masivaPreviewContainer" style="display:none;">
+              <h4 style="margin-bottom:10px;">Vista Previa y Asignación (<span id="masivaCount">0</span> alumnos)</h4>
+              <p style="font-size:0.8rem; color:var(--danger); margin-bottom:10px;">Verifica o ajusta el Grado, Grupo y Tecnología de cada alumno antes de confirmar.</p>
+              
+              <div style="overflow-x:auto; max-height:400px; border:1px solid var(--border); border-radius:8px; margin-bottom:20px;">
+                  <table style="width:100%; border-collapse:collapse; font-size:0.8rem;">
+                      <thead style="background:#f8fafc; position:sticky; top:0; z-index:10; box-shadow:0 1px 2px rgba(0,0,0,0.05);">
+                          <tr>
+                              <th style="padding:10px; text-align:left; border-bottom:2px solid var(--border);">Nombre</th>
+                              <th style="padding:10px; text-align:left; border-bottom:2px solid var(--border);">CURP</th>
+                              <th style="padding:10px; text-align:left; border-bottom:2px solid var(--border);">Sexo / Edad</th>
+                              <th style="padding:10px; text-align:left; border-bottom:2px solid var(--border);">Grado</th>
+                              <th style="padding:10px; text-align:left; border-bottom:2px solid var(--border);">Grupo</th>
+                              <th style="padding:10px; text-align:left; border-bottom:2px solid var(--border);">Tecnología / Taller</th>
+                          </tr>
+                      </thead>
+                      <tbody id="masivaTableBody"></tbody>
+                  </table>
+              </div>
+
+              <div id="masivaProgressContainer" style="display:none; margin-bottom:20px;">
+                  <div style="display:flex; justify-content:space-between; font-size:0.8rem; font-weight:bold; margin-bottom:5px;">
+                      <span>Progreso de Inscripción...</span>
+                      <span id="masivaProgressText">0 / 0</span>
+                  </div>
+                  <div style="width:100%; height:10px; background:var(--border); border-radius:5px; overflow:hidden;">
+                      <div id="masivaProgressBar" style="width:0%; height:100%; background:var(--primary); transition:width 0.2s;"></div>
+                  </div>
+              </div>
+
+              <button id="btnConfirmarMasiva" class="btn btn-success btn-lg" style="width:100%;" onclick="window.confirmarInscripcionMasiva()">
+                  <i class="fa-solid fa-check-double"></i> Inscribir Todos los Alumnos
+              </button>
+          </div>
+      </div>
+    </div>
+
   `;
 }
 
