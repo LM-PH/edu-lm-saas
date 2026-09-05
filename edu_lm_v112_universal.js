@@ -20106,7 +20106,7 @@ window.renderMasivaPreview = async () => {
         <tr style="border-bottom:1px solid #f1f5f9;">
             <td style="padding:8px;"><input type="text" class="form-input" style="padding:4px; font-size:0.8rem; width:100%; border:none; background:transparent;" value="${row.nombre}" onchange="window._masivaData[${idx}].nombre = this.value"></td>
             <td style="padding:8px;"><input type="text" class="form-input" style="padding:4px; font-size:0.75rem; width:100%; border:none; background:transparent;" value="${row.curp}" onchange="window._masivaData[${idx}].curp = this.value"></td>
-            <td style="padding:8px;"><input type="text" class="form-input" style="padding:4px; font-size:0.75rem; width:100%; border:none; background:transparent;" placeholder="Automático" value="${row.correo}" onchange="window._masivaData[${idx}].correo = this.value"></td>
+            <td style="padding:8px;"><input type="text" class="form-input" style="padding:4px; font-size:0.75rem; width:100%; border:none; background:transparent;" placeholder="requerido@correo.com" value="${row.correo}" onchange="window._masivaData[${idx}].correo = this.value"></td>
             <td style="padding:8px; font-size:0.75rem;">${row.sexo.substring(0,1)} / ${row.edad}a</td>
             <td style="padding:8px;">
                 <select class="form-select" style="padding:4px; font-size:0.8rem; width:60px;" onchange="window.masivaCambiarGrado(${idx}, this.value)">
@@ -20142,9 +20142,9 @@ window.confirmarInscripcionMasiva = async () => {
     if(data.length === 0) return;
     
     // Validate
-    const invalidos = data.filter(r => !r.nombre || !r.curp || !r.grado || !r.grupo);
+    const invalidos = data.filter(r => !r.nombre || !r.curp || !r.grado || !r.grupo || !r.correo);
     if(invalidos.length > 0) {
-        return alert(`Hay ${invalidos.length} alumnos con datos incompletos. Todos deben tener Nombre, CURP, Grado y Grupo para ser inscritos.`);
+        return alert(`Hay ${invalidos.length} alumnos con datos incompletos. Todos deben tener Nombre, CURP, Correo, Grado y Grupo para ser inscritos.`);
     }
     
     if(!confirm(`¿Confirmas la inscripción masiva de ${data.length} alumnos? Esta acción no se puede deshacer y tomará unos segundos.`)) return;
@@ -20176,11 +20176,6 @@ window.confirmarInscripcionMasiva = async () => {
             
             // Generar correo / pass
             let autoEmail = row.correo;
-            if(!autoEmail) {
-                const parts = row.nombre.split(' ');
-                const base = (parts[0] + (parts[1] || '')).replace(/[^a-zA-Z]/g, '').toLowerCase();
-                autoEmail = `${base}_${row.curp.substring(row.curp.length-4)}@alumno.edu.mx`;
-            }
             const autoPass = row.curp.substring(0, 10); // Primeros 10 de curp como pass temporal
             
             const numG = row.grado.replace(/[^0-9]/g, '');
