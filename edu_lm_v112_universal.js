@@ -20147,6 +20147,11 @@ window.confirmarInscripcionMasiva = async () => {
         return alert(`Hay ${invalidos.length} alumnos con datos incompletos. Todos deben tener Nombre, CURP, Correo, Grado y Grupo para ser inscritos.`);
     }
     
+    const correosInvalidos = data.filter(r => !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(r.correo.trim()));
+    if(correosInvalidos.length > 0) {
+        return alert(`Hay ${correosInvalidos.length} alumnos con formato de correo inválido (ej. no contiene "@" o ".com"). Por favor corrige los correos en la tabla.`);
+    }
+    
     if(!confirm(`¿Confirmas la inscripción masiva de ${data.length} alumnos? Esta acción no se puede deshacer y tomará unos segundos.`)) return;
     
     const btn = document.getElementById('btnConfirmarMasiva');
@@ -20159,6 +20164,7 @@ window.confirmarInscripcionMasiva = async () => {
     
     let successCount = 0;
     let errCount = 0;
+    let errCurp = 0;
     
     for(let i=0; i < data.length; i++) {
         const row = data[i];
@@ -20170,7 +20176,7 @@ window.confirmarInscripcionMasiva = async () => {
             const { data: existCurp } = await supabaseClient.from('alumnos').select('id').eq('curp', row.curp.trim()).maybeSingle();
             if(existCurp) {
                 console.warn("CURP ya registrada:", row.curp);
-                errCount++;
+                errCurp++;
                 continue; // Saltamos
             }
             
@@ -20215,7 +20221,7 @@ window.confirmarInscripcionMasiva = async () => {
     }
     
     progText.innerText = "¡Proceso Terminado!";
-    alert(`✅ Inscripción Masiva Completada.\n\nÉxitos: ${successCount}\nErrores/Saltados (CURP repetida): ${errCount}`);
+    alert(`✅ Inscripción Masiva Completada.\n\nÉxitos: ${successCount}\nCURPs Repetidos (Saltados): ${errCurp}\nOtros Errores: ${errCount}`);
     
     document.getElementById('modalCargaMasiva').style.display = 'none';
     if(window.loadGruposAdmin) window.loadGruposAdmin();
