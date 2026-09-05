@@ -20150,9 +20150,9 @@ window.confirmarInscripcionMasiva = async () => {
     if(data.length === 0) return;
     
     // Validate
-    const invalidos = data.filter(r => !r.nombre || !r.curp || !r.grado || !r.grupo || !r.correo);
+    const invalidos = data.filter(r => !r.nombre || !r.curp || !r.grado || !r.grupo || !r.correo || !r.tecnologia);
     if(invalidos.length > 0) {
-        return alert(`Hay ${invalidos.length} alumnos con datos incompletos. Todos deben tener Nombre, CURP, Correo, Grado y Grupo para ser inscritos.`);
+        return alert(`Hay ${invalidos.length} alumnos con datos incompletos. Todos deben tener Nombre, CURP, Correo, Grado, Grupo y Tecnología/Taller para ser inscritos.`);
     }
     
     const correosInvalidos = data.filter(r => !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(r.correo.trim()));
@@ -20201,7 +20201,7 @@ window.confirmarInscripcionMasiva = async () => {
             
             // Generar correo / pass
             let autoEmail = row.correo;
-            const autoPass = row.curp.substring(0, 10); // Primeros 10 de curp como pass temporal
+            const autoPass = 'st' + Math.floor(Math.random() * 9000 + 1000);
             
             const numG = row.grado.replace(/[^0-9]/g, '');
             const matricula = `${new Date().getFullYear()}${numG}${row.grupo.trim().toUpperCase()}${Math.floor(1000 + Math.random() * 9000)}`;
