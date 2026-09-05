@@ -768,9 +768,66 @@ function renderRoleSelector() {
         </div>
 
         ${forceLogout}
+         </div>
+
+    <!-- Modal Carga Masiva -->
+    <div id="modalCargaMasiva" class="modal" style="display:none; position:fixed; z-index:100; left:0; top:0; width:100%; height:100%; background:rgba(0,0,0,0.5); backdrop-filter:blur(4px); overflow-y:auto;">
+      <div class="card shadow-lg" style="margin: 5% auto; width: 95%; max-width: 1000px; padding: 24px; position:relative; min-height:400px;">
+          <button onclick="document.getElementById('modalCargaMasiva').style.display='none'" style="position:absolute; right:15px; top:15px; background:none; border:none; color:var(--text-muted); cursor:pointer;"><i class="fa-solid fa-xmark fa-xl"></i></button>
+          <h3 style="margin-bottom:12px; color:var(--primary);"><i class="fa-solid fa-users-viewfinder"></i> Carga Masiva de Alumnos</h3>
+          <p style="font-size:0.85rem; color:var(--text-muted); margin-bottom:20px;">Sube un archivo de Excel (.xlsx) o CSV con el formato correcto para inscribir múltiples alumnos al mismo tiempo.</p>
+          
+          <div style="display:flex; gap:10px; margin-bottom:20px; flex-wrap:wrap;">
+              <button class="btn btn-outline" style="border-color:var(--success); color:var(--success)" onclick="window.descargarPlantillaMasiva()">
+                  <i class="fa-solid fa-download"></i> Descargar Plantilla Excel
+              </button>
+              <div style="position:relative; display:inline-block; flex:1; min-width:200px;">
+                  <input type="file" id="fileCargaMasiva" accept=".csv, .xlsx, .xls" style="position:absolute; opacity:0; width:100%; height:100%; cursor:pointer;" onchange="window.procesarArchivoMasiva(event)">
+                  <div class="btn btn-primary" style="width:100%; text-align:center; pointer-events:none;">
+                      <i class="fa-solid fa-upload"></i> Seleccionar Archivo
+                  </div>
+              </div>
+          </div>
+          
+          <div id="masivaPreviewContainer" style="display:none;">
+              <h4 style="margin-bottom:10px;">Vista Previa y Asignación (<span id="masivaCount">0</span> alumnos)</h4>
+              <p style="font-size:0.8rem; color:var(--danger); margin-bottom:10px;">Verifica o ajusta el Grado, Grupo y Tecnología de cada alumno antes de confirmar.</p>
+              
+              <div style="overflow-x:auto; max-height:400px; border:1px solid var(--border); border-radius:8px; margin-bottom:20px;">
+                  <table style="width:100%; border-collapse:collapse; font-size:0.8rem;">
+                      <thead style="background:#f8fafc; position:sticky; top:0; z-index:10; box-shadow:0 1px 2px rgba(0,0,0,0.05);">
+                          <tr>
+                              <th style="padding:10px; text-align:left; border-bottom:2px solid var(--border);">Nombre</th>
+                              <th style="padding:10px; text-align:left; border-bottom:2px solid var(--border);">CURP</th>
+                              <th style="padding:10px; text-align:left; border-bottom:2px solid var(--border);">Sexo / Edad</th>
+                              <th style="padding:10px; text-align:left; border-bottom:2px solid var(--border);">Grado</th>
+                              <th style="padding:10px; text-align:left; border-bottom:2px solid var(--border);">Grupo</th>
+                              <th style="padding:10px; text-align:left; border-bottom:2px solid var(--border);">Tecnología / Taller</th>
+                          </tr>
+                      </thead>
+                      <tbody id="masivaTableBody"></tbody>
+                  </table>
+              </div>
+
+              <div id="masivaProgressContainer" style="display:none; margin-bottom:20px;">
+                  <div style="display:flex; justify-content:space-between; font-size:0.8rem; font-weight:bold; margin-bottom:5px;">
+                      <span>Progreso de Inscripción...</span>
+                      <span id="masivaProgressText">0 / 0</span>
+                  </div>
+                  <div style="width:100%; height:10px; background:var(--border); border-radius:5px; overflow:hidden;">
+                      <div id="masivaProgressBar" style="width:0%; height:100%; background:var(--primary); transition:width 0.2s;"></div>
+                  </div>
+              </div>
+
+              <button id="btnConfirmarMasiva" class="btn btn-success btn-lg" style="width:100%;" onclick="window.confirmarInscripcionMasiva()">
+                  <i class="fa-solid fa-check-double"></i> Inscribir Todos los Alumnos
+              </button>
+          </div>
       </div>
     </div>
-        `;
+
+    </div>
+  `;
 }
 
 function renderSetPasswordScreen() {
@@ -1066,6 +1123,9 @@ function renderAdminInscripcion() {
 
         <button class="btn btn-success btn-lg" style="width: 100%; margin-top:20px;" id="btnGuardarAlumno">
           <i class="fa-solid fa-user-check"></i> Finalizar Inscripción y Generar QR
+        </button>
+        <button class="btn btn-outline btn-lg" style="width: 100%; margin-top:10px; border-color:var(--primary); color:var(--primary);" onclick="window.abrirModalCargaMasiva()">
+          <i class="fa-solid fa-file-csv"></i> Inscripción Masiva (Excel / CSV)
         </button>
       </div>
     <div class="card" style="grid-column: 1 / -1; margin-top:24px;">
@@ -19888,4 +19948,277 @@ window.imprimirReporteTramitesMes = async () => {
     } catch(e) {
         alert("Error al imprimir: " + e.message);
     }
+};
+
+
+
+// ==========================================
+// CARGA MASIVA DE ALUMNOS (EXCEL / CSV)
+// ==========================================
+window._masivaData = [];
+window._tecnologiasCache = {};
+
+window.abrirModalCargaMasiva = async () => {
+    document.getElementById('modalCargaMasiva').style.display = 'block';
+    document.getElementById('masivaPreviewContainer').style.display = 'none';
+    document.getElementById('fileCargaMasiva').value = '';
+    window._masivaData = [];
+    
+    // Inyectar SheetJS si no existe para procesar excel
+    if (typeof XLSX === 'undefined') {
+        const script = document.createElement('script');
+        script.src = 'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
+        document.head.appendChild(script);
+    }
+};
+
+window.descargarPlantillaMasiva = () => {
+    // Generar CSV directo con BOM para acentos
+    const BOM = "\uFEFF";
+    const header = "CURP,NOMBRE COMPLETO,EDAD,SEXO (M/F),ESTATURA (mts),PESO (kg),TALLA ZAPATO,CORREO,GRADO (Ej. 1),GRUPO (Ej. A),TECNOLOGIA (Vacio si no sabes)\n";
+    const example = "ABCD123456EFGHIJ78,JUAN PEREZ GONZALEZ,13,M,1.65,55.5,25.5,juanperez@correo.com,1,A,Ofimatica\n";
+    const csvContent = BOM + header + example;
+    
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement("a");
+    const url = URL.createObjectURL(blob);
+    link.setAttribute("href", url);
+    link.setAttribute("download", "Plantilla_Carga_Masiva_Alumnos.csv");
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+};
+
+window.procesarArchivoMasiva = (e) => {
+    const file = e.target.files[0];
+    if(!file) return;
+    
+    const isCSV = file.name.toLowerCase().endsWith('.csv');
+    
+    const reader = new FileReader();
+    reader.onload = function(ev) {
+        let rows = [];
+        if (isCSV) {
+            const text = ev.target.result;
+            // Simple CSV parser ignorando comas dentro de comillas (muy basico)
+            const lines = text.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+            if(lines.length > 1) {
+                const headers = lines[0].split(',').map(h => h.trim().toUpperCase());
+                for(let i = 1; i < lines.length; i++) {
+                    const cols = lines[i].split(',').map(c => c.trim());
+                    if(cols.length >= 2 && cols[0]) {
+                        rows.push({
+                            curp: cols[0],
+                            nombre: cols[1],
+                            edad: cols[2] || '',
+                            sexo: (cols[3]||'').toUpperCase().startsWith('M') ? 'Masculino' : ((cols[3]||'').toUpperCase().startsWith('F') ? 'Femenino' : ''),
+                            estatura: cols[4] || '',
+                            peso: cols[5] || '',
+                            talla: cols[6] || '',
+                            correo: cols[7] || '',
+                            grado: cols[8] ? cols[8].replace(/[^0-9]/g, '') + '°' : '',
+                            grupo: cols[9] || '',
+                            tecnologia: cols[10] || ''
+                        });
+                    }
+                }
+            }
+        } else {
+            // Excel using SheetJS
+            if(typeof XLSX === 'undefined') return alert('La librería de Excel aún se está cargando. Por favor intenta de nuevo en unos segundos.');
+            const data = new Uint8Array(ev.target.result);
+            const workbook = XLSX.read(data, {type: 'array'});
+            const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+            const json = XLSX.utils.sheet_to_json(firstSheet);
+            
+            rows = json.map(r => {
+                const keys = Object.keys(r);
+                const getKey = (kw) => keys.find(k => k.toUpperCase().includes(kw));
+                
+                return {
+                    curp: r[getKey('CURP')] || '',
+                    nombre: r[getKey('NOMBRE')] || '',
+                    edad: r[getKey('EDAD')] || '',
+                    sexo: r[getKey('SEXO')] || '',
+                    estatura: r[getKey('ESTATURA')] || '',
+                    peso: r[getKey('PESO')] || '',
+                    talla: r[getKey('TALLA')] || r[getKey('ZAPATO')] || '',
+                    correo: r[getKey('CORREO')] || r[getKey('EMAIL')] || '',
+                    grado: r[getKey('GRADO')] ? String(r[getKey('GRADO')]).replace(/[^0-9]/g, '') + '°' : '',
+                    grupo: r[getKey('GRUPO')] || '',
+                    tecnologia: r[getKey('TECNOLOGIA')] || r[getKey('TALLER')] || ''
+                };
+            }).filter(r => r.curp && r.nombre);
+        }
+        
+        if(rows.length === 0) return alert('No se encontraron alumnos válidos en el archivo. Asegúrate de incluir CURP y Nombre.');
+        
+        window._masivaData = rows;
+        window.renderMasivaPreview();
+    };
+    
+    if (isCSV) reader.readAsText(file, 'utf-8');
+    else reader.readAsArrayBuffer(file);
+};
+
+window.renderMasivaPreview = async () => {
+    const tbody = document.getElementById('masivaTableBody');
+    const container = document.getElementById('masivaPreviewContainer');
+    const btn = document.getElementById('btnConfirmarMasiva');
+    
+    document.getElementById('masivaCount').innerText = window._masivaData.length;
+    tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; padding:20px;"><i class="fa-solid fa-spinner fa-spin"></i> Cargando catálogos de tecnologías...</td></tr>';
+    container.style.display = 'block';
+    
+    // Pre-cargar todas las tecnologías disponibles por grado
+    if(Object.keys(window._tecnologiasCache).length === 0) {
+        try {
+            const { data } = await supabaseClient.from('asignaciones_maestros').select('materia, target_grado');
+            if(data) {
+                const grados = ['1°', '2°', '3°', '4°', '5°', '6°'];
+                grados.forEach(g => {
+                    const mats = [...new Set(data.filter(d => d.target_grado === g).map(d => d.materia))];
+                    window._tecnologiasCache[g] = mats;
+                });
+            }
+        } catch(e) { console.error('Error cargando tecnologías', e); }
+    }
+    
+    let html = '';
+    window._masivaData.forEach((row, idx) => {
+        const gradosOpts = ['1°', '2°', '3°', '4°', '5°', '6°'].map(g => 
+            `<option value="${g}" ${row.grado === g ? 'selected' : ''}>${g}</option>`
+        ).join('');
+        
+        let tecsHtml = '<option value="">Sin Asignar / Seleccionar...</option>';
+        if(row.grado && window._tecnologiasCache[row.grado]) {
+            tecsHtml += window._tecnologiasCache[row.grado].map(t => {
+                // Try to match technology string intelligently (case insensitive, partial match)
+                const isSelected = row.tecnologia && t.toLowerCase().includes(row.tecnologia.toLowerCase().trim());
+                return `<option value="${t}" ${isSelected ? 'selected' : ''}>${t}</option>`;
+            }).join('');
+        }
+        
+        html += `
+        <tr style="border-bottom:1px solid #f1f5f9;">
+            <td style="padding:8px;"><input type="text" class="form-input" style="padding:4px; font-size:0.8rem; width:100%; border:none; background:transparent;" value="${row.nombre}" onchange="window._masivaData[${idx}].nombre = this.value"></td>
+            <td style="padding:8px;"><input type="text" class="form-input" style="padding:4px; font-size:0.75rem; width:100%; border:none; background:transparent;" value="${row.curp}" onchange="window._masivaData[${idx}].curp = this.value"></td>
+            <td style="padding:8px; font-size:0.75rem;">${row.sexo.substring(0,1)} / ${row.edad}a</td>
+            <td style="padding:8px;">
+                <select class="form-select" style="padding:4px; font-size:0.8rem; width:60px;" onchange="window.masivaCambiarGrado(${idx}, this.value)">
+                    <option value="">-</option>${gradosOpts}
+                </select>
+            </td>
+            <td style="padding:8px;"><input type="text" class="form-input" style="padding:4px; font-size:0.8rem; width:50px; text-align:center;" value="${row.grupo}" onchange="window._masivaData[${idx}].grupo = this.value"></td>
+            <td style="padding:8px;">
+                <select id="masivaTec_${idx}" class="form-select" style="padding:4px; font-size:0.8rem; width:150px;" onchange="window._masivaData[${idx}].tecnologia = this.value">
+                    ${tecsHtml}
+                </select>
+            </td>
+        </tr>
+        `;
+    });
+    
+    tbody.innerHTML = html;
+};
+
+window.masivaCambiarGrado = (idx, newGrado) => {
+    window._masivaData[idx].grado = newGrado;
+    const selectTec = document.getElementById(`masivaTec_${idx}`);
+    if(selectTec && window._tecnologiasCache[newGrado]) {
+        let tecsHtml = '<option value="">Sin Asignar / Seleccionar...</option>';
+        tecsHtml += window._tecnologiasCache[newGrado].map(t => `<option value="${t}">${t}</option>`).join('');
+        selectTec.innerHTML = tecsHtml;
+        window._masivaData[idx].tecnologia = '';
+    }
+};
+
+window.confirmarInscripcionMasiva = async () => {
+    const data = window._masivaData;
+    if(data.length === 0) return;
+    
+    // Validate
+    const invalidos = data.filter(r => !r.nombre || !r.curp || !r.grado || !r.grupo);
+    if(invalidos.length > 0) {
+        return alert(`Hay ${invalidos.length} alumnos con datos incompletos. Todos deben tener Nombre, CURP, Grado y Grupo para ser inscritos.`);
+    }
+    
+    if(!confirm(`¿Confirmas la inscripción masiva de ${data.length} alumnos? Esta acción no se puede deshacer y tomará unos segundos.`)) return;
+    
+    const btn = document.getElementById('btnConfirmarMasiva');
+    const progCont = document.getElementById('masivaProgressContainer');
+    const progBar = document.getElementById('masivaProgressBar');
+    const progText = document.getElementById('masivaProgressText');
+    
+    btn.style.display = 'none';
+    progCont.style.display = 'block';
+    
+    let successCount = 0;
+    let errCount = 0;
+    
+    for(let i=0; i < data.length; i++) {
+        const row = data[i];
+        progText.innerText = `${i+1} / ${data.length} (${row.nombre})`;
+        progBar.style.width = `${((i+1)/data.length)*100}%`;
+        
+        try {
+            // Verificar si CURP ya existe
+            const { data: existCurp } = await supabaseClient.from('alumnos').select('id').eq('curp', row.curp.trim()).maybeSingle();
+            if(existCurp) {
+                console.warn("CURP ya registrada:", row.curp);
+                errCount++;
+                continue; // Saltamos
+            }
+            
+            // Generar correo / pass
+            let autoEmail = row.correo;
+            if(!autoEmail) {
+                const parts = row.nombre.split(' ');
+                const base = (parts[0] + (parts[1] || '')).replace(/[^a-zA-Z]/g, '').toLowerCase();
+                autoEmail = `${base}_${row.curp.substring(row.curp.length-4)}@alumno.edu.mx`;
+            }
+            const autoPass = row.curp.substring(0, 10); // Primeros 10 de curp como pass temporal
+            
+            const numG = row.grado.replace(/[^0-9]/g, '');
+            const matricula = `${new Date().getFullYear()}${numG}${row.grupo.trim().toUpperCase()}${Math.floor(1000 + Math.random() * 9000)}`;
+            
+            // 1. Insertar Alumno
+            const { error: insErr } = await supabaseClient.from('alumnos').insert([{
+                curp: row.curp.trim(),
+                nombre: row.nombre.trim(),
+                edad: parseInt(row.edad, 10) || null,
+                contacto_email: autoEmail.toLowerCase().trim(),
+                grado: row.grado.trim(),
+                grupo_id: row.grupo.trim().toUpperCase(),
+                taller: row.tecnologia.trim() || null,
+                estatura: parseFloat(row.estatura) || null,
+                peso: parseFloat(row.peso) || null,
+                talla_zapato: row.talla.trim() || null,
+                plantel_id: state.plantelId
+            }]);
+            
+            if(insErr) throw insErr;
+            
+            // 2. Crear Auth
+            await supabaseClient.rpc('crear_usuario_admin', {
+                p_email: autoEmail.toLowerCase().trim(),
+                p_password: autoPass,
+                p_nombre: row.nombre.trim(),
+                p_rol: 'alumno',
+                p_plantel_id: state.plantelId
+            });
+            
+            successCount++;
+        } catch(e) {
+            console.error("Error inscribiendo a " + row.nombre, e);
+            errCount++;
+        }
+    }
+    
+    progText.innerText = "¡Proceso Terminado!";
+    alert(`✅ Inscripción Masiva Completada.\n\nÉxitos: ${successCount}\nErrores/Saltados (CURP repetida): ${errCount}`);
+    
+    document.getElementById('modalCargaMasiva').style.display = 'none';
+    if(window.loadGruposAdmin) window.loadGruposAdmin();
 };
