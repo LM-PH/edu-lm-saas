@@ -7311,7 +7311,8 @@ window.loadPersonalDirectivo = async () => {
         roleOrder.forEach(r => { roleGroups[r.key] = []; });
         
         data.forEach(p => {
-            const r = p.rol || 'otro';
+            let r = p.rol || 'otro';
+            if (r === 'secretaria_direccion') r = 'admin';
             if (!roleGroups[r]) roleGroups[r] = [];
             roleGroups[r].push(p);
         });
