@@ -20187,6 +20187,25 @@ window.confirmarInscripcionMasiva = async () => {
             const numG = row.grado.replace(/[^0-9]/g, '');
             const matricula = `${new Date().getFullYear()}${numG}${row.grupo.trim().toUpperCase()}${Math.floor(1000 + Math.random() * 9000)}`;
             
+            // 0. Resolver grupo_id (UUID)
+            const gradoNom = row.grado.trim();
+            const grupoLetra = row.grupo.trim().toUpperCase();
+            const fullGrupoNom = `${gradoNom} ${grupoLetra}`;
+            
+            const { data: grData } = await supabaseClient.from('grupos').select('id').eq('nombre', fullGrupoNom).eq('plantel_id', state.plantelId).maybeSingle();
+            let resolvedGrupoId = grData ? grData.id : null;
+            
+            if (!resolvedGrupoId) {
+                const { data: newGr, error: eGr } = await supabaseClient.from('grupos').insert([{
+                    nombre: fullGrupoNom,
+                    grado: gradoNom,
+                    plantel_id: state.plantelId
+                }]).select('id').single();
+                
+                if (eGr) throw eGr;
+                resolvedGrupoId = newGr.id;
+            }
+
             // 1. Insertar Alumno
             const { error: insErr } = await supabaseClient.from('alumnos').insert([{
                 curp: row.curp.trim(),
@@ -20194,8 +20213,8 @@ window.confirmarInscripcionMasiva = async () => {
                 matricula: matricula,
                 edad: parseInt(row.edad, 10) || null,
                 contacto_email: autoEmail.toLowerCase().trim(),
-                grado: row.grado.trim(),
-                grupo_id: row.grupo.trim().toUpperCase(),
+                grado: gradoNom,
+                grupo_id: resolvedGrupoId,
                 taller: row.tecnologia.trim() || null,
                 estatura: parseFloat(row.estatura) || null,
                 peso: parseFloat(row.peso) || null,
