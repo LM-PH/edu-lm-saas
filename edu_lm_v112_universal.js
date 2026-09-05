@@ -1161,7 +1161,6 @@ function renderAdminInscripcion() {
                               <th style="padding:10px; text-align:left; border-bottom:2px solid var(--border);">Sexo / Edad</th>
                               <th style="padding:10px; text-align:left; border-bottom:2px solid var(--border);">Grado</th>
                               <th style="padding:10px; text-align:left; border-bottom:2px solid var(--border);">Grupo</th>
-                              <th style="padding:10px; text-align:left; border-bottom:2px solid var(--border);">Tecnología / Taller</th>
                           </tr>
                       </thead>
                       <tbody id="masivaTableBody"></tbody>
@@ -19985,8 +19984,8 @@ window.abrirModalCargaMasiva = async () => {
 window.descargarPlantillaMasiva = () => {
     // Generar CSV directo con BOM para acentos
     const BOM = "\uFEFF";
-    const header = "CURP,NOMBRE COMPLETO,EDAD,SEXO (M/F),ESTATURA (mts),PESO (kg),TALLA ZAPATO,CORREO,GRADO (Ej. 1),GRUPO (Ej. A),TECNOLOGIA (Vacio si no sabes)\n";
-    const example = "ABCD123456EFGHIJ78,JUAN PEREZ GONZALEZ,13,M,1.65,55.5,25.5,juanperez@correo.com,1,A,Ofimatica\n";
+    const header = "CURP,NOMBRE COMPLETO,EDAD,SEXO (M/F),ESTATURA (mts),PESO (kg),TALLA ZAPATO,CORREO,GRADO (Ej. 1),GRUPO (Ej. A)\n";
+    const example = "ABCD123456EFGHIJ78,JUAN PEREZ GONZALEZ,13,M,1.65,55.5,25.5,juanperez@correo.com,1,A\n";
     const csvContent = BOM + header + example;
     
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
@@ -20078,43 +20077,14 @@ window.renderMasivaPreview = async () => {
     const btn = document.getElementById('btnConfirmarMasiva');
     
     document.getElementById('masivaCount').innerText = window._masivaData.length;
-    tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; padding:20px;"><i class="fa-solid fa-spinner fa-spin"></i> Cargando catálogos de tecnologías...</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; padding:20px;"><i class="fa-solid fa-spinner fa-spin"></i> Cargando vista previa...</td></tr>';
     container.style.display = 'block';
-    
-    // Pre-cargar todas las tecnologías disponibles por grado
-    if(Object.keys(window._tecnologiasCache).length === 0) {
-        try {
-            const { data } = await supabaseClient.from('asignaciones_maestros').select('materia, target_grado');
-            if(data) {
-                const grados = ['1°', '2°', '3°', '4°', '5°', '6°'];
-                grados.forEach(g => {
-                    const mats = [...new Set(data.filter(d => d.target_grado === g).map(d => d.materia))];
-                    window._tecnologiasCache[g] = mats;
-                });
-            }
-        } catch(e) { console.error('Error cargando tecnologías', e); }
-    }
     
     let html = '';
     window._masivaData.forEach((row, idx) => {
         const gradosOpts = ['1°', '2°', '3°', '4°', '5°', '6°'].map(g => 
             `<option value="${g}" ${row.grado === g ? 'selected' : ''}>${g}</option>`
         ).join('');
-        
-        let tecsHtml = '<option value="">Sin Asignar / Seleccionar...</option>';
-        let matched = false;
-        if(row.grado && window._tecnologiasCache[row.grado]) {
-            tecsHtml += window._tecnologiasCache[row.grado].map(t => {
-                // Try to match technology string intelligently (case insensitive, partial match)
-                const isSelected = row.tecnologia && t.toLowerCase().includes(row.tecnologia.toLowerCase().trim());
-                if (isSelected) {
-                    matched = true;
-                    window._masivaData[idx].tecnologia = t; // Force exact match
-                }
-                return `<option value="${t}" ${isSelected ? 'selected' : ''}>${t}</option>`;
-            }).join('');
-        }
-        if (!matched) window._masivaData[idx].tecnologia = ""; // Clear invalid or unfound Excel text
         
         html += `
         <tr style="border-bottom:1px solid #f1f5f9;">
@@ -20128,11 +20098,6 @@ window.renderMasivaPreview = async () => {
                 </select>
             </td>
             <td style="padding:8px;"><input type="text" class="form-input" style="padding:4px; font-size:0.8rem; width:50px; text-align:center;" value="${row.grupo}" onchange="window._masivaData[${idx}].grupo = this.value"></td>
-            <td style="padding:8px;">
-                <select id="masivaTec_${idx}" class="form-select" style="padding:4px; font-size:0.8rem; width:150px;" onchange="window._masivaData[${idx}].tecnologia = this.value">
-                    ${tecsHtml}
-                </select>
-            </td>
         </tr>
         `;
     });
@@ -20142,13 +20107,6 @@ window.renderMasivaPreview = async () => {
 
 window.masivaCambiarGrado = (idx, newGrado) => {
     window._masivaData[idx].grado = newGrado;
-    const selectTec = document.getElementById(`masivaTec_${idx}`);
-    if(selectTec && window._tecnologiasCache[newGrado]) {
-        let tecsHtml = '<option value="">Sin Asignar / Seleccionar...</option>';
-        tecsHtml += window._tecnologiasCache[newGrado].map(t => `<option value="${t}">${t}</option>`).join('');
-        selectTec.innerHTML = tecsHtml;
-        window._masivaData[idx].tecnologia = '';
-    }
 };
 
 window.confirmarInscripcionMasiva = async () => {
@@ -20156,9 +20114,9 @@ window.confirmarInscripcionMasiva = async () => {
     if(data.length === 0) return;
     
     // Validate
-    const invalidos = data.filter(r => !r.nombre?.trim() || !r.curp?.trim() || !r.grado?.trim() || !r.grupo?.trim() || !r.correo?.trim() || !r.tecnologia?.trim());
+    const invalidos = data.filter(r => !r.nombre?.trim() || !r.curp?.trim() || !r.grado?.trim() || !r.grupo?.trim() || !r.correo?.trim());
     if(invalidos.length > 0) {
-        return alert(`Hay ${invalidos.length} alumnos con datos incompletos. Todos deben tener Nombre, CURP, Correo, Grado, Grupo y Tecnología/Taller válidos seleccionados para ser inscritos.`);
+        return alert(`Hay ${invalidos.length} alumnos con datos incompletos. Todos deben tener Nombre, CURP, Correo, Grado y Grupo válidos seleccionados para ser inscritos.`);
     }
     
     const correosInvalidos = data.filter(r => !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(r.correo.trim()));
@@ -20239,7 +20197,7 @@ window.confirmarInscripcionMasiva = async () => {
                 contacto_email: autoEmail.toLowerCase().trim(),
                 grado: gradoNom,
                 grupo_id: resolvedGrupoId,
-                taller: row.tecnologia.trim() || null,
+                taller: null,
                 estatura: parseFloat(row.estatura) || null,
                 peso: parseFloat(row.peso) || null,
                 talla_zapato: row.talla.trim() || null,
