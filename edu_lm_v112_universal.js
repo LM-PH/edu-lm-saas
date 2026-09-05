@@ -1157,6 +1157,7 @@ function renderAdminInscripcion() {
                           <tr>
                               <th style="padding:10px; text-align:left; border-bottom:2px solid var(--border);">Nombre</th>
                               <th style="padding:10px; text-align:left; border-bottom:2px solid var(--border);">CURP</th>
+                              <th style="padding:10px; text-align:left; border-bottom:2px solid var(--border);">Correo</th>
                               <th style="padding:10px; text-align:left; border-bottom:2px solid var(--border);">Sexo / Edad</th>
                               <th style="padding:10px; text-align:left; border-bottom:2px solid var(--border);">Grado</th>
                               <th style="padding:10px; text-align:left; border-bottom:2px solid var(--border);">Grupo</th>
@@ -20105,6 +20106,7 @@ window.renderMasivaPreview = async () => {
         <tr style="border-bottom:1px solid #f1f5f9;">
             <td style="padding:8px;"><input type="text" class="form-input" style="padding:4px; font-size:0.8rem; width:100%; border:none; background:transparent;" value="${row.nombre}" onchange="window._masivaData[${idx}].nombre = this.value"></td>
             <td style="padding:8px;"><input type="text" class="form-input" style="padding:4px; font-size:0.75rem; width:100%; border:none; background:transparent;" value="${row.curp}" onchange="window._masivaData[${idx}].curp = this.value"></td>
+            <td style="padding:8px;"><input type="text" class="form-input" style="padding:4px; font-size:0.75rem; width:100%; border:none; background:transparent;" placeholder="Automático" value="${row.correo}" onchange="window._masivaData[${idx}].correo = this.value"></td>
             <td style="padding:8px; font-size:0.75rem;">${row.sexo.substring(0,1)} / ${row.edad}a</td>
             <td style="padding:8px;">
                 <select class="form-select" style="padding:4px; font-size:0.8rem; width:60px;" onchange="window.masivaCambiarGrado(${idx}, this.value)">
