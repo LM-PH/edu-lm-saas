@@ -20102,13 +20102,19 @@ window.renderMasivaPreview = async () => {
         ).join('');
         
         let tecsHtml = '<option value="">Sin Asignar / Seleccionar...</option>';
+        let matched = false;
         if(row.grado && window._tecnologiasCache[row.grado]) {
             tecsHtml += window._tecnologiasCache[row.grado].map(t => {
                 // Try to match technology string intelligently (case insensitive, partial match)
                 const isSelected = row.tecnologia && t.toLowerCase().includes(row.tecnologia.toLowerCase().trim());
+                if (isSelected) {
+                    matched = true;
+                    window._masivaData[idx].tecnologia = t; // Force exact match
+                }
                 return `<option value="${t}" ${isSelected ? 'selected' : ''}>${t}</option>`;
             }).join('');
         }
+        if (!matched) window._masivaData[idx].tecnologia = ""; // Clear invalid or unfound Excel text
         
         html += `
         <tr style="border-bottom:1px solid #f1f5f9;">
@@ -20150,9 +20156,9 @@ window.confirmarInscripcionMasiva = async () => {
     if(data.length === 0) return;
     
     // Validate
-    const invalidos = data.filter(r => !r.nombre || !r.curp || !r.grado || !r.grupo || !r.correo || !r.tecnologia);
+    const invalidos = data.filter(r => !r.nombre?.trim() || !r.curp?.trim() || !r.grado?.trim() || !r.grupo?.trim() || !r.correo?.trim() || !r.tecnologia?.trim());
     if(invalidos.length > 0) {
-        return alert(`Hay ${invalidos.length} alumnos con datos incompletos. Todos deben tener Nombre, CURP, Correo, Grado, Grupo y Tecnología/Taller para ser inscritos.`);
+        return alert(`Hay ${invalidos.length} alumnos con datos incompletos. Todos deben tener Nombre, CURP, Correo, Grado, Grupo y Tecnología/Taller válidos seleccionados para ser inscritos.`);
     }
     
     const correosInvalidos = data.filter(r => !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(r.correo.trim()));
