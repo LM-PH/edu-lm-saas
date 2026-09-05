@@ -15810,13 +15810,21 @@ window.eliminarPersona = async (idPermitido, email, nombre, rol = '') => {
         if (isDirectivo) {
             // Acción Directa para Directivos
             if (rol === 'alumno') {
-                await supabaseClient.rpc('eliminar_alumno_seguro', { p_alumno_id: idPermitido, p_plantel_id: state.plantelId });
-                await supabaseClient.from('perfiles_permitidos').delete().eq('email', email);
+                if (idPermitido && idPermitido !== 'undefined') {
+                    await supabaseClient.rpc('eliminar_alumno_seguro', { p_alumno_id: idPermitido, p_plantel_id: state.plantelId });
+                    await supabaseClient.from('perfiles_permitidos').delete().eq('email', email);
+                } else {
+                    // Alumno huérfano (sin registro en perfiles_permitidos)
+                    await supabaseClient.from('alumnos').delete().eq('contacto_email', email).eq('plantel_id', state.plantelId);
+                    await supabaseClient.rpc('eliminar_usuario_por_email', { p_email: email, p_plantel_id: state.plantelId });
+                }
                 window.showToast("Alumno eliminado correctamente.", "success");
             } else {
                 await supabaseClient.from('asignaciones_maestros').delete().eq('docente_email', email).eq('plantel_id', state.plantelId);
-                const { error: errPerm } = await supabaseClient.from('perfiles_permitidos').delete().eq('id', idPermitido);
-                if(errPerm) throw errPerm;
+                if (idPermitido && idPermitido !== 'undefined') {
+                    const { error: errPerm } = await supabaseClient.from('perfiles_permitidos').delete().eq('id', idPermitido);
+                    if(errPerm) throw errPerm;
+                }
                 
                 await supabaseClient.rpc('eliminar_usuario_por_email', { p_email: email, p_plantel_id: state.plantelId });
                 window.showToast("Personal eliminado y acceso revocado.", "success");
