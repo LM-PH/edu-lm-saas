@@ -20209,8 +20209,7 @@ window.confirmarInscripcionMasiva = async () => {
             let autoEmail = row.correo;
             const autoPass = 'st' + Math.floor(Math.random() * 9000 + 1000);
             
-            const numG = row.grado.replace(/[^0-9]/g, '');
-            const matricula = `${new Date().getFullYear()}${numG}${row.grupo.trim().toUpperCase()}${Math.floor(1000 + Math.random() * 9000)}`;
+            const matricula = 'AL-' + Math.floor(Math.random() * 90000 + 10000);
             
             // 0. Resolver grupo_id (UUID)
             const gradoLimpio = row.grado.replace('°', '').trim();
