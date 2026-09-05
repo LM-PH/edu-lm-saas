@@ -20154,6 +20154,16 @@ window.confirmarInscripcionMasiva = async () => {
     
     if(!confirm(`¿Confirmas la inscripción masiva de ${data.length} alumnos? Esta acción no se puede deshacer y tomará unos segundos.`)) return;
     
+    // Robustez de Plantel para Alumnos
+    let finalPlantel = state.plantelId || state.user?.user_metadata?.plantel_id;
+    if(!finalPlantel && state.user?.id) {
+        const { data: prof } = await supabaseClient.from('perfiles').select('plantel_id').eq('id', state.user.id).maybeSingle();
+        finalPlantel = prof?.plantel_id;
+    }
+    if(!finalPlantel) {
+        return alert("❌ Error: No se pudo identificar tu plantel. Por favor recarga la página.");
+    }
+    
     const btn = document.getElementById('btnConfirmarMasiva');
     const progCont = document.getElementById('masivaProgressContainer');
     const progBar = document.getElementById('masivaProgressBar');
@@ -20165,6 +20175,7 @@ window.confirmarInscripcionMasiva = async () => {
     let successCount = 0;
     let errCount = 0;
     let errCurp = 0;
+    let errorDetails = [];
     
     for(let i=0; i < data.length; i++) {
         const row = data[i];
@@ -20192,14 +20203,14 @@ window.confirmarInscripcionMasiva = async () => {
             const grupoLetra = row.grupo.trim().toUpperCase();
             const fullGrupoNom = `${gradoNom} ${grupoLetra}`;
             
-            const { data: grData } = await supabaseClient.from('grupos').select('id').eq('nombre', fullGrupoNom).eq('plantel_id', state.plantelId).maybeSingle();
+            const { data: grData } = await supabaseClient.from('grupos').select('id').eq('nombre', fullGrupoNom).eq('plantel_id', finalPlantel).maybeSingle();
             let resolvedGrupoId = grData ? grData.id : null;
             
             if (!resolvedGrupoId) {
                 const { data: newGr, error: eGr } = await supabaseClient.from('grupos').insert([{
                     nombre: fullGrupoNom,
                     grado: gradoNom,
-                    plantel_id: state.plantelId
+                    plantel_id: finalPlantel
                 }]).select('id').single();
                 
                 if (eGr) throw eGr;
@@ -20219,29 +20230,37 @@ window.confirmarInscripcionMasiva = async () => {
                 estatura: parseFloat(row.estatura) || null,
                 peso: parseFloat(row.peso) || null,
                 talla_zapato: row.talla.trim() || null,
-                plantel_id: state.plantelId
+                plantel_id: finalPlantel
             }]);
             
             if(insErr) throw insErr;
             
             // 2. Crear Auth
-            await supabaseClient.rpc('crear_usuario_admin', {
+            const { error: rpcError } = await supabaseClient.rpc('crear_usuario_admin', {
                 p_email: autoEmail.toLowerCase().trim(),
                 p_password: autoPass,
                 p_nombre: row.nombre.trim(),
                 p_rol: 'alumno',
-                p_plantel_id: state.plantelId
+                p_plantel_id: finalPlantel
             });
+            
+            if(rpcError) throw rpcError;
             
             successCount++;
         } catch(e) {
             console.error("Error inscribiendo a " + row.nombre, e);
             errCount++;
+            if(errorDetails.length < 5) errorDetails.push(`${row.nombre}: ${e.message || JSON.stringify(e)}`);
         }
     }
     
     progText.innerText = "¡Proceso Terminado!";
-    alert(`✅ Inscripción Masiva Completada.\n\nÉxitos: ${successCount}\nCURPs Repetidos (Saltados): ${errCurp}\nOtros Errores: ${errCount}`);
+    
+    let msg = `✅ Inscripción Masiva Completada.\n\nÉxitos: ${successCount}\nCURPs Repetidos (Saltados): ${errCurp}\nOtros Errores: ${errCount}`;
+    if(errorDetails.length > 0) {
+        msg += `\n\nDetalles de algunos errores:\n- ${errorDetails.join('\n- ')}`;
+    }
+    alert(msg);
     
     document.getElementById('modalCargaMasiva').style.display = 'none';
     if(window.loadGruposAdmin) window.loadGruposAdmin();
