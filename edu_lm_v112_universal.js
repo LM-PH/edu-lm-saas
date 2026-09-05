@@ -20191,6 +20191,7 @@ window.confirmarInscripcionMasiva = async () => {
             const { error: insErr } = await supabaseClient.from('alumnos').insert([{
                 curp: row.curp.trim(),
                 nombre: row.nombre.trim(),
+                matricula: matricula,
                 edad: parseInt(row.edad, 10) || null,
                 contacto_email: autoEmail.toLowerCase().trim(),
                 grado: row.grado.trim(),
