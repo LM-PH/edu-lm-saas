@@ -15746,7 +15746,7 @@ window.loadListasAdminPersonal = async (searchTerm = '') => {
             if(error) throw error;
             
             let tabRoles = [];
-            if(window._activePersonalTab === 'admin') tabRoles = ['admin'];
+            if(window._activePersonalTab === 'admin') tabRoles = ['admin', 'secretaria_direccion', 'administrativo'];
             else if(window._activePersonalTab === 'maestro') tabRoles = ['maestro'];
             else if(window._activePersonalTab === 'apoyo') tabRoles = ['apoyo'];
             else if(window._activePersonalTab === 'directivo') tabRoles = ['directivo'];
@@ -15767,7 +15767,7 @@ window.loadListasAdminPersonal = async (searchTerm = '') => {
 
         let html = '';
         itemsToRender.forEach(p => {
-            const roleLabels = { 'admin': 'Administrador', 'maestro': 'Maestro', 'apoyo': 'Apoyo', 'directivo': 'Directivo', 'alumno': 'Alumno', 'biblioteca': 'Biblioteca' };
+            const roleLabels = { 'admin': 'Administrador', 'secretaria_direccion': 'Secretaría de Dirección', 'maestro': 'Maestro', 'apoyo': 'Apoyo', 'directivo': 'Directivo', 'alumno': 'Alumno', 'biblioteca': 'Biblioteca' };
             const roleClass = (p.rol === 'admin' || p.rol === 'directivo') ? 'badge-primary' : 
                               (p.rol === 'maestro' ? 'badge-success' : 
                               (p.rol === 'alumno' ? 'badge-warning' : 'badge-outline'));
