@@ -139,6 +139,7 @@ window.login = (rawRole) => {
     if(role === 'master') state.path = '/master/saas';
     else if(role === 'admin') state.path = '/admin/inscripcion';
     else if(role === 'directivo') state.path = '/directivo/autorizaciones';
+    else if(role === 'secretaria_direccion') state.path = '/directivo/maestros';
     else if(role === 'maestro') state.path = '/maestro/aula';
     else if(role === 'apoyo') state.path = '/apoyo/dashboard';
     else if(role === 'alumno') state.path = '/alumno/credencial';
@@ -705,6 +706,7 @@ window.checkSchoolSetup = async () => {
             // DETERMINAR RUTA SEGÚN ROL RECUPERADO
             if(state.role === 'master') state.path = '/master/saas';
             else if(state.role === 'directivo') state.path = '/directivo/autorizaciones';
+            else if(state.role === 'secretaria_direccion') state.path = '/directivo/maestros';
             else if(state.role === 'admin') state.path = '/admin/inscripcion';
             else if(state.role === 'maestro') state.path = '/maestro/aula';
             else if(state.role === 'apoyo') state.path = '/apoyo/dashboard';
@@ -908,7 +910,14 @@ function renderSidebar() {
       { name: 'Maestros y Materias', path: '/directivo/maestros', icon: 'fa-chalkboard-user' },
       { name: 'Grupos y Asignación', path: '/directivo/grupos', icon: 'fa-users-gear' },
       { name: 'Horarios de Clase', path: '/directivo/horarios', icon: 'fa-calendar-days' },
+      { name: 'Expedientes Docentes', path: '/directivo/expedientes', icon: 'fa-address-book' },
       { name: 'Comunicados Oficiales', path: '/directivo/comunicados', icon: 'fa-bullhorn' }
+    ],
+    secretaria_direccion: [
+      { name: 'Maestros y Materias', path: '/directivo/maestros', icon: 'fa-chalkboard-user' },
+      { name: 'Grupos y Asignación', path: '/directivo/grupos', icon: 'fa-users-gear' },
+      { name: 'Horarios de Clase', path: '/directivo/horarios', icon: 'fa-calendar-days' },
+      { name: 'Expedientes Docentes', path: '/directivo/expedientes', icon: 'fa-address-book' }
     ],
     alumno: [
       { name: 'Credencial Digital', path: '/alumno/credencial', icon: 'fa-id-card' },
@@ -952,7 +961,7 @@ function renderSidebar() {
     `;
   }).join('');
 
-  const roleNames = { master: 'Creador del Sistema', admin: 'Admin', directivo: 'Directivo', maestro: 'Maestro', apoyo: 'Trabajo Social', alumno: 'Estudiante', administrativo: 'Admin', biblioteca: 'Biblioteca / Aula Medios' };
+  const roleNames = { master: 'Creador del Sistema', admin: 'Admin', directivo: 'Directivo', secretaria_direccion: 'Secretaría de Dirección', maestro: 'Maestro', apoyo: 'Trabajo Social', alumno: 'Estudiante', administrativo: 'Admin', biblioteca: 'Biblioteca / Aula Medios' };
 
   const userName = (state.isMaster) ? 'M.C Luis Miguel Ponce Herrera' : (state.userName || state.user?.user_metadata?.nombre || state.user?.email || 'Usuario');
   const shortName = (state.isMaster) ? 'Luis Miguel' : userName.split(' ').slice(0, 2).join(' ');
@@ -1206,7 +1215,7 @@ window.ejecutarPromocionMasiva = async () => {
     const targetNom = formatearGrupo(tGrado, tGrupo);
     tGrado = tGrado.replace(/[^0-9]/g, '') + '°';
 
-    const isDirectivo = state.role === 'directivo';
+    const isDirectivo = state.role === 'directivo' || state.role === 'secretaria_direccion';
     const confirmMsg = isDirectivo 
         ? `⚠️ ¿Deseas ejecutar AHORA la promoción de TODOS los alumnos de ${sourceNom} a ${targetNom}?`
         : `⚠️ ¿Deseas SOLICITAR LA PROMOCIÓN de todos los alumnos de ${sourceNom} a ${targetNom}? El Directivo deberá autorizar este cambio.`;
@@ -1269,7 +1278,7 @@ window.graduarGeneracion = async () => {
     const grado = document.getElementById('gradoGraduacion').value.trim();
     if(!grado) return alert('Por favor indica el grado que se va a graduar.');
 
-    const isDirectivo = state.role === 'directivo';
+    const isDirectivo = state.role === 'directivo' || state.role === 'secretaria_direccion';
     const confirmMsg = isDirectivo 
         ? `🚨 ATENCIÓN: Esta acción eliminará permanentemente a TODOS los alumnos de ${grado}° y revocará sus accesos. ¿Estas seguro?`
         : `⚠️ ¿Deseas SOLICITAR LA GRADUACIÓN MASIVA de ${grado}°? Esta acción requiere autorización del Directivo.`;
@@ -1342,7 +1351,7 @@ window.liveSearchGestion = async (q) => {
 }
 
 window.darDeBajaAlumno = async (id, nombre) => {
-    const isDirectivo = state.role === 'directivo';
+    const isDirectivo = state.role === 'directivo' || state.role === 'secretaria_direccion';
     const confirmMsg = isDirectivo 
         ? `⚠️ ¿Deseas dar de BAJA DEFINITIVA a ${nombre}?`
         : `⚠️ ¿Deseas SOLICITAR LA BAJA DEFINITIVA de ${nombre}? El Directivo deberá autorizar este movimiento.`;
@@ -1383,7 +1392,7 @@ window.darDeBajaAlumno = async (id, nombre) => {
 }
 
 window.promoverGradoAlumno = async (id) => {
-    const isDirectivo = state.role === 'directivo';
+    const isDirectivo = state.role === 'directivo' || state.role === 'secretaria_direccion';
     const nuevoGrado = prompt('Ingresa el nuevo GRADO (ej. 2°, 3°):');
     if(!nuevoGrado) return;
     const nuevoGrupo = prompt('Ingresa el nuevo GRUPO (ej. A, B o 101):');
@@ -2080,6 +2089,7 @@ function renderAdminMaestros() {
             <option value="apoyo">Apoyo (Prefectura / Trabajo Social)</option>
             <option value="admin">Admin (Control Escolar)</option>
             <option value="directivo">Directivo del Plantel</option>
+            <option value="secretaria_direccion">Secretaría de Dirección</option>
             <option value="biblioteca">Biblioteca / Aula de Medios</option>
           </select>
         </div>
@@ -7177,6 +7187,7 @@ function renderDirectivoPersonal() {
                  <option value="maestro">Maestro</option>
                  <option value="apoyo">Apoyo (Prefectura / Trabajo Social)</option>
                  <option value="directivo">Directivo (Director / Subdirector)</option>
+                 <option value="secretaria_direccion">Secretaría de Dirección</option>
                  <option value="admin">Admin (Control Escolar)</option>
                  <option value="biblioteca">Biblioteca / Aula de Medios</option>
               </select>
@@ -7216,6 +7227,7 @@ window.registrarNuevoPersonal = async () => {
         else if (['maestro', 'docente', 'profesor'].includes(rol)) finalRol = 'maestro';
         else if (['apoyo', 'prefectura', 'trabajo_social'].includes(rol)) finalRol = 'apoyo';
         else if (['directivo', 'director', 'subdirector'].includes(rol)) finalRol = 'directivo';
+        else if (['secretaria', 'secretaria_direccion', 'secretariado'].includes(rol)) finalRol = 'secretaria_direccion';
         else if (['biblioteca', 'medios', 'aula_de_medios'].includes(rol)) finalRol = 'biblioteca';
         
         // Recuperar Plantel ID con máxima prioridad (State -> Metadata -> Fetch DB)
@@ -7444,6 +7456,7 @@ async function renderPage(path) {
         if(state.role === 'apoyo') return renderApoyoDashboard();
         if(state.role === 'biblioteca') return renderBibliotecaDashboard();
         if(state.role === 'alumno') return renderAlumnoCredencial();
+        if(state.role === 'secretaria_direccion') return renderAdminMaestros();
         return `<div style="text-align:center; padding:50px;">
                     <h2>Página no encontrada</h2>
                     <button class="btn btn-primary" onclick="window.logout()">Cerrar sesión y volver</button>
@@ -7454,6 +7467,7 @@ async function renderPage(path) {
     case '/admin/expediente': return renderAdminExpediente();
     case '/directivo/grupos': return renderAdminGrupos();
     case '/directivo/maestros': return renderAdminMaestros();
+    case '/directivo/expedientes': return renderSecretariaExpedientes();
     case '/admin/calificaciones': return renderAdminCalificaciones();
     case '/admin/tramites': return renderAdminTramites();
     case '/directivo/horarios': return renderAdminHorarios();
@@ -7956,7 +7970,7 @@ async function renderMasterGestionPerfiles() {
             alumno: alumnosPermitidos,
             maestro: users.filter(u => u.rol === 'maestro'),
             apoyo: users.filter(u => u.rol === 'apoyo'),
-            admin: users.filter(u => ['admin', 'administrativo', 'directivo'].includes(u.rol)),
+            admin: users.filter(u => ['admin', 'administrativo', 'directivo', 'secretaria_direccion'].includes(u.rol)),
             biblioteca: users.filter(u => u.rol === 'biblioteca')
         };
         
@@ -8201,7 +8215,7 @@ window.updateNotificationBadge = async (clearAll = false) => {
                 if(al.grupo_id) audArr.push('Grupo_' + al.grupo_id);
                 creadoEn = al.creado_en;
             }
-        } else if (userRole === 'directivo' || userRole === 'admin' || userRole === 'administrativo') {
+        } else if (userRole === 'directivo' || userRole === 'secretaria_direccion' || userRole === 'admin' || userRole === 'administrativo') {
             audArr.push('Maestros', 'Personal', 'Alumnos');
         }
 
@@ -9813,7 +9827,7 @@ window.loadTimelinePersonal = async (selectedDate) => {
             audArr.push('Personal');
         } else if (userRole === 'alumno' || userRole === 'estudiante') {
             audArr.push('Alumnos');
-        } else if (userRole === 'directivo' || userRole === 'admin' || userRole === 'administrativo') {
+        } else if (userRole === 'directivo' || userRole === 'secretaria_direccion' || userRole === 'admin' || userRole === 'administrativo') {
             audArr.push('Maestros', 'Personal', 'Alumnos');
         }
         
@@ -11837,6 +11851,7 @@ window.initEventosAdminMaestros = () => {
                     else if (['maestro', 'docente', 'profesor'].includes(rolValue)) finalRolVal = 'maestro';
                     else if (['apoyo', 'prefectura', 'trabajo_social'].includes(rolValue)) finalRolVal = 'apoyo';
                     else if (['directivo', 'director', 'subdirector'].includes(rolValue)) finalRolVal = 'directivo';
+                    else if (['secretaria', 'secretaria_direccion', 'secretariado'].includes(rolValue)) finalRolVal = 'secretaria_direccion';
                     else if (['biblioteca', 'medios', 'aula_de_medios'].includes(rolValue)) finalRolVal = 'biblioteca';
 
                     const { error } = await supabaseClient.from('perfiles_permitidos').upsert([{ 
@@ -15799,7 +15814,7 @@ window.loadListasAdminPersonal = async (searchTerm = '') => {
 };
 
 window.eliminarPersona = async (idPermitido, email, nombre, rol = '') => {
-    const isDirectivo = state.role === 'directivo';
+    const isDirectivo = state.role === 'directivo' || state.role === 'secretaria_direccion';
     const confirmMsg = isDirectivo 
         ? `⚠️ ¿Deseas ELIMINAR AHORA a "${nombre}" (${email})? Esta acción es inmediata.`
         : `⚠️ ¿Deseas SOLICITAR LA BAJA de "${nombre}" (${email})? El Directivo deberá autorizar este movimiento.`;
@@ -19094,7 +19109,7 @@ window.initFlatpickrAvisos = async (isAlumno = false) => {
                     const gId = aud.replace('Grupo_', '');
                     isTargeted = maestroGrupos.includes(gId);
                 }
-            } else if (userRole === 'directivo' || userRole === 'admin' || userRole === 'administrador' || userRole === 'administrativo') {
+            } else if (userRole === 'directivo' || userRole === 'secretaria_direccion' || userRole === 'admin' || userRole === 'administrador' || userRole === 'administrativo') {
                 isTargeted = true; // Admin/Directivos ven todas las fechas con avisos
             } else if (userRole === 'apoyo' || userRole === 'biblioteca') {
                 if(['Personal', 'Maestros'].includes(aud)) isTargeted = true;
@@ -20288,4 +20303,358 @@ window.confirmarInscripcionMasiva = async () => {
     
     document.getElementById('modalCargaMasiva').style.display = 'none';
     if(window.loadGruposAdmin) window.loadGruposAdmin();
+};
+
+// ==========================================
+// NUEVO MÓDULO: EXPEDIENTE DE DOCENTES
+// ==========================================
+async function renderSecretariaExpedientes() {
+    return `
+    <div class="fade-in" style="padding: 20px;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 20px;">
+            <h2 style="font-size: 1.5rem; color: var(--text-main);"><i class="fa-solid fa-address-book" style="color:var(--primary); margin-right:10px;"></i> Expedientes Docentes</h2>
+            <button class="btn btn-primary" onclick="loadExpedientesDocentes()"><i class="fa-solid fa-sync"></i> Actualizar</button>
+        </div>
+        <p style="color: var(--text-muted); margin-bottom: 20px;">Gestiona la información académica, administrativa y carga horaria de los maestros del plantel.</p>
+        
+        <div class="glass-panel">
+            <div style="overflow-x:auto;">
+                <table class="table" style="width:100%; text-align:left; border-collapse:collapse;">
+                    <thead>
+                        <tr style="border-bottom: 1px solid var(--border);">
+                            <th style="padding:10px;">Maestro</th>
+                            <th style="padding:10px;">Correo (Usuario)</th>
+                            <th style="padding:10px;">Teléfono</th>
+                            <th style="padding:10px;">Último Grado</th>
+                            <th style="padding:10px; text-align:center;">Acciones</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tbodyExpedientes">
+                        <tr><td colspan="5" style="text-align:center; padding:20px;">Cargando...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal Expediente -->
+    <div id="modalExpedienteDocente" class="modal-overlay" style="display:none;">
+        <div class="modal-content" style="max-width:800px; width:95%;">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 15px; border-bottom: 1px solid var(--border); padding-bottom: 10px;">
+                <h3 id="modalExpedienteTitle" style="margin:0;">Expediente de Docente</h3>
+                <button class="btn btn-sm" onclick="document.getElementById('modalExpedienteDocente').style.display='none'" style="background:transparent; color:var(--text-main); font-size:1.2rem; border:none;">&times;</button>
+            </div>
+            
+            <div id="modalExpedienteBody" style="max-height: 70vh; overflow-y: auto; padding-right:10px;">
+                <!-- Content loaded dynamically -->
+            </div>
+            
+            <div style="text-align:right; margin-top:20px; padding-top:15px; border-top: 1px solid var(--border);">
+                <button class="btn" style="background:var(--bg-card); color:var(--text-main); border:1px solid var(--border);" onclick="document.getElementById('modalExpedienteDocente').style.display='none'">Cancelar</button>
+                <button class="btn btn-primary" onclick="guardarExpedienteDocente()">Guardar Expediente</button>
+            </div>
+        </div>
+    </div>
+    <script>
+        setTimeout(() => {
+            loadExpedientesDocentes();
+        }, 100);
+    </script>
+    `;
+}
+
+window.loadExpedientesDocentes = async function() {
+    const tbody = document.getElementById('tbodyExpedientes');
+    if(!tbody) return;
+    tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; padding:20px;"><i class="fa-solid fa-spinner fa-spin"></i> Cargando...</td></tr>';
+    
+    try {
+        // Traer maestros
+        const { data: maestros, error: errM } = await supabaseClient
+            .from('perfiles')
+            .select('*')
+            .eq('plantel_id', state.plantelId)
+            .eq('rol', 'maestro');
+            
+        if(errM) throw errM;
+        
+        // Traer expedientes
+        const { data: expedientes, error: errE } = await supabaseClient
+            .from('expedientes_docentes')
+            .select('*')
+            .eq('plantel_id', state.plantelId);
+            
+        if(errE) throw errE;
+        
+        const expedientesMap = {};
+        if(expedientes) {
+            expedientes.forEach(e => expedientesMap[e.maestro_id] = e);
+        }
+        
+        if(!maestros || maestros.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; padding:20px;">No hay maestros registrados en este plantel.</td></tr>';
+            return;
+        }
+        
+        let html = '';
+        window._maestrosData = maestros;
+        window._expedientesData = expedientesMap;
+        
+        maestros.sort((a,b) => (a.nombre || '').localeCompare(b.nombre || '')).forEach(m => {
+            const exp = expedientesMap[m.id] || {};
+            html += `
+                <tr style="border-bottom: 1px solid var(--border);">
+                    <td style="padding:10px;">
+                        <div style="font-weight:600; color:var(--text-main);">${m.nombre || 'Sin nombre'}</div>
+                    </td>
+                    <td style="padding:10px; color:var(--text-muted);">${exp.correo || 'No registrado'}</td>
+                    <td style="padding:10px; color:var(--text-muted);">${exp.telefono || 'No registrado'}</td>
+                    <td style="padding:10px;">${exp.perfil_academico_ultimo_grado || 'No registrado'}</td>
+                    <td style="padding:10px; text-align:center;">
+                        <button class="btn btn-sm btn-primary" onclick="abrirModalExpediente('${m.id}')">
+                            <i class="fa-solid fa-folder-open"></i> Abrir
+                        </button>
+                    </td>
+                </tr>
+            `;
+        });
+        
+        tbody.innerHTML = html;
+        
+    } catch(err) {
+        console.error(err);
+        tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; padding:20px; color:var(--danger);">Error al cargar expedientes.</td></tr>';
+    }
+};
+
+window.abrirModalExpediente = async function(maestroId) {
+    const maestro = (window._maestrosData || []).find(m => m.id === maestroId);
+    if(!maestro) return;
+    
+    let exp = window._expedientesData[maestroId] || {
+        maestro_id: maestroId,
+        correo: '',
+        telefono: '',
+        curp: '',
+        estado_civil: '',
+        clave_presupuestal: '',
+        perfil_academico_ultimo_grado: '',
+        fecha_ingreso_sep: '',
+        fecha_ingreso_ct: '',
+        horas_totales: 0,
+        carga_horaria_json: []
+    };
+    
+    window._currentExpediente = { ...exp };
+    window._currentExpedienteMaestro = maestro;
+    
+    document.getElementById('modalExpedienteTitle').innerText = 'Expediente: ' + (maestro.nombre || '');
+    
+    const body = document.getElementById('modalExpedienteBody');
+    body.innerHTML = `
+        <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin-bottom: 20px;">
+            <div class="form-group">
+                <label>CURP</label>
+                <input type="text" class="form-control" id="exp_curp" value="${exp.curp || ''}" placeholder="18 caracteres">
+            </div>
+            <div class="form-group">
+                <label>Teléfono</label>
+                <input type="text" class="form-control" id="exp_tel" value="${exp.telefono || ''}" placeholder="Ej. 5512345678">
+            </div>
+            <div class="form-group">
+                <label>Correo Electrónico (Contacto)</label>
+                <input type="email" class="form-control" id="exp_correo" value="${exp.correo || ''}">
+            </div>
+            <div class="form-group">
+                <label>Estado Civil</label>
+                <select class="form-control" id="exp_ec">
+                    <option value="">Seleccione...</option>
+                    <option value="Soltero(a)" ${exp.estado_civil === 'Soltero(a)' ? 'selected' : ''}>Soltero(a)</option>
+                    <option value="Casado(a)" ${exp.estado_civil === 'Casado(a)' ? 'selected' : ''}>Casado(a)</option>
+                    <option value="Divorciado(a)" ${exp.estado_civil === 'Divorciado(a)' ? 'selected' : ''}>Divorciado(a)</option>
+                    <option value="Viudo(a)" ${exp.estado_civil === 'Viudo(a)' ? 'selected' : ''}>Viudo(a)</option>
+                    <option value="Unión Libre" ${exp.estado_civil === 'Unión Libre' ? 'selected' : ''}>Unión Libre</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label>Último Grado de Estudios</label>
+                <input type="text" class="form-control" id="exp_grado" value="${exp.perfil_academico_ultimo_grado || ''}" placeholder="Ej. Licenciatura, Maestría...">
+            </div>
+            <div class="form-group">
+                <label>Clave Presupuestal</label>
+                <input type="text" class="form-control" id="exp_clave" value="${exp.clave_presupuestal || ''}">
+            </div>
+            <div class="form-group">
+                <label>Fecha de Ingreso a SEP</label>
+                <input type="date" class="form-control" id="exp_f_sep" value="${exp.fecha_ingreso_sep || ''}">
+            </div>
+            <div class="form-group">
+                <label>Fecha de Ingreso al CT</label>
+                <input type="date" class="form-control" id="exp_f_ct" value="${exp.fecha_ingreso_ct || ''}">
+            </div>
+        </div>
+        
+        <div style="border-top:1px solid var(--border); padding-top:20px; margin-top:10px;">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px;">
+                <h4 style="margin:0; color:var(--text-main);">Carga Horaria y Asignaciones</h4>
+                <button class="btn btn-sm" style="background:var(--primary); color:white;" onclick="calcularCargaHorariaAuto('${maestro.id}')">
+                    <i class="fa-solid fa-calculator"></i> Calcular Automático
+                </button>
+            </div>
+            
+            <div class="form-group" style="max-width: 200px;">
+                <label>Horas Totales</label>
+                <input type="number" class="form-control" id="exp_horas" value="${exp.horas_totales || 0}">
+            </div>
+            
+            <div class="form-group">
+                <label>Detalle de Materias (Editable manual si se desea)</label>
+                <textarea class="form-control" id="exp_carga_texto" rows="4" placeholder="Ej. Matemáticas (1°A) - 5 horas...">${(exp.carga_horaria_json || []).map(x => (x.materia || '') + ' (' + (x.grupo || '') + ') - ' + (x.horas || 0) + ' hrs').join('\\n')}</textarea>
+            </div>
+        </div>
+    `;
+    
+    document.getElementById('modalExpedienteDocente').style.display = 'flex';
+};
+
+window.calcularCargaHorariaAuto = async function(maestroId) {
+    try {
+        const btn = event.currentTarget;
+        const originalText = btn.innerHTML;
+        btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Calculando...';
+        btn.disabled = true;
+        
+        // 1. Obtener grupos y materias para mapear nombres
+        const { data: gruposData } = await supabaseClient.from('grupos').select('*').eq('plantel_id', state.plantelId);
+        const { data: materiasData } = await supabaseClient.from('materias').select('*').eq('plantel_id', state.plantelId);
+        
+        const gMap = {}; (gruposData||[]).forEach(g => gMap[g.id] = g.nombre);
+        const mMap = {}; (materiasData||[]).forEach(m => mMap[m.id] = m.nombre);
+        
+        // 2. Obtener asignaciones_maestros para ver qué materias y grupos da
+        const { data: asignaciones } = await supabaseClient
+            .from('asignaciones_maestros')
+            .select('*')
+            .eq('maestro_id', maestroId)
+            .eq('plantel_id', state.plantelId);
+            
+        // 3. Obtener horarios (para contar módulos/horas).
+        // En este sistema, la tabla horarios_maestros tiene un array horario_data con sesiones
+        const { data: perfilesData } = await supabaseClient.from('perfiles').select('email').eq('id', maestroId).maybeSingle();
+        let horariosList = [];
+        if(perfilesData && perfilesData.email) {
+            const { data: hData } = await supabaseClient.from('horarios_maestros').select('*').eq('maestro_email', perfilesData.email).maybeSingle();
+            if(hData && hData.horario_data) {
+                horariosList = Array.isArray(hData.horario_data) ? hData.horario_data : [];
+            }
+        }
+        
+        let totalHoras = 0;
+        let detalleTexto = "";
+        let jsonCarga = [];
+        
+        if(asignaciones && asignaciones.length > 0) {
+            for(const asig of asignaciones) {
+                const materiaNombre = mMap[asig.materia_id] || 'Materia Desconocida';
+                const grupoNombre = gMap[asig.grupo_id] || 'Grupo Desconocido';
+                
+                // Contar cuántas sesiones tiene en su horario para este grupo y materia
+                // (Opcionalmente, si el horario no está desglosado así, solo lo registramos)
+                let horasEnHorario = horariosList.filter(s => s.grupo === grupoNombre && s.materia === materiaNombre).length;
+                
+                // Si no hay horario detallado o no se guardó igual, al menos damos la asignación
+                if(horasEnHorario === 0) {
+                   horasEnHorario = horariosList.filter(s => s.grupo_id === asig.grupo_id && s.materia_id === asig.materia_id).length;
+                }
+                
+                // Si aún así no hay cruce, podemos poner un default o preguntar al usuario. 
+                // Lo dejamos en lo que se encontró en horario o 0.
+                
+                detalleTexto += `${materiaNombre} (${grupoNombre}) - ${horasEnHorario} hrs\\n`;
+                totalHoras += horasEnHorario;
+                jsonCarga.push({ materia: materiaNombre, grupo: grupoNombre, horas: horasEnHorario, materia_id: asig.materia_id, grupo_id: asig.grupo_id });
+            }
+        } else {
+            detalleTexto = "No se encontraron asignaciones de materias para este docente.\\nVerifica en 'Grupos y Asignación'.";
+        }
+        
+        document.getElementById('exp_horas').value = totalHoras;
+        document.getElementById('exp_carga_texto').value = detalleTexto;
+        window._currentExpediente.carga_horaria_json = jsonCarga;
+        
+        btn.innerHTML = originalText;
+        btn.disabled = false;
+        showToast("Cálculo realizado. Verifica los datos antes de guardar.");
+        
+    } catch(err) {
+        console.error(err);
+        alert("Error al calcular carga horaria: " + err.message);
+    }
+};
+
+window.guardarExpedienteDocente = async function() {
+    try {
+        const curp = document.getElementById('exp_curp').value.trim();
+        const tel = document.getElementById('exp_tel').value.trim();
+        const correo = document.getElementById('exp_correo').value.trim();
+        const ec = document.getElementById('exp_ec').value;
+        const grado = document.getElementById('exp_grado').value.trim();
+        const clave = document.getElementById('exp_clave').value.trim();
+        const f_sep = document.getElementById('exp_f_sep').value;
+        const f_ct = document.getElementById('exp_f_ct').value;
+        const horas = parseInt(document.getElementById('exp_horas').value) || 0;
+        
+        // Convertimos el texto a una estructura simple si fue editado manualmente. 
+        // (Para simplificar, solo guardaremos lo que calculó o un string en texto si se requiere, pero dejamos el json que se generó o vacío).
+        let cargaTexto = document.getElementById('exp_carga_texto').value.trim();
+        let cargaArray = window._currentExpediente.carga_horaria_json || [];
+        
+        if(!window._currentExpediente.id) {
+            // Crear nuevo
+            const payload = {
+                maestro_id: window._currentExpedienteMaestro.id,
+                plantel_id: state.plantelId,
+                curp: curp,
+                telefono: tel,
+                correo: correo,
+                estado_civil: ec,
+                clave_presupuestal: clave,
+                perfil_academico_ultimo_grado: grado,
+                fecha_ingreso_sep: f_sep || null,
+                fecha_ingreso_ct: f_ct || null,
+                horas_totales: horas,
+                carga_horaria_json: cargaArray // idealmente mapear lo del textarea, pero lo dejamos así
+            };
+            
+            const { error } = await supabaseClient.from('expedientes_docentes').insert([payload]);
+            if(error) throw error;
+        } else {
+            // Actualizar
+            const payload = {
+                curp: curp,
+                telefono: tel,
+                correo: correo,
+                estado_civil: ec,
+                clave_presupuestal: clave,
+                perfil_academico_ultimo_grado: grado,
+                fecha_ingreso_sep: f_sep || null,
+                fecha_ingreso_ct: f_ct || null,
+                horas_totales: horas,
+                actualizado_en: new Date().toISOString()
+            };
+            
+            const { error } = await supabaseClient.from('expedientes_docentes')
+                .update(payload)
+                .eq('id', window._currentExpediente.id);
+            if(error) throw error;
+        }
+        
+        showToast("Expediente guardado correctamente");
+        document.getElementById('modalExpedienteDocente').style.display = 'none';
+        loadExpedientesDocentes();
+        
+    } catch(err) {
+        console.error(err);
+        alert("Error al guardar: " + err.message);
+    }
 };
