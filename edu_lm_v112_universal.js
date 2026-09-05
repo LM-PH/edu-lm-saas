@@ -20199,9 +20199,9 @@ window.confirmarInscripcionMasiva = async () => {
             const matricula = `${new Date().getFullYear()}${numG}${row.grupo.trim().toUpperCase()}${Math.floor(1000 + Math.random() * 9000)}`;
             
             // 0. Resolver grupo_id (UUID)
-            const gradoNom = row.grado.trim();
-            const grupoLetra = row.grupo.trim().toUpperCase();
-            const fullGrupoNom = `${gradoNom} ${grupoLetra}`;
+            const gradoLimpio = row.grado.replace('°', '').trim();
+            const fullGrupoNom = `${gradoLimpio}°${row.grupo.trim().toUpperCase()}`;
+            const gradoNom = `${gradoLimpio}°`;
             
             const { data: grData } = await supabaseClient.from('grupos').select('id').eq('nombre', fullGrupoNom).eq('plantel_id', finalPlantel).maybeSingle();
             let resolvedGrupoId = grData ? grData.id : null;
@@ -20244,6 +20244,18 @@ window.confirmarInscripcionMasiva = async () => {
             });
             
             if(rpcError) throw rpcError;
+            
+            // 3. Registrar en perfiles_permitidos (para el directorio)
+            const { error: permErr } = await supabaseClient.from('perfiles_permitidos').upsert([{ 
+                email: autoEmail.toLowerCase().trim(), 
+                rol: 'alumno', 
+                nombre: row.nombre.trim(),
+                plantel_id: finalPlantel,
+                temp_pass: autoPass,
+                estado: 'activo'
+            }], { onConflict: 'email' });
+            
+            if(permErr) throw permErr;
             
             successCount++;
         } catch(e) {
