@@ -3141,6 +3141,7 @@ function renderApoyoReportes() {
   const today = new Date().toLocaleDateString('en-CA');
   setTimeout(() => { 
       if(!isMaestro && !isBiblioteca && window.loadCitatoriosApoyo) window.loadCitatoriosApoyo();
+      if(!isMaestro && !isBiblioteca && window.cargarProtocolosEscuela) window.cargarProtocolosEscuela();
       // Ocultamos la auto-carga de mis reportes; ahora es por búsqueda
   }, 150);
   
@@ -3205,6 +3206,24 @@ function renderApoyoReportes() {
         </div>
   ` : '';
 
+  const protocolosSection = (state.role === 'apoyo') ? `
+        <!-- SECCIÓN: PROTOCOLOS DE ATENCIÓN (TRABAJO SOCIAL) -->
+        <div class="card" style="width:100%; border-top:4px solid var(--info);">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px; flex-wrap:wrap; gap:10px;">
+                <div>
+                    <h3 style="margin-bottom:4px;"><i class="fa-solid fa-list-ol text-info"></i> Protocolos de Seguimiento</h3>
+                    <p style="font-size:0.85rem; color:var(--text-muted);">Definir acciones a realizar según acumulación de reportes.</p>
+                </div>
+                <button class="btn btn-outline btn-sm" onclick="window.abrirModalProtocolos()">
+                    <i class="fa-solid fa-cog"></i> Configurar Protocolos
+                </button>
+            </div>
+            <div id="contenedorProtocolosActuales" style="display:grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap:15px;">
+                <div style="text-align:center; padding:20px; color:var(--text-muted); grid-column:1/-1;">Cargando protocolos...</div>
+            </div>
+        </div>
+  ` : '';
+
     const buscarExpedienteSection = (isMaestro) ? '' : `
         <!-- SECCIÓN DE BÚSQUEDA DE EXPEDIENTE DISCIPLINARIO -->
         <div class="card" style="width:100%; border-top:4px solid var(--primary);">
@@ -3237,6 +3256,7 @@ function renderApoyoReportes() {
 
     <div style="display:grid; grid-template-columns: 1fr; gap:30px; margin-top:20px;">
         ${buscarExpedienteSection}
+        ${protocolosSection}
         ${citatoriosSection}
         ${misReportesSection}
     </div>
@@ -3257,18 +3277,19 @@ function renderApoyoReportes() {
 
             <div style="margin-top:15px; display:grid; grid-template-columns: 1fr 1fr; gap:15px;">
                 <div>
+                    <label style="display:block; font-size:0.85rem; margin-bottom:5px; font-weight:600;">Categoría:</label>
+                    <select id="categoriaReporteApoyo" class="form-input" style="border-radius:10px;" onchange="window.cambioCategoriaApoyo(this.value)">
+                        <option value="Académico">Académico</option>
+                        <option value="Convivencia">Convivencia</option>
+                        <option value="Atención Prioritaria">Atención Prioritaria</option>
+                    </select>
+                </div>
+                <div id="contenedorGravedadApoyo">
                     <label style="display:block; font-size:0.85rem; margin-bottom:5px; font-weight:600;">Gravedad:</label>
                     <select id="gravedadReporteApoyo" class="form-input" style="border-radius:10px;">
                         <option value="Leve">Leve</option>
                         <option value="Moderado">Moderado</option>
                         <option value="Grave">Grave</option>
-                    </select>
-                </div>
-                <div>
-                    <label style="display:block; font-size:0.85rem; margin-bottom:5px; font-weight:600;">Categoría:</label>
-                    <select id="categoriaReporteApoyo" class="form-input" style="border-radius:10px;">
-                        <option value="Conducta">Conducta / Comportamiento</option>
-                        <option value="Académico">Académico</option>
                     </select>
                 </div>
             </div>
@@ -3345,8 +3366,153 @@ function renderApoyoReportes() {
             </div>
         </div>
     </div>
+
+    <!-- Modal de Configuración de Protocolos -->
+    <div id="modalProtocolos" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); z-index:9999; backdrop-filter:blur(4px);">
+        <div class="card" style="max-width:600px; margin:40px auto; padding:25px; position:relative; box-shadow:var(--shadow-lg);">
+            <button onclick="document.getElementById('modalProtocolos').style.display='none'" style="position:absolute; top:15px; right:15px; border:none; background:none; font-size:1.5rem; cursor:pointer; color:var(--text-muted)">&times;</button>
+            <h3 style="margin-top:0; color:var(--info)"><i class="fa-solid fa-list-ol"></i> Protocolos de Seguimiento</h3>
+            <p style="font-size:0.85rem; color:var(--text-muted); margin-bottom:20px;">Establece qué acciones se tomarán al acumular cierta cantidad de reportes.</p>
+            
+            <div style="background:var(--page-bg); padding:15px; border-radius:12px; margin-bottom:20px; border:1px solid var(--border);">
+                <h4 style="margin-top:0; margin-bottom:15px; font-size:0.95rem;">Nuevo Protocolo</h4>
+                <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px; margin-bottom:10px;">
+                    <div>
+                        <label style="display:block; font-size:0.8rem; margin-bottom:5px;">Categoría</label>
+                        <select id="protClasificacion" class="form-input" style="border-radius:8px;" onchange="document.getElementById('protGravedad').style.display = (this.value==='Atención Prioritaria')?'none':'block'">
+                            <option value="Académico">Académico</option>
+                            <option value="Convivencia">Convivencia</option>
+                            <option value="Atención Prioritaria">Atención Prioritaria</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label style="display:block; font-size:0.8rem; margin-bottom:5px;">Nivel</label>
+                        <select id="protGravedad" class="form-input" style="border-radius:8px;">
+                            <option value="Leve">Leve</option>
+                            <option value="Moderado">Moderado</option>
+                            <option value="Grave">Grave</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label style="display:block; font-size:0.8rem; margin-bottom:5px;">Acumulación (Cantidad)</label>
+                        <input type="number" id="protCantidad" class="form-input" style="border-radius:8px;" min="1" value="3">
+                    </div>
+                    <div>
+                        <label style="display:block; font-size:0.8rem; margin-bottom:5px;">Acción a tomar</label>
+                        <select id="protAccion" class="form-input" style="border-radius:8px;">
+                            <option value="Citatorio a Padres">Mandar citatorio a padres</option>
+                            <option value="Citatorio a Alumno">Mandar citatorio a alumno</option>
+                            <option value="Notificación General">Notificación General</option>
+                        </select>
+                    </div>
+                </div>
+                <button class="btn btn-primary btn-sm" onclick="window.guardarNuevoProtocolo()" style="width:100%; border-radius:8px;"><i class="fa-solid fa-plus"></i> Agregar Protocolo</button>
+            </div>
+
+            <div id="listaProtocolosModal" style="max-height:250px; overflow-y:auto;">
+                <!-- Lista inyectada JS -->
+            </div>
+        </div>
+    </div>
   `;
 }
+
+// ========================
+// PROTOCOLOS DE ATENCIÓN LÓGICA
+// ========================
+
+window.cambioCategoriaApoyo = (val) => {
+    document.getElementById('contenedorGravedadApoyo').style.display = (val === 'Atención Prioritaria') ? 'none' : 'block';
+};
+
+window.abrirModalProtocolos = () => {
+    document.getElementById('modalProtocolos').style.display = 'block';
+    window.cargarProtocolosEscuela();
+};
+
+window.cargarProtocolosEscuela = async () => {
+    const contenedor = document.getElementById('listaProtocolosModal');
+    contenedor.innerHTML = '<div style="text-align:center; padding:20px; color:var(--text-muted);">Cargando...</div>';
+    try {
+        const { data, error } = await supabaseClient
+            .from('protocolos_reportes')
+            .select('*')
+            .eq('plantel_id', state.plantelId)
+            .order('creado_en', { ascending: false });
+        
+        if (error) throw error;
+        
+        if (!data || data.length === 0) {
+            contenedor.innerHTML = '<div style="text-align:center; padding:20px; color:var(--text-muted);">No hay protocolos configurados.</div>';
+            const contExt = document.getElementById('contenedorProtocolosActuales');
+            if(contExt) contExt.innerHTML = '<div style="text-align:center; padding:20px; color:var(--text-muted); grid-column:1/-1;">No hay protocolos configurados.</div>';
+            return;
+        }
+        
+        contenedor.innerHTML = data.map(p => `
+            <div style="background:white; padding:12px; border-radius:8px; border:1px solid var(--border); margin-bottom:10px; display:flex; justify-content:space-between; align-items:center;">
+                <div>
+                    <strong>${p.clasificacion}</strong> ${p.gravedad !== 'N/A' ? `(${p.gravedad})` : ''} 
+                    <span style="color:var(--danger)">[${p.cantidad_reportes} reportes]</span><br>
+                    <small style="color:var(--text-muted);"><i class="fa-solid fa-arrow-right"></i> Acción: ${p.accion_a_tomar}</small>
+                </div>
+                <button class="btn btn-outline btn-sm" onclick="window.eliminarProtocolo('${p.id}')" style="color:var(--danger); border-color:var(--danger);">
+                    <i class="fa-solid fa-trash"></i>
+                </button>
+            </div>
+        `).join('');
+        
+        const contExt = document.getElementById('contenedorProtocolosActuales');
+        if(contExt) {
+            contExt.innerHTML = data.map(p => `
+                <div style="background:var(--page-bg); padding:12px; border-radius:12px; border-left:4px solid var(--info);">
+                    <strong style="font-size:0.9rem;">${p.clasificacion} ${p.gravedad!=='N/A'?'('+p.gravedad+')':''}</strong><br>
+                    <span style="font-size:0.8rem; color:var(--danger);">${p.cantidad_reportes} reportes</span> -> <span style="font-size:0.8rem;">${p.accion_a_tomar}</span>
+                </div>
+            `).join('');
+        }
+    } catch(e) {
+        contenedor.innerHTML = '<div style="color:var(--danger);">Error: '+e.message+'</div>';
+    }
+};
+
+window.guardarNuevoProtocolo = async () => {
+    const clas = document.getElementById('protClasificacion').value;
+    let grav = document.getElementById('protGravedad').value;
+    if (clas === 'Atención Prioritaria') grav = 'N/A';
+    const cant = parseInt(document.getElementById('protCantidad').value);
+    const acc = document.getElementById('protAccion').value;
+    
+    if(!cant || cant < 1) return alert("Ingresa una cantidad válida.");
+    
+    try {
+        const { error } = await supabaseClient.from('protocolos_reportes').insert([{
+            plantel_id: state.plantelId,
+            clasificacion: clas,
+            gravedad: grav,
+            cantidad_reportes: cant,
+            accion_a_tomar: acc
+        }]);
+        if(error) throw error;
+        
+        window.showToast("Protocolo guardado", "success");
+        window.cargarProtocolosEscuela();
+    } catch(e) {
+        alert("Error al guardar: " + e.message);
+    }
+};
+
+window.eliminarProtocolo = async (id) => {
+    if(!confirm("¿Eliminar este protocolo?")) return;
+    try {
+        const { error } = await supabaseClient.from('protocolos_reportes').delete().eq('id', id);
+        if(error) throw error;
+        window.showToast("Protocolo eliminado", "success");
+        window.cargarProtocolosEscuela();
+    } catch(e) {
+        alert("Error al eliminar: " + e.message);
+    }
+};
 
 // ========================
 // APOYO DATA LOADERS
@@ -3943,12 +4109,13 @@ window.guardarReporteApoyo = async () => {
             metaStr = state.role ? state.role.charAt(0).toUpperCase() + state.role.slice(1) : 'Personal';
         }
 
+        const finalGravedad = (cat === 'Atención Prioritaria') ? 'N/A' : sev;
         const { error } = await supabaseClient.from('reportes_conducta').insert([{
             id: crypto.randomUUID(),
             alumno_id: aid,
             autor_id: u.data.user.id,
             descripcion: finalDesc,
-            gravedad: sev,
+            gravedad: finalGravedad,
             resuelto: false,
             plantel_id: state.plantelId,
             autor_metadata: metaStr
@@ -3956,40 +4123,68 @@ window.guardarReporteApoyo = async () => {
 
         if(error) throw error;
 
-        // VIGILANCIA AUTOMÁTICA: Regla de los 3 Graves
-        const { count: gravesCount } = await supabaseClient
+        // VIGILANCIA AUTOMÁTICA: Basado en Protocolos de Escuela
+        let queryCount = supabaseClient
             .from('reportes_conducta')
             .select('*', { count: 'exact', head: true })
             .eq('alumno_id', aid)
-            .eq('gravedad', 'Grave')
-            .eq('resuelto', false);
+            .eq('resuelto', false)
+            .ilike('descripcion', `[${cat.toUpperCase()}]%`);
+            
+        if (finalGravedad !== 'N/A') {
+            queryCount = queryCount.eq('gravedad', finalGravedad);
+        }
 
-        if(gravesCount > 0 && gravesCount % 3 === 0 && sev === 'Grave') {
-            // Enviar citatorio formal automático a LINEA DE TIEMPO
-            await supabaseClient.from('comunicados').insert([{
-                autor_id: u.data.user.id,
-                titulo: `🚨 CITATORIO URGENTE: Seguimiento Conductual`,
-                mensaje: `Estimado alumno y padre de familia/tutor:\n\nSe ha detectado una acumulación crítica de ${gravesCount} reportes graves sin atender. ES REQUISITO INDISPENSABLE presentarse en el área de Trabajo Social para una junta de seguimiento y firma de compromisos.\n\nEl acceso al plantel podría verse limitado si no se atiende este citatorio.\n\nSube a la parte superior de esta pantalla (Línea de Tiempo) para ver el documento oficial y firmarlo en el recuadro naranja.`,
-                audiencia: `Alumno_${aid}`,
-                tipo: 'General',
-                plantel_id: state.plantelId
-            }]);
-            
-            // CREAR EN LA TABLA OFICIAL PARA RECABAR FIRMA
-            await supabaseClient.from('citatorios').insert([{
-                alumno_id: aid,
-                emisor_id: u.data.user.id,
-                motivo: `Acumulación crítica de ${gravesCount} reportes graves sin atender. (Citatorio Conductual URGENTE)`,
-                tipo: 'Conductual',
-                plantel_id: state.plantelId
-            }]);
-            
-            window.showToast("Citatorio automático enviado por acumulación de reportes", "warning");
-        } else if(sev === 'Grave' || cat === 'Conducta') {
+        const { count: reportesCount } = await queryCount;
+
+        // Obtener protocolos de la escuela
+        const { data: protocolos } = await supabaseClient
+            .from('protocolos_reportes')
+            .select('*')
+            .eq('plantel_id', state.plantelId)
+            .eq('clasificacion', cat)
+            .eq('gravedad', finalGravedad);
+
+        let actionTriggered = false;
+
+        if (protocolos && protocolos.length > 0) {
+            for (const prot of protocolos) {
+                if (reportesCount > 0 && reportesCount % prot.cantidad_reportes === 0) {
+                    actionTriggered = true;
+                    let titulo = 'Aviso de Incidencia Automático';
+                    let msj = `Se ha alcanzado el límite de ${prot.cantidad_reportes} reportes de tipo ${cat} (${finalGravedad}). Acción requerida: ${prot.accion_a_tomar}.`;
+                    
+                    if (prot.accion_a_tomar.includes('Citatorio')) {
+                        titulo = '🚨 CITATORIO URGENTE: ' + prot.accion_a_tomar;
+                        msj = `Estimado alumno y padre de familia/tutor:\n\nSe ha detectado una acumulación de ${reportesCount} reportes de clasificación ${cat}. ES REQUISITO INDISPENSABLE presentarse en el área de Trabajo Social para una junta de seguimiento.\n\nSube a la parte superior de esta pantalla (Línea de Tiempo) para ver el documento oficial y firmarlo.`;
+                        
+                        await supabaseClient.from('citatorios').insert([{
+                            alumno_id: aid,
+                            emisor_id: u.data.user.id,
+                            motivo: `Acumulación de ${reportesCount} reportes de tipo ${cat} (${finalGravedad}). Protocolo: ${prot.accion_a_tomar}`,
+                            tipo: 'Seguimiento',
+                            plantel_id: state.plantelId
+                        }]);
+                        window.showToast("Citatorio automático enviado según protocolo", "warning");
+                    }
+
+                    await supabaseClient.from('comunicados').insert([{
+                        autor_id: u.data.user.id,
+                        titulo: titulo,
+                        mensaje: msj,
+                        audiencia: `Alumno_${aid}`,
+                        tipo: 'General',
+                        plantel_id: state.plantelId
+                    }]);
+                }
+            }
+        }
+
+        if (!actionTriggered && (finalGravedad === 'Grave' || cat === 'Atención Prioritaria')) {
             await supabaseClient.from('comunicados').insert([{
                 autor_id: u.data.user.id,
                 titulo: `Aviso de Incidencia: ${cat}`,
-                mensaje: `Se ha registrado un reporte de tipo ${cat} (${sev}) para seguimiento de Trabajo Social.\n\nDescripción breve: ${desc.substring(0, 100)}...`,
+                mensaje: `Se ha registrado un reporte de tipo ${cat} (${finalGravedad}) para seguimiento de Trabajo Social.\n\nDescripción breve: ${desc.substring(0, 100)}...`,
                 audiencia: `Alumno_${aid}`,
                 tipo: 'General',
                 plantel_id: state.plantelId
