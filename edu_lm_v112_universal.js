@@ -4180,7 +4180,7 @@ window.guardarReporteApoyo = async () => {
             }
         }
 
-        if (!actionTriggered && (finalGravedad === 'Grave' || cat === 'Atención Prioritaria')) {
+        if (!actionTriggered) {
             await supabaseClient.from('comunicados').insert([{
                 autor_id: u.data.user.id,
                 titulo: `Aviso de Incidencia: ${cat}`,
