@@ -20612,31 +20612,38 @@ window.calcularCargaHorariaAuto = async function(maestroId) {
             
         if(errAsig) throw errAsig;
             
-        // 3. Obtener horarios (para contar módulos/horas).
-        let horariosList = [];
-        const { data: hData, error: errHorario } = await supabaseClient.from('horarios_maestros').select('*').eq('maestro_email', correoDelModal).maybeSingle();
-        if(errHorario && errHorario.code !== 'PGRST116') console.warn("Error buscando horario:", errHorario);
+        // 3. Obtener horarios para sumar módulos/horas
+        const { data: hData, error: errHorario } = await supabaseClient
+            .from('horarios_maestros')
+            .select('*')
+            .eq('maestro_email', correoDelModal)
+            .eq('plantel_id', state.plantelId);
+            
+        if(errHorario) console.warn("Error buscando horario:", errHorario);
         
-        if(hData && hData.horario_data) {
-            horariosList = Array.isArray(hData.horario_data) ? hData.horario_data : [];
-        }
-        
+        let horariosList = hData || [];
         let totalHoras = 0;
         let detalleTexto = "";
         let jsonCarga = [];
         
         if(asignaciones && asignaciones.length > 0) {
             for(const asig of asignaciones) {
-                const materiaNombre = mMap[asig.materia_id] || asig.materia || 'Materia Desconocida';
-                const grupoNombre = gMap[asig.grupo_id] || asig.grupo_id || 'Grupo Desconocido';
-                
-                // Contar cuántas sesiones tiene en su horario para este grupo y materia
-                let horasEnHorario = horariosList.filter(s => s.grupo === grupoNombre && s.materia === materiaNombre).length;
-                
-                // Si no hay horario detallado, buscar por ID si están disponibles
-                if(horasEnHorario === 0 && asig.grupo_id && asig.materia_id) {
-                   horasEnHorario = horariosList.filter(s => s.grupo_id === asig.grupo_id && s.materia_id === asig.materia_id).length;
+                // Determine group name and ID
+                let grupoNombre = 'Grupo Desconocido';
+                if(asig.grupo_id && gMap[asig.grupo_id]) {
+                    grupoNombre = gMap[asig.grupo_id];
+                } else if (asig.target_grado) {
+                    grupoNombre = asig.target_grado + ' (Taller/Club)';
                 }
+                
+                const materiaNombre = mMap[asig.materia_id] || asig.materia || 'Materia Desconocida';
+                
+                // Contar cuántos bloques de horario (filas en horarios_maestros) tiene para esta asignación
+                let horasEnHorario = horariosList.filter(s => {
+                    const matchMateria = (s.materia === asig.materia || s.materia === materiaNombre);
+                    const matchGrupo = (s.grupo_id === asig.grupo_id);
+                    return matchMateria && matchGrupo;
+                }).length;
                 
                 detalleTexto += `${materiaNombre} (${grupoNombre}) - ${horasEnHorario} hrs\\n`;
                 totalHoras += horasEnHorario;
