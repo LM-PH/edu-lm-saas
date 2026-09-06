@@ -20572,22 +20572,30 @@ window.calcularCargaHorariaAuto = async function(maestroId) {
         const gMap = {}; (gruposData||[]).forEach(g => gMap[g.id] = g.nombre);
         const mMap = {}; (materiasData||[]).forEach(m => mMap[m.id] = m.nombre);
         
-        // 2. Obtener asignaciones_maestros para ver qué materias y grupos da
-        const { data: asignaciones } = await supabaseClient
+        // 2. Obtener el correo del expediente para cruzar la información
+        const correoDelModal = document.getElementById('exp_correo').value.trim();
+        if(!correoDelModal) {
+            alert("Para calcular la carga horaria, primero ingresa el Correo del docente en este formulario (es con el que se le asignaron sus materias).");
+            btn.innerHTML = originalText;
+            btn.disabled = false;
+            return;
+        }
+
+        const { data: asignaciones, error: errAsig } = await supabaseClient
             .from('asignaciones_maestros')
             .select('*')
-            .eq('maestro_id', maestroId)
+            .eq('docente_email', correoDelModal)
             .eq('plantel_id', state.plantelId);
             
+        if(errAsig) throw errAsig;
+            
         // 3. Obtener horarios (para contar módulos/horas).
-        // En este sistema, la tabla horarios_maestros tiene un array horario_data con sesiones
-        const { data: perfilesData } = await supabaseClient.from('perfiles').select('email').eq('id', maestroId).maybeSingle();
         let horariosList = [];
-        if(perfilesData && perfilesData.email) {
-            const { data: hData } = await supabaseClient.from('horarios_maestros').select('*').eq('maestro_email', perfilesData.email).maybeSingle();
-            if(hData && hData.horario_data) {
-                horariosList = Array.isArray(hData.horario_data) ? hData.horario_data : [];
-            }
+        const { data: hData, error: errHorario } = await supabaseClient.from('horarios_maestros').select('*').eq('maestro_email', correoDelModal).maybeSingle();
+        if(errHorario && errHorario.code !== 'PGRST116') console.warn("Error buscando horario:", errHorario);
+        
+        if(hData && hData.horario_data) {
+            horariosList = Array.isArray(hData.horario_data) ? hData.horario_data : [];
         }
         
         let totalHoras = 0;
@@ -20596,27 +20604,23 @@ window.calcularCargaHorariaAuto = async function(maestroId) {
         
         if(asignaciones && asignaciones.length > 0) {
             for(const asig of asignaciones) {
-                const materiaNombre = mMap[asig.materia_id] || 'Materia Desconocida';
-                const grupoNombre = gMap[asig.grupo_id] || 'Grupo Desconocido';
+                const materiaNombre = mMap[asig.materia_id] || asig.materia || 'Materia Desconocida';
+                const grupoNombre = gMap[asig.grupo_id] || asig.grupo_id || 'Grupo Desconocido';
                 
                 // Contar cuántas sesiones tiene en su horario para este grupo y materia
-                // (Opcionalmente, si el horario no está desglosado así, solo lo registramos)
                 let horasEnHorario = horariosList.filter(s => s.grupo === grupoNombre && s.materia === materiaNombre).length;
                 
-                // Si no hay horario detallado o no se guardó igual, al menos damos la asignación
-                if(horasEnHorario === 0) {
+                // Si no hay horario detallado, buscar por ID si están disponibles
+                if(horasEnHorario === 0 && asig.grupo_id && asig.materia_id) {
                    horasEnHorario = horariosList.filter(s => s.grupo_id === asig.grupo_id && s.materia_id === asig.materia_id).length;
                 }
-                
-                // Si aún así no hay cruce, podemos poner un default o preguntar al usuario. 
-                // Lo dejamos en lo que se encontró en horario o 0.
                 
                 detalleTexto += `${materiaNombre} (${grupoNombre}) - ${horasEnHorario} hrs\\n`;
                 totalHoras += horasEnHorario;
                 jsonCarga.push({ materia: materiaNombre, grupo: grupoNombre, horas: horasEnHorario, materia_id: asig.materia_id, grupo_id: asig.grupo_id });
             }
         } else {
-            detalleTexto = "No se encontraron asignaciones de materias para este docente.\\nVerifica en 'Grupos y Asignación'.";
+            detalleTexto = "No se encontraron asignaciones de materias para este docente.\\nVerifica en 'Grupos y Asignación' usando su correo.";
         }
         
         document.getElementById('exp_horas').value = totalHoras;
