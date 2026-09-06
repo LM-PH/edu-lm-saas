@@ -20638,6 +20638,9 @@ window.calcularCargaHorariaAuto = async function(maestroId) {
                 
                 const materiaNombre = mMap[asig.materia_id] || asig.materia || 'Materia Desconocida';
                 
+                // Ignorar filas basura/corruptas que no tienen grupo ni grado asignado
+                if (grupoNombre === 'Grupo Desconocido') continue;
+                
                 // Contar cuántos bloques de horario (filas en horarios_maestros) tiene para esta asignación
                 let horasEnHorario = horariosList.filter(s => {
                     const matchMateria = (s.materia === asig.materia || s.materia === materiaNombre);
@@ -20648,6 +20651,10 @@ window.calcularCargaHorariaAuto = async function(maestroId) {
                 detalleTexto += `${materiaNombre} (${grupoNombre}) - ${horasEnHorario} hrs\\n`;
                 totalHoras += horasEnHorario;
                 jsonCarga.push({ materia: materiaNombre, grupo: grupoNombre, horas: horasEnHorario, materia_id: asig.materia_id, grupo_id: asig.grupo_id });
+            }
+            
+            if(jsonCarga.length === 0) {
+                detalleTexto = "No hay grupos válidos con horas asignadas para este docente.";
             }
         } else {
             detalleTexto = "No se encontraron asignaciones de materias para este docente.\\nVerifica en 'Grupos y Asignación' usando su correo.";
