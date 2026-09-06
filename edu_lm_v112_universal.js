@@ -20382,6 +20382,20 @@ window.loadExpedientesDocentes = async function() {
             
         if(errM) throw errM;
         
+        // Traer perfiles_permitidos para cruzar los correos registrados en el sistema
+        const { data: permitidos } = await supabaseClient
+            .from('perfiles_permitidos')
+            .select('email, nombre')
+            .eq('plantel_id', state.plantelId)
+            .neq('rol', 'alumno');
+            
+        const systemEmailMap = {};
+        if(permitidos) {
+            permitidos.forEach(p => {
+                if(p.nombre && p.email) systemEmailMap[p.nombre.trim().toLowerCase()] = p.email;
+            });
+        }
+        
         // Traer expedientes
         const { data: expedientes, error: errE } = await supabaseClient
             .from('expedientes_docentes')
@@ -20394,6 +20408,15 @@ window.loadExpedientesDocentes = async function() {
         if(expedientes) {
             expedientes.forEach(e => expedientesMap[e.maestro_id] = e);
         }
+        
+        // A cada maestro le asignamos el correo del sistema si no lo tiene en su expediente
+        (maestros || []).forEach(m => {
+            if(!expedientesMap[m.id]) expedientesMap[m.id] = { maestro_id: m.id };
+            if(!expedientesMap[m.id].correo) {
+                const sysEmail = systemEmailMap[(m.nombre || '').trim().toLowerCase()];
+                if(sysEmail) expedientesMap[m.id].correo = sysEmail;
+            }
+        });
         
         window._maestrosData = maestros || [];
         window._expedientesData = expedientesMap;
