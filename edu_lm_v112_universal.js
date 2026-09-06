@@ -3828,7 +3828,7 @@ window.loadFocosRojos = async () => {
         // 1. Obtener reportes activos
         const { data: reportes, error: repErr } = await supabaseClient
             .from('reportes_conducta')
-            .select('alumno_id, gravedad, alumnos(id, nombre, matricula, grupos(nombre))')
+            .select('alumno_id, gravedad, descripcion, alumnos(id, nombre, matricula, grupos(nombre))')
             .eq('resuelto', false)
             .eq('plantel_id', state.plantelId);
 
@@ -3840,10 +3840,31 @@ window.loadFocosRojos = async () => {
             if(!r.alumnos) return;
             const aid = r.alumno_id;
             if(!conteo[aid]) {
-                conteo[aid] = { count: 0, graves: 0, nombre: r.alumnos.nombre, matricula: r.alumnos.matricula, grupo: r.alumnos.grupos?.nombre || 'S/G' };
+                conteo[aid] = { 
+                    count: 0, graves: 0, 
+                    aL: 0, aM: 0, aG: 0,
+                    cL: 0, cM: 0, cG: 0,
+                    pTotal: 0,
+                    nombre: r.alumnos.nombre, matricula: r.alumnos.matricula, grupo: r.alumnos.grupos?.nombre || 'S/G' 
+                };
             }
             conteo[aid].count++;
             if(r.gravedad === 'Grave') conteo[aid].graves++;
+            
+            if (r.descripcion) {
+                const descUpper = r.descripcion.toUpperCase();
+                if (descUpper.startsWith('[ACADÉMICO]')) {
+                    if (r.gravedad === 'Leve') conteo[aid].aL++;
+                    else if (r.gravedad === 'Moderado') conteo[aid].aM++;
+                    else if (r.gravedad === 'Grave') conteo[aid].aG++;
+                } else if (descUpper.startsWith('[CONVIVENCIA]') || descUpper.startsWith('[CONDUCTA]')) {
+                    if (r.gravedad === 'Leve') conteo[aid].cL++;
+                    else if (r.gravedad === 'Moderado') conteo[aid].cM++;
+                    else if (r.gravedad === 'Grave') conteo[aid].cG++;
+                } else if (descUpper.startsWith('[ATENCIÓN PRIORITARIA]')) {
+                    conteo[aid].pTotal++;
+                }
+            }
         });
 
         // 2. Obtener citatorios activos de toda la escuela
@@ -3867,7 +3888,7 @@ window.loadFocosRojos = async () => {
                 
             if (missingAlumnos) {
                 missingAlumnos.forEach(al => {
-                    conteo[al.id] = { count: 0, graves: 0, nombre: al.nombre, matricula: al.matricula, grupo: al.grupos?.nombre || 'S/G' };
+                    conteo[al.id] = { count: 0, graves: 0, aL:0, aM:0, aG:0, cL:0, cM:0, cG:0, pTotal:0, nombre: al.nombre, matricula: al.matricula, grupo: al.grupos?.nombre || 'S/G' };
                 });
             }
         }
@@ -3906,7 +3927,11 @@ window.loadFocosRojos = async () => {
               <td style="padding:15px;"><b>${f.nombre}</b><br><small style="color:var(--text-muted)">${f.matricula} - ${f.grupo}</small></td>
               <td style="padding:15px; text-align:center;">
                  <span class="badge" style="background:#f5f5f5; color:var(--text-main); border:1px solid #ddd;">${f.count} Totales</span><br>
-                 <small style="color:var(--danger)">${f.graves} Graves</small>
+                 <div style="margin-top:8px; font-size:0.75rem; text-align:left; display:inline-block; line-height:1.5;">
+                     <div style="color:#0369a1;"><strong style="background:#e0f2fe; padding:2px 4px; border-radius:4px;">A</strong> L:${f.aL} M:${f.aM} G:${f.aG}</div>
+                     <div style="color:#854d0e; margin-top:3px;"><strong style="background:#fef08a; padding:2px 4px; border-radius:4px;">C</strong> L:${f.cL} M:${f.cM} G:${f.cG}</div>
+                     <div style="color:#be123c; margin-top:3px;"><strong style="background:#fecdd3; padding:2px 4px; border-radius:4px;">P</strong> Total: ${f.pTotal}</div>
+                 </div>
               </td>
               <td style="padding:15px; text-align:center;"><span class="badge" style="background:${f.graves >= 1 ? '#fff3e0' : '#e8f5e9'}; color:${f.graves >= 1 ? '#e65100' : '#2e7d32'};">${f.graves >= 1 ? 'Crítico' : 'Seguimiento'}</span></td>
               <td style="padding:15px; text-align:center;">${citGenBadge}</td>
