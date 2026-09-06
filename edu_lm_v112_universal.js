@@ -20317,25 +20317,30 @@ async function renderSecretariaExpedientes() {
     return `
     <div class="fade-in" style="padding: 20px;">
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 20px;">
-            <h2 style="font-size: 1.5rem; color: var(--text-main);"><i class="fa-solid fa-address-book" style="color:var(--primary); margin-right:10px;"></i> Expedientes Docentes</h2>
-            <button class="btn btn-primary" onclick="loadExpedientesDocentes()"><i class="fa-solid fa-sync"></i> Actualizar</button>
+            <h2 style="font-size: 1.5rem; color: var(--text-main);"><i class="fa-solid fa-address-book" style="color:var(--primary); margin-right:10px;"></i> Expedientes del Personal</h2>
+            <button class="btn btn-primary" onclick="loadExpedientesDocentes()"><i class="fa-solid fa-sync"></i> Actualizar Datos</button>
         </div>
-        <p style="color: var(--text-muted); margin-bottom: 20px;">Gestiona la información académica, administrativa y carga horaria de los maestros del plantel.</p>
+        <p style="color: var(--text-muted); margin-bottom: 20px;">Gestiona la información administrativa y académica de todo el personal del plantel.</p>
         
         <div class="glass-panel">
+            <div style="margin-bottom: 20px; position: relative;">
+                <i class="fa-solid fa-magnifying-glass" style="position:absolute; left:15px; top:50%; transform:translateY(-50%); color:var(--text-muted);"></i>
+                <input type="text" id="busquedaExpedientes" class="form-input" placeholder="Buscar por nombre, correo o rol..." onkeyup="window.renderTablaExpedientes(this.value)" style="padding-left: 40px; width: 100%; max-width: 500px; font-size: 0.95rem;">
+            </div>
+
             <div style="overflow-x:auto;">
                 <table class="table" style="width:100%; text-align:left; border-collapse:collapse;">
                     <thead>
                         <tr style="border-bottom: 1px solid var(--border);">
-                            <th style="padding:10px;">Maestro</th>
-                            <th style="padding:10px;">Correo (Usuario)</th>
+                            <th style="padding:10px;">Personal</th>
+                            <th style="padding:10px;">Rol</th>
                             <th style="padding:10px;">Teléfono</th>
                             <th style="padding:10px;">Último Grado</th>
                             <th style="padding:10px; text-align:center;">Acciones</th>
                         </tr>
                     </thead>
                     <tbody id="tbodyExpedientes">
-                        <tr><td colspan="5" style="text-align:center; padding:20px;">Cargando...</td></tr>
+                        <tr><td colspan="5" style="text-align:center; padding:20px;">Cargando información del personal...</td></tr>
                     </tbody>
                 </table>
             </div>
@@ -20346,7 +20351,7 @@ async function renderSecretariaExpedientes() {
     <div id="modalExpedienteDocente" class="modal-overlay" style="display:none;">
         <div class="modal-content" style="max-width:800px; width:95%;">
             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 15px; border-bottom: 1px solid var(--border); padding-bottom: 10px;">
-                <h3 id="modalExpedienteTitle" style="margin:0;">Expediente de Docente</h3>
+                <h3 id="modalExpedienteTitle" style="margin:0;">Expediente de Personal</h3>
                 <button class="btn btn-sm" onclick="document.getElementById('modalExpedienteDocente').style.display='none'" style="background:transparent; color:var(--text-main); font-size:1.2rem; border:none;">&times;</button>
             </div>
             
@@ -20366,15 +20371,14 @@ async function renderSecretariaExpedientes() {
 window.loadExpedientesDocentes = async function() {
     const tbody = document.getElementById('tbodyExpedientes');
     if(!tbody) return;
-    tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; padding:20px;"><i class="fa-solid fa-spinner fa-spin"></i> Cargando...</td></tr>';
     
     try {
-        // Traer maestros
+        // Traer TODO el personal (no solo maestros)
         const { data: maestros, error: errM } = await supabaseClient
             .from('perfiles')
             .select('*')
             .eq('plantel_id', state.plantelId)
-            .eq('rol', 'maestro');
+            .neq('rol', 'alumno');
             
         if(errM) throw errM;
         
@@ -20391,40 +20395,77 @@ window.loadExpedientesDocentes = async function() {
             expedientes.forEach(e => expedientesMap[e.maestro_id] = e);
         }
         
-        if(!maestros || maestros.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; padding:20px;">No hay maestros registrados en este plantel.</td></tr>';
-            return;
-        }
-        
-        let html = '';
-        window._maestrosData = maestros;
+        window._maestrosData = maestros || [];
         window._expedientesData = expedientesMap;
         
-        maestros.sort((a,b) => (a.nombre || '').localeCompare(b.nombre || '')).forEach(m => {
-            const exp = expedientesMap[m.id] || {};
-            html += `
-                <tr style="border-bottom: 1px solid var(--border);">
-                    <td style="padding:10px;">
-                        <div style="font-weight:600; color:var(--text-main);">${m.nombre || 'Sin nombre'}</div>
-                    </td>
-                    <td style="padding:10px; color:var(--text-muted);">${exp.correo || 'No registrado'}</td>
-                    <td style="padding:10px; color:var(--text-muted);">${exp.telefono || 'No registrado'}</td>
-                    <td style="padding:10px;">${exp.perfil_academico_ultimo_grado || 'No registrado'}</td>
-                    <td style="padding:10px; text-align:center;">
-                        <button class="btn btn-sm btn-primary" onclick="abrirModalExpediente('${m.id}')">
-                            <i class="fa-solid fa-folder-open"></i> Abrir
-                        </button>
-                    </td>
-                </tr>
-            `;
-        });
-        
-        tbody.innerHTML = html;
+        // Renderizar la tabla inicial (vacía o con todos, aquí renderizamos vacío sugiriendo búsqueda)
+        window.renderTablaExpedientes('');
         
     } catch(err) {
         console.error(err);
         tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; padding:20px; color:var(--danger);">Error al cargar expedientes.</td></tr>';
     }
+};
+
+window.renderTablaExpedientes = function(searchTerm = '') {
+    const tbody = document.getElementById('tbodyExpedientes');
+    if(!tbody) return;
+
+    if(!window._maestrosData || window._maestrosData.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; padding:20px;">No hay personal registrado en este plantel.</td></tr>';
+        return;
+    }
+
+    const term = searchTerm.toLowerCase().trim();
+    
+    // Si no hay búsqueda, sugerimos buscar para no saturar la pantalla
+    if (term === '') {
+        tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; padding:40px; color:var(--text-muted);"><i class="fa-solid fa-magnifying-glass" style="font-size:2rem; margin-bottom:15px; display:block; opacity:0.3;"></i> Utiliza el buscador de arriba para encontrar al personal.</td></tr>';
+        return;
+    }
+
+    const roleLabels = { 'admin': 'Administrativo', 'secretaria_direccion': 'Sec. Dirección', 'maestro': 'Maestro', 'apoyo': 'Personal de Apoyo', 'directivo': 'Directivo', 'biblioteca': 'Biblioteca' };
+    
+    const filtrados = window._maestrosData.filter(m => {
+        const rLabel = roleLabels[m.rol] || m.rol;
+        const nombre = (m.nombre || '').toLowerCase();
+        const exp = window._expedientesData[m.id] || {};
+        const email = (exp.correo || '').toLowerCase();
+        
+        return nombre.includes(term) || email.includes(term) || rLabel.toLowerCase().includes(term);
+    });
+
+    if (filtrados.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; padding:20px; color:var(--text-muted);">No se encontraron coincidencias.</td></tr>';
+        return;
+    }
+
+    let html = '';
+    filtrados.sort((a,b) => (a.nombre || '').localeCompare(b.nombre || '')).forEach(m => {
+        const exp = window._expedientesData[m.id] || {};
+        const rLabel = roleLabels[m.rol] || m.rol;
+        
+        html += `
+            <tr style="border-bottom: 1px solid var(--border);">
+                <td style="padding:10px;">
+                    <div style="font-weight:600; color:var(--text-main);">${m.nombre || 'Sin nombre'}</div>
+                    <div style="font-size:0.75rem; color:var(--text-muted);">${exp.correo || 'Sin correo registrado'}</div>
+                </td>
+                <td style="padding:10px;">
+                    <span class="badge" style="background:var(--bg-card); color:var(--text-muted); border:1px solid var(--border); font-size:0.7rem;">${rLabel.toUpperCase()}</span>
+                </td>
+                <td style="padding:10px; color:var(--text-muted);">${exp.telefono || '-'}</td>
+                <td style="padding:10px;">${exp.perfil_academico_ultimo_grado || '-'}</td>
+                <td style="padding:10px; text-align:center;">
+                    <button class="btn btn-sm btn-primary" onclick="abrirModalExpediente('${m.id}')">
+                        <i class="fa-solid fa-folder-open"></i> Abrir
+                    </button>
+                </td>
+            </tr>
+        `;
+    });
+    
+    tbody.innerHTML = html;
 };
 
 window.abrirModalExpediente = async function(maestroId) {
