@@ -3053,9 +3053,9 @@ function renderApoyoDashboard() {
                 <tr>
                   <th style="padding:15px;">Estudiante</th>
                   <th style="padding:15px; text-align:center;">Reportes</th>
-                  <th style="padding:15px; text-align:center; white-space:nowrap;">Cit. Académico</th>
-                  <th style="padding:15px; text-align:center; white-space:nowrap;">Cit. Conductual</th>
-                  <th style="padding:15px; text-align:center; white-space:nowrap;">Atención Prioritaria</th>
+                  <th style="padding:15px; text-align:center;">Cit. Académico</th>
+                  <th style="padding:15px; text-align:center;">Cit. Conductual</th>
+                  <th style="padding:15px; text-align:center;">Atención Prioritaria</th>
                   <th style="padding:15px; text-align:center;">Citatorio</th>
                   <th style="padding:15px; text-align:right;">Acciones</th>
                 </tr>
@@ -3929,8 +3929,7 @@ window.loadFocosRojos = async () => {
             <tr>
               <td style="padding:15px;"><b>${f.nombre}</b><br><small style="color:var(--text-muted)">${f.matricula} - ${f.grupo}</small></td>
               <td style="padding:15px; text-align:center;">
-                 <span class="badge" style="background:#f5f5f5; color:var(--text-main); border:1px solid #ddd;">${f.count} Totales</span><br>
-                 <div style="margin-top:8px; font-size:0.75rem; text-align:left; display:inline-block; line-height:1.5;">
+                 <div style="font-size:0.75rem; text-align:left; display:inline-block; line-height:1.5;">
                      <div style="color:#0369a1;"><strong style="background:#e0f2fe; padding:2px 4px; border-radius:4px;">A</strong> L:${f.aL} M:${f.aM} G:${f.aG}</div>
                      <div style="color:#854d0e; margin-top:3px;"><strong style="background:#fef08a; padding:2px 4px; border-radius:4px;">C</strong> L:${f.cL} M:${f.cM} G:${f.cG}</div>
                      <div style="color:#be123c; margin-top:3px;"><strong style="background:#fecdd3; padding:2px 4px; border-radius:4px;">P</strong> Total: ${f.pTotal}</div>
