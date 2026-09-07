@@ -3053,9 +3053,10 @@ function renderApoyoDashboard() {
                 <tr>
                   <th style="padding:15px;">Estudiante</th>
                   <th style="padding:15px; text-align:center;">Reportes</th>
-                  <th style="padding:15px; text-align:center;">Estado</th>
+                  <th style="padding:15px; text-align:center; white-space:nowrap;">Cit. Académico</th>
+                  <th style="padding:15px; text-align:center; white-space:nowrap;">Cit. Conductual</th>
+                  <th style="padding:15px; text-align:center; white-space:nowrap;">Atención Prioritaria</th>
                   <th style="padding:15px; text-align:center;">Citatorio</th>
-                  <th style="padding:15px; text-align:center;">Cit. Conductual</th>
                   <th style="padding:15px; text-align:right;">Acciones</th>
                 </tr>
               </thead>
@@ -3898,7 +3899,11 @@ window.loadFocosRojos = async () => {
             const aid = cit.alumno_id;
             if(!conteo[aid]) return; // por si acaso
             
-            const key = cit.tipo === 'Conductual' ? 'citatorioConductual' : 'citatorioGeneral';
+            let key = 'citNormal';
+            if (cit.tipo === 'Académico') key = 'citAcademico';
+            else if (cit.tipo === 'Convivencia' || cit.tipo === 'Conductual') key = 'citConductual';
+            else if (cit.tipo === 'Atención Prioritaria') key = 'citPrioritaria';
+            
             // Priorizamos el estado 'Pendiente' si hay varios
             if (!conteo[aid][key] || conteo[aid][key] === 'Firmado') {
                 conteo[aid][key] = cit.estado === 'enterado' ? 'Firmado' : 'Pendiente';
@@ -3906,21 +3911,19 @@ window.loadFocosRojos = async () => {
         });
 
         // Mostramos si tiene al menos 1 reporte activo O algún citatorio pendiente/firmado
-        const focos = Object.entries(conteo).map(([id, info]) => ({ id, ...info })).filter(f => f.count >= 1 || f.citatorioGeneral || f.citatorioConductual);
+        const focos = Object.entries(conteo).map(([id, info]) => ({ id, ...info })).filter(f => f.count >= 1 || f.citNormal || f.citAcademico || f.citConductual || f.citPrioritaria);
         
         if(focos.length === 0) {
-            cont.innerHTML = '<tr><td colspan="5" style="text-align:center; padding:40px; color:var(--text-muted)">No hay alumnos con reportes activos.</td></tr>';
+            cont.innerHTML = '<tr><td colspan="7" style="text-align:center; padding:40px; color:var(--text-muted)">No hay alumnos con reportes activos ni citatorios.</td></tr>';
             return;
         }
 
         cont.innerHTML = focos.map(f => {
-            let citGenBadge = '<span style="color:var(--text-muted); font-size:0.8rem;">Ninguno</span>';
-            if(f.citatorioGeneral === 'Firmado') citGenBadge = '<span class="badge" style="background:#22c55e; color:white; font-size:0.7rem; padding:4px 8px;"><i class="fa-solid fa-check"></i> Enterado</span>';
-            if(f.citatorioGeneral === 'Pendiente') citGenBadge = '<span class="badge" style="background:#f97316; color:white; font-size:0.7rem; padding:4px 8px;"><i class="fa-solid fa-clock"></i> No Enterado</span>';
-
-            let citCondBadge = '<span style="color:var(--text-muted); font-size:0.8rem;">Ninguno</span>';
-            if(f.citatorioConductual === 'Firmado') citCondBadge = '<span class="badge" style="background:#22c55e; color:white; font-size:0.7rem; padding:4px 8px;"><i class="fa-solid fa-check"></i> Enterado</span>';
-            if(f.citatorioConductual === 'Pendiente') citCondBadge = '<span class="badge" style="background:#f97316; color:white; font-size:0.7rem; padding:4px 8px;"><i class="fa-solid fa-clock"></i> No Enterado</span>';
+            const renderBadge = (val) => {
+                if(val === 'Firmado') return '<span class="badge" style="background:#22c55e; color:white; font-size:0.7rem; padding:4px 8px;"><i class="fa-solid fa-check"></i> Enterado</span>';
+                if(val === 'Pendiente') return '<span class="badge" style="background:#f97316; color:white; font-size:0.7rem; padding:4px 8px;"><i class="fa-solid fa-clock"></i> No Enterado</span>';
+                return '<span style="color:var(--text-muted); font-size:0.8rem;">Ninguno</span>';
+            };
 
             return `
             <tr>
@@ -3933,9 +3936,10 @@ window.loadFocosRojos = async () => {
                      <div style="color:#be123c; margin-top:3px;"><strong style="background:#fecdd3; padding:2px 4px; border-radius:4px;">P</strong> Total: ${f.pTotal}</div>
                  </div>
               </td>
-              <td style="padding:15px; text-align:center;"><span class="badge" style="background:${f.graves >= 1 ? '#fff3e0' : '#e8f5e9'}; color:${f.graves >= 1 ? '#e65100' : '#2e7d32'};">${f.graves >= 1 ? 'Crítico' : 'Seguimiento'}</span></td>
-              <td style="padding:15px; text-align:center;">${citGenBadge}</td>
-              <td style="padding:15px; text-align:center;">${citCondBadge}</td>
+              <td style="padding:15px; text-align:center;">${renderBadge(f.citAcademico)}</td>
+              <td style="padding:15px; text-align:center;">${renderBadge(f.citConductual)}</td>
+              <td style="padding:15px; text-align:center;">${renderBadge(f.citPrioritaria)}</td>
+              <td style="padding:15px; text-align:center;">${renderBadge(f.citNormal)}</td>
               <td style="padding:15px; text-align:right; display:flex; gap:8px; justify-content:flex-end;">
                   <button class="btn btn-outline btn-xs" style="border-color:var(--primary); color:var(--primary)" onclick="window.showAlumnoExpediente('${f.id}')">Ver Expediente</button>
                   <button class="btn btn-xs" style="background:var(--success); color:white; border:none;" onclick="window.abrirModalAtencionFoco('${f.id}', '${f.nombre}')">Atender</button>
@@ -4187,7 +4191,7 @@ window.guardarReporteApoyo = async () => {
                             alumno_id: aid,
                             emisor_id: u.data.user.id,
                             motivo: `Acumulación de ${reportesCount} reportes de tipo ${cat} (${finalGravedad}). Protocolo: ${prot.accion_a_tomar}`,
-                            tipo: 'Seguimiento',
+                            tipo: cat,
                             plantel_id: state.plantelId
                         }]);
                         window.showToast("Citatorio automático enviado según protocolo", "warning");
