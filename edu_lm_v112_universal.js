@@ -15609,6 +15609,12 @@ window.uploadExpedienteDoc = async (input, type) => {
     const aluId = document.getElementById('currentExpedienteAlumnoId').value;
     if(!aluId) return alert("Error: No se ha seleccionado un alumno.");
 
+    // Validar peso máximo (400 KB = 409,600 bytes)
+    const MAX_SIZE_BYTES = 400 * 1024;
+    if(file.size > MAX_SIZE_BYTES) {
+        return alert(`Error: El archivo es demasiado pesado (${(file.size / 1024).toFixed(1)} KB).\n\nPor favor usa una herramienta gratuita como ilovepdf.com para comprimir el PDF y asegurarte de que pese menos de 400 KB.`);
+    }
+
     const card = input.closest('.doc-card');
     const btn = card ? card.querySelector('.btn-doc') : null;
     const orig = btn ? btn.innerHTML : 'Subir';
