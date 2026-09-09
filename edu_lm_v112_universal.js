@@ -12588,7 +12588,9 @@ window.guardarAsistenciaQR = async (matricula, grupoId) => {
             // Caso Taller: Comparamos Grado y Nombre del Taller
             const targetGrado = sessionGid.replace('grado:', '').split('|')[0].trim();
             const targetTaller = sessionGid.split('|')[1].trim();
-            if(alumno.grado !== targetGrado || (alumno.taller || '').trim() !== targetTaller) {
+            const cleanMat = targetTaller.replace(/tecnología|tecnologia/gi, '').trim() || targetTaller;
+            const alTaller = (alumno.taller || '').trim().toLowerCase();
+            if(alumno.grado !== targetGrado || !alTaller.includes(cleanMat.toLowerCase())) {
                 window.showToast(`❌ El alumno NO pertenece a este taller (${targetTaller} ${targetGrado})`, "error");
                 return;
             }
@@ -12669,7 +12671,15 @@ window.finalizarSesionAsistencia = async () => {
         await supabaseClient.from('asistencia_sesiones').update({ estado: 'cerrado' }).eq('grupo_id', grupoId).eq('materia', materia).eq('fecha', hoy).eq('plantel_id', state.plantelId);
         
         let queryAl = supabaseClient.from('alumnos').select('id').eq('plantel_id', state.plantelId);
-        if(grupoId.startsWith('grado:')) queryAl = queryAl.eq('grado', grupoId.split(':')[1].split('|')[0]);
+        if(grupoId.startsWith('grado:')) {
+            const targetGrado = grupoId.replace('grado:', '').split('|')[0].trim();
+            const targetTaller = grupoId.split('|')[1]?.trim();
+            queryAl = queryAl.eq('grado', targetGrado);
+            if (targetTaller) {
+                const cleanMat = targetTaller.replace(/tecnología|tecnologia/gi, '').trim();
+                queryAl = queryAl.ilike('taller', `%${cleanMat || targetTaller}%`);
+            }
+        }
         else queryAl = queryAl.eq('grupo_id', grupoId);
         
         const { data: todos } = await queryAl;
