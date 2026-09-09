@@ -12258,7 +12258,8 @@ function attachDOMEvents() {
               // Buscamos materias que sean Tecnologías o Talleres en la CARGA MAESTRO
               const { data: talData, error: talError } = await supabaseClient.from('asignaciones_maestros')
                   .select('materia')
-                  .eq('target_grado', selectedGrado);
+                  .eq('target_grado', selectedGrado)
+                  .eq('plantel_id', state.plantelId);
               
               if(talError) throw talError;
 
@@ -18790,7 +18791,7 @@ window.buscarAlumnoPsicoGenerico = async (term, inputId, resId) => {
     if(!term || term.length < 3) { res.style.display = 'none'; return; }
     
     try {
-        const { data, error } = await supabaseClient.from('alumnos').select('id, nombre, matricula, grupos(nombre)').ilike('nombre', `%${term}%`).limit(5);
+        const { data, error } = await supabaseClient.from('alumnos').select('id, nombre, matricula, grupos(nombre)').eq('plantel_id', state.plantelId).ilike('nombre', `%${term}%`).limit(5);
         if(error || !data) return;
         
         if(data.length === 0) { res.innerHTML = '<div style="padding:10px;">Sin resultados</div>'; res.style.display = 'block'; return; }
@@ -18815,7 +18816,7 @@ window.buscarAlumnoPsico = async (term) => {
     if(!term || term.length < 3) { res.style.display = 'none'; return; }
     
     try {
-        const { data, error } = await supabaseClient.from('alumnos').select('id, nombre, matricula, grupos(nombre)').ilike('nombre', `%${term}%`).limit(5);
+        const { data, error } = await supabaseClient.from('alumnos').select('id, nombre, matricula, grupos(nombre)').eq('plantel_id', state.plantelId).ilike('nombre', `%${term}%`).limit(5);
         if(error || !data) return;
         
         if(data.length === 0) { res.innerHTML = '<div style="padding:10px;">Sin resultados</div>'; res.style.display = 'block'; return; }
@@ -19057,7 +19058,7 @@ window.enviarPsicosocial = async () => {
     window.showToast('Creando cuestionario y procesando envíos...', 'info');
     
     try {
-        let query = supabaseClient.from('alumnos').select('id');
+        let query = supabaseClient.from('alumnos').select('id').eq('plantel_id', state.plantelId);
         if(filtro === 'grado') query = query.ilike('grado', `${esp}%`);
         if(filtro === 'grupo') query = query.eq('grupo_id', esp);
         if(filtro === 'alumno') {
@@ -19966,7 +19967,7 @@ window.buscarAlumnoSalud = async (term) => {
     if(!term || term.length < 3) { res.style.display = 'none'; return; }
     
     try {
-        const { data, error } = await supabaseClient.from('alumnos').select('id, nombre, matricula, grupos(nombre)').ilike('nombre', `%${term}%`).limit(5);
+        const { data, error } = await supabaseClient.from('alumnos').select('id, nombre, matricula, grupos(nombre)').eq('plantel_id', state.plantelId).ilike('nombre', `%${term}%`).limit(5);
         if(error || !data) return;
         
         if(data.length === 0) { res.innerHTML = '<div style="padding:10px;">Sin resultados</div>'; res.style.display = 'block'; return; }
@@ -20493,7 +20494,7 @@ window.renderMasivaPreview = async () => {
     // Pre-cargar todas las tecnologías disponibles por grado
     if(Object.keys(window._tecnologiasCache).length === 0) {
         try {
-            const { data } = await supabaseClient.from('asignaciones_maestros').select('materia, target_grado');
+            const { data } = await supabaseClient.from('asignaciones_maestros').select('materia, target_grado').eq('plantel_id', state.plantelId);
             if(data) {
                 const grados = ['1°', '2°', '3°', '4°', '5°', '6°'];
                 grados.forEach(g => {

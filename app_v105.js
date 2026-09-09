@@ -1091,7 +1091,7 @@ window.liveSearchGestion = async (q) => {
     if(!res) return;
     if(q.length < 2) { res.style.display='none'; return; }
     try {
-        const { data } = await supabaseClient.from('alumnos').select('*, grupos(nombre)').or(`nombre.ilike.%${q}%,matricula.ilike.%${q}%`).limit(50);
+        const { data } = await supabaseClient.from('alumnos').select('*, grupos(nombre)').eq('plantel_id', state.plantelId).or(`nombre.ilike.%${q}%,matricula.ilike.%${q}%`).limit(50);
         if(!data || data.length === 0) { res.innerHTML='<p style="padding:10px; color:var(--text-muted)">Sin resultados</p>'; res.style.display='block'; return; }
         res.style.display='block';
         res.innerHTML = data.map(a => `
@@ -2236,7 +2236,7 @@ window.buscarExpedienteGlobal = async (query) => {
     const resDiv = document.getElementById('resExpedienteGlobal');
     if(!query || query.length < 2) { resDiv.style.display = 'none'; return; }
     try {
-        const { data } = await supabaseClient.from('alumnos').select('*, grupos(nombre)').or(`nombre.ilike.%${query}%,matricula.ilike.%${query}%`).limit(10);
+        const { data } = await supabaseClient.from('alumnos').select('*, grupos(nombre)').eq('plantel_id', state.plantelId).or(`nombre.ilike.%${query}%,matricula.ilike.%${query}%`).limit(10);
         if(!data || data.length === 0) {
             resDiv.innerHTML = '<div style="padding:15px; color:var(--text-muted)">No se encontraron alumnos.</div>';
             resDiv.style.display = 'block';
@@ -2980,7 +2980,7 @@ window.buscarHistorialSalud = async (query) => {
     const resDiv = document.getElementById('resBusquedaSaludLocal');
     if(!query || query.length < 2) { resDiv.style.display = 'none'; return; }
     try {
-        const { data } = await supabaseClient.from('alumnos').select('*, grupos(nombre)').or(`nombre.ilike.%${query}%,matricula.ilike.%${query}%`).limit(5);
+        const { data } = await supabaseClient.from('alumnos').select('*, grupos(nombre)').eq('plantel_id', state.plantelId).or(`nombre.ilike.%${query}%,matricula.ilike.%${query}%`).limit(5);
         if(!data || data.length === 0) { resDiv.style.display = 'none'; return; }
         resDiv.style.display = 'block';
         resDiv.innerHTML = data.map(a => `
@@ -5337,7 +5337,7 @@ window.loadFirmantesEncuadre = async () => {
         }
 
         // 2. Obtener lista de alumnos
-        let qAl = supabaseClient.from('alumnos').select('id, nombre, matricula').order('nombre');
+        let qAl = supabaseClient.from('alumnos').select('id, nombre, matricula').eq('plantel_id', state.plantelId).order('nombre');
         if(isTec) {
             const gNorm = targetGrado.includes('°') ? targetGrado : targetGrado + '°';
             qAl = qAl.eq('grado', gNorm).ilike('taller', `%${mat.trim()}%`);
@@ -5984,7 +5984,7 @@ window.cargarAlumnosLista = async () => {
     const targetGrado = isTec ? idPart.replace('grado:', '').trim() : null;
 
     try {
-        let alumnosQuery = supabaseClient.from('alumnos').select('id, nombre, matricula, contacto_email');
+        let alumnosQuery = supabaseClient.from('alumnos').select('id, nombre, matricula, contacto_email').eq('plantel_id', state.plantelId);
         if(isTec) {
             const gNorm = targetGrado.includes('°') ? targetGrado : targetGrado + '°';
             alumnosQuery = alumnosQuery.eq('grado', gNorm.trim()).ilike('taller', `%${materia.trim()}%`);
@@ -6402,7 +6402,7 @@ window.cargarBoletasGrupo = async () => {
         const matId = tmateria?.id;
 
         // 2. Fetch Alumnos
-        let alumnosQuery = supabaseClient.from('alumnos').select('id, nombre, matricula');
+        let alumnosQuery = supabaseClient.from('alumnos').select('id, nombre, matricula').eq('plantel_id', state.plantelId);
         if(isTec) {
             const gNorm = targetGrado.includes('°') ? targetGrado : targetGrado + '°';
             alumnosQuery = alumnosQuery.eq('grado', gNorm).ilike('taller', `%${materiaText.trim()}%`);
@@ -6954,7 +6954,7 @@ function attachDOMEvents() {
               const val = e.target.value.trim();
               const resCont = document.getElementById('resBuscadorExpediente');
               if(val.length < 2) { resCont.style.display = 'none'; return; }
-              const { data } = await supabaseClient.from('alumnos').select('id, nombre, matricula').or(`nombre.ilike.%${val}%,matricula.ilike.%${val}%`).limit(5);
+              const { data } = await supabaseClient.from('alumnos').select('id, nombre, matricula').eq('plantel_id', state.plantelId).or(`nombre.ilike.%${val}%,matricula.ilike.%${val}%`).limit(5);
               if(data && data.length > 0) {
                   resCont.style.display = 'block';
                   resCont.innerHTML = data.map(a => `<div class="search-item" onclick="window.selectAlumnoExpediente('${a.id}', '${a.nombre.replace(/'/g, "\\'")}', '${a.matricula}'); document.getElementById('resBuscadorExpediente').style.display='none';">${a.nombre} (${a.matricula})</div>`).join('');
@@ -6968,7 +6968,7 @@ function attachDOMEvents() {
               const val = e.target.value.trim();
               const resCont = document.getElementById('resBuscadorTramite');
               if(val.length < 2) { resCont.style.display = 'none'; return; }
-              const { data } = await supabaseClient.from('alumnos').select('id, nombre, matricula').or(`nombre.ilike.%${val}%,matricula.ilike.%${val}%`).limit(5);
+              const { data } = await supabaseClient.from('alumnos').select('id, nombre, matricula').eq('plantel_id', state.plantelId).or(`nombre.ilike.%${val}%,matricula.ilike.%${val}%`).limit(5);
               if(data && data.length > 0) {
                   resCont.style.display = 'block';
                   resCont.innerHTML = data.map(a => `<div class="search-item" onclick="window.selectAlumnoTramite('${a.id}', '${a.nombre.replace(/'/g, "\\'")}', '${a.matricula}'); document.getElementById('resBuscadorTramite').style.display='none';">${a.nombre} (${a.matricula})</div>`).join('');
@@ -7065,7 +7065,8 @@ function attachDOMEvents() {
               // Buscamos materias que sean Tecnologías o Talleres en la CARGA DOCENTE
               const { data: talData, error: talError } = await supabaseClient.from('asignaciones_docentes')
                   .select('materia')
-                  .eq('target_grado', selectedGrado);
+                  .eq('target_grado', selectedGrado)
+                  .eq('plantel_id', state.plantelId);
               
               if(talError) throw talError;
 
@@ -7443,9 +7444,9 @@ window.finalizarSesionAsistencia = async () => {
         const grupoId = String(window.currentAulaGrupoId);
         const materia = (window.currentAulaMateria || 'N/A').trim();
         
-        await supabaseClient.from('asistencia_sesiones').update({ estado: 'cerrado' }).eq('grupo_id', grupoId).eq('materia', materia).eq('fecha', hoy);
+        await supabaseClient.from('asistencia_sesiones').update({ estado: 'cerrado' }).eq('grupo_id', grupoId).eq('materia', materia).eq('fecha', hoy).eq('plantel_id', state.plantelId);
         
-        let queryAl = supabaseClient.from('alumnos').select('id');
+        let queryAl = supabaseClient.from('alumnos').select('id').eq('plantel_id', state.plantelId);
         if(grupoId.startsWith('grado:')) {
             const targetGrado = grupoId.replace('grado:', '').split('|')[0].trim();
             const targetTaller = grupoId.split('|')[1]?.trim();
@@ -7854,7 +7855,7 @@ window.openReporteModal = async () => {
     document.getElementById('app').insertAdjacentHTML('beforeend', modalHTML);
     
     try {
-        let query = supabaseClient.from('alumnos').select('id, nombre');
+        let query = supabaseClient.from('alumnos').select('id, nombre').eq('plantel_id', state.plantelId);
         
         if (window.currentAulaGrupoId && window.currentAulaGrupoId.startsWith('grado:')) {
             // Formato: "grado:1°|Computación"
@@ -8256,7 +8257,7 @@ window.cargarEncuadreActivo = async () => {
         }
 
         // 2. Obtener los alumnos del grupo/grado para notificarles
-        let alumnosQuery = supabaseClient.from('alumnos').select('id, nombre');
+        let alumnosQuery = supabaseClient.from('alumnos').select('id, nombre').eq('plantel_id', state.plantelId);
         if(isTec) {
             const gNorm = targetGrado.includes('°') ? targetGrado : targetGrado + '°';
             alumnosQuery = alumnosQuery.eq('grado', gNorm).ilike('taller', `%${mat.trim()}%`);
