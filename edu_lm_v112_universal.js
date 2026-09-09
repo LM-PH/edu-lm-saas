@@ -10901,6 +10901,13 @@ window.cargarAlumnosLista = async () => {
             const alumnoIds = alumnos.map(a => a.id);
             const materiaLimpia = (materia || '').trim();
             const currentTrim = state.selectedMaestroTrimestre === 'final' ? null : (state.selectedMaestroTrimestre || 1);
+            
+            let isAsistBloqueada = false;
+            if (currentTrim && window.checkPaseListaBloqueado) {
+                const bMsg = await window.checkPaseListaBloqueado(materiaLimpia, gid || rawVal, currentTrim);
+                if (bMsg) isAsistBloqueada = true;
+            }
+
             let qAsist = supabaseClient.from('asistencias')
                 .select('alumno_id, estado, creado_en')
                 .in('alumno_id', alumnoIds)
@@ -10963,11 +10970,17 @@ window.cargarAlumnosLista = async () => {
                         }
                         else { 
                             faltas++; 
-                            asistCell += `<td style="text-align:center; padding:12px; color:var(--danger);">
-                                <button class="btn btn-ghost btn-xs" style="color:var(--danger)" onclick="window.justificarFaltaManual('${al.id}', '${d}', '${rawVal}')" title="Justificar Falta">
+                            if (isAsistBloqueada) {
+                                asistCell += `<td style="text-align:center; padding:12px; color:var(--danger);" title="Falta (Trimestre Cerrado)">
                                     <i class="fa-solid fa-xmark"></i>
-                                </button>
-                            </td>`; 
+                                </td>`;
+                            } else {
+                                asistCell += `<td style="text-align:center; padding:12px; color:var(--danger);">
+                                    <button class="btn btn-ghost btn-xs" style="color:var(--danger)" onclick="window.justificarFaltaManual('${al.id}', '${d}', '${rawVal}')" title="Justificar Falta">
+                                        <i class="fa-solid fa-xmark"></i>
+                                    </button>
+                                </td>`; 
+                            }
                         }
                     });
                 } else { asistCell = `<td style="text-align:center; padding:12px; color:var(--text-muted)">No hay sesiones</td>`; }
@@ -12527,6 +12540,13 @@ window.toggleAsistenciaModo = async (modo) => {
 };
 
 window.startMaestroQR = async () => {
+    const materia = (window.currentAulaMateria || 'N/A').trim();
+    const trim = state.selectedMaestroTrimestre || 1;
+    if (window.checkPaseListaBloqueado) {
+        const blockedMsg = await window.checkPaseListaBloqueado(materia, window.currentAulaGrupoId, trim);
+        if (blockedMsg) return; // Ya se muestra el UI bloqueado
+    }
+
     const reader = document.getElementById('reader-maestro');
     if(!reader) return;
     reader.style.display = 'block';
@@ -13320,6 +13340,52 @@ window.registrarSalidaAnticipada = async () => {
     }
 };
 
+window.checkPaseListaBloqueado = async (materia, grupoId, trimestre) => {
+    try {
+        if (!trimestre || trimestre === 'final') return "Trimestre no válido para pase de lista.";
+        
+        // 1. Validar Periodos de Calificaciones
+        const { data: periodo } = await supabaseClient
+            .from('periodos_calificaciones')
+            .select('*')
+            .eq('trimestre', trimestre)
+            .eq('plantel_id', state.plantelId)
+            .maybeSingle();
+
+        if (periodo) {
+            if (periodo.bloqueado) return "El pase de lista está BLOQUEADO por la Administración.";
+            if (periodo.fecha_limite) {
+                const deadline = new Date(periodo.fecha_limite);
+                if (new Date() > deadline) return `La fecha límite (${deadline.toLocaleString('es-MX', { dateStyle:'short', timeStyle:'short' })}) expiró. Pase de lista cerrado.`;
+            }
+        }
+
+        // 2. Validar si ya enviaron calificaciones (Historial)
+        const materiaClean = (materia || '').replace(/tecnología|tecnologia/gi, '').trim().toLowerCase();
+        const gid = String(grupoId).startsWith('grado:') ? null : String(grupoId);
+        
+        const { data: rawHistorial } = await supabaseClient.from('calificaciones_historial')
+            .select('id, materia_nombre, payload_json')
+            .eq('plantel_id', state.plantelId)
+            .eq('trimestre', trimestre);
+            
+        const historial = (rawHistorial || []).filter(h => {
+            const mNombre = (h.materia_nombre || '').trim().toLowerCase();
+            const payload = h.payload_json || {};
+            const matchMateria = !materiaClean || mNombre === materiaClean || mNombre.includes(materiaClean) || (payload.materia || '').toLowerCase().includes(materiaClean);
+            const matchGrupo = gid ? (payload.grupo_id === gid) : true;
+            return matchMateria && matchGrupo;
+        });
+
+        if (historial.length > 0) return "Calificaciones enviadas. Pase de lista cerrado para este trimestre.";
+        
+        return false;
+    } catch(e) {
+        console.error(e);
+        return false;
+    }
+};
+
 window.showQRScannerModal = async (title = 'Grupo Seleccionado', grupoId = null, materia = null) => {
    window.currentAulaGrupoId = grupoId;
    window.currentAulaMateria = materia;
@@ -13353,6 +13419,18 @@ window.updateSessionUI = async () => {
     try {
         const hoy = new Date().toLocaleDateString('en-CA');
         const materia = (window.currentAulaMateria || 'N/A').trim();
+        const trim = state.selectedMaestroTrimestre || 1;
+        
+        const blockedMsg = await window.checkPaseListaBloqueado(materia, window.currentAulaGrupoId, trim);
+        if(blockedMsg) {
+            statusEl.innerHTML = `<i class="fa-solid fa-lock"></i> ${blockedMsg}`;
+            statusEl.style.color = "var(--danger)";
+            if(btnPuntual) btnPuntual.style.display = 'none';
+            if(btnRetardo) btnRetardo.style.display = 'none';
+            if(btnCerrar) btnCerrar.style.display = 'none';
+            if(window._mScanner) { await window._mScanner.stop().catch(()=>{}); window._mScanner = null; const r=document.getElementById('reader-maestro'); if(r) r.style.display = 'none'; }
+            return;
+        }
         const { data: sesion } = await supabaseClient.from('asistencia_sesiones')
             .select('estado')
             .eq('grupo_id', String(window.currentAulaGrupoId))
