@@ -1818,6 +1818,9 @@ function renderMaestroAula() {
           </div>
           
           <div id="reader-maestro" style="width: 100%; min-height: 250px; display:none; border-radius:12px; overflow:hidden; margin: 20px 0; background:black"></div>
+          <div id="contadorQRMaestro" style="display:none; text-align:center; font-size:1.2rem; font-weight:bold; color:var(--primary); margin-bottom:15px; padding:10px; background:var(--page-bg); border-radius:8px; border:1px solid var(--border);">
+             Alumnos escaneados: <span id="lblCountQRMaestro" style="font-size:1.5rem;">0</span>
+          </div>
           
           <div style="display:flex; justify-content:center; align-items:center; margin-bottom:20px;">
              <button id="btnCerrarSesionDefinitivo" class="btn btn-danger btn-sm" style="display:none; border-radius:20px; padding:8px 20px; font-weight:bold;" onclick="window.confirmarCierreSesion()">
@@ -7289,6 +7292,29 @@ window.startMaestroQR = async () => {
     const reader = document.getElementById('reader-maestro');
     if(!reader) return;
     reader.style.display = 'block';
+
+    // Iniciar contador
+    const contDiv = document.getElementById('contadorQRMaestro');
+    const lblCount = document.getElementById('lblCountQRMaestro');
+    if(contDiv && lblCount) {
+        contDiv.style.display = 'block';
+        lblCount.innerText = 'Cargando...';
+        try {
+            const hoy = new Date().toLocaleDateString('en-CA');
+            const materia = (window.currentAulaMateria || 'N/A').trim();
+            const trim = state.selectedMaestroTrimestre || 1;
+            const { count } = await supabaseClient.from('asistencias')
+                .select('*', { count: 'exact', head: true })
+                .gte('creado_en', `${hoy}T00:00:00Z`)
+                .lte('creado_en', `${hoy}T23:59:59Z`)
+                .eq('materia', materia)
+                .eq('trimestre', trim)
+                .eq('grupo_id', String(window.currentAulaGrupoId).startsWith('grado:') ? null : String(window.currentAulaGrupoId));
+            window._qrScanCount = count || 0;
+            lblCount.innerText = window._qrScanCount;
+        } catch(e) { console.error(e); window._qrScanCount = 0; lblCount.innerText = '0'; }
+    }
+
     if(window._mScanner) { await window._mScanner.stop().catch(()=>{}); window._mScanner = null; }
     window._mScanner = new Html5Qrcode("reader-maestro");
     window._isProcessingQR = false;
@@ -7335,6 +7361,23 @@ window.guardarAsistenciaQR = async (matricula, grupoId) => {
             }
         }
 
+        const trim = state.selectedMaestroTrimestre || 1;
+
+        // Evitar duplicados si ya fue escaneado hoy en este trimestre y materia
+        const { data: yaRegistrado } = await supabaseClient.from('asistencias')
+            .select('id, estado')
+            .eq('alumno_id', alumno.id)
+            .eq('materia', materia)
+            .gte('creado_en', `${hoy}T00:00:00Z`)
+            .lte('creado_en', `${hoy}T23:59:59Z`)
+            .eq('trimestre', trim)
+            .maybeSingle();
+
+        if (yaRegistrado) {
+            window.showToast(`✅ ${alumno.nombre} ya estaba registrado como ${yaRegistrado.estado}`, "info");
+            return;
+        }
+
         const estFinal = (sesion.estado === 'retardo') ? 'Retardo' : 'Asistencia';
         const { error } = await supabaseClient.from('asistencias').insert([{
             alumno_id: alumno.id, 
@@ -7342,7 +7385,7 @@ window.guardarAsistenciaQR = async (matricula, grupoId) => {
             estado: estFinal,
             materia: materia,
             grupo_id: String(grupoId).startsWith('grado:') ? null : String(grupoId),
-            trimestre: state.selectedMaestroTrimestre || 1
+            trimestre: trim
         }]);
         if(error) throw error;
 
@@ -7353,6 +7396,13 @@ window.guardarAsistenciaQR = async (matricula, grupoId) => {
                 audiencia: 'Alumno_' + alumno.id,
                 mensaje: `Hola. Se ha registrado un RETARDO en la materia: "${materia}" el día de hoy (${hoy}). \n\nRecuerda que la puntualidad es parte de tu evaluación formativa.`
             }]);
+        }
+
+        // Incrementar contador localmente
+        if (typeof window._qrScanCount === 'number') {
+            window._qrScanCount++;
+            const lblCount = document.getElementById('lblCountQRMaestro');
+            if (lblCount) lblCount.innerText = window._qrScanCount;
         }
 
         window.showToast(`✅ ${estFinal}: ${alumno.nombre}`, estFinal === 'Retardo' ? 'warning' : 'success');
