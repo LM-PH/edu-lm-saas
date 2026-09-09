@@ -7334,10 +7334,20 @@ window.guardarAsistenciaQR = async (matricula, grupoId) => {
             alumno_id: alumno.id, 
             registrador_id: u.data.user.id, 
             estado: estFinal,
-            materia: (window.currentAulaMateria || 'N/A').trim(),
+            materia: materia,
             grupo_id: String(grupoId).startsWith('grado:') ? null : String(grupoId)
         }]);
         if(error) throw error;
+
+        if (estFinal === 'Retardo') {
+            await supabaseClient.from('comunicados').insert([{
+                autor_id: u.data.user.id, 
+                titulo: '⚠️ AVISO DE RETARDO', 
+                audiencia: 'Alumno_' + alumno.id,
+                mensaje: `Hola. Se ha registrado un RETARDO en la materia: "${materia}" el día de hoy (${hoy}). \n\nRecuerda que la puntualidad es parte de tu evaluación formativa.`
+            }]);
+        }
+
         window.showToast(`✅ ${estFinal}: ${alumno.nombre}`, estFinal === 'Retardo' ? 'warning' : 'success');
     } catch(e) { window.showToast("Error: " + e.message, "error"); }
 };
@@ -7389,15 +7399,7 @@ window.finalizarSesionAsistencia = async () => {
             })));
         }
 
-        const retardos = (reg || []).filter(r => r.estado === 'Retardo');
-        if(retardos.length > 0) {
-            await supabaseClient.from('comunicados').insert(retardos.map(r => ({
-                autor_id: u.data.user.id, 
-                titulo: '⚠️ AVISO DE RETARDO', 
-                audiencia: 'Alumno_' + r.alumno_id,
-                mensaje: `Hola. Se ha registrado un RETARDO en la materia: "${materia}" el día de hoy (${hoy}). \n\nRecuerda que la puntualidad es parte de tu evaluación formativa.`
-            })));
-        }
+        // Nota: Los retardos ahora se envían al momento de registrar en guardarAsistenciaQR
 
         if(window._mScanner) { await window._mScanner.stop().catch(()=>{}); window._mScanner = null; document.getElementById('reader-maestro').style.display='none'; }
         window._currentAsistenciaModo = null;
