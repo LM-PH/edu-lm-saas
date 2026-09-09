@@ -12531,7 +12531,7 @@ window.toggleAsistenciaModo = async (modo) => {
             maestro_id: u.data.user.id, 
             estado: dbEstado,
             plantel_id: state.plantelId,
-            trimestre: state.selectedMaestroTrimestre || 1
+            trimestre: window._trimestreActivoParaPase || state.selectedMaestroTrimestre || 1
         }, { onConflict: 'plantel_id, grupo_id, materia, fecha' });
 
         window.startMaestroQR();
@@ -12541,10 +12541,9 @@ window.toggleAsistenciaModo = async (modo) => {
 
 window.startMaestroQR = async () => {
     const materia = (window.currentAulaMateria || 'N/A').trim();
-    const trim = state.selectedMaestroTrimestre || 1;
-    if (window.checkPaseListaBloqueado) {
-        const blockedMsg = await window.checkPaseListaBloqueado(materia, window.currentAulaGrupoId, trim);
-        if (blockedMsg) return; // Ya se muestra el UI bloqueado
+    if (!window._trimestreActivoParaPase) {
+        window._trimestreActivoParaPase = await window.getTrimestreActivoPaseLista(materia, window.currentAulaGrupoId);
+        if (!window._trimestreActivoParaPase) return; // UI bloqueado
     }
 
     const reader = document.getElementById('reader-maestro');
@@ -12560,7 +12559,7 @@ window.startMaestroQR = async () => {
         try {
             const hoy = new Date().toLocaleDateString('en-CA');
             const materia = (window.currentAulaMateria || 'N/A').trim();
-            const trim = state.selectedMaestroTrimestre || 1;
+            const trim = window._trimestreActivoParaPase || 1;
             const { count } = await supabaseClient.from('asistencias')
                 .select('*', { count: 'exact', head: true })
                 .gte('creado_en', `${hoy}T00:00:00Z`)
@@ -12622,7 +12621,7 @@ window.guardarAsistenciaQR = async (matricula, grupoId) => {
             }
         }
 
-        const trim = state.selectedMaestroTrimestre || 1;
+        const trim = window._trimestreActivoParaPase || state.selectedMaestroTrimestre || 1;
         const materiaGuardar = (window.currentAulaMateria || 'N/A').trim();
 
         // Evitar duplicados si ya fue escaneado hoy en este trimestre y materia
@@ -12734,7 +12733,7 @@ window.finalizarSesionAsistencia = async () => {
                 materia: materia, // Importante registrar la materia
                 grupo_id: grupoId.startsWith('grado:') ? null : grupoId,
                 plantel_id: state.plantelId,
-                trimestre: state.selectedMaestroTrimestre || 1
+                trimestre: window._trimestreActivoParaPase || state.selectedMaestroTrimestre || 1
             })));
 
             // 2. Enviar comunicados de inasistencia (Aviso a los alumnos/padres)
@@ -13386,9 +13385,20 @@ window.checkPaseListaBloqueado = async (materia, grupoId, trimestre) => {
     }
 };
 
+window.getTrimestreActivoPaseLista = async (materia, grupoId) => {
+    // Buscar el primer trimestre que no esté bloqueado (1, 2 o 3)
+    for (let trim = 1; trim <= 3; trim++) {
+        const isBlocked = await window.checkPaseListaBloqueado(materia, grupoId, trim);
+        if (!isBlocked) return trim;
+    }
+    return null; // Todos bloqueados
+};
+
 window.showQRScannerModal = async (title = 'Grupo Seleccionado', grupoId = null, materia = null) => {
    window.currentAulaGrupoId = grupoId;
    window.currentAulaMateria = materia;
+   window._trimestreActivoParaPase = null;
+
    const classCards = document.querySelectorAll('.class-card');
    classCards.forEach(c => c.style.display = 'none');
    document.getElementById('classDetail').style.display = 'block';
@@ -13419,11 +13429,11 @@ window.updateSessionUI = async () => {
     try {
         const hoy = new Date().toLocaleDateString('en-CA');
         const materia = (window.currentAulaMateria || 'N/A').trim();
-        const trim = state.selectedMaestroTrimestre || 1;
         
-        const blockedMsg = await window.checkPaseListaBloqueado(materia, window.currentAulaGrupoId, trim);
-        if(blockedMsg) {
-            statusEl.innerHTML = `<i class="fa-solid fa-lock"></i> ${blockedMsg}`;
+        // Determinar el trimestre real activo para tomar asistencia
+        const trimActivo = await window.getTrimestreActivoPaseLista(materia, window.currentAulaGrupoId);
+        if(!trimActivo) {
+            statusEl.innerHTML = `<i class="fa-solid fa-lock"></i> Todos los trimestres están cerrados.`;
             statusEl.style.color = "var(--danger)";
             if(btnPuntual) btnPuntual.style.display = 'none';
             if(btnRetardo) btnRetardo.style.display = 'none';
@@ -13431,6 +13441,10 @@ window.updateSessionUI = async () => {
             if(window._mScanner) { await window._mScanner.stop().catch(()=>{}); window._mScanner = null; const r=document.getElementById('reader-maestro'); if(r) r.style.display = 'none'; }
             return;
         }
+        
+        // Guardamos el trimestre activo globalmente para que el escáner lo use
+        window._trimestreActivoParaPase = trimActivo;
+
         const { data: sesion } = await supabaseClient.from('asistencia_sesiones')
             .select('estado')
             .eq('grupo_id', String(window.currentAulaGrupoId))
