@@ -10897,17 +10897,22 @@ window.cargarAlumnosLista = async () => {
             // (El código de asistencias sigue aquí, pero me enfocaré en las evaluaciones que es lo que el usuario está viendo usualmente)
             const alumnoIds = alumnos.map(a => a.id);
             const materiaLimpia = (materia || '').trim();
-            const { data: asistenciasRegistradas } = await supabaseClient.from('asistencias')
+            const currentTrim = state.selectedMaestroTrimestre === 'final' ? null : (state.selectedMaestroTrimestre || 1);
+            let qAsist = supabaseClient.from('asistencias')
                 .select('alumno_id, estado, creado_en')
                 .in('alumno_id', alumnoIds)
                 .eq('materia', materiaLimpia)
                 .order('creado_en');
+            if (currentTrim) qAsist = qAsist.eq('trimestre', currentTrim);
+            const { data: asistenciasRegistradas } = await qAsist;
                 
-            const { data: sesiones } = await supabaseClient.from('asistencia_sesiones')
+            let qSes = supabaseClient.from('asistencia_sesiones')
                 .select('fecha')
                 .eq('grupo_id', String(rawVal))
                 .eq('materia', materiaLimpia)
                 .eq('plantel_id', state.plantelId);
+            if (currentTrim) qSes = qSes.eq('trimestre', currentTrim);
+            const { data: sesiones } = await qSes;
                 
             let diasPaseLista = new Set();
             if(sesiones) sesiones.forEach(s => diasPaseLista.add(s.fecha));
@@ -11018,7 +11023,8 @@ window.justificarFaltaManual = async (alumnoId, fecha, rawVal) => {
             creado_en: `${fecha}T23:59:59Z`, 
             fecha: fecha,
             tipo: 'Maestro (Manual)',
-            plantel_id: state.plantelId
+            plantel_id: state.plantelId,
+            trimestre: state.selectedMaestroTrimestre || 1
         }]);
 
         if(error) throw error;
@@ -12508,7 +12514,8 @@ window.toggleAsistenciaModo = async (modo) => {
             fecha: hoy, 
             maestro_id: u.data.user.id, 
             estado: dbEstado,
-            plantel_id: state.plantelId
+            plantel_id: state.plantelId,
+            trimestre: state.selectedMaestroTrimestre || 1
         }, { onConflict: 'plantel_id, grupo_id, materia, fecha' });
 
         window.startMaestroQR();
@@ -12575,7 +12582,8 @@ window.guardarAsistenciaQR = async (matricula, grupoId) => {
             materia: materiaGuardar,
             grupo_id: String(grupoId).startsWith('grado:') ? null : String(grupoId),
             fecha: hoy,
-            plantel_id: state.plantelId
+            plantel_id: state.plantelId,
+            trimestre: state.selectedMaestroTrimestre || 1
         }]);
         if(error) throw error;
 
@@ -12643,7 +12651,8 @@ window.finalizarSesionAsistencia = async () => {
                 estado: 'Falta', 
                 materia: materia, // Importante registrar la materia
                 grupo_id: grupoId.startsWith('grado:') ? null : grupoId,
-                plantel_id: state.plantelId
+                plantel_id: state.plantelId,
+                trimestre: state.selectedMaestroTrimestre || 1
             })));
 
             // 2. Enviar comunicados de inasistencia (Aviso a los alumnos/padres)

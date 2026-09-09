@@ -6194,16 +6194,21 @@ window.cargarAlumnosLista = async () => {
             // (El código de asistencias sigue aquí, pero me enfocaré en las evaluaciones que es lo que el usuario está viendo usualmente)
             const alumnoIds = alumnos.map(a => a.id);
             const materiaLimpia = (materia || '').trim();
-            const { data: asistenciasRegistradas } = await supabaseClient.from('asistencias')
+            const currentTrim = state.selectedMaestroTrimestre === 'final' ? null : (state.selectedMaestroTrimestre || 1);
+            let qAsist = supabaseClient.from('asistencias')
                 .select('alumno_id, estado, creado_en')
                 .in('alumno_id', alumnoIds)
                 .eq('materia', materiaLimpia)
                 .order('creado_en');
+            if (currentTrim) qAsist = qAsist.eq('trimestre', currentTrim);
+            const { data: asistenciasRegistradas } = await qAsist;
                 
-            const { data: sesiones } = await supabaseClient.from('asistencia_sesiones')
+            let qSes = supabaseClient.from('asistencia_sesiones')
                 .select('fecha')
                 .eq('grupo_id', String(rawVal))
                 .eq('materia', materiaLimpia);
+            if (currentTrim) qSes = qSes.eq('trimestre', currentTrim);
+            const { data: sesiones } = await qSes;
                 
             let diasPaseLista = new Set();
             if(sesiones) sesiones.forEach(s => diasPaseLista.add(s.fecha));
@@ -6312,7 +6317,8 @@ window.justificarFaltaManual = async (alumnoId, fecha, rawVal) => {
             estado: 'Justificada',
             materia: (window.currentAulaMateria || '').trim(),
             creado_en: `${fecha}T10:00:00Z`, 
-            tipo: 'Maestro (Manual)'
+            tipo: 'Maestro (Manual)',
+            trimestre: state.selectedMaestroTrimestre || 1
         }]);
 
         if(error) throw error;
@@ -7271,7 +7277,7 @@ window.toggleAsistenciaModo = async (modo) => {
         const dbEstado = modo === 'asistencia' ? 'abierto' : 'retardo';
         
         await supabaseClient.from('asistencia_sesiones').upsert({
-            grupo_id: String(window.currentAulaGrupoId), materia: window.currentAulaMateria || 'N/A', fecha: hoy, maestro_id: u.data.user.id, estado: dbEstado
+            grupo_id: String(window.currentAulaGrupoId), materia: window.currentAulaMateria || 'N/A', fecha: hoy, maestro_id: u.data.user.id, estado: dbEstado, trimestre: state.selectedMaestroTrimestre || 1
         }, { onConflict: 'grupo_id, materia, fecha' });
 
         window.startMaestroQR();
@@ -7335,7 +7341,8 @@ window.guardarAsistenciaQR = async (matricula, grupoId) => {
             registrador_id: u.data.user.id, 
             estado: estFinal,
             materia: materia,
-            grupo_id: String(grupoId).startsWith('grado:') ? null : String(grupoId)
+            grupo_id: String(grupoId).startsWith('grado:') ? null : String(grupoId),
+            trimestre: state.selectedMaestroTrimestre || 1
         }]);
         if(error) throw error;
 
@@ -7395,7 +7402,7 @@ window.finalizarSesionAsistencia = async () => {
         
         if(faltantes.length > 0) {
             await supabaseClient.from('asistencias').insert(faltantes.map(al => ({
-                alumno_id: al.id, registrador_id: u.data.user.id, estado: 'Falta', grupo_id: grupoId.startsWith('grado:') ? null : grupoId
+                alumno_id: al.id, registrador_id: u.data.user.id, estado: 'Falta', grupo_id: grupoId.startsWith('grado:') ? null : grupoId, trimestre: state.selectedMaestroTrimestre || 1
             })));
         }
 

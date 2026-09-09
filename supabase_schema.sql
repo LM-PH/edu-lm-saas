@@ -1220,3 +1220,5 @@ WITH CHECK (
 CREATE POLICY "Lectura_Expediente_Propio"
 ON public.expedientes_docentes FOR SELECT TO authenticated
 USING (maestro_id = auth.uid());
+ALTER TABLE public.asistencias ADD COLUMN IF NOT EXISTS trimestre integer DEFAULT 1;
+ALTER TABLE public.asistencia_sesiones ADD COLUMN IF NOT EXISTS trimestre integer DEFAULT 1;
