@@ -21332,9 +21332,9 @@ window.loadComunicadosEnviadosMaestro = async () => {
         
         cont.innerHTML = data.map(c => `
             <div style="background:var(--page-bg); border:1px solid var(--border); padding:12px; border-radius:8px; display:flex; flex-direction:column; gap:8px; box-shadow:0 1px 3px rgba(0,0,0,0.03);">
-               <div><strong style="color:var(--primary); font-size:0.95rem;">\${c.titulo}</strong></div>
-               <div style="font-size:0.8rem; color:var(--secondary);">Enviado a: \${c.audiencia.replace('Grupo_', 'Grupo ID: ')} - \${new Date(c.fecha_envio).toLocaleString('es-MX')}</div>
-               <div style="font-size:0.85rem; color:var(--text-color); white-space:pre-wrap; opacity:0.85; max-height:80px; overflow:hidden; text-overflow:ellipsis;">\${c.mensaje}</div>
+               <div><strong style="color:var(--primary); font-size:0.95rem;">${c.titulo}</strong></div>
+               <div style="font-size:0.8rem; color:var(--secondary);">Enviado a: ${c.audiencia.replace('Grupo_', 'Grupo ID: ')} - ${new Date(c.fecha_envio).toLocaleString('es-MX')}</div>
+               <div style="font-size:0.85rem; color:var(--text-color); white-space:pre-wrap; opacity:0.85; max-height:80px; overflow:hidden; text-overflow:ellipsis;">${c.mensaje}</div>
             </div>
         `).join('');
     } catch(e) {
