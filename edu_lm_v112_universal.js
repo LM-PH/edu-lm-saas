@@ -9834,7 +9834,8 @@ window.firmarEncuadreDesdeTimeline = async (comunicadoId, btn) => {
                 const { error: errFirma } = await supabaseClient.from('firmas_encuadre').upsert({
                     encuadre_id: targetEncId,
                     alumno_id: al.id,
-                    firma: firmaTexto
+                    firma: firmaTexto,
+                    plantel_id: state.plantelId
                 }, { onConflict: 'encuadre_id,alumno_id' });
                 
                 if(errFirma) throw errFirma;
