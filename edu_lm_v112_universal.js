@@ -21208,19 +21208,21 @@ window.loadMaestroAvisosGrupos = async () => {
            .or('grupo_id.not.is.null,target_grado.not.is.null');
 
         if(asigs && asigs.length > 0) {
-            sel.innerHTML = '<option value="">-- Selecciona un Grupo --</option>' + 
-               asigs.map(a => {
-                   if(a.grupos) {
-                       return \`<option value="Grupo_\${a.grupos.id}">\${a.materia} - \${a.grupos.nombre}</option>\`;
-                   } else if(a.target_grado) {
-                       // En un comunicado maestro no se puede mandar "Grado 1 (Tecnología)" directamente sin saber los grupos,
-                       // pero para simplificar, usaremos la misma audiencia general para todo el grado:
-                       // Para un target_grado, el profesor envía el comunicado y le llega a todos los de ese grado (o grupo_null + materia).
-                       // Idealmente, expandimos los grupos aquí.
-                       return \`<option value="Grado_\${a.target_grado}">\${a.materia} - Todos los grupos de \${a.target_grado} (Tecnología)</option>\`;
-                   }
-                   return '';
-               }).filter(Boolean).join('');
+            let optionsHtml = '<option value="">-- Selecciona un Grupo --</option>';
+            for (const a of asigs) {
+                if(a.grupos) {
+                    optionsHtml += `<option value="Grupo_${a.grupos.id}">${a.materia} - ${a.grupos.nombre}</option>`;
+                } else if(a.target_grado) {
+                    const { data: grps } = await supabaseClient.from('grupos').select('id, nombre').like('nombre', a.target_grado + '%').eq('plantel_id', state.plantelId);
+                    optionsHtml += `<option value="Grado_${a.target_grado}" style="font-weight:bold;">${a.materia} - TODOS los grupos de ${a.target_grado}</option>`;
+                    if(grps && grps.length > 0) {
+                        grps.forEach(g => {
+                            optionsHtml += `<option value="Grupo_${g.id}">&nbsp;&nbsp;&nbsp;↳ Solo ${g.nombre}</option>`;
+                        });
+                    }
+                }
+            }
+            sel.innerHTML = optionsHtml;
         } else {
             sel.innerHTML = '<option value="">No tienes grupos asignados</option>';
         }
