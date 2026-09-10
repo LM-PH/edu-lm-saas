@@ -4123,7 +4123,7 @@ window.guardarReporteApoyo = async () => {
         
         let metaStr = null;
         if(state.role === 'maestro' || state.role === 'docente') {
-            const { data: asig } = await supabaseClient.from('asignaciones_maestros').select('materia').eq('docente_email', state.user.email);
+            const { data: asig } = await supabaseClient.from('asignaciones_maestros').select('materia').eq('docente_email', state.user.email).eq('plantel_id', state.plantelId);
             if(asig && asig.length > 0) {
                 const materias = [...new Set(asig.map(a => a.materia))].filter(Boolean).join(', ');
                 if(materias) metaStr = 'Maestro(a) de ' + materias;
@@ -8107,7 +8107,7 @@ window.eliminarPersonaMaster = async (idPermitido, email, nombre, rol = '') => {
                 }
             }
         } else {
-            await supabaseClient.from('asignaciones_maestros').delete().eq('docente_email', email).eq('plantel_id', state.plantelId);
+            await supabaseClient.from('asignaciones_maestros').delete().eq('docente_email', email).eq('plantel_id', state.plantelId).eq('plantel_id', state.plantelId);
         }
         const { error: errPerm } = await supabaseClient.from('perfiles_permitidos').delete().eq('id', idPermitido);
         if(errPerm) throw errPerm;
@@ -8417,7 +8417,7 @@ window.updateNotificationBadge = async (clearAll = false) => {
 
         if (userRole === 'maestro' || userRole === 'docente') {
             audArr.push('Maestros', 'Personal');
-            const { data: asig } = await supabaseClient.from('asignaciones_maestros').select('grupo_id, target_grado').eq('docente_email', state.user.email);
+            const { data: asig } = await supabaseClient.from('asignaciones_maestros').select('grupo_id, target_grado').eq('docente_email', state.user.email).eq('plantel_id', state.plantelId);
             if(asig) {
                 for (const a of asig) {
                     if(a.grupo_id) {
@@ -8425,7 +8425,7 @@ window.updateNotificationBadge = async (clearAll = false) => {
                         audArr.push('Maestros_Grupo_' + a.grupo_id);
                     }
                     else if(a.target_grado) {
-                        const { data: grps } = await supabaseClient.from('grupos').select('id').like('nombre', a.target_grado + '%');
+                        const { data: grps } = await supabaseClient.from('grupos').select('id').like('nombre', a.target_grado + '%').eq('plantel_id', state.plantelId);
                         if(grps) grps.forEach(g => {
                             audArr.push('Grupo_' + g.id);
                             audArr.push('Maestros_Grupo_' + g.id);
@@ -8510,7 +8510,7 @@ window.loadMisGruposMaestro = async () => {
         const { data: asigs, error } = await supabaseClient
             .from('asignaciones_maestros')
             .select('grupo_id, target_grado, materia, grupos(*)')
-            .eq('docente_email', email);
+            .eq('docente_email', email).eq('plantel_id', state.plantelId).eq('plantel_id', state.plantelId);
 
         if(error) throw error;
         
@@ -9842,7 +9842,8 @@ window.firmarEncuadreDesdeTimeline = async (comunicadoId, btn) => {
                     autor_id: u.data.user.id,
                     titulo: `✅ Firma de Enterado: ${al.nombre}`,
                     mensaje: `El alumno(a) ${al.nombre} ha firmado el encuadre de ${tituloMatch}.\n\n✍️ Firma: ${firmaTexto}`,
-                    audiencia: `Maestro_${com.autor_id}`
+                    audiencia: `Maestro_${com.autor_id}`,
+                    plantel_id: state.plantelId
                 }]);
                 
                 alert(`✅ Firma registrada con éxito para ${tituloMatch}.\nTu profesor ya puede ver tu enterado en su registro.`);
@@ -10067,7 +10068,7 @@ window.loadTimelinePersonal = async (selectedDate) => {
             audArr.push('Maestro_' + userId);
             
             // Cargar asignaciones (grupos específicos y grados completos)
-            const { data: asig } = await supabaseClient.from('asignaciones_maestros').select('grupo_id, target_grado, materia').eq('docente_email', email);
+            const { data: asig } = await supabaseClient.from('asignaciones_maestros').select('grupo_id, target_grado, materia').eq('docente_email', email).eq('plantel_id', state.plantelId).eq('plantel_id', state.plantelId);
             
             if(asig) {
                 for (const a of asig) {
@@ -10113,7 +10114,7 @@ window.loadTimelinePersonal = async (selectedDate) => {
 
         // Filtrar justificantes médicos para maestros de tecnología (solo ven de sus propios alumnos de taller)
         if (data && (userRole === 'maestro' || userRole === 'docente') && uRes.data?.user) {
-            const { data: asig } = await supabaseClient.from('asignaciones_maestros').select('materia').eq('docente_email', uRes.data.user.email);
+            const { data: asig } = await supabaseClient.from('asignaciones_maestros').select('materia').eq('docente_email', uRes.data.user.email).eq('plantel_id', state.plantelId);
             if (asig && asig.length > 0) {
                 data = data.filter(c => {
                     if (c.titulo?.startsWith('JUSTIFICANTE MÉDICO:') && c.titulo.includes('[TALLER:')) {
@@ -10261,7 +10262,7 @@ window.loadActividadesMaestro = async () => {
             const { data: asigs, error: errAsigs } = await supabaseClient.from('asignaciones_maestros')
                .select('materia, grupo_id, target_grado, grupos(id, nombre)')
                .eq('plantel_id', state.plantelId)
-               .eq('docente_email', email)
+               .eq('docente_email', email).eq('plantel_id', state.plantelId)
                .or('grupo_id.not.is.null,target_grado.not.is.null');
                
             if(!errAsigs && asigs) {
@@ -10612,7 +10613,7 @@ window.loadListasMaestro = async () => {
         const email = (await supabaseClient.auth.getUser()).data.user.email;
         const { data: asigs } = await supabaseClient.from('asignaciones_maestros')
            .select('materia, grupo_id, target_grado, grupos(id, nombre)')
-           .eq('docente_email', email)
+           .eq('docente_email', email).eq('plantel_id', state.plantelId)
            .or('grupo_id.not.is.null,target_grado.not.is.null');
            
         if(asigs && asigs.length > 0) {
@@ -11061,7 +11062,7 @@ window.loadGruposCalificacionesCarga = async () => {
         const email = (await supabaseClient.auth.getUser()).data.user.email;
         const { data: asigs } = await supabaseClient.from('asignaciones_maestros')
            .select('materia, grupo_id, target_grado, grupos(id, nombre)')
-           .eq('docente_email', email)
+           .eq('docente_email', email).eq('plantel_id', state.plantelId)
            .or('grupo_id.not.is.null,target_grado.not.is.null');
            
         if(asigs && asigs.length > 0) {
@@ -13623,7 +13624,8 @@ window.enviarReporteRapido = async () => {
                autor_id: autor_id,
                titulo: `Aviso Importante: Reporte ${tipo}`,
                audiencia: `Alumno_${alumno_id}`,
-               mensaje: `Se ha levantado un reporte de severidad *${sev}* para ${alumnoName}.\n\nDetalle:\n${desc}`
+               mensaje: `Se ha levantado un reporte de severidad *${sev}* para ${alumnoName}.\n\nDetalle:\n${desc}`,
+               plantel_id: state.plantelId
             }]);
         }
         
@@ -13804,7 +13806,7 @@ window.loadGruposEncuadre = async () => {
         
         const { data: asigs } = await supabaseClient.from('asignaciones_maestros')
            .select('materia, grupo_id, target_grado, grupos(id, nombre)')
-           .eq('docente_email', u.data.user.email)
+           .eq('docente_email', u.data.user.email).eq('plantel_id', state.plantelId)
            .or('grupo_id.not.is.null,target_grado.not.is.null');
            
         if(asigs && asigs.length > 0) {
@@ -14836,7 +14838,8 @@ window.notificarRevisionSabana = async () => {
                 titulo: tituloFinal,
                 mensaje: `Hola ${res.nombre}, se han validado tus calificaciones para el ${trim}.\n\nDETALLE POR MATERIA:\n${res.desglose}\nPROMEDIO GENERAL: ${res.promedio.toFixed(1)}${mensajeEspecial}\n\n📌 NOTA IMPORTANTE:\nEl día de la firma de boletas, se registrará tu firma electrónica utilizando el código QR del alumno. Por favor, asegúrate de presentarte con el QR para agilizar el proceso.`,
                 audiencia: `Alumno_${res.id}`,
-                tipo: 'reporte_academico_automatico'
+                tipo: 'reporte_academico_automatico',
+                plantel_id: state.plantelId
             }]);
             conteo++;
         }
@@ -15551,7 +15554,7 @@ window.loadMateriasDeMaestro = async (email) => {
 
         const { data, error } = await supabaseClient.from('asignaciones_maestros')
             .select('materia')
-            .eq('docente_email', email)
+            .eq('docente_email', email).eq('plantel_id', state.plantelId)
             .eq('plantel_id', currentPlantelID);
             
         if(error) throw error;
@@ -15588,7 +15591,7 @@ window.loadGruposDeMaestro = async (email) => {
     if(!list) return;
     if(!email) { list.innerHTML = '<li>Sin selección</li>'; return; }
     try {
-        const { data } = await supabaseClient.from('asignaciones_maestros').select('id, materia, target_grado, grupo_id, grupos(nombre)').eq('docente_email', email);
+        const { data } = await supabaseClient.from('asignaciones_maestros').select('id, materia, target_grado, grupo_id, grupos(nombre)').eq('docente_email', email).eq('plantel_id', state.plantelId).eq('plantel_id', state.plantelId);
         
         // Filtramos para que solo se vean las que TIENEN un grupo o un grado asignado
         const asignacionesReales = (data || []).filter(d => d.grupo_id !== null || d.target_grado !== null);
@@ -15647,7 +15650,7 @@ window.crearAsignacionGrupoMaestro = async () => {
     try {
         // Verificar existencia previa
         let checkExist = supabaseClient.from('asignaciones_maestros').select('id')
-            .eq('docente_email', email).eq('materia', mat);
+            .eq('docente_email', email).eq('plantel_id', state.plantelId).eq('materia', mat);
         
         if(finalGrupoId) checkExist = checkExist.eq('grupo_id', finalGrupoId);
         else checkExist = checkExist.eq('target_grado', targetGrado);
@@ -16232,7 +16235,7 @@ window.eliminarPersona = async (idPermitido, email, nombre, rol = '') => {
                 }
                 window.showToast("Alumno eliminado correctamente.", "success");
             } else {
-                await supabaseClient.from('asignaciones_maestros').delete().eq('docente_email', email).eq('plantel_id', state.plantelId);
+                await supabaseClient.from('asignaciones_maestros').delete().eq('docente_email', email).eq('plantel_id', state.plantelId).eq('plantel_id', state.plantelId);
                 if (idPermitido && idPermitido !== 'undefined') {
                     const { error: errPerm } = await supabaseClient.from('perfiles_permitidos').delete().eq('id', idPermitido);
                     if(errPerm) throw errPerm;
@@ -16549,7 +16552,7 @@ window.cargarAsignacionesYHorarioDocente = async () => {
         // 1. Cargar vinculaciones (asignaciones_maestros)
         const { data: asigs, error: errAsig } = await supabaseClient.from('asignaciones_maestros')
             .select('id, materia, grupo_id, target_grado, grupos(nombre)')
-            .eq('docente_email', email)
+            .eq('docente_email', email).eq('plantel_id', state.plantelId)
             .eq('plantel_id', state.plantelId);
             
         if(errAsig) throw errAsig;
@@ -16933,9 +16936,9 @@ window.loadMiHorario = async () => {
             return;
         }
 
-        // Buscar por grupo o grado o general
         const { data, error } = await supabaseClient.from('horarios')
             .select('*')
+            .eq('plantel_id', state.plantelId)
             .or(`grupo_id.eq.${alu.grupo_id},grado.eq.${alu.grado_estudios},and(grupo_id.is.null,grado.is.null)`)
             .order('creado_en', { ascending: false });
 
@@ -19482,7 +19485,7 @@ window.initFlatpickrAvisos = async (isAlumno = false) => {
         let maestroGrupos = [];
         let maestroMaterias = [];
         if((userRole === 'maestro' || userRole === 'docente') && uRes.data?.user?.email) {
-            const { data: asigs } = await supabaseClient.from('asignaciones_maestros').select('grupo_id, materia').eq('docente_email', uRes.data.user.email);
+            const { data: asigs } = await supabaseClient.from('asignaciones_maestros').select('grupo_id, materia').eq('docente_email', uRes.data.user.email).eq('plantel_id', state.plantelId);
             if(asigs) {
                 maestroGrupos = asigs.map(a => a.grupo_id).filter(Boolean);
                 maestroMaterias = asigs.map(a => a.materia).filter(Boolean);

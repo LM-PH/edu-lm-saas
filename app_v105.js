@@ -8444,7 +8444,7 @@ window.agregarBitacora = async () => {
 
 window.loadAdminCalificacionesFiltros = async () => {
     try {
-        const { data: grupos, error } = await supabaseClient.from('grupos').select('id, nombre, turno').order('nombre');
+        const { data: grupos, error } = await supabaseClient.from('grupos').select('id, nombre, turno').eq('plantel_id', state.plantelId).order('nombre');
         if(error) return console.error(error);
         const sel = document.getElementById('adminGrupoSel');
         if(!sel) return;
