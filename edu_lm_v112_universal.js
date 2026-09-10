@@ -444,7 +444,7 @@ function renderSetupScreen() {
                 </div>
                 <div class="form-group" style="margin-bottom:20px;">
                     <label class="form-label" style="font-weight:600; margin-bottom:8px; display:block;">Tu Correo Institucional</label>
-                    <input type="email" id="setupCorreo" class="form-input" 
+                    <input type="text" id="setupCorreo" class="form-input" 
                            style="height:60px; text-align:center; border-radius:12px; font-size:16px;" 
                            placeholder="director@escuela.com"
                            inputmode="email" autocomplete="email">
@@ -742,7 +742,7 @@ function renderRoleSelector() {
         
         <div class="form-group" style="text-align:left; margin-bottom:15px;">
           <label class="form-label">Correo Electrónico</label>
-          <input type="email" id="fb-email" class="form-input" 
+          <input type="text" id="fb-email" class="form-input" 
                  placeholder="ejemplo@escuela.edu.mx" 
                  inputmode="email" 
                  autocomplete="email" 
@@ -1051,7 +1051,7 @@ function renderAdminInscripcion() {
 
         <div class="form-group">
           <label class="form-label">Correo Electrónico (Acceso Alumno)</label>
-          <input type="email" class="form-input" id="contactoAcceso" placeholder="alumno@correo.com">
+          <input type="text" class="form-input" id="contactoAcceso" placeholder="alumno@correo.com">
           <p style="font-size:0.75rem; color:var(--text-muted); margin-top:4px;">Estas credenciales servirán como usuario único para que inicie sesión en la plataforma y conectarlo con la Matrícula.</p>
         </div>
         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
@@ -2078,7 +2078,7 @@ function renderAdminMaestros() {
         
         <div class="form-group">
           <label class="form-label">Correo Institucional / Personal</label>
-          <input type="email" id="docEmail" class="form-input" placeholder="empleado@escuela.edu.mx">
+          <input type="text" id="docEmail" class="form-input" placeholder="empleado@escuela.edu.mx">
         </div>
         
         <div class="form-group">
@@ -7412,7 +7412,7 @@ function renderDirectivoPersonal() {
            </div>
            <div class="form-group">
               <label class="form-label">Correo Electrónico</label>
-              <input type="email" id="perEmail" class="form-input" placeholder="correo@ejemplo.com">
+              <input type="text" id="perEmail" class="form-input" placeholder="correo@ejemplo.com">
            </div>
            <div class="form-group">
               <label class="form-label">Rol en el Plantel</label>
@@ -20942,7 +20942,7 @@ window.abrirModalExpediente = async function(maestroId) {
             </div>
             <div class="form-group">
                 <label>Correo Electrónico (Contacto)</label>
-                <input type="email" class="form-control" id="exp_correo" value="${exp.correo || ''}">
+                <input type="text" class="form-control" id="exp_correo" value="${exp.correo || ''}">
             </div>
             <div class="form-group">
                 <label>Estado Civil</label>
