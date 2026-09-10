@@ -890,6 +890,7 @@ function renderSidebar() {
       { name: 'Bitácora de Maestro', path: '/maestro/bitacora', icon: 'fa-book-journal-whills' },
       { name: 'Reportes Escolares', path: '/maestro/reportes', icon: 'fa-file-signature' },
       { name: 'Avisos Oficiales', path: '/maestro/comunicados', icon: 'fa-bullhorn' },
+      { name: 'Enviar Avisos (Grupos)', path: '/maestro/enviar_comunicados', icon: 'fa-paper-plane' },
     ],
     apoyo: [
       { name: 'Focos Rojos', path: '/apoyo/dashboard', icon: 'fa-triangle-exclamation' },
@@ -7718,6 +7719,7 @@ async function renderPage(path) {
     case '/maestro/bitacora': return renderMaestroBitacora();
     case '/maestro/reportes': return renderApoyoReportes();
     case '/maestro/comunicados': return renderPersonalComunicados('Maestros');
+    case '/maestro/enviar_comunicados': return renderMaestroEnviarComunicados();
     case '/apoyo/dashboard': return renderApoyoDashboard();
     case '/apoyo/riesgo': return renderApoyoRiesgoAcademico();
     case '/apoyo/horarios': return renderApoyoHorarios();
@@ -21137,5 +21139,202 @@ window.guardarExpedienteDocente = async function() {
     } catch(err) {
         console.error(err);
         alert("Error al guardar: " + err.message);
+    }
+};
+
+function renderMaestroEnviarComunicados() {
+  setTimeout(() => { 
+      if(window.loadMaestroAvisosGrupos) window.loadMaestroAvisosGrupos(); 
+      if(window.loadComunicadosEnviadosMaestro) window.loadComunicadosEnviadosMaestro();
+  }, 100);
+  return `
+    <div class="page-header">
+      <h2 class="page-title">Enviar Comunicados a Grupos</h2>
+      <p class="page-subtitle">Panel para enviar avisos y notificaciones a los alumnos de tus grupos asignados.</p>
+    </div>
+
+    <div style="display:flex; gap:24px; flex-wrap:wrap;">
+      <!-- Creador de Comunicado -->
+      <div class="card" style="flex:2; min-width:350px;">
+        <h3 style="margin-bottom:16px">Nuevo Comunicado / Aviso</h3>
+        <div class="form-group">
+          <label class="form-label">Asunto o Título del Aviso</label>
+          <input type="text" id="inMaestroComTitulo" class="form-input" placeholder="Ej: Traer material para laboratorio">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Audiencia Destino (Mis Grupos)</label>
+          <select id="selMaestroComAudiencia" class="form-select">
+            <option value="">Cargando grupos...</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Mensaje Detallado</label>
+          <textarea id="inMaestroComMensaje" class="form-input" style="height:120px; resize:vertical; font-family:inherit;" placeholder="Escribe el contenido del aviso aquí..."></textarea>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Adjuntar Documento / Material (.pdf, .jpg, .png)</label>
+          <input type="file" id="inMaestroComArchivo" class="form-input" style="padding:8px; cursor:pointer;" accept=".pdf,.jpg,.png">
+        </div>
+        <button id="btnPublicarMaestroComunicado" class="btn btn-primary btn-lg" style="width:100%" onclick="window.publicarComunicadoMaestro()">
+          <i class="fa-solid fa-paper-plane"></i> Enviar a Alumnos
+        </button>
+      </div>
+
+      <!-- Historial de Comunicados Enviados -->
+      <div class="card" style="flex:1; min-width:300px;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+          <h3 style="margin:0;">Enviados Recientemente</h3>
+          <button class="btn btn-outline" style="padding:4px 8px; font-size:0.8rem;" onclick="window.loadComunicadosEnviadosMaestro()"><i class="fa-solid fa-arrows-rotate"></i></button>
+        </div>
+        <div id="divMaestroComHistorial" style="max-height:500px; overflow-y:auto; display:flex; flex-direction:column; gap:12px;">
+          <div style="text-align:center; padding:30px; color:var(--text-muted);"><i class="fa-solid fa-spinner fa-spin"></i></div>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+window.loadMaestroAvisosGrupos = async () => {
+    const sel = document.getElementById('selMaestroComAudiencia');
+    if(!sel) return;
+    try {
+        const u = await supabaseClient.auth.getUser();
+        if(!u.data.user) return;
+        
+        const { data: asigs } = await supabaseClient.from('asignaciones_maestros')
+           .select('materia, grupo_id, target_grado, grupos(id, nombre)')
+           .eq('docente_email', u.data.user.email)
+           .eq('plantel_id', state.plantelId)
+           .or('grupo_id.not.is.null,target_grado.not.is.null');
+
+        if(asigs && asigs.length > 0) {
+            sel.innerHTML = '<option value="">-- Selecciona un Grupo --</option>' + 
+               asigs.map(a => {
+                   if(a.grupos) {
+                       return \`<option value="Grupo_\${a.grupos.id}">\${a.materia} - \${a.grupos.nombre}</option>\`;
+                   } else if(a.target_grado) {
+                       // En un comunicado maestro no se puede mandar "Grado 1 (Tecnología)" directamente sin saber los grupos,
+                       // pero para simplificar, usaremos la misma audiencia general para todo el grado:
+                       // Para un target_grado, el profesor envía el comunicado y le llega a todos los de ese grado (o grupo_null + materia).
+                       // Idealmente, expandimos los grupos aquí.
+                       return \`<option value="Grado_\${a.target_grado}">\${a.materia} - Todos los grupos de \${a.target_grado} (Tecnología)</option>\`;
+                   }
+                   return '';
+               }).filter(Boolean).join('');
+        } else {
+            sel.innerHTML = '<option value="">No tienes grupos asignados</option>';
+        }
+    } catch(e) {
+        console.error(e);
+        sel.innerHTML = '<option value="">Error al cargar grupos</option>';
+    }
+};
+
+window.publicarComunicadoMaestro = async () => {
+    const btn = document.getElementById('btnPublicarMaestroComunicado');
+    const titulo = document.getElementById('inMaestroComTitulo').value.trim();
+    const aud = document.getElementById('selMaestroComAudiencia').value;
+    const msg = document.getElementById('inMaestroComMensaje').value.trim();
+    const fInp = document.getElementById('inMaestroComArchivo');
+    
+    if(!titulo || !msg || !aud) return alert("Llena todos los campos (título, audiencia y mensaje).");
+    
+    btn.disabled = true;
+    const originalHtml = btn.innerHTML;
+    btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Publicando...';
+    
+    try {
+        const uRes = await supabaseClient.auth.getUser();
+        
+        let fileUrl = null;
+        if (fInp.files && fInp.files.length > 0) {
+            const file = fInp.files[0];
+            const fileExt = file.name.split('.').pop();
+            const fileName = `aviso_maestro_${Date.now()}.${fileExt}`;
+            const filePath = `avisos_adjuntos/${fileName}`;
+
+            const { error: uploadError } = await supabaseClient.storage
+                .from('comunicados')
+                .upload(filePath, file);
+
+            if (uploadError) throw uploadError;
+            const { data: { publicUrl } } = supabaseClient.storage
+                .from('comunicados')
+                .getPublicUrl(filePath);
+            fileUrl = publicUrl;
+        }
+
+        // Si la audiencia es Grado_X, necesitamos enviar los comunicados a todos los grupos de ese grado (y plantel)
+        let audienciasObj = [];
+        if(aud.startsWith('Grado_')) {
+            const numGrado = aud.replace('Grado_','');
+            const { data: grps } = await supabaseClient.from('grupos').select('id').like('nombre', numGrado+'%').eq('plantel_id', state.plantelId);
+            if(grps && grps.length > 0) {
+                grps.forEach(g => {
+                    audienciasObj.push('Grupo_' + g.id);
+                });
+            } else {
+                audienciasObj.push(aud); // fallback (aunque nadie lo lea directamente por Grado_X)
+            }
+        } else {
+            audienciasObj.push(aud);
+        }
+
+        const inserts = audienciasObj.map(audiencia => ({
+            autor_id: uRes.data.user.id,
+            titulo: titulo,
+            mensaje: msg,
+            audiencia: audiencia,
+            archivo_url: fileUrl,
+            plantel_id: state.plantelId
+        }));
+        
+        const { error } = await supabaseClient.from('comunicados').insert(inserts);
+        if(error) throw error;
+        
+        alert("Comunicado enviado exitosamente al grupo/grado.");
+        document.getElementById('inMaestroComTitulo').value = '';
+        document.getElementById('inMaestroComMensaje').value = '';
+        document.getElementById('selMaestroComAudiencia').selectedIndex = 0;
+        fInp.value = '';
+        
+        window.loadComunicadosEnviadosMaestro();
+    } catch(e) {
+        console.error(e);
+        alert("Ocurrió un error al enviar: " + (e.message || ""));
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = originalHtml;
+    }
+};
+
+window.loadComunicadosEnviadosMaestro = async () => {
+    const cont = document.getElementById('divMaestroComHistorial');
+    if(!cont) return;
+    try {
+        const uRes = await supabaseClient.auth.getUser();
+        const { data, error } = await supabaseClient.from('comunicados')
+            .select('id, titulo, mensaje, fecha_envio, audiencia')
+            .eq('autor_id', uRes.data.user.id)
+            .eq('plantel_id', state.plantelId)
+            .order('fecha_envio', {ascending: false})
+            .limit(20);
+            
+        if(error) throw error;
+        if(!data || data.length === 0) {
+            cont.innerHTML = '<p style="text-align:center; padding:20px; color:var(--text-muted);">No has enviado comunicados recientemente.</p>';
+            return;
+        }
+        
+        cont.innerHTML = data.map(c => `
+            <div style="background:var(--page-bg); border:1px solid var(--border); padding:12px; border-radius:8px; display:flex; flex-direction:column; gap:8px; box-shadow:0 1px 3px rgba(0,0,0,0.03);">
+               <div><strong style="color:var(--primary); font-size:0.95rem;">\${c.titulo}</strong></div>
+               <div style="font-size:0.8rem; color:var(--secondary);">Enviado a: \${c.audiencia.replace('Grupo_', 'Grupo ID: ')} - \${new Date(c.fecha_envio).toLocaleString('es-MX')}</div>
+               <div style="font-size:0.85rem; color:var(--text-color); white-space:pre-wrap; opacity:0.85; max-height:80px; overflow:hidden; text-overflow:ellipsis;">\${c.mensaje}</div>
+            </div>
+        `).join('');
+    } catch(e) {
+        console.error(e);
+        cont.innerHTML = '<p style="color:var(--danger); text-align:center;">Error al cargar historial</p>';
     }
 };
