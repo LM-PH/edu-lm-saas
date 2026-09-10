@@ -11112,7 +11112,7 @@ window.cargarBoletasGrupo = async () => {
         const u = await supabaseClient.auth.getUser();
         
         // 1. Fetch Materia ID
-        const { data: tmateria } = await supabaseClient.from('materias').select('id').ilike('nombre', materiaText).maybeSingle();
+        const { data: tmateria } = await supabaseClient.from('materias').select('id').ilike('nombre', materiaText).eq('plantel_id', state.plantelId).maybeSingle();
         const matId = tmateria?.id;
 
         // 2. Fetch Alumnos
@@ -11461,7 +11461,7 @@ window.sellarYEnviarCalificaciones = async () => {
         const actUserId = u.data.user.id;
         
         // 1. Fetch Materia ID
-        const { data: tmateria } = await supabaseClient.from('materias').select('id').ilike('nombre', materiaText).maybeSingle();
+        const { data: tmateria } = await supabaseClient.from('materias').select('id').ilike('nombre', materiaText).eq('plantel_id', state.plantelId).maybeSingle();
         const matId = tmateria ? tmateria.id : null;
         
         // 2. Preparar Updates para Calificaciones
