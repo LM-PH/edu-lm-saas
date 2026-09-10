@@ -10111,8 +10111,9 @@ window.loadTimelinePersonal = async (selectedDate) => {
         if(error) throw error;
         
         // Filtrar avisos de horarios (solo deben verse en el perfil de estudiante)
+        // Y ocultar comunicados de maestros de la bandeja oficial
         if (data && userRole !== 'alumno') {
-            data = data.filter(c => !c.titulo?.includes('HORARIO DE CLASE DISPONIBLE'));
+            data = data.filter(c => !c.titulo?.includes('HORARIO DE CLASE DISPONIBLE') && c.tipo !== 'AvisoMaestro');
         }
 
         // Filtrar justificantes médicos para maestros de tecnología (solo ven de sus propios alumnos de taller)
@@ -21339,13 +21340,31 @@ window.loadComunicadosEnviadosMaestro = async () => {
             return;
         }
         
-        cont.innerHTML = data.map(c => `
+        const groupIds = data.map(c => c.audiencia.replace('Grupo_', '')).filter(id => id && id.length > 10);
+        let groupsMap = {};
+        if (groupIds.length > 0) {
+            const { data: grps } = await supabaseClient.from('grupos').select('id, nombre').in('id', groupIds);
+            if (grps) {
+                grps.forEach(g => groupsMap[g.id] = g.nombre);
+            }
+        }
+
+        cont.innerHTML = data.map(c => {
+            let audLabel = c.audiencia;
+            if (c.audiencia.startsWith('Grupo_')) {
+                const gId = c.audiencia.replace('Grupo_', '');
+                audLabel = groupsMap[gId] ? 'Grupo: ' + groupsMap[gId] : 'Grupo (ID): ' + gId.substring(0,6) + '...';
+            } else if (c.audiencia.startsWith('Grado_')) {
+                audLabel = 'Todos los grupos de ' + c.audiencia.replace('Grado_', '');
+            }
+            return `
             <div style="background:var(--page-bg); border:1px solid var(--border); padding:12px; border-radius:8px; display:flex; flex-direction:column; gap:8px; box-shadow:0 1px 3px rgba(0,0,0,0.03);">
                <div><strong style="color:var(--primary); font-size:0.95rem;">${c.titulo}</strong></div>
-               <div style="font-size:0.8rem; color:var(--secondary);">Enviado a: ${c.audiencia.replace('Grupo_', 'Grupo ID: ')} - ${new Date(c.fecha_envio).toLocaleString('es-MX')}</div>
+               <div style="font-size:0.8rem; color:var(--secondary);">Enviado a: ${audLabel} - ${new Date(c.fecha_envio).toLocaleString('es-MX')}</div>
                <div style="font-size:0.85rem; color:var(--text-color); white-space:pre-wrap; opacity:0.85; max-height:80px; overflow:hidden; text-overflow:ellipsis;">${(c.mensaje || '').replace(/\[REF_ID:.*?\]/gi, '').trim()}</div>
             </div>
-        `).join('');
+            `;
+        }).join('');
     } catch(e) {
         console.error(e);
         cont.innerHTML = '<p style="color:var(--danger); text-align:center;">Error al cargar historial</p>';
