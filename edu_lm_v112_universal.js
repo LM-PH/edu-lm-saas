@@ -2416,7 +2416,7 @@ window.loadComunicadosAdmin = async (fechaFiltro = null) => {
                     <span style="font-weight:600; color:var(--text-main); font-size:0.95rem;">${c.titulo}</span>
                     <span style="font-size:0.7rem; background:${color}22; color:${color}; padding:2px 8px; border-radius:20px; white-space:nowrap; font-weight:600;">${audText}</span>
                 </div>
-                <p style="font-size:0.85rem; color:var(--text-main); margin:0 0 8px 0; white-space:pre-wrap;">${c.mensaje}</p>
+                <p style="font-size:0.85rem; color:var(--text-main); margin:0 0 8px 0; white-space:pre-wrap;">${(c.mensaje || '').replace(/\[REF_ID:.*?\]/gi, '').trim()}</p>
                 <div style="font-size:0.75rem; color:var(--text-muted);">
                     <i class="fa-regular fa-clock"></i> ${date} &nbsp;|&nbsp; <i class="fa-solid fa-user"></i> ${autor}
                 </div>
@@ -9621,7 +9621,7 @@ window.loadTimelineAlumno = async (mostrarHistorial = false, selectedDateStr = n
              <div class="timeline-content" style="position:relative">
                <div style="font-size:0.75rem; color: var(--text-muted); float:right;">${date}</div>
                <h4 style="color: ${tipoColor}; margin:0 0 4px 0;">${c.titulo}</h4>
-               <p style="font-size: 0.85rem; white-space:pre-wrap; margin-bottom:10px;">${c.mensaje}</p>
+               <p style="font-size: 0.85rem; white-space:pre-wrap; margin-bottom:10px;">${(c.mensaje || '').replace(/\[REF_ID:.*?\]/gi, '').trim()}</p>
                
                <div style="display:flex; justify-content:space-between; align-items:center; gap:10px;">
                   ${btnAdjunto}
@@ -10211,7 +10211,7 @@ window.loadTimelinePersonal = async (selectedDate) => {
                  </span>
               </div>
               <h3 style="color: var(--text-main); margin:0 0 10px 0; font-size:1.1rem; line-height:1.4;">${c.titulo}</h3>
-              <p style="font-size: 0.9rem; color: var(--text-muted); white-space:pre-wrap; margin:0; line-height:1.6;">${c.mensaje}</p>
+              <p style="font-size: 0.9rem; color: var(--text-muted); white-space:pre-wrap; margin:0; line-height:1.6;">${(c.mensaje || '').replace(/\[REF_ID:.*?\]/gi, '').trim()}</p>
               ${btnAdjunto}
            </div>
            `;
@@ -21342,7 +21342,7 @@ window.loadComunicadosEnviadosMaestro = async () => {
             <div style="background:var(--page-bg); border:1px solid var(--border); padding:12px; border-radius:8px; display:flex; flex-direction:column; gap:8px; box-shadow:0 1px 3px rgba(0,0,0,0.03);">
                <div><strong style="color:var(--primary); font-size:0.95rem;">${c.titulo}</strong></div>
                <div style="font-size:0.8rem; color:var(--secondary);">Enviado a: ${c.audiencia.replace('Grupo_', 'Grupo ID: ')} - ${new Date(c.fecha_envio).toLocaleString('es-MX')}</div>
-               <div style="font-size:0.85rem; color:var(--text-color); white-space:pre-wrap; opacity:0.85; max-height:80px; overflow:hidden; text-overflow:ellipsis;">${c.mensaje}</div>
+               <div style="font-size:0.85rem; color:var(--text-color); white-space:pre-wrap; opacity:0.85; max-height:80px; overflow:hidden; text-overflow:ellipsis;">${(c.mensaje || '').replace(/\[REF_ID:.*?\]/gi, '').trim()}</div>
             </div>
         `).join('');
     } catch(e) {
