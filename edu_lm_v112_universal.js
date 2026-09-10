@@ -21208,16 +21208,16 @@ window.loadMaestroAvisosGrupos = async () => {
            .or('grupo_id.not.is.null,target_grado.not.is.null');
 
         if(asigs && asigs.length > 0) {
-            let optionsHtml = '<option value="">-- Selecciona un Grupo --</option>';
+            let optionsHtml = '<option value="" data-materia="">-- Selecciona un Grupo --</option>';
             for (const a of asigs) {
                 if(a.grupos) {
-                    optionsHtml += `<option value="Grupo_${a.grupos.id}">${a.materia} - ${a.grupos.nombre}</option>`;
+                    optionsHtml += `<option value="Grupo_${a.grupos.id}" data-materia="${a.materia}">${a.materia} - ${a.grupos.nombre}</option>`;
                 } else if(a.target_grado) {
                     const { data: grps } = await supabaseClient.from('grupos').select('id, nombre').like('nombre', a.target_grado + '%').eq('plantel_id', state.plantelId);
-                    optionsHtml += `<option value="Grado_${a.target_grado}" style="font-weight:bold;">${a.materia} - TODOS los grupos de ${a.target_grado}</option>`;
+                    optionsHtml += `<option value="Grado_${a.target_grado}" data-materia="${a.materia}" style="font-weight:bold;">${a.materia} - TODOS los grupos de ${a.target_grado}</option>`;
                     if(grps && grps.length > 0) {
                         grps.forEach(g => {
-                            optionsHtml += `<option value="Grupo_${g.id}">&nbsp;&nbsp;&nbsp;↳ Solo ${g.nombre}</option>`;
+                            optionsHtml += `<option value="Grupo_${g.id}" data-materia="${a.materia}">&nbsp;&nbsp;&nbsp;↳ Solo ${g.nombre}</option>`;
                         });
                     }
                 }
@@ -21235,11 +21235,14 @@ window.loadMaestroAvisosGrupos = async () => {
 window.publicarComunicadoMaestro = async () => {
     const btn = document.getElementById('btnPublicarMaestroComunicado');
     const titulo = document.getElementById('inMaestroComTitulo').value.trim();
-    const aud = document.getElementById('selMaestroComAudiencia').value;
+    const selObj = document.getElementById('selMaestroComAudiencia');
+    const aud = selObj.value;
     const msg = document.getElementById('inMaestroComMensaje').value.trim();
     const fInp = document.getElementById('inMaestroComArchivo');
     
     if(!titulo || !msg || !aud) return alert("Llena todos los campos (título, audiencia y mensaje).");
+    
+    const materiaAsignada = selObj.options[selObj.selectedIndex].getAttribute('data-materia') || '';
     
     btn.disabled = true;
     const originalHtml = btn.innerHTML;
@@ -21247,6 +21250,9 @@ window.publicarComunicadoMaestro = async () => {
     
     try {
         const uRes = await supabaseClient.auth.getUser();
+        
+        const { data: perfil } = await supabaseClient.from('perfiles').select('nombre').eq('id', uRes.data.user.id).single();
+        const maestroNombre = perfil ? perfil.nombre : 'Tu Maestro';
         
         let fileUrl = null;
         if (fInp.files && fInp.files.length > 0) {
@@ -21266,7 +21272,9 @@ window.publicarComunicadoMaestro = async () => {
             fileUrl = publicUrl;
         }
 
-        // Si la audiencia es Grado_X, necesitamos enviar los comunicados a todos los grupos de ese grado (y plantel)
+        // Formatear el mensaje para incluir quién lo mandó y de qué materia
+        const mensajeCompuesto = `De: Prof. ${maestroNombre}\nMateria: ${materiaAsignada}\n\n${msg}`;
+
         let audienciasObj = [];
         if(aud.startsWith('Grado_')) {
             const numGrado = aud.replace('Grado_','');
@@ -21276,7 +21284,7 @@ window.publicarComunicadoMaestro = async () => {
                     audienciasObj.push('Grupo_' + g.id);
                 });
             } else {
-                audienciasObj.push(aud); // fallback (aunque nadie lo lea directamente por Grado_X)
+                audienciasObj.push(aud);
             }
         } else {
             audienciasObj.push(aud);
@@ -21286,7 +21294,7 @@ window.publicarComunicadoMaestro = async () => {
             autor_id: uRes.data.user.id,
             tipo: 'AvisoMaestro',
             titulo: titulo,
-            mensaje: msg,
+            mensaje: mensajeCompuesto,
             audiencia: audiencia,
             archivo_url: fileUrl,
             plantel_id: state.plantelId
@@ -21298,7 +21306,7 @@ window.publicarComunicadoMaestro = async () => {
         alert("Comunicado enviado exitosamente al grupo/grado.");
         document.getElementById('inMaestroComTitulo').value = '';
         document.getElementById('inMaestroComMensaje').value = '';
-        document.getElementById('selMaestroComAudiencia').selectedIndex = 0;
+        selObj.selectedIndex = 0;
         fInp.value = '';
         
         window.loadComunicadosEnviadosMaestro();
