@@ -19461,7 +19461,7 @@ window.initFlatpickrAvisos = async (isAlumno = false) => {
     
     let { data } = await supabaseClient
         .from('comunicados')
-        .select('fecha_envio, audiencia, titulo')
+        .select('fecha_envio, audiencia, titulo, tipo')
         .eq('plantel_id', state.plantelId);
 
     if(!data) data = [];
@@ -19497,6 +19497,10 @@ window.initFlatpickrAvisos = async (isAlumno = false) => {
         }
 
         datesWithComs = data.filter(c => {
+            // Mantener consistencia con el filtro de loadTimelinePersonal
+            if (c.titulo?.includes('HORARIO DE CLASE DISPONIBLE')) return false;
+            if (c.tipo === 'AvisoMaestro') return false;
+
             if(!c.audiencia) return true;
             const aud = c.audiencia;
             let isTargeted = false;
