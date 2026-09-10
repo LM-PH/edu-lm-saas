@@ -166,7 +166,10 @@ window.handleLogin = async (e) => {
   const btn = document.querySelector('.btn-login');
   const errorMsg = document.getElementById('auth-error-msg');
   
-  const email = emailInput ? emailInput.value.trim().toLowerCase() : '';
+  let email = emailInput ? emailInput.value.trim().toLowerCase() : '';
+  if (email && !email.includes('@')) {
+      email = email + '@edulm.local';
+  }
   const password = passwordInput ? passwordInput.value.trim() : '';
   
   if(!email || !password) {
@@ -1367,7 +1370,7 @@ window.darDeBajaAlumno = async (id, nombre) => {
             if(alu && alu.contacto_email) {
                 await supabaseClient.from('perfiles_permitidos').delete().eq('email', alu.contacto_email);
                 // NUEVO: Eliminar de auth.users para que pueda volver a ser registrado sin chocar
-                await supabaseClient.rpc('eliminar_usuario_admin', { p_email: alu.contacto_email });
+                await supabaseClient.rpc('eliminar_usuario_por_email', { p_email: alu.contacto_email, p_plantel_id: state.plantelId });
             }
             alert('Alumno dado de baja exitosamente.');
         } else {
@@ -6677,6 +6680,7 @@ window.cargarAdminNombreCache = async () => {
         const { data: pData } = await supabaseClient
             .from('perfiles')
             .select('nombre')
+            .eq('plantel_id', state.plantelId)
             .or('rol.ilike.%admin%,rol.ilike.%administrativo%')
             .not('nombre', 'is', null)
             .limit(10);
@@ -6693,6 +6697,7 @@ window.cargarAdminNombreCache = async () => {
         const { data: permData } = await supabaseClient
             .from('perfiles_permitidos')
             .select('nombre')
+            .eq('plantel_id', state.plantelId)
             .or('rol.ilike.%admin%,rol.ilike.%administrativo%')
             .not('nombre', 'is', null)
             .limit(10);
@@ -7439,7 +7444,8 @@ function renderDirectivoPersonal() {
 
 window.registrarNuevoPersonal = async () => {
     const nombre = document.getElementById('perNombre').value.trim();
-    const email = document.getElementById('perEmail').value.trim().toLowerCase();
+    let email = document.getElementById('perEmail').value.trim().toLowerCase();
+    if (email && !email.includes('@')) email = email + '@edulm.local';
     const rol = document.getElementById('perRol').value;
 
     if(!nombre || !email || !rol) return alert("Por favor llena todos los campos.");
@@ -12088,7 +12094,8 @@ window.initEventosAdminMaestros = () => {
         const btnGuardarDoc = document.getElementById('btnGuardarMaestroSolo');
         if(btnGuardarDoc) {
             btnGuardarDoc.onclick = async () => {
-                const emailValue = document.getElementById('docEmail').value;
+                let emailValue = document.getElementById('docEmail').value.trim().toLowerCase();
+                if (emailValue && !emailValue.includes('@')) emailValue = emailValue + '@edulm.local';
                 const nombreValue = document.getElementById('docName').value;
                 const rolRaw = document.getElementById('docRole') ? document.getElementById('docRole').value : 'maestro';
                 const rolValue = (['admin','administrativo','admin'].includes(rolRaw)) ? 'admin' : (['maestro','maestro'].includes(rolRaw) ? 'maestro' : rolRaw);
@@ -12296,7 +12303,8 @@ function attachDOMEvents() {
           const nombre = document.getElementById('nombre').value;
           const edad = document.getElementById('edad').value;
           const sexo = document.getElementById('sexo')?.value || null;
-          const email = document.getElementById('contactoAcceso').value.trim().toLowerCase();
+          let email = document.getElementById('contactoAcceso').value.trim().toLowerCase();
+          if (email && !email.includes('@')) email = email + '@edulm.local';
           const grado = document.getElementById('gradoInput').value;
           const grupoNom = document.getElementById('grupoInput').value;
           const estatura = document.getElementById('estatura')?.value;
@@ -20584,10 +20592,7 @@ window.confirmarInscripcionMasiva = async () => {
         return alert(`Hay ${invalidos.length} alumnos con datos incompletos. Todos deben tener Nombre, CURP, Correo, Grado, Grupo y Tecnología/Taller válidos seleccionados para ser inscritos.`);
     }
     
-    const correosInvalidos = data.filter(r => !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(r.correo.trim()));
-    if(correosInvalidos.length > 0) {
-        return alert(`Hay ${correosInvalidos.length} alumnos con formato de correo inválido (ej. no contiene "@" o ".com"). Por favor corrige los correos en la tabla.`);
-    }
+    // Se eliminó la restricción de formato de correo para permitir usar CURP u otros identificadores rápidos
     
     if(!confirm(`¿Confirmas la inscripción masiva de ${data.length} alumnos? Esta acción no se puede deshacer y tomará unos segundos.`)) return;
     
@@ -20629,7 +20634,10 @@ window.confirmarInscripcionMasiva = async () => {
             }
             
             // Generar correo / pass
-            let autoEmail = row.correo;
+            let autoEmail = row.correo.trim().toLowerCase();
+            if (!autoEmail.includes('@')) {
+                autoEmail = autoEmail + '@edulm.local';
+            }
             const autoPass = 'st' + Math.floor(Math.random() * 9000 + 1000);
             
             const matricula = 'AL-' + Math.floor(Math.random() * 90000 + 10000);
