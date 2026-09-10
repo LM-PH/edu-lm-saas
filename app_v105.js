@@ -3262,10 +3262,11 @@ window.loadResumenEntrada = async () => {
     try {
         const hoy = new Date().toLocaleDateString('en-CA');
         
-        const { count: totalAlu } = await supabaseClient.from('alumnos').select('*', { count: 'exact', head: true });
+        const { count: totalAlu } = await supabaseClient.from('alumnos').select('*', { count: 'exact', head: true }).eq('plantel_id', state.plantelId);
         
         const { data: asistencias } = await supabaseClient.from('accesos_plantel')
             .select('estado')
+            .eq('plantel_id', state.plantelId)
             .eq('fecha', hoy);
         
         const puntuales = (asistencias || []).filter(a => a.estado === 'Asistencia').length;
@@ -3307,6 +3308,7 @@ window.loadAsistenciasApoyo = async () => {
     try {
         let query = supabaseClient.from('accesos_plantel')
             .select('*, alumnos(nombre, grupo_id)')
+            .eq('plantel_id', state.plantelId)
             .eq('fecha', fecha)
             .order('creado_en', {ascending: false});
         
@@ -3346,11 +3348,12 @@ window.generarInasistenciasMasivas = async () => {
         const hoy = new Date().toLocaleDateString('en-CA');
         
         // 1. Obtener TODOS los alumnos de la escuela
-        const { data: alumnos } = await supabaseClient.from('alumnos').select('id');
+        const { data: alumnos } = await supabaseClient.from('alumnos').select('id').eq('plantel_id', state.plantelId);
         
         // 2. Obtener quienes ya tienen acceso hoy
         const { data: registrados } = await supabaseClient.from('accesos_plantel')
             .select('alumno_id')
+            .eq('plantel_id', state.plantelId)
             .eq('fecha', hoy);
         
         const idsRegistrados = new Set((registrados || []).map(r => r.alumno_id));
@@ -3364,7 +3367,8 @@ window.generarInasistenciasMasivas = async () => {
                 alumno_id: f.id,
                 estado: 'Inasistencia',
                 fecha: hoy,
-                registrador_id: u.data.user?.id
+                registrador_id: u.data.user?.id,
+                plantel_id: state.plantelId
             }));
 
             const { error: insErr } = await supabaseClient.from('accesos_plantel').insert(inserts);
@@ -7329,6 +7333,7 @@ window.startMaestroQR = async () => {
                 .lte('creado_en', `${hoy}T23:59:59Z`)
                 .eq('materia', materia)
                 .eq('trimestre', trim)
+                .eq('plantel_id', state.plantelId)
                 .eq('grupo_id', String(window.currentAulaGrupoId).startsWith('grado:') ? null : String(window.currentAulaGrupoId));
             window._qrScanCount = count || 0;
             lblCount.innerText = window._qrScanCount;
@@ -7462,7 +7467,8 @@ window.finalizarSesionAsistencia = async () => {
         let queryReg = supabaseClient.from('asistencias')
             .select('alumno_id, estado, materia')
             .gte('creado_en', hoy + 'T00:00:00')
-            .lte('creado_en', hoy + 'T23:59:59');
+            .lte('creado_en', hoy + 'T23:59:59')
+            .eq('plantel_id', state.plantelId);
             
         if(grupoId.startsWith('grado:')) {
             queryReg = queryReg.is('grupo_id', null);
@@ -7616,7 +7622,8 @@ window.registrarAsistenciaEntrada = async (qrText) => {
             estado: estadoPortal,
             registrador_id: uRes.data.user?.id,
             fecha: new Date().toLocaleDateString('en-CA'),
-            hora: new Date().toLocaleTimeString('en-GB')
+            hora: new Date().toLocaleTimeString('en-GB'),
+            plantel_id: state.plantelId
         }]);
 
         if(error) {

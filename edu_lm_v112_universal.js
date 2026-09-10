@@ -3698,6 +3698,7 @@ window.loadApoyoRiesgoData = async () => {
         // ── PASO 1: Alumnos del grupo/grado seleccionado ──
         let alumnosQuery = supabaseClient.from('alumnos')
             .select('id, nombre, grado, grupo_id, grupos(id, nombre)')
+            .eq('plantel_id', state.plantelId)
             .limit(10000);
 
         if (grupoSel && grupoSel !== 'Todos') {
@@ -12566,8 +12567,8 @@ window.startMaestroQR = async () => {
                 .gte('creado_en', `${hoy}T00:00:00Z`)
                 .lte('creado_en', `${hoy}T23:59:59Z`)
                 .eq('materia', materia)
-                .eq('plantel_id', state.plantelId)
                 .eq('trimestre', trim)
+                .eq('plantel_id', state.plantelId)
                 .eq('grupo_id', String(window.currentAulaGrupoId).startsWith('grado:') ? null : String(window.currentAulaGrupoId));
             window._qrScanCount = count || 0;
             lblCount.innerText = window._qrScanCount;
@@ -14968,6 +14969,7 @@ window.onFirmaQrScanSuccess = async (decodedText) => {
                 .from('alumnos')
                 .select('id, nombre, matricula, perfil_id, contacto_email, grupo_id, grupos(nombre)')
                 .eq('matricula', code)
+                .eq('plantel_id', state.plantelId)
                 .maybeSingle();
             alumno = data;
         }
@@ -20608,7 +20610,7 @@ window.confirmarInscripcionMasiva = async () => {
         
         try {
             // Verificar si CURP ya existe
-            const { data: existCurp } = await supabaseClient.from('alumnos').select('id').eq('curp', row.curp.trim()).maybeSingle();
+            const { data: existCurp } = await supabaseClient.from('alumnos').select('id').eq('curp', row.curp.trim()).eq('plantel_id', state.plantelId).maybeSingle();
             if(existCurp) {
                 console.warn("CURP ya registrada:", row.curp);
                 errCurp++;
