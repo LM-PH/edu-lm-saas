@@ -741,9 +741,9 @@ function renderRoleSelector() {
         <p style="text-align:center; color:var(--text-muted); margin-bottom:32px; font-weight:500; font-size:1.1rem;">${CONFIG.schoolName}</p>
         
         <div class="form-group" style="text-align:left; margin-bottom:15px;">
-          <label class="form-label">Correo Electrónico</label>
+          <label class="form-label">Usuario / Correo</label>
           <input type="text" id="fb-email" class="form-input" 
-                 placeholder="ejemplo@escuela.edu.mx" 
+                 placeholder="Correo, CURP o Matrícula" 
                  inputmode="email" 
                  autocomplete="email" 
                  style="font-size:16px; height:50px;">
@@ -1051,7 +1051,7 @@ function renderAdminInscripcion() {
 
         <div class="form-group">
           <label class="form-label">Correo Electrónico (Acceso Alumno)</label>
-          <input type="text" class="form-input" id="contactoAcceso" placeholder="alumno@correo.com">
+          <input type="text" class="form-input" id="contactoAcceso" placeholder="Correo, CURP o Usuario">
           <p style="font-size:0.75rem; color:var(--text-muted); margin-top:4px;">Estas credenciales servirán como usuario único para que inicie sesión en la plataforma y conectarlo con la Matrícula.</p>
         </div>
         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
@@ -2078,7 +2078,7 @@ function renderAdminMaestros() {
         
         <div class="form-group">
           <label class="form-label">Correo Institucional / Personal</label>
-          <input type="text" id="docEmail" class="form-input" placeholder="empleado@escuela.edu.mx">
+          <input type="text" id="docEmail" class="form-input" placeholder="Correo, CURP o Usuario">
         </div>
         
         <div class="form-group">
@@ -7412,7 +7412,7 @@ function renderDirectivoPersonal() {
            </div>
            <div class="form-group">
               <label class="form-label">Correo Electrónico</label>
-              <input type="text" id="perEmail" class="form-input" placeholder="correo@ejemplo.com">
+              <input type="text" id="perEmail" class="form-input" placeholder="Correo, CURP o Usuario">
            </div>
            <div class="form-group">
               <label class="form-label">Rol en el Plantel</label>
