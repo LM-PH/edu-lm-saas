@@ -21284,6 +21284,7 @@ window.publicarComunicadoMaestro = async () => {
 
         const inserts = audienciasObj.map(audiencia => ({
             autor_id: uRes.data.user.id,
+            tipo: 'AvisoMaestro',
             titulo: titulo,
             mensaje: msg,
             audiencia: audiencia,
@@ -21319,6 +21320,7 @@ window.loadComunicadosEnviadosMaestro = async () => {
             .select('id, titulo, mensaje, fecha_envio, audiencia')
             .eq('autor_id', uRes.data.user.id)
             .eq('plantel_id', state.plantelId)
+            .eq('tipo', 'AvisoMaestro')
             .order('fecha_envio', {ascending: false})
             .limit(20);
             
