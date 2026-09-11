@@ -3413,13 +3413,20 @@ function renderApoyoReportes() {
                         <label style="display:block; font-size:0.8rem; margin-bottom:5px;">Acumulación (Cantidad)</label>
                         <input type="number" id="protCantidad" class="form-input" style="border-radius:8px;" min="1" value="3">
                     </div>
-                    <div>
-                        <label style="display:block; font-size:0.8rem; margin-bottom:5px;">Acción a tomar</label>
-                        <select id="protAccion" class="form-input" style="border-radius:8px;">
-                            <option value="Citatorio a Padres">Mandar citatorio a padres</option>
-                            <option value="Citatorio a Alumno">Mandar citatorio a alumno</option>
-                            <option value="Notificación General">Notificación General</option>
-                        </select>
+                    <div style="grid-column: 1 / -1; display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+                        <div>
+                            <label style="display:block; font-size:0.8rem; margin-bottom:5px;">Acción a tomar</label>
+                            <select id="protAccion" class="form-input" style="border-radius:8px;" onchange="document.getElementById('protAccionCustom').style.display = (this.value==='Escalar a') ? 'block' : 'none'">
+                                <option value="Solo registro">Solo registro</option>
+                                <option value="Mandar citar a alumno">Mandar citar a alumno</option>
+                                <option value="Citatorio a padres o tutores">Citatorio a padres o tutores</option>
+                                <option value="Escalar a">Escalar a (Definir...)</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label style="display:block; font-size:0.8rem; margin-bottom:5px; color:transparent; user-select:none;">.</label>
+                            <input type="text" id="protAccionCustom" class="form-input" style="border-radius:8px; display:none;" placeholder="Especifique a dónde o a quién...">
+                        </div>
                     </div>
                 </div>
                 <button class="btn btn-primary btn-sm" onclick="window.guardarNuevoProtocolo()" style="width:100%; border-radius:8px;"><i class="fa-solid fa-plus"></i> Agregar Protocolo</button>
@@ -3497,7 +3504,12 @@ window.guardarNuevoProtocolo = async () => {
     let grav = document.getElementById('protGravedad').value;
     if (clas === 'Atención Prioritaria') grav = 'N/A';
     const cant = parseInt(document.getElementById('protCantidad').value);
-    const acc = document.getElementById('protAccion').value;
+    let acc = document.getElementById('protAccion').value;
+    if (acc === 'Escalar a') {
+        const customAcc = document.getElementById('protAccionCustom').value.trim();
+        if(!customAcc) return alert("Por favor define a dónde o a quién escala el reporte.");
+        acc = `Escalar a: ${customAcc}`;
+    }
     
     if(!cant || cant < 1) return alert("Ingresa una cantidad válida.");
     
