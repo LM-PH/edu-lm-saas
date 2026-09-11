@@ -3416,18 +3416,18 @@ function renderApoyoReportes() {
                     <div style="grid-column: 1 / -1; display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
                         <div>
                             <label style="display:block; font-size:0.8rem; margin-bottom:5px;">Acción a tomar</label>
-                            <select id="protAccion" class="form-input" style="border-radius:8px;" onchange="document.getElementById('protAccionCustom').style.display = (this.value==='Escalar a') ? 'block' : 'none'">
+                            <select id="protAccion" class="form-input" style="border-radius:8px;">
                                 <option value="Solo registro">Solo registro</option>
                                 <option value="Mandar citar a alumno">Mandar citar a alumno</option>
                                 <option value="Citatorio a padres o tutores">Citatorio a padres o tutores</option>
-                                <option value="Escalar a">Escalar o convertirse en...</option>
                             </select>
                         </div>
                         <div>
-                            <label style="display:block; font-size:0.8rem; margin-bottom:5px; color:transparent; user-select:none;">.</label>
-                            <select id="protAccionCustom" class="form-input" style="border-radius:8px; display:none;">
-                                <option value="Moderado">Nuevo Reporte Moderado</option>
-                                <option value="Grave">Nuevo Reporte Grave</option>
+                            <label style="display:block; font-size:0.8rem; margin-bottom:5px;">Y escalar a (Opcional)</label>
+                            <select id="protEscala" class="form-input" style="border-radius:8px;">
+                                <option value="No escalar">No escalar (Mantener nivel)</option>
+                                <option value="Moderado">Generar Nuevo Reporte Moderado</option>
+                                <option value="Grave">Generar Nuevo Reporte Grave</option>
                             </select>
                         </div>
                     </div>
@@ -3508,9 +3508,10 @@ window.guardarNuevoProtocolo = async () => {
     if (clas === 'Atención Prioritaria') grav = 'N/A';
     const cant = parseInt(document.getElementById('protCantidad').value);
     let acc = document.getElementById('protAccion').value;
-    if (acc === 'Escalar a') {
-        const customAcc = document.getElementById('protAccionCustom').value;
-        acc = `Escalar a reporte: ${customAcc}`;
+    const escala = document.getElementById('protEscala').value;
+    
+    if (escala !== 'No escalar') {
+        acc = `${acc} | ESCALA: ${escala}`;
     }
     
     if(!cant || cant < 1) return alert("Ingresa una cantidad válida.");
@@ -4210,37 +4211,48 @@ window.guardarReporteApoyo = async () => {
                 if (reportesCount > 0 && reportesCount % prot.cantidad_reportes === 0) {
                     actionTriggered = true;
                     let titulo = 'Aviso de Incidencia Automático';
-                    let msj = `Se ha alcanzado el límite de ${prot.cantidad_reportes} reportes de tipo ${cat} (${finalGravedad}). Acción requerida: ${prot.accion_a_tomar}.`;
+                    let accionPrincipal = prot.accion_a_tomar;
+                    let nuevaGravedad = null;
                     
-                    if (prot.accion_a_tomar.includes('Escalar a reporte:')) {
-                        const nuevaGravedad = prot.accion_a_tomar.split(':')[1].trim();
-                        titulo = '🚨 ESCALAMIENTO AUTOMÁTICO DE REPORTE';
-                        msj = `Se han acumulado ${reportesCount} reportes de tipo ${cat} (${finalGravedad}). Por protocolo, esto se ha convertido automáticamente en un NUEVO REPORTE ${nuevaGravedad.toUpperCase()}.`;
-                        
+                    if (prot.accion_a_tomar.includes('| ESCALA:')) {
+                        const parts = prot.accion_a_tomar.split('| ESCALA:');
+                        accionPrincipal = parts[0].trim();
+                        nuevaGravedad = parts[1].trim();
+                    }
+
+                    let msj = `Se ha alcanzado el límite de ${prot.cantidad_reportes} reportes de tipo ${cat} (${finalGravedad}). Acción requerida: ${accionPrincipal}.`;
+
+                    // 1. Ejecutar el Escalamiento (si existe)
+                    if (nuevaGravedad) {
                         await supabaseClient.from('reportes_conducta').insert([{
                             alumno_id: aid,
                             autor_id: u.data.user.id,
-                            descripcion: `[AUTOMÁTICO] Escalamiento por acumulación de ${reportesCount} reportes de tipo ${cat} (${finalGravedad}).`,
+                            descripcion: `[AUTOMÁTICO] Escalamiento por acumulación de ${reportesCount} reportes de tipo ${cat} (${finalGravedad}). Acción detonada: ${accionPrincipal}.`,
                             clasificacion: cat,
                             gravedad: nuevaGravedad,
                             plantel_id: state.plantelId,
                             resuelto: false
                         }]);
-                        window.showToast(`Protocolo activado: Se generó un nuevo reporte ${nuevaGravedad} automáticamente.`, "error");
-                    } else if (prot.accion_a_tomar.includes('Citatorio')) {
-                        titulo = '🚨 CITATORIO URGENTE: ' + prot.accion_a_tomar;
-                        msj = `Estimado alumno y padre de familia/tutor:\n\nSe ha detectado una acumulación de ${reportesCount} reportes de clasificación ${cat}. ES REQUISITO INDISPENSABLE presentarse en el área de Trabajo Social para una junta de seguimiento.\n\nSube a la parte superior de esta pantalla (Línea de Tiempo) para ver el documento oficial y firmarlo.`;
+                        window.showToast(`Protocolo: Se escaló a un nuevo reporte ${nuevaGravedad} automáticamente.`, "error");
+                        msj += `\n\n⚠️ Por protocolo, este caso se ha escalado a un NUEVO REPORTE ${nuevaGravedad.toUpperCase()}.`;
+                    }
+
+                    // 2. Ejecutar la Acción Principal
+                    if (accionPrincipal.includes('citar') || accionPrincipal.includes('Citatorio')) {
+                        titulo = '🚨 CITATORIO URGENTE: ' + accionPrincipal;
+                        msj = `Estimado alumno y padre de familia/tutor:\n\nSe ha detectado una acumulación de ${reportesCount} reportes de clasificación ${cat}. ES REQUISITO INDISPENSABLE presentarse en el área de Trabajo Social para una junta de seguimiento.\n\nSube a la parte superior de esta pantalla (Línea de Tiempo) para ver el documento oficial y firmarlo.` + (nuevaGravedad ? `\n\n⚠️ Este caso ha sido escalado a Nivel ${nuevaGravedad.toUpperCase()}.` : '');
                         
                         await supabaseClient.from('citatorios').insert([{
                             alumno_id: aid,
                             emisor_id: u.data.user.id,
-                            motivo: `Acumulación de ${reportesCount} reportes de tipo ${cat} (${finalGravedad}). Protocolo: ${prot.accion_a_tomar}`,
+                            motivo: `Acumulación de ${reportesCount} reportes de tipo ${cat} (${finalGravedad}). Protocolo: ${accionPrincipal}`,
                             tipo: cat,
                             plantel_id: state.plantelId
                         }]);
                         window.showToast("Citatorio automático enviado según protocolo", "warning");
                     }
 
+                    // 3. Notificación general del suceso
                     await supabaseClient.from('comunicados').insert([{
                         autor_id: u.data.user.id,
                         titulo: titulo,
