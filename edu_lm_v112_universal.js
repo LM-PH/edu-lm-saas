@@ -3440,6 +3440,14 @@ function renderApoyoReportes() {
             </div>
         </div>
     </div>
+    </div>
+    
+    <!-- Expediente Detallado (Drawer) -->
+    <div id="expedienteDrawer" class="card" style="position:fixed; top:0; right:0; width:100%; max-width:600px; height:100vh; overflow-y:auto; display: none; background: #fff; border-left: 1px solid var(--border); box-shadow: var(--shadow-lg); animation: slideInRight 0.4s ease-out; z-index:10000;">
+       <div id="expedienteContent">
+          <div style="padding:40px; text-align:center; opacity:0.5;">Selecciona un alumno para ver su expediente completo.</div>
+       </div>
+    </div>
   `;
 }
 
@@ -3561,9 +3569,10 @@ window.buscarAlumnoExpedienteReportes = async (term) => {
             if(pId) state.plantelId = pId;
         }
 
+        const safeTerm = term.trim();
         let query = supabaseClient.from('alumnos').select('id, nombre, matricula, grupos(nombre)');
         if(pId) query = query.eq('plantel_id', pId);
-        query = query.or(`nombre.ilike.%${term}%,matricula.ilike.%${term}%`).limit(10);
+        query = query.or(`nombre.ilike.%${safeTerm}%,matricula.ilike.%${safeTerm}%`).limit(10);
 
         const { data, error } = await query;
             
