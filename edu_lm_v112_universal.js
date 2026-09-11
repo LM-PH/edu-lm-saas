@@ -4236,9 +4236,12 @@ window.guardarReporteApoyo = async () => {
             .eq('clasificacion', cat)
             .eq('gravedad', finalGravedad);
 
+        let actionTriggered = false;
+
         if (protocolos && protocolos.length > 0) {
             for (const prot of protocolos) {
                 if (reportesCount > 0 && reportesCount % prot.cantidad_reportes === 0) {
+                    actionTriggered = true;
                     let titulo = 'Aviso de Incidencia Automático';
                     let accionPrincipal = prot.accion_a_tomar;
                     let nuevaGravedad = null;
