@@ -752,8 +752,8 @@ function renderRoleSelector() {
           <label class="form-label">Usuario / Correo</label>
           <input type="text" id="fb-email" class="form-input" 
                  placeholder="Correo, CURP o Matrícula" 
-                 inputmode="email" 
-                 autocomplete="email" 
+                 inputmode="text" 
+                 autocomplete="username" 
                  style="font-size:16px; height:50px;">
         </div>
 
