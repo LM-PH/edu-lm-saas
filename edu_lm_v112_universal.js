@@ -166,13 +166,10 @@ window.handleLogin = async (e) => {
   const btn = document.querySelector('.btn-login');
   const errorMsg = document.getElementById('auth-error-msg');
   
-  let email = emailInput ? emailInput.value.trim().toLowerCase() : '';
-  if (email && !email.includes('@')) {
-      email = email + '@edulm.local';
-  }
+  const originalEmail = emailInput ? emailInput.value.trim().toLowerCase() : '';
   const password = passwordInput ? passwordInput.value.trim() : '';
   
-  if(!email || !password) {
+  if(!originalEmail || !password) {
     if(errorMsg) errorMsg.innerText = 'Correo y contraseña requeridos.';
     return;
   }
@@ -183,9 +180,20 @@ window.handleLogin = async (e) => {
   }
 
   try {
-    // 1. Intento de Login Oficial (Primero validamos que la cuenta exista en Supabase Auth)
-    const { data: authData, error: authErr } = await supabaseClient.auth.signInWithPassword({ email, password });
+    // 1. Intento de Login Oficial
+    // Primero intentamos exactamente con lo que escribió el usuario (para soportar cuentas legacy sin @)
+    let { data: authData, error: authErr } = await supabaseClient.auth.signInWithPassword({ email: originalEmail, password });
     
+    // Si falla y el usuario no escribió un '@', intentamos con el sufijo automático (para cuentas nuevas masivas)
+    if (authErr && !originalEmail.includes('@')) {
+        const autoSuffixEmail = originalEmail + '@edulm.local';
+        const retry = await supabaseClient.auth.signInWithPassword({ email: autoSuffixEmail, password });
+        if (!retry.error && retry.data?.user) {
+            authData = retry.data;
+            authErr = null;
+        }
+    }
+
     if (authErr) {
         if (authErr.message === 'Invalid login credentials') {
             throw new Error('Credenciales incorrectas. Verifique su correo y contraseña.');
