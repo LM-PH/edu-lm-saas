@@ -3315,6 +3315,14 @@ function renderApoyoReportes() {
                 <textarea id="descReporteApoyo" class="form-input" placeholder="Detalla lo ocurrido..." style="height:100px; border-radius:10px; resize:none;"></textarea>
             </div>
 
+            <div style="margin-top:15px; background:var(--page-bg); padding:10px; border-radius:10px; border:1px solid var(--border);">
+                <label style="display:flex; align-items:center; gap:8px; font-size:0.85rem; font-weight:600; cursor:pointer;">
+                    <input type="checkbox" id="checkNotificarAlumno" checked>
+                    Enviar aviso de incidencia al perfil del alumno/padre
+                </label>
+                <small style="color:var(--text-muted); display:block; margin-top:4px;">(Los protocolos automáticos que generen citatorios o escalamientos se seguirán ejecutando aunque desmarques esta casilla).</small>
+            </div>
+
             <div style="margin-top:25px; display:flex; gap:10px;">
                 <button class="btn btn-outline" style="flex:1" onclick="document.getElementById('modalNuevoReporteApoyo').style.display='none'">Cancelar</button>
                 <button class="btn btn-primary" id="btnGuardarReporteApoyo" style="flex:1" onclick="window.guardarReporteApoyo()">Guardar Reporte</button>
@@ -4177,6 +4185,9 @@ window.guardarReporteApoyo = async () => {
             metaStr = state.role ? state.role.charAt(0).toUpperCase() + state.role.slice(1) : 'Personal';
         }
 
+        const enviarAvisoCheckbox = document.getElementById('checkNotificarAlumno');
+        const enviarAviso = enviarAvisoCheckbox ? enviarAvisoCheckbox.checked : true;
+
         const finalGravedad = (cat === 'Atención Prioritaria') ? 'N/A' : sev;
         const { error } = await supabaseClient.from('reportes_conducta').insert([{
             id: crypto.randomUUID(),
@@ -4214,10 +4225,11 @@ window.guardarReporteApoyo = async () => {
             window.showToast("Citatorio de protección enviado automáticamente.", "warning");
             
             // Recargar UI
-            document.getElementById('modalNuevoReporte').style.display = 'none';
-            document.getElementById('descReporte').value = '';
-            document.getElementById('catReporte').value = 'Académico';
-            document.getElementById('sevReporte').value = 'Leve';
+            document.getElementById('modalNuevoReporteApoyo').style.display = 'none';
+            document.getElementById('descReporteApoyo').value = '';
+            document.getElementById('categoriaReporteApoyo').value = 'Académico';
+            document.getElementById('gravedadReporteApoyo').value = 'Leve';
+            if(enviarAvisoCheckbox) enviarAvisoCheckbox.checked = true;
             
             if(window.buscarAlumnoTS) window.buscarAlumnoTS();
             else if(window.cargarDatosMaestro) window.cargarDatosMaestro();
@@ -4308,7 +4320,7 @@ window.guardarReporteApoyo = async () => {
             }
         }
 
-        if (!actionTriggered) {
+        if (!actionTriggered && enviarAviso) {
             await supabaseClient.from('comunicados').insert([{
                 autor_id: u.data.user.id,
                 titulo: `Aviso de Incidencia: ${cat}`,
@@ -4321,6 +4333,10 @@ window.guardarReporteApoyo = async () => {
 
         window.showToast("Reporte levantado con éxito", "success");
         document.getElementById('modalNuevoReporteApoyo').style.display = 'none';
+        document.getElementById('descReporteApoyo').value = '';
+        document.getElementById('categoriaReporteApoyo').value = 'Académico';
+        document.getElementById('gravedadReporteApoyo').value = 'Leve';
+        if(enviarAvisoCheckbox) enviarAvisoCheckbox.checked = true;
         
         // Refrescar lista
         if(window.loadHistorialReportesApoyo) window.loadHistorialReportesApoyo();
