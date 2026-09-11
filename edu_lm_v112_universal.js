@@ -4183,6 +4183,39 @@ window.guardarReporteApoyo = async () => {
         if(error) throw error;
 
         // VIGILANCIA AUTOMÁTICA: Basado en Protocolos de Escuela
+        // EXCEPCIÓN: ATENCIÓN PRIORITARIA SIEMPRE GENERA CITATORIO INMEDIATO
+        if (cat === 'Atención Prioritaria') {
+            await supabaseClient.from('citatorios').insert([{
+                alumno_id: aid,
+                emisor_id: u.data.user.id,
+                motivo: `Reporte de Atención Prioritaria (Protección). Motivo: ${desc}`,
+                tipo: 'Atención Prioritaria',
+                plantel_id: state.plantelId
+            }]);
+            
+            await supabaseClient.from('comunicados').insert([{
+                autor_id: u.data.user.id,
+                titulo: '🚨 CITATORIO URGENTE: Atención Prioritaria',
+                mensaje: `Estimado padre de familia/tutor:\n\nPor protocolo de protección, se requiere su presencia INMEDIATA en el área de Trabajo Social debido a un reporte de Atención Prioritaria.\n\nSube a la parte superior de esta pantalla para ver el documento oficial y firmarlo.`,
+                audiencia: `Alumno_${aid}`,
+                tipo: 'General',
+                plantel_id: state.plantelId
+            }]);
+            
+            window.showToast("Citatorio de protección enviado automáticamente.", "warning");
+            
+            // Recargar UI
+            document.getElementById('modalNuevoReporte').style.display = 'none';
+            document.getElementById('descReporte').value = '';
+            document.getElementById('catReporte').value = 'Académico';
+            document.getElementById('sevReporte').value = 'Leve';
+            
+            if(window.buscarAlumnoTS) window.buscarAlumnoTS();
+            else if(window.cargarDatosMaestro) window.cargarDatosMaestro();
+            return;
+        }
+
+        // PROTOCOLOS REGULARES (Académico y Convivencia)
         let queryCount = supabaseClient
             .from('reportes_conducta')
             .select('*', { count: 'exact', head: true })
@@ -4196,7 +4229,6 @@ window.guardarReporteApoyo = async () => {
 
         const { count: reportesCount } = await queryCount;
 
-        // Obtener protocolos de la escuela
         const { data: protocolos } = await supabaseClient
             .from('protocolos_reportes')
             .select('*')
@@ -4204,12 +4236,9 @@ window.guardarReporteApoyo = async () => {
             .eq('clasificacion', cat)
             .eq('gravedad', finalGravedad);
 
-        let actionTriggered = false;
-
         if (protocolos && protocolos.length > 0) {
             for (const prot of protocolos) {
                 if (reportesCount > 0 && reportesCount % prot.cantidad_reportes === 0) {
-                    actionTriggered = true;
                     let titulo = 'Aviso de Incidencia Automático';
                     let accionPrincipal = prot.accion_a_tomar;
                     let nuevaGravedad = null;
@@ -4252,15 +4281,17 @@ window.guardarReporteApoyo = async () => {
                         window.showToast("Citatorio automático enviado según protocolo", "warning");
                     }
 
-                    // 3. Notificación general del suceso
-                    await supabaseClient.from('comunicados').insert([{
-                        autor_id: u.data.user.id,
-                        titulo: titulo,
-                        mensaje: msj,
-                        audiencia: `Alumno_${aid}`,
-                        tipo: 'General',
-                        plantel_id: state.plantelId
-                    }]);
+                    // 3. Notificación general del suceso (SOLO si no es "Solo registro")
+                    if (accionPrincipal !== 'Solo registro') {
+                        await supabaseClient.from('comunicados').insert([{
+                            autor_id: u.data.user.id,
+                            titulo: titulo,
+                            mensaje: msj,
+                            audiencia: `Alumno_${aid}`,
+                            tipo: 'General',
+                            plantel_id: state.plantelId
+                        }]);
+                    }
                 }
             }
         }
