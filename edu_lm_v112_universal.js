@@ -3420,12 +3420,16 @@ function renderApoyoReportes() {
                                 <option value="Solo registro">Solo registro</option>
                                 <option value="Mandar citar a alumno">Mandar citar a alumno</option>
                                 <option value="Citatorio a padres o tutores">Citatorio a padres o tutores</option>
-                                <option value="Escalar a">Escalar a (Definir...)</option>
+                                <option value="Escalar a">Escalar o convertirse en...</option>
                             </select>
                         </div>
                         <div>
                             <label style="display:block; font-size:0.8rem; margin-bottom:5px; color:transparent; user-select:none;">.</label>
-                            <input type="text" id="protAccionCustom" class="form-input" style="border-radius:8px; display:none;" placeholder="Especifique a dónde o a quién...">
+                            <select id="protAccionCustom" class="form-input" style="border-radius:8px; display:none;">
+                                <option value="Moderado">Nuevo Reporte Moderado</option>
+                                <option value="Grave">Nuevo Reporte Grave</option>
+                                <option value="Atención Prioritaria">Nuevo Reporte de Atención Prioritaria</option>
+                            </select>
                         </div>
                     </div>
                 </div>
@@ -3506,9 +3510,8 @@ window.guardarNuevoProtocolo = async () => {
     const cant = parseInt(document.getElementById('protCantidad').value);
     let acc = document.getElementById('protAccion').value;
     if (acc === 'Escalar a') {
-        const customAcc = document.getElementById('protAccionCustom').value.trim();
-        if(!customAcc) return alert("Por favor define a dónde o a quién escala el reporte.");
-        acc = `Escalar a: ${customAcc}`;
+        const customAcc = document.getElementById('protAccionCustom').value;
+        acc = `Escalar a reporte: ${customAcc}`;
     }
     
     if(!cant || cant < 1) return alert("Ingresa una cantidad válida.");
@@ -4210,7 +4213,22 @@ window.guardarReporteApoyo = async () => {
                     let titulo = 'Aviso de Incidencia Automático';
                     let msj = `Se ha alcanzado el límite de ${prot.cantidad_reportes} reportes de tipo ${cat} (${finalGravedad}). Acción requerida: ${prot.accion_a_tomar}.`;
                     
-                    if (prot.accion_a_tomar.includes('Citatorio')) {
+                    if (prot.accion_a_tomar.includes('Escalar a reporte:')) {
+                        const nuevaGravedad = prot.accion_a_tomar.split(':')[1].trim();
+                        titulo = '🚨 ESCALAMIENTO AUTOMÁTICO DE REPORTE';
+                        msj = `Se han acumulado ${reportesCount} reportes de tipo ${cat} (${finalGravedad}). Por protocolo, esto se ha convertido automáticamente en un NUEVO REPORTE ${nuevaGravedad.toUpperCase()}.`;
+                        
+                        await supabaseClient.from('reportes_conducta').insert([{
+                            alumno_id: aid,
+                            autor_id: u.data.user.id,
+                            descripcion: `[AUTOMÁTICO] Escalamiento por acumulación de ${reportesCount} reportes de tipo ${cat} (${finalGravedad}).`,
+                            clasificacion: cat,
+                            gravedad: nuevaGravedad,
+                            plantel_id: state.plantelId,
+                            resuelto: false
+                        }]);
+                        window.showToast(`Protocolo activado: Se generó un nuevo reporte ${nuevaGravedad} automáticamente.`, "error");
+                    } else if (prot.accion_a_tomar.includes('Citatorio')) {
                         titulo = '🚨 CITATORIO URGENTE: ' + prot.accion_a_tomar;
                         msj = `Estimado alumno y padre de familia/tutor:\n\nSe ha detectado una acumulación de ${reportesCount} reportes de clasificación ${cat}. ES REQUISITO INDISPENSABLE presentarse en el área de Trabajo Social para una junta de seguimiento.\n\nSube a la parte superior de esta pantalla (Línea de Tiempo) para ver el documento oficial y firmarlo.`;
                         
