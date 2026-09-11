@@ -4171,8 +4171,7 @@ window.ejecutarVigilanciaAutomatica = async (aid, cat, sev, desc, enviarAvisoMan
         let queryCount = supabaseClient.from('reportes_conducta')
             .select('*', { count: 'exact', head: true })
             .eq('alumno_id', aid).eq('resuelto', false)
-            .ilike('descripcion', `[${cat.toUpperCase()}]%`)
-            .not('descripcion', 'ilike', `%[AUTOMÁTICO] Escalamiento%`); 
+            .ilike('descripcion', `[${cat.toUpperCase()}]%`);
             
         if (finalGravedad !== 'N/A') queryCount = queryCount.eq('gravedad', finalGravedad);
 
