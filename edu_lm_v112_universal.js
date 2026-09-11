@@ -4170,8 +4170,13 @@ window.ejecutarVigilanciaAutomatica = async (aid, cat, sev, desc, enviarAvisoMan
 
         let queryCount = supabaseClient.from('reportes_conducta')
             .select('*', { count: 'exact', head: true })
-            .eq('alumno_id', aid).eq('resuelto', false)
-            .ilike('descripcion', `[${cat.toUpperCase()}]%`);
+            .eq('alumno_id', aid).eq('resuelto', false);
+            
+        if (cat === 'Convivencia') {
+            queryCount = queryCount.or(`descripcion.ilike.[CONVIVENCIA]%,descripcion.ilike.[CONDUCTA]%,descripcion.ilike.[CONDUCTUAL]%`);
+        } else {
+            queryCount = queryCount.ilike('descripcion', `[${cat.toUpperCase()}]%`);
+        }
             
         if (finalGravedad !== 'N/A') queryCount = queryCount.eq('gravedad', finalGravedad);
 
@@ -4199,17 +4204,32 @@ window.ejecutarVigilanciaAutomatica = async (aid, cat, sev, desc, enviarAvisoMan
                     let actualTriggers = 0;
 
                     if (nuevaGravedad) {
-                        const { count } = await supabaseClient.from('reportes_conducta')
+                        let q = supabaseClient.from('reportes_conducta')
                             .select('*', { count: 'exact', head: true })
                             .eq('alumno_id', aid)
-                            .eq('gravedad', nuevaGravedad)
-                            .ilike('descripcion', `[${cat.toUpperCase()}] [AUTOMÁTICO] Escalamiento%`);
+                            .eq('gravedad', nuevaGravedad);
+                            
+                        if (cat === 'Convivencia') {
+                            q = q.or(`descripcion.ilike.[CONVIVENCIA] [AUTOMÁTICO] Escalamiento%,descripcion.ilike.[CONDUCTA] [AUTOMÁTICO] Escalamiento%,descripcion.ilike.[CONDUCTUAL] [AUTOMÁTICO] Escalamiento%`);
+                        } else {
+                            q = q.ilike('descripcion', `[${cat.toUpperCase()}] [AUTOMÁTICO] Escalamiento%`);
+                        }
+                        
+                        const { count } = await q;
                         actualTriggers = count || 0;
                     } else if (accionPrincipal.includes('citar') || accionPrincipal.includes('Citatorio')) {
-                        const { count } = await supabaseClient.from('citatorios')
+                        let q = supabaseClient.from('citatorios')
                             .select('*', { count: 'exact', head: true })
-                            .eq('alumno_id', aid).eq('tipo', cat)
+                            .eq('alumno_id', aid)
                             .ilike('motivo', `%Acumulación de%Protocolo: ${accionPrincipal}%`);
+                        
+                        if (cat === 'Convivencia') {
+                            q = q.in('tipo', ['Convivencia', 'Conductual', 'Conducta']);
+                        } else {
+                            q = q.eq('tipo', cat);
+                        }
+                        
+                        const { count } = await q;
                         actualTriggers = count || 0;
                     }
 
