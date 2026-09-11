@@ -4227,7 +4227,7 @@ window.ejecutarVigilanciaAutomatica = async (aid, cat, sev, desc, enviarAvisoMan
                                     id: crypto.randomUUID(),
                                     alumno_id: aid, autor_id: u.data.user.id,
                                     descripcion: `[${cat.toUpperCase()}] [AUTOMÁTICO] Escalamiento por acumulación de reportes ${finalGravedad}. Acción: ${accionPrincipal}.`,
-                                    clasificacion: cat, gravedad: nuevaGravedad,
+                                    gravedad: nuevaGravedad,
                                     plantel_id: state.plantelId, resuelto: false
                                 }]);
                                 window.showToast(`Protocolo: Se escaló a un nuevo reporte ${nuevaGravedad} automáticamente.`, "error");
@@ -4274,6 +4274,7 @@ window.ejecutarVigilanciaAutomatica = async (aid, cat, sev, desc, enviarAvisoMan
         }
     } catch(e) {
         console.error("Error en vigilancia automática:", e);
+        window.showToast("Error en auto-vigilancia (Revisa consola)", "error");
     }
 };
 
