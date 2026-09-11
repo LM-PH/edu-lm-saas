@@ -3428,7 +3428,6 @@ function renderApoyoReportes() {
                             <select id="protAccionCustom" class="form-input" style="border-radius:8px; display:none;">
                                 <option value="Moderado">Nuevo Reporte Moderado</option>
                                 <option value="Grave">Nuevo Reporte Grave</option>
-                                <option value="Atención Prioritaria">Nuevo Reporte de Atención Prioritaria</option>
                             </select>
                         </div>
                     </div>
