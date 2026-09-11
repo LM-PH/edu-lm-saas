@@ -4268,7 +4268,7 @@ window.guardarReporteApoyo = async () => {
                         await supabaseClient.from('reportes_conducta').insert([{
                             alumno_id: aid,
                             autor_id: u.data.user.id,
-                            descripcion: `[AUTOMÁTICO] Escalamiento por acumulación de ${reportesCount} reportes de tipo ${cat} (${finalGravedad}). Acción detonada: ${accionPrincipal}.`,
+                            descripcion: `[${cat.toUpperCase()}] [AUTOMÁTICO] Escalamiento por acumulación de ${reportesCount} reportes ${finalGravedad}. Acción: ${accionPrincipal}.`,
                             clasificacion: cat,
                             gravedad: nuevaGravedad,
                             plantel_id: state.plantelId,
