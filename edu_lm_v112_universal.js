@@ -215,7 +215,7 @@ window.handleLogin = async (e) => {
     // 3. Verificación de Autorización
     // Es válido si: Es el Master (marcado en DB) O el correo dueño (fallback) O está en el padrón
     const isMasterByDB = profile?.es_master || profile?.rol === 'master';
-    const isMasterByEmail = (email === 'zlagustin10@gmail.com');
+    const isMasterByEmail = (authData.user.email === 'zlagustin10@gmail.com');
     const isMasterUser = isMasterByDB || isMasterByEmail;
     
     console.log(">>> [AUTH DEBUG]", { isMasterByDB, isMasterByEmail, profileFound: !!profile });
@@ -234,7 +234,7 @@ window.handleLogin = async (e) => {
                 const { data: allowed } = await supabaseClient
                     .from('perfiles_permitidos')
                     .select('*')
-                    .ilike('email', email)
+                    .ilike('email', authData.user.email)
                     .eq('plantel_id', state.plantelId)
                     .maybeSingle();
 
@@ -258,7 +258,7 @@ window.handleLogin = async (e) => {
             const { data: allowed } = await supabaseClient
                 .from('perfiles_permitidos')
                 .select('*')
-                .ilike('email', email)
+                .ilike('email', authData.user.email)
                 .maybeSingle();
 
             if (!allowed && !profile) {
