@@ -4146,6 +4146,137 @@ window.seleccionarAlumnoReporteApoyo = (id, nombre, grupo, mode = 'reporte') => 
     }
 };
 
+window.ejecutarVigilanciaAutomatica = async (aid, cat, sev, desc, enviarAvisoManual = true) => {
+    try {
+        const u = await supabaseClient.auth.getUser();
+        if(!u.data.user) return;
+        
+        const finalGravedad = (cat === 'Atención Prioritaria') ? 'N/A' : sev;
+
+        if (cat === 'Atención Prioritaria') {
+            await supabaseClient.from('citatorios').insert([{
+                alumno_id: aid, emisor_id: u.data.user.id,
+                motivo: `Reporte de Atención Prioritaria (Protección). Motivo: ${desc}`,
+                tipo: 'Atención Prioritaria', plantel_id: state.plantelId
+            }]);
+            await supabaseClient.from('comunicados').insert([{
+                autor_id: u.data.user.id, titulo: '🚨 CITATORIO URGENTE: Atención Prioritaria',
+                mensaje: `Estimado padre de familia/tutor:\n\nPor protocolo de protección, se requiere su presencia INMEDIATA en el área de Trabajo Social debido a un reporte de Atención Prioritaria.\n\nSube a la parte superior de esta pantalla para ver el documento oficial y firmarlo.`,
+                audiencia: `Alumno_${aid}`, tipo: 'General', plantel_id: state.plantelId
+            }]);
+            window.showToast("Citatorio de protección enviado automáticamente.", "warning");
+            return;
+        }
+
+        let queryCount = supabaseClient.from('reportes_conducta')
+            .select('*', { count: 'exact', head: true })
+            .eq('alumno_id', aid).eq('resuelto', false)
+            .ilike('descripcion', `[${cat.toUpperCase()}]%`)
+            .not('descripcion', 'ilike', `%[AUTOMÁTICO] Escalamiento%`); 
+            
+        if (finalGravedad !== 'N/A') queryCount = queryCount.eq('gravedad', finalGravedad);
+
+        const { count: reportesCount } = await queryCount;
+
+        const { data: protocolos } = await supabaseClient.from('protocolos_reportes')
+            .select('*').eq('plantel_id', state.plantelId)
+            .eq('clasificacion', cat).eq('gravedad', finalGravedad);
+
+        let actionTriggered = false;
+
+        if (protocolos && protocolos.length > 0) {
+            for (const prot of protocolos) {
+                if (reportesCount > 0 && reportesCount >= prot.cantidad_reportes) {
+                    let accionPrincipal = prot.accion_a_tomar;
+                    let nuevaGravedad = null;
+                    
+                    if (prot.accion_a_tomar.includes('| ESCALA:')) {
+                        const parts = prot.accion_a_tomar.split('| ESCALA:');
+                        accionPrincipal = parts[0].trim();
+                        nuevaGravedad = parts[1].trim();
+                    }
+
+                    const expectedTriggers = Math.floor(reportesCount / prot.cantidad_reportes);
+                    let actualTriggers = 0;
+
+                    if (nuevaGravedad) {
+                        const { count } = await supabaseClient.from('reportes_conducta')
+                            .select('*', { count: 'exact', head: true })
+                            .eq('alumno_id', aid)
+                            .eq('gravedad', nuevaGravedad)
+                            .ilike('descripcion', `[${cat.toUpperCase()}] [AUTOMÁTICO] Escalamiento%`);
+                        actualTriggers = count || 0;
+                    } else if (accionPrincipal.includes('citar') || accionPrincipal.includes('Citatorio')) {
+                        const { count } = await supabaseClient.from('citatorios')
+                            .select('*', { count: 'exact', head: true })
+                            .eq('alumno_id', aid).eq('tipo', cat)
+                            .ilike('motivo', `%Acumulación de%Protocolo: ${accionPrincipal}%`);
+                        actualTriggers = count || 0;
+                    }
+
+                    if (actualTriggers < expectedTriggers) {
+                        actionTriggered = true;
+                        const triggersNeeded = expectedTriggers - actualTriggers;
+                        
+                        for(let i=0; i<triggersNeeded; i++) {
+                            let titulo = 'Aviso de Incidencia Automático';
+                            let msj = `Se ha alcanzado el límite de reportes de tipo ${cat} (${finalGravedad}). Acción requerida: ${accionPrincipal}.`;
+
+                            if (nuevaGravedad) {
+                                await supabaseClient.from('reportes_conducta').insert([{
+                                    id: crypto.randomUUID(),
+                                    alumno_id: aid, autor_id: u.data.user.id,
+                                    descripcion: `[${cat.toUpperCase()}] [AUTOMÁTICO] Escalamiento por acumulación de reportes ${finalGravedad}. Acción: ${accionPrincipal}.`,
+                                    clasificacion: cat, gravedad: nuevaGravedad,
+                                    plantel_id: state.plantelId, resuelto: false
+                                }]);
+                                window.showToast(`Protocolo: Se escaló a un nuevo reporte ${nuevaGravedad} automáticamente.`, "error");
+                                msj += `\n\n⚠️ Por protocolo, este caso se ha escalado a un NUEVO REPORTE ${nuevaGravedad.toUpperCase()}.`;
+                                
+                                setTimeout(() => {
+                                    window.ejecutarVigilanciaAutomatica(aid, cat, nuevaGravedad, "Escalamiento automático", false);
+                                }, 1500);
+                            }
+
+                            if (accionPrincipal.includes('citar') || accionPrincipal.includes('Citatorio')) {
+                                titulo = '🚨 CITATORIO URGENTE: ' + accionPrincipal;
+                                msj = `Estimado alumno y padre de familia/tutor:\n\nSe ha detectado una acumulación de reportes de clasificación ${cat}. ES REQUISITO INDISPENSABLE presentarse en el área de Trabajo Social para una junta de seguimiento.` + (nuevaGravedad ? `\n\n⚠️ Este caso ha sido escalado a Nivel ${nuevaGravedad.toUpperCase()}.` : '');
+                                
+                                await supabaseClient.from('citatorios').insert([{
+                                    alumno_id: aid, emisor_id: u.data.user.id,
+                                    motivo: `Acumulación de reportes de tipo ${cat} (${finalGravedad}). Protocolo: ${accionPrincipal}`,
+                                    tipo: cat, plantel_id: state.plantelId
+                                }]);
+                                window.showToast("Citatorio automático enviado según protocolo", "warning");
+                            }
+
+                            if (accionPrincipal !== 'Solo registro') {
+                                await supabaseClient.from('comunicados').insert([{
+                                    autor_id: u.data.user.id, titulo: titulo, mensaje: msj,
+                                    audiencia: `Alumno_${aid}`, tipo: 'General', plantel_id: state.plantelId
+                                }]);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        if (!actionTriggered && enviarAvisoManual) {
+            await supabaseClient.from('comunicados').insert([{
+                autor_id: u.data.user.id,
+                titulo: `Aviso de Incidencia: ${cat}`,
+                mensaje: `Se ha registrado un reporte de tipo ${cat} (${finalGravedad}) para seguimiento.\n\nDescripción breve: ${desc.substring(0, 100)}...`,
+                audiencia: `Alumno_${aid}`,
+                tipo: 'General',
+                plantel_id: state.plantelId
+            }]);
+        }
+    } catch(e) {
+        console.error("Error en vigilancia automática:", e);
+    }
+};
+
 window.guardarReporteApoyo = async () => {
     const aid = document.getElementById('alumnoIdSeleccionado').value;
     const cat = document.getElementById('categoriaReporteApoyo').value;
@@ -4202,135 +4333,10 @@ window.guardarReporteApoyo = async () => {
 
         if(error) throw error;
 
-        // VIGILANCIA AUTOMÁTICA: Basado en Protocolos de Escuela
-        // EXCEPCIÓN: ATENCIÓN PRIORITARIA SIEMPRE GENERA CITATORIO INMEDIATO
-        if (cat === 'Atención Prioritaria') {
-            await supabaseClient.from('citatorios').insert([{
-                alumno_id: aid,
-                emisor_id: u.data.user.id,
-                motivo: `Reporte de Atención Prioritaria (Protección). Motivo: ${desc}`,
-                tipo: 'Atención Prioritaria',
-                plantel_id: state.plantelId
-            }]);
-            
-            await supabaseClient.from('comunicados').insert([{
-                autor_id: u.data.user.id,
-                titulo: '🚨 CITATORIO URGENTE: Atención Prioritaria',
-                mensaje: `Estimado padre de familia/tutor:\n\nPor protocolo de protección, se requiere su presencia INMEDIATA en el área de Trabajo Social debido a un reporte de Atención Prioritaria.\n\nSube a la parte superior de esta pantalla para ver el documento oficial y firmarlo.`,
-                audiencia: `Alumno_${aid}`,
-                tipo: 'General',
-                plantel_id: state.plantelId
-            }]);
-            
-            window.showToast("Citatorio de protección enviado automáticamente.", "warning");
-            
-            // Recargar UI
-            document.getElementById('modalNuevoReporteApoyo').style.display = 'none';
-            document.getElementById('descReporteApoyo').value = '';
-            document.getElementById('categoriaReporteApoyo').value = 'Académico';
-            document.getElementById('gravedadReporteApoyo').value = 'Leve';
-            if(enviarAvisoCheckbox) enviarAvisoCheckbox.checked = true;
-            
-            if(window.buscarAlumnoTS) window.buscarAlumnoTS();
-            else if(window.cargarDatosMaestro) window.cargarDatosMaestro();
-            return;
-        }
+        // VIGILANCIA AUTOMÁTICA UNIFICADA
+        await window.ejecutarVigilanciaAutomatica(aid, cat, sev, desc, enviarAviso);
 
-        // PROTOCOLOS REGULARES (Académico y Convivencia)
-        let queryCount = supabaseClient
-            .from('reportes_conducta')
-            .select('*', { count: 'exact', head: true })
-            .eq('alumno_id', aid)
-            .eq('resuelto', false)
-            .ilike('descripcion', `[${cat.toUpperCase()}]%`);
-            
-        if (finalGravedad !== 'N/A') {
-            queryCount = queryCount.eq('gravedad', finalGravedad);
-        }
-
-        const { count: reportesCount } = await queryCount;
-
-        const { data: protocolos } = await supabaseClient
-            .from('protocolos_reportes')
-            .select('*')
-            .eq('plantel_id', state.plantelId)
-            .eq('clasificacion', cat)
-            .eq('gravedad', finalGravedad);
-
-        let actionTriggered = false;
-
-        if (protocolos && protocolos.length > 0) {
-            for (const prot of protocolos) {
-                if (reportesCount > 0 && reportesCount % prot.cantidad_reportes === 0) {
-                    actionTriggered = true;
-                    let titulo = 'Aviso de Incidencia Automático';
-                    let accionPrincipal = prot.accion_a_tomar;
-                    let nuevaGravedad = null;
-                    
-                    if (prot.accion_a_tomar.includes('| ESCALA:')) {
-                        const parts = prot.accion_a_tomar.split('| ESCALA:');
-                        accionPrincipal = parts[0].trim();
-                        nuevaGravedad = parts[1].trim();
-                    }
-
-                    let msj = `Se ha alcanzado el límite de ${prot.cantidad_reportes} reportes de tipo ${cat} (${finalGravedad}). Acción requerida: ${accionPrincipal}.`;
-
-                    // 1. Ejecutar el Escalamiento (si existe)
-                    if (nuevaGravedad) {
-                        await supabaseClient.from('reportes_conducta').insert([{
-                            alumno_id: aid,
-                            autor_id: u.data.user.id,
-                            descripcion: `[${cat.toUpperCase()}] [AUTOMÁTICO] Escalamiento por acumulación de ${reportesCount} reportes ${finalGravedad}. Acción: ${accionPrincipal}.`,
-                            clasificacion: cat,
-                            gravedad: nuevaGravedad,
-                            plantel_id: state.plantelId,
-                            resuelto: false
-                        }]);
-                        window.showToast(`Protocolo: Se escaló a un nuevo reporte ${nuevaGravedad} automáticamente.`, "error");
-                        msj += `\n\n⚠️ Por protocolo, este caso se ha escalado a un NUEVO REPORTE ${nuevaGravedad.toUpperCase()}.`;
-                    }
-
-                    // 2. Ejecutar la Acción Principal
-                    if (accionPrincipal.includes('citar') || accionPrincipal.includes('Citatorio')) {
-                        titulo = '🚨 CITATORIO URGENTE: ' + accionPrincipal;
-                        msj = `Estimado alumno y padre de familia/tutor:\n\nSe ha detectado una acumulación de ${reportesCount} reportes de clasificación ${cat}. ES REQUISITO INDISPENSABLE presentarse en el área de Trabajo Social para una junta de seguimiento.\n\nSube a la parte superior de esta pantalla (Línea de Tiempo) para ver el documento oficial y firmarlo.` + (nuevaGravedad ? `\n\n⚠️ Este caso ha sido escalado a Nivel ${nuevaGravedad.toUpperCase()}.` : '');
-                        
-                        await supabaseClient.from('citatorios').insert([{
-                            alumno_id: aid,
-                            emisor_id: u.data.user.id,
-                            motivo: `Acumulación de ${reportesCount} reportes de tipo ${cat} (${finalGravedad}). Protocolo: ${accionPrincipal}`,
-                            tipo: cat,
-                            plantel_id: state.plantelId
-                        }]);
-                        window.showToast("Citatorio automático enviado según protocolo", "warning");
-                    }
-
-                    // 3. Notificación general del suceso (SOLO si no es "Solo registro")
-                    if (accionPrincipal !== 'Solo registro') {
-                        await supabaseClient.from('comunicados').insert([{
-                            autor_id: u.data.user.id,
-                            titulo: titulo,
-                            mensaje: msj,
-                            audiencia: `Alumno_${aid}`,
-                            tipo: 'General',
-                            plantel_id: state.plantelId
-                        }]);
-                    }
-                }
-            }
-        }
-
-        if (!actionTriggered && enviarAviso) {
-            await supabaseClient.from('comunicados').insert([{
-                autor_id: u.data.user.id,
-                titulo: `Aviso de Incidencia: ${cat}`,
-                mensaje: `Se ha registrado un reporte de tipo ${cat} (${finalGravedad}) para seguimiento de Trabajo Social.\n\nDescripción breve: ${desc.substring(0, 100)}...`,
-                audiencia: `Alumno_${aid}`,
-                tipo: 'General',
-                plantel_id: state.plantelId
-            }]);
-        }
-
+        // Terminar UI
         window.showToast("Reporte levantado con éxito", "success");
         document.getElementById('modalNuevoReporteApoyo').style.display = 'none';
         document.getElementById('descReporteApoyo').value = '';
@@ -13704,7 +13710,9 @@ window.openReporteModal = async () => {
 
 window.enviarReporteRapido = async () => {
     const alumno_id = document.getElementById('repAlumnoList').value;
-    const tipo = document.getElementById('repTipo').value;
+    let tipo = document.getElementById('repTipo').value;
+    if (tipo === 'Conductual') tipo = 'Convivencia';
+    
     const desc = document.getElementById('repDesc').value;
     const sev = document.getElementById('repSev').value;
     
@@ -13736,18 +13744,8 @@ window.enviarReporteRapido = async () => {
             throw error;
         }
         
-        if (sev === 'Grave') {
-            const { data: qAl } = await supabaseClient.from('alumnos').select('nombre').eq('id', alumno_id).single();
-            const alumnoName = qAl ? qAl.nombre : 'Alumno';
-            await supabaseClient.from('comunicados').insert([{
-               id: crypto.randomUUID(),
-               autor_id: autor_id,
-               titulo: `Aviso Importante: Reporte ${tipo}`,
-               audiencia: `Alumno_${alumno_id}`,
-               mensaje: `Se ha levantado un reporte de severidad *${sev}* para ${alumnoName}.\n\nDetalle:\n${desc}`,
-               plantel_id: state.plantelId
-            }]);
-        }
+        // VIGILANCIA AUTOMÁTICA (incluye las notificaciones si aplican)
+        await window.ejecutarVigilanciaAutomatica(alumno_id, tipo, sev, desc, true);
         
         alert("Reporte guardado y canalizado exitosamente.");
         document.getElementById('reporteModal').remove();
