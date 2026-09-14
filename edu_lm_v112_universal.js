@@ -8089,6 +8089,7 @@ async function renderMasterSaaS() {
                             <th style="padding:12px;">Rol del Usuario</th>
                             <th style="padding:12px;">Fecha y Hora de Conexión</th>
                             <th style="padding:12px; text-align:center;">Estado</th>
+                            <th style="padding:12px; text-align:center;">Acciones</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -8127,6 +8128,11 @@ async function renderMasterSaaS() {
                             </td>
                             <td style="padding:12px; text-align:center;">
                                 ${estadoBadge}
+                            </td>
+                            <td style="padding:12px; text-align:center;">
+                                <button class="btn btn-outline" style="color:var(--danger); border-color:var(--danger); padding:4px 10px; font-size:0.75rem; font-weight:bold; display:inline-flex; align-items:center; gap:5px;" onclick="window.eliminarPlantelSaaS('${c.id}', '${c.plantelNombre}')" title="Eliminar Plantel Completo">
+                                    <i class="fa-solid fa-trash-can"></i>
+                                </button>
                             </td>
                         </tr>`;
                         }).join('')}
