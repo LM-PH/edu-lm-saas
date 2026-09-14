@@ -8225,7 +8225,27 @@ window.eliminarPlantelSaaS = async (id, nombre) => {
     if(confirmName !== nombre) return alert("Nombre incorrecto. Acción cancelada.");
 
     try {
-        // USAR supabaseClient para saltar RLS y borrar CUALQUIER plantel
+        window.showToast("Iniciando borrado en cascada (esto puede tardar)...", "warning");
+
+        // Tablas que dependen del plantel_id ordenadas de hijos a padres
+        const tablas = [
+            'accesos_plantel', 'actividades_maestro', 'asistencia_sesiones', 'asistencias',
+            'autorizaciones_movimientos', 'biblioteca_prestamos', 'biblioteca_reservas',
+            'bitacora_maestro', 'calificaciones', 'calificaciones_historial', 'citatorios',
+            'comunicados_vistos', 'comunicados_adjuntos', 'comunicados', 'cuestionarios_psicosociales',
+            'cuestionarios_salud', 'encuadres', 'estudios_psicosociales', 'evaluaciones_actividades',
+            'expedientes', 'expedientes_docentes', 'expedientes_salud', 'fichas_salud',
+            'firmas_boleta', 'firmas_encuadre', 'grupos', 'horarios', 'horarios_maestros',
+            'intervenciones_conducta', 'justificantes_medicos', 'materias', 'periodos_calificaciones',
+            'protocolos_reportes', 'reportes_conducta', 'seguimientos_sociales', 'tramites',
+            'asignaciones_maestros', 'alumnos', 'perfiles_permitidos'
+        ];
+
+        for (const tabla of tablas) {
+            try { await supabaseClient.from(tabla).delete().eq('plantel_id', id); } catch(err) {}
+        }
+
+        // Finalmente borrar el plantel
         const { error } = await supabaseClient.from('planteles').delete().eq('id', id);
         if(error) throw error;
         window.showToast("Plantel y datos eliminados correctamente.", "success");
