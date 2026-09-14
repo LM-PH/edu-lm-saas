@@ -8249,7 +8249,9 @@ window.eliminarPlantelSaaS = async (id, nombre) => {
         const { error } = await supabaseClient.from('planteles').delete().eq('id', id);
         if(error) throw error;
         window.showToast("Plantel y datos eliminados correctamente.", "success");
-        renderApp();
+        state.plantelId = null;
+        CONFIG.schoolName = "Edu-LM";
+        window.navigate('/master/saas');
     } catch(e) { alert("Error al borrar: " + e.message); }
 };
 
@@ -8489,7 +8491,7 @@ async function renderMasterGestionPerfiles() {
 
         return `
             <div class="page-header" style="background: linear-gradient(135deg, #1e293b 0%, #334155 100%); color:white; padding:32px; border-radius:24px; margin-bottom:32px; box-shadow:0 10px 25px -5px rgba(0,0,0,0.1);">
-                <div style="display:flex; justify-content:space-between; align-items:center;">
+                <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:16px;">
                     <div>
                         <h2 class="page-title" style="color:white; margin:0 0 4px 0;">Gestión de Credenciales: ${CONFIG.schoolName}</h2>
                         <p style="margin:0; opacity:0.8; font-size:0.95rem;"><i class="fa-solid fa-fingerprint"></i> Has iniciado sesión como controlador global en esta sede.</p>
@@ -8497,9 +8499,14 @@ async function renderMasterGestionPerfiles() {
                         ${gruposErr ? `<p style="color:red; background:white; padding:10px; margin-top:10px;">Error Grupos: ${gruposErr.message}</p>` : ''}
                         ${(!alumnosErr && !gruposErr) ? `<p style="color:blue; background:white; padding:10px; margin-top:10px; font-size:12px;">DEBUG: alumnosData length = ${alumnosData ? alumnosData.length : 'null'}, gruposData length = ${gruposData ? gruposData.length : 'null'}</p>` : ''}
                     </div>
-                    <button class="btn" style="background:rgba(255,255,255,0.1); border:1px solid rgba(255,255,255,0.2); color:white;" onclick="window.navigate('/master/saas')">
-                        <i class="fa-solid fa-rotate-left"></i> Volver a Planteles
-                    </button>
+                    <div style="display:flex; gap:12px; flex-wrap:wrap;">
+                        <button class="btn" style="background:var(--danger); color:white; border:none;" onclick="window.eliminarPlantelSaaS('${state.plantelId}', '${CONFIG.schoolName}')">
+                            <i class="fa-solid fa-trash-can"></i> Aniquilar Escuela Completa
+                        </button>
+                        <button class="btn" style="background:rgba(255,255,255,0.1); border:1px solid rgba(255,255,255,0.2); color:white;" onclick="window.navigate('/master/saas')">
+                            <i class="fa-solid fa-rotate-left"></i> Volver a Planteles
+                        </button>
+                    </div>
                 </div>
             </div>
             
@@ -8508,7 +8515,6 @@ async function renderMasterGestionPerfiles() {
             ${renderSection('Personal de Apoyo', categorized.apoyo, 'fa-hand-holding-medical', '#10b981')}
             ${renderSection('Equipo Administrativo', categorized.admin, 'fa-user-tie', '#f59e0b')}
             ${renderSection('Biblioteca / Aula de Medios', categorized.biblioteca, 'fa-book-open', '#06b6d4')}
-            
             <div style="margin-top:20px; padding:20px; background:#eff6ff; border-radius:16px; border:1px solid #dbeafe; display:flex; gap:16px; align-items:center;">
                 <div style="font-size:1.5rem; color:#3b82f6;"><i class="fa-solid fa-circle-info"></i></div>
                 <div style="font-size:0.85rem; color:#1e40af;">
