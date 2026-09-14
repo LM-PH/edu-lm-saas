@@ -16871,7 +16871,7 @@ window.guardarHorarioDocente = async () => {
             const sEnd = timeToMinutes(s.hora_fin);
             
             // Hay traslape si coinciden en orden de hora o si se empalman los rangos de tiempo
-            const timeOverlap = (mStart < sEnd && mEnd > sStart) || (parseInt(s.orden_hora) === orden_hora);
+            const timeOverlap = (mStart < sEnd && mEnd > sStart);
             
             if (timeOverlap) {
                 // 1. Conflicto para el maestro
