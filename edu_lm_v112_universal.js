@@ -16639,11 +16639,6 @@ window.renderAdminHorarios = () => {
                                 </div>
                             </div>
                             
-                            <div class="form-group">
-                                <label class="form-label">Orden / Sesión (Ej. 1 para primera clase, 2 para segunda, etc.)</label>
-                                <input type="number" id="numOrdenDocente" class="form-input" value="1" min="1">
-                            </div>
-                            
                             <button class="btn btn-primary btn-block" onclick="window.guardarHorarioDocente()">
                                 <i class="fa-solid fa-save"></i> Guardar Bloque Horario
                             </button>
@@ -16757,9 +16752,10 @@ window.cargarAsignacionesYHorarioDocente = async () => {
         
         // Ordenar slots por día y luego por orden
         const dayOrder = { 'Lunes': 1, 'Martes': 2, 'Miércoles': 3, 'Jueves': 4, 'Viernes': 5 };
+        const hmToMin = (hm) => { if(!hm) return 0; const p = hm.split(':'); return parseInt(p[0]||0)*60 + parseInt(p[1]||0); };
         slots.sort((a, b) => {
-            const valA = (dayOrder[a.dia] || 9) * 100 + (parseInt(a.orden_hora) || 0);
-            const valB = (dayOrder[b.dia] || 9) * 100 + (parseInt(b.orden_hora) || 0);
+            const valA = (dayOrder[a.dia] || 9) * 10000 + hmToMin(a.hora_inicio);
+            const valB = (dayOrder[b.dia] || 9) * 10000 + hmToMin(b.hora_inicio);
             return valA - valB;
         });
         
@@ -16792,9 +16788,6 @@ window.cargarAsignacionesYHorarioDocente = async () => {
                                 <div style="font-size:0.85rem; color:var(--text-muted); margin-top:4px;">
                                     <strong>${s.materia}</strong> <span style="color:var(--primary)">(${grpLabel})</span>
                                 </div>
-                                <div style="font-size:0.7rem; color:var(--text-muted); opacity:0.7; margin-top:2px;">
-                                    Orden: ${s.orden_hora}° sesión
-                                </div>
                             </div>
                             <button class="btn btn-xs btn-outline" style="color:var(--danger); border-color:#fee2e2; background:none; padding:6px 10px; height:32px;" onclick="window.eliminarBloqueHorarioDocente('${s.id}')" title="Eliminar bloque">
                                 <i class="fa-solid fa-trash-can"></i>
@@ -16821,7 +16814,6 @@ window.guardarHorarioDocente = async () => {
     const dia = document.getElementById('selDiaDocente')?.value;
     const hora_inicio = document.getElementById('timeInicioDocente')?.value.trim();
     const hora_fin = document.getElementById('timeFinDocente')?.value.trim();
-    const ordenStr = document.getElementById('numOrdenDocente')?.value;
     
     if(!email || !asigIdxStr || !dia || !hora_inicio || !hora_fin) {
         return alert("Por favor completa todos los campos del formulario.");
@@ -16834,7 +16826,7 @@ window.guardarHorarioDocente = async () => {
         return alert("Error al recuperar la información de la asignación seleccionada.");
     }
     
-    const orden_hora = parseInt(ordenStr) || 1;
+    const orden_hora = 1;
     
     const timeToMinutes = (t) => {
         if(!t) return 0;
@@ -16890,12 +16882,12 @@ window.guardarHorarioDocente = async () => {
         
         if (conflictTeacher) {
             const grp = conflictTeacher.grupos ? conflictTeacher.grupos.nombre : (conflictTeacher.target_grado ? `Grado ${conflictTeacher.target_grado}` : 'Sin Grupo');
-            return alert(`⚠️ EMPALME DE DOCENTE:\nEl docente ya tiene asignada la materia "${conflictTeacher.materia}" para "${grp}" el día ${dia} en el horario ${conflictTeacher.hora_inicio} - ${conflictTeacher.hora_fin} (Sesión ${conflictTeacher.orden_hora}°).\nPor favor, verifica los horarios.`);
+            return alert(`⚠️ EMPALME DE DOCENTE:\nEl docente ya tiene asignada la materia "${conflictTeacher.materia}" para "${grp}" el día ${dia} en el horario ${conflictTeacher.hora_inicio} - ${conflictTeacher.hora_fin}.\nPor favor, verifica los horarios.`);
         }
         
         if (conflictGroup) {
             const grpName = conflictGroup.grupos ? conflictGroup.grupos.nombre : `Grado ${conflictGroup.target_grado}`;
-            return alert(`⚠️ EMPALME DE GRUPO / GRADO:\nEl grupo/grado "${grpName}" ya tiene ocupado este horario con la materia "${conflictGroup.materia}" dictada por el docente (${conflictGroup.maestro_email}) el día ${dia} de ${conflictGroup.hora_inicio} a ${conflictGroup.hora_fin} (Sesión ${conflictGroup.orden_hora}°).\nPor favor, asigna otra hora.`);
+            return alert(`⚠️ EMPALME DE GRUPO / GRADO:\nEl grupo/grado "${grpName}" ya tiene ocupado este horario con la materia "${conflictGroup.materia}" dictada por el docente (${conflictGroup.maestro_email}) el día ${dia} de ${conflictGroup.hora_inicio} a ${conflictGroup.hora_fin}.\nPor favor, asigna otra hora.`);
         }
         
         window.showToast("Guardando horario de docente...", "info");
@@ -16919,7 +16911,6 @@ window.guardarHorarioDocente = async () => {
         // Reset values
         document.getElementById('timeInicioDocente').value = '';
         document.getElementById('timeFinDocente').value = '';
-        document.getElementById('numOrdenDocente').value = '1';
         
         // Reload list
         window.cargarAsignacionesYHorarioDocente();
@@ -17210,9 +17201,10 @@ window.loadMaestroHorario = async () => {
         
         // Ordenar slots por día y orden
         const dayOrder = { 'Lunes': 1, 'Martes': 2, 'Miércoles': 3, 'Jueves': 4, 'Viernes': 5 };
+        const hmToMin = (hm) => { if(!hm) return 0; const p = hm.split(':'); return parseInt(p[0]||0)*60 + parseInt(p[1]||0); };
         slots.sort((a, b) => {
-            const valA = (dayOrder[a.dia] || 9) * 100 + (parseInt(a.orden_hora) || 0);
-            const valB = (dayOrder[b.dia] || 9) * 100 + (parseInt(b.orden_hora) || 0);
+            const valA = (dayOrder[a.dia] || 9) * 10000 + hmToMin(a.hora_inicio);
+            const valB = (dayOrder[b.dia] || 9) * 10000 + hmToMin(b.hora_inicio);
             return valA - valB;
         });
         
@@ -17562,9 +17554,10 @@ window.seleccionarDocenteApoyo = async (email, name) => {
         
         // Ordenar slots
         const dayOrder = { 'Lunes': 1, 'Martes': 2, 'Miércoles': 3, 'Jueves': 4, 'Viernes': 5 };
+        const hmToMin = (hm) => { if(!hm) return 0; const p = hm.split(':'); return parseInt(p[0]||0)*60 + parseInt(p[1]||0); };
         slots.sort((a, b) => {
-            const valA = (dayOrder[a.dia] || 9) * 100 + (parseInt(a.orden_hora) || 0);
-            const valB = (dayOrder[b.dia] || 9) * 100 + (parseInt(b.orden_hora) || 0);
+            const valA = (dayOrder[a.dia] || 9) * 10000 + hmToMin(a.hora_inicio);
+            const valB = (dayOrder[b.dia] || 9) * 10000 + hmToMin(b.hora_inicio);
             return valA - valB;
         });
         
