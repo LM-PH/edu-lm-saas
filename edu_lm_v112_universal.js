@@ -16885,12 +16885,6 @@ window.guardarHorarioDocente = async () => {
                     conflictGroup = s;
                     break;
                 }
-                
-                // 3. Conflicto para el grado (si es el mismo grado de taller/tecnología)
-                if (asig.target_grado && s.target_grado && s.target_grado === asig.target_grado) {
-                    conflictGroup = s;
-                    break;
-                }
             }
         }
         
