@@ -20805,19 +20805,41 @@ window.confirmarInscripcionMasiva = async () => {
                 resolvedGrupoId = newGr.id;
             }
 
+            let finalEdad = parseInt(row.edad, 10) || null;
+            if (finalEdad !== null && finalEdad > 99) finalEdad = null; // Prevent overflow if date serial was passed
+            
+            let finalEstatura = null;
+            if (row.estatura) {
+                let eNum = parseFloat(String(row.estatura).replace(',', '.'));
+                if (!isNaN(eNum)) {
+                    if (eNum > 5) eNum = eNum / 100; // cm to mts
+                    if (eNum > 3) eNum = 2.99; // Cap
+                    finalEstatura = eNum;
+                }
+            }
+            
+            let finalPeso = null;
+            if (row.peso) {
+                let pNum = parseFloat(String(row.peso).replace(',', '.'));
+                if (!isNaN(pNum)) {
+                    if (pNum > 999) pNum = 999;
+                    finalPeso = pNum;
+                }
+            }
+
             // 1. Insertar Alumno
             const { error: insErr } = await supabaseClient.from('alumnos').insert([{
-                curp: row.curp.trim(),
-                nombre: row.nombre.trim(),
+                curp: String(row.curp).trim(),
+                nombre: String(row.nombre).trim(),
                 matricula: matricula,
-                edad: parseInt(row.edad, 10) || null,
+                edad: finalEdad,
                 contacto_email: autoEmail.toLowerCase().trim(),
                 grado: gradoNom,
                 grupo_id: resolvedGrupoId,
-                taller: row.tecnologia.trim() || null,
-                estatura: parseFloat(row.estatura) || null,
-                peso: parseFloat(row.peso) || null,
-                talla_zapato: row.talla.trim() || null,
+                taller: String(row.tecnologia || '').trim() || null,
+                estatura: finalEstatura,
+                peso: finalPeso,
+                talla_zapato: String(row.talla || '').trim() || null,
                 plantel_id: finalPlantel
             }]);
             
