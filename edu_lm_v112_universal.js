@@ -2369,11 +2369,8 @@ window.descargarPasswordsAlumnosPDF = async () => {
                     <div style="font-size: 1.1rem; font-weight: bold; margin-bottom: 12px; line-height: 1.4rem;">${student.nombre}</div>
                     
                     <div style="background: #f8fafc; padding: 12px; border-radius: 8px; width: 100%; box-sizing: border-box; margin-bottom: 12px;">
-                        <div style="font-size: 0.8rem; color: #64748b; margin-bottom: 4px;">Correo:</div>
-                        <div style="font-size: 0.95rem; font-weight: bold; color: #0f172a; word-break: break-all;">${student.contacto_email || 'Sin correo'}</div>
-                        
-                        <div style="font-size: 0.8rem; color: #64748b; margin-top: 10px; margin-bottom: 4px;">Contraseña:</div>
-                        <div style="font-size: 1.2rem; font-weight: bold; color: #2563eb; letter-spacing: 1px;">${pass}</div>
+                        <div style="font-size: 0.85rem; color: #64748b; margin-bottom: 8px;">Contraseña de Acceso:</div>
+                        <div style="font-size: 1.5rem; font-weight: bold; color: #2563eb; letter-spacing: 2px;">${pass}</div>
                     </div>
                     
                     <div style="font-size: 0.95rem; color: #555; font-weight: bold;">${student.grupos?.nombre || 'S/G'}</div>
