@@ -2180,9 +2180,14 @@ function renderAdminMaestros() {
             <select id="selGrupoAlumnoTab" class="form-input" style="width:105px; font-size:0.8rem; padding:4px 8px; margin:0;" onchange="window.loadListasAdminPersonal()">
                 <option value="">Todos</option>
             </select>
-            <button class="btn btn-primary btn-sm" onclick="window.descargarQRsAlumnosPDF()" style="margin-left:auto; display:flex; gap:6px; align-items:center;">
-                <i class="fa-solid fa-file-pdf"></i> Descargar QRs (PDF)
-            </button>
+            <div style="display:flex; gap:8px; margin-left:auto;">
+                <button class="btn btn-primary btn-sm" onclick="window.descargarQRsAlumnosPDF()" style="display:flex; gap:6px; align-items:center;">
+                    <i class="fa-solid fa-file-pdf"></i> Descargar QRs (PDF)
+                </button>
+                <button class="btn btn-outline btn-sm" onclick="window.descargarPasswordsAlumnosPDF()" style="display:flex; gap:6px; align-items:center; border-color:var(--primary); color:var(--primary);">
+                    <i class="fa-solid fa-key"></i> Descargar Accesos
+                </button>
+            </div>
         </div>
         
         <div style="overflow-x:auto;">
@@ -2285,6 +2290,107 @@ window.descargarQRsAlumnosPDF = async () => {
         const opt = {
             margin:       0,
             filename:     `QRs_Alumnos_${grado}_${grupo}.pdf`,
+            image:        { type: 'jpeg', quality: 0.98 },
+            html2canvas:  { scale: 2, useCORS: true, logging: false },
+            jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' }
+        };
+
+        await html2pdf().set(opt).from(html).save();
+
+    } catch (err) {
+        console.error(err);
+        alert("Error al generar PDF: " + err.message);
+    } finally {
+        btn.innerHTML = originalText;
+        btn.disabled = false;
+    }
+};
+
+window.descargarPasswordsAlumnosPDF = async () => {
+    const grado = document.getElementById('selGradoAlumnoTab').value;
+    const grupo = document.getElementById('selGrupoAlumnoTab').value;
+
+    if(!grado || !grupo) {
+        alert("Por favor selecciona un Grado y un Grupo para descargar las contraseñas.");
+        return;
+    }
+
+    const btn = document.querySelector('button[onclick="window.descargarPasswordsAlumnosPDF()"]');
+    const originalText = btn.innerHTML;
+    btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Generando PDF...';
+    btn.disabled = true;
+
+    try {
+        const currentPlantelID = state.plantelId || 'general';
+        let query = supabaseClient.from('alumnos')
+            .select('id, nombre, matricula, contacto_email, grupos(nombre)')
+            .eq('plantel_id', currentPlantelID)
+            .order('nombre', { ascending: true });
+
+        const { data, error } = await query;
+        if(error) throw error;
+
+        // Filtro por grado/grupo
+        const filteredData = (data || []).filter(s => {
+            const gName = (s.grupos?.nombre || '').toUpperCase();
+            let ok = true;
+            if(grado && !gName.startsWith(grado.toUpperCase())) ok = false;
+            if(grupo && !gName.endsWith(grupo.toUpperCase())) ok = false;
+            return ok;
+        });
+
+        if(filteredData.length === 0) {
+            alert("No hay alumnos en el grado y grupo seleccionado.");
+            btn.innerHTML = originalText;
+            btn.disabled = false;
+            return;
+        }
+        
+        // Fetch passwords
+        const emails = filteredData.map(s => s.contacto_email).filter(e => e);
+        const { data: pData } = await supabaseClient.from('perfiles_permitidos').select('email, temp_pass').in('email', emails);
+        const passMap = {};
+        if (pData) {
+            pData.forEach(p => passMap[p.email] = p.temp_pass);
+        }
+
+        let html = '<div style="width: 794px; background: white; color: black; font-family: sans-serif;">';
+        const itemsPerPage = 12;
+        
+        for (let i = 0; i < filteredData.length; i += itemsPerPage) {
+            const pageData = filteredData.slice(i, i + itemsPerPage);
+            
+            html += `<div style="width: 210mm; height: 295mm; padding: 10mm; box-sizing: border-box; display: grid; grid-template-columns: repeat(3, 1fr); grid-template-rows: repeat(4, 1fr); gap: 10mm; overflow: hidden; ${i + itemsPerPage < filteredData.length ? 'page-break-after: always;' : ''}">`;
+            
+            for (let student of pageData) {
+                const pass = passMap[student.contacto_email] || 'No registrada';
+                html += `
+                <div style="border: 2px dashed #ccc; border-radius: 10px; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 15px; text-align: center; overflow: hidden; background: #fff;">
+                    <div style="font-size: 1.1rem; font-weight: bold; margin-bottom: 12px; line-height: 1.4rem;">${student.nombre}</div>
+                    
+                    <div style="background: #f8fafc; padding: 12px; border-radius: 8px; width: 100%; box-sizing: border-box; margin-bottom: 12px;">
+                        <div style="font-size: 0.8rem; color: #64748b; margin-bottom: 4px;">Correo:</div>
+                        <div style="font-size: 0.95rem; font-weight: bold; color: #0f172a; word-break: break-all;">${student.contacto_email || 'Sin correo'}</div>
+                        
+                        <div style="font-size: 0.8rem; color: #64748b; margin-top: 10px; margin-bottom: 4px;">Contraseña:</div>
+                        <div style="font-size: 1.2rem; font-weight: bold; color: #2563eb; letter-spacing: 1px;">${pass}</div>
+                    </div>
+                    
+                    <div style="font-size: 0.95rem; color: #555; font-weight: bold;">${student.grupos?.nombre || 'S/G'}</div>
+                    <div style="font-size: 0.85rem; color: #777;">Matrícula: ${student.matricula || 'N/A'}</div>
+                </div>
+                `;
+            }
+            
+            html += `</div>`;
+        }
+        
+        html += '</div>';
+
+        // html2pdf
+        const opt = {
+            margin:       0,
+            filename:     `Accesos_Alumnos_${grado}_${grupo}.pdf`,
             image:        { type: 'jpeg', quality: 0.98 },
             html2canvas:  { scale: 2, useCORS: true, logging: false },
             jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' }
