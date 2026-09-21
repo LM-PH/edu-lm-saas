@@ -214,6 +214,9 @@ create table public.asistencias (
 alter table public.asistencias enable row level security;
 create policy "Staff ve asistencias" on public.asistencias for select to authenticated using(true);
 create policy "Staff inserta asistencias" on public.asistencias for insert to authenticated with check(
+create policy "Staff actualiza asistencias" on public.asistencias for update to authenticated using(
+  (select rol from public.perfiles where id = auth.uid()) in ('admin', 'maestro', 'apoyo')
+);
   (select rol from public.perfiles where id = auth.uid()) in ('admin', 'maestro', 'apoyo')
 );
 
