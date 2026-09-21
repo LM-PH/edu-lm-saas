@@ -10914,6 +10914,8 @@ window.cerrarQREvaluacion = () => {
     // Reseteamos ID de alumno para evitar asentar nota al alumno equivocado si se reabre el modal:
     targetStudentId = null;
     document.getElementById('inCalificacionQR').value = '10';
+    // Refrescar lista de fondo al cerrar el modal
+    if (window.loadActividadesMaestro) window.loadActividadesMaestro();
 };
 
 window.guardarEvaluacionQR = async () => {
@@ -10927,7 +10929,6 @@ window.guardarEvaluacionQR = async () => {
         if(error) throw error;
         alert("Evaluación registrada exitosamente!");
         window.cerrarQREvaluacion();
-        window.loadActividadesMaestro(); // Actualiza la lista para mostrar al alumno
     } catch(err) {
         console.error(err);
         alert("Error crítico al guardar: " + (err.message || 'Error desconocido') + ". \nRevisa permisos RLS o la conexión.");
@@ -11057,8 +11058,7 @@ window.guardarEvaluacionListaManual = async (alumnoId) => {
         input.parentElement.parentElement.style.borderColor = 'var(--success)';
         btn.disabled = false;
         
-        // No cerramos modal para que siga evaluando a los demás
-        window.loadActividadesMaestro(); // Refresh background list subtly
+        // La lista de fondo se actualizará hasta que el maestro cierre el modal
     } catch(err) {
         console.error(err);
         if(window.showToast) window.showToast("Error al guardar: " + err.message, "error");
