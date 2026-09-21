@@ -2700,39 +2700,71 @@ function renderMaestroAula() {
              </div>
           </div>
 
-          <!-- PANEL DE CONTROL MANUAL DE ASISTENCIA -->
-          <div class="card" style="margin-bottom: 20px; padding: 15px; background: #f8f9fa; border: 1px solid var(--border); border-radius:12px;">
-             <div id="asistenciaStatusMsg" style="margin-bottom:15px; font-weight: bold; color: var(--text-muted); font-size: 1.1rem; text-align:center;">
-                <i class="fa-solid fa-circle-dot"></i> Esperando acción del maestro...
-             </div>
-             
-             <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px;">
-                <button id="btnModoPuntual" class="btn btn-primary" style="padding:15px 5px; font-weight:bold; border-radius:10px; display:flex; flex-direction:column; align-items:center; gap:5px;" onclick="window.toggleAsistenciaModo('asistencia')">
-                   <i class="fa-solid fa-clock"></i>
-                   <span style="font-size:0.9rem;">ENTRADA EN TIEMPO</span>
-                   <small id="lblBtnPuntual" style="font-size:0.65rem; opacity:0.8;">[Activar Cámara]</small>
-                </button>
-                
-                <button id="btnModoRetardo" class="btn btn-warning" style="padding:15px 5px; font-weight:bold; border-radius:10px; display:flex; flex-direction:column; align-items:center; gap:5px;" onclick="window.toggleAsistenciaModo('retardo')">
-                   <i class="fa-solid fa-stopwatch"></i>
-                   <span style="font-size:0.9rem;">MÓDULO RETARDOS</span>
-                   <small id="lblBtnRetardo" style="font-size:0.65rem; opacity:0.8;">[Activar Cámara]</small>
-                </button>
-             </div>
+          <div style="display:flex; gap:10px; margin-bottom: 15px; border-bottom: 1px solid var(--border); padding-bottom: 10px;">
+              <button id="tabPaseQR" class="btn btn-sm btn-primary" style="flex:1; border-radius:8px;" onclick="window.switchModoPaseLista('qr')"><i class="fa-solid fa-qrcode"></i> Pase QR</button>
+              <button id="tabPaseManual" class="btn btn-sm btn-outline" style="flex:1; border-radius:8px;" onclick="window.switchModoPaseLista('manual')"><i class="fa-solid fa-list"></i> Pase Manual</button>
           </div>
-          
-          <div id="reader-maestro" style="width: 100%; min-height: 250px; display:none; border-radius:12px; overflow:hidden; margin: 20px 0; background:black"></div>
-          <div id="contadorQRMaestro" style="display:none; text-align:center; font-size:1.2rem; font-weight:bold; color:var(--primary); margin-bottom:15px; padding:10px; background:var(--page-bg); border-radius:8px; border:1px solid var(--border);">
-             Alumnos escaneados: <span id="lblCountQRMaestro" style="font-size:1.5rem;">0</span>
+
+          <!-- CONTENEDOR QR -->
+          <div id="contenedorPaseQR">
+              <!-- PANEL DE CONTROL MANUAL DE ASISTENCIA -->
+              <div class="card" style="margin-bottom: 20px; padding: 15px; background: #f8f9fa; border: 1px solid var(--border); border-radius:12px;">
+                 <div id="asistenciaStatusMsg" style="margin-bottom:15px; font-weight: bold; color: var(--text-muted); font-size: 1.1rem; text-align:center;">
+                    <i class="fa-solid fa-circle-dot"></i> Esperando acción del maestro...
+                 </div>
+                 
+                 <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px;">
+                    <button id="btnModoPuntual" class="btn btn-primary" style="padding:15px 5px; font-weight:bold; border-radius:10px; display:flex; flex-direction:column; align-items:center; gap:5px;" onclick="window.toggleAsistenciaModo('asistencia')">
+                       <i class="fa-solid fa-clock"></i>
+                       <span style="font-size:0.9rem;">ENTRADA EN TIEMPO</span>
+                       <small id="lblBtnPuntual" style="font-size:0.65rem; opacity:0.8;">[Activar Cámara]</small>
+                    </button>
+                    
+                    <button id="btnModoRetardo" class="btn btn-warning" style="padding:15px 5px; font-weight:bold; border-radius:10px; display:flex; flex-direction:column; align-items:center; gap:5px;" onclick="window.toggleAsistenciaModo('retardo')">
+                       <i class="fa-solid fa-stopwatch"></i>
+                       <span style="font-size:0.9rem;">MÓDULO RETARDOS</span>
+                       <small id="lblBtnRetardo" style="font-size:0.65rem; opacity:0.8;">[Activar Cámara]</small>
+                    </button>
+                 </div>
+              </div>
+              
+              <div id="reader-maestro" style="width: 100%; min-height: 250px; display:none; border-radius:12px; overflow:hidden; margin: 20px 0; background:black"></div>
+              <div id="contadorQRMaestro" style="display:none; text-align:center; font-size:1.2rem; font-weight:bold; color:var(--primary); margin-bottom:15px; padding:10px; background:var(--page-bg); border-radius:8px; border:1px solid var(--border);">
+                 Alumnos escaneados: <span id="lblCountQRMaestro" style="font-size:1.5rem;">0</span>
+              </div>
+              
+              <div style="display:flex; justify-content:center; align-items:center; margin-bottom:20px;">
+                 <button id="btnCerrarSesionDefinitivo" class="btn btn-danger btn-sm" style="display:none; border-radius:20px; padding:8px 20px; font-weight:bold;" onclick="window.confirmarCierreSesion()">
+                    <i class="fa-solid fa-lock"></i> FINALIZAR SESIÓN Y PONER FALTAS
+                 </button>
+                 <button class="btn btn-info btn-xs" onclick="window.toggleCameraMode()" style="border-radius:20px; margin-left:10px;">
+                    <i class="fa-solid fa-camera-rotate"></i> Girar Cámara
+                 </button>
+              </div>
           </div>
-          
-          <div style="display:flex; justify-content:center; align-items:center; margin-bottom:20px;">
-             <button id="btnCerrarSesionDefinitivo" class="btn btn-danger btn-sm" style="display:none; border-radius:20px; padding:8px 20px; font-weight:bold;" onclick="window.confirmarCierreSesion()">
-                <i class="fa-solid fa-lock"></i> FINALIZAR SESIÓN Y PONER FALTAS
-             </button>
-             <button class="btn btn-info btn-xs" onclick="window.toggleCameraMode()" style="border-radius:20px; margin-left:10px;">
-                <i class="fa-solid fa-camera-rotate"></i> Girar Cámara
-             </button>
+
+          <!-- CONTENEDOR MANUAL -->
+          <div id="contenedorPaseManual" style="display:none; text-align:left;">
+              <div class="card" style="margin-bottom: 15px; padding: 15px; background: #f8f9fa; border: 1px solid var(--border); border-radius:12px;">
+                 <div id="asistenciaManualStatusMsg" style="margin-bottom:15px; font-weight: bold; color: var(--text-muted); font-size: 1.1rem; text-align:center;">
+                    <i class="fa-solid fa-circle-dot"></i> Estado de Sesión
+                 </div>
+                 
+                 <div style="display:grid; grid-template-columns: 1fr 1fr 1fr; gap:8px;">
+                    <button id="btnAbrirManual" class="btn btn-primary" style="padding:10px 5px; font-weight:bold; border-radius:10px;" onclick="window.abrirSesionManual('abierto')">
+                       <i class="fa-solid fa-clock"></i> Abrir a Tiempo
+                    </button>
+                    <button id="btnRetardoManual" class="btn btn-warning" style="padding:10px 5px; font-weight:bold; border-radius:10px;" onclick="window.abrirSesionManual('retardo')">
+                       <i class="fa-solid fa-stopwatch"></i> Abrir Retardo
+                    </button>
+                    <button id="btnCerrarManual" class="btn btn-danger" style="padding:10px 5px; font-weight:bold; border-radius:10px; display:none;" onclick="window.confirmarCierreSesion()">
+                       <i class="fa-solid fa-lock"></i> Cerrar Sesión
+                    </button>
+                 </div>
+              </div>
+              <div id="listaAlumnosManual" style="display:flex; flex-direction:column; gap:8px; max-height:400px; overflow-y:auto; padding-right:5px;">
+                 <div style="text-align:center; padding: 20px;"><i class="fa-solid fa-spinner fa-spin"></i> Seleccione un modo...</div>
+              </div>
           </div>
 
           <button class="btn btn-outline btn-lg" style="width: 100%; border-color: var(--danger); color: var(--danger)" onclick="window.openReporteModal()">
@@ -12960,7 +12992,9 @@ window.guardarAsistenciaQR = async (matricula, grupoId) => {
 
 window.confirmarCierreSesion = () => {
     if(confirm("¿Seguro de CERRAR el pase de lista?\n\nMarcará FALTAS a los ausentes y enviará AVISOS de retardo.")) {
-        window.finalizarSesionAsistencia();
+        window.finalizarSesionAsistencia().then(() => {
+            if(window.loadListaAsistenciaManual) window.loadListaAsistenciaManual();
+        });
     }
 };
 
@@ -13688,6 +13722,9 @@ window.showQRScannerModal = async (title = 'Grupo Seleccionado', grupoId = null,
    document.getElementById('classDetail').style.display = 'block';
    const titleEl = document.getElementById('classDetailTitle');
    if(titleEl) titleEl.innerText = title;
+
+   // Asegurar que inicia en tab QR
+   if(window.switchModoPaseLista) window.switchModoPaseLista('qr');
 
    // No auto-iniciar modo, dejamos al maestro elegir el botón
    window.updateSessionUI();
@@ -21651,5 +21688,230 @@ window.loadComunicadosEnviadosMaestro = async () => {
     } catch(e) {
         console.error(e);
         cont.innerHTML = '<p style="color:var(--danger); text-align:center;">Error al cargar historial</p>';
+    }
+};
+
+// ==== MANUAL ATTENDANCE LOGIC ====
+window.switchModoPaseLista = (modo) => {
+    if (modo === 'qr') {
+        document.getElementById('contenedorPaseQR').style.display = 'block';
+        document.getElementById('contenedorPaseManual').style.display = 'none';
+        document.getElementById('tabPaseQR').className = 'btn btn-sm btn-primary';
+        document.getElementById('tabPaseManual').className = 'btn btn-sm btn-outline';
+        // Reiniciar UI de QR session
+        window.updateSessionUI();
+        if(window._currentAsistenciaModo) {
+            window.startMaestroQR('normal');
+        }
+    } else {
+        document.getElementById('contenedorPaseQR').style.display = 'none';
+        document.getElementById('contenedorPaseManual').style.display = 'block';
+        document.getElementById('tabPaseQR').className = 'btn btn-sm btn-outline';
+        document.getElementById('tabPaseManual').className = 'btn btn-sm btn-primary';
+        // Detener cámara si está corriendo
+        if(window._mScanner) { 
+            window._mScanner.stop().catch(()=>{}); 
+            window._mScanner = null; 
+            document.getElementById('reader-maestro').style.display = 'none'; 
+        }
+        window.loadListaAsistenciaManual();
+    }
+};
+
+window.abrirSesionManual = async (modo) => {
+    try {
+        const u = await supabaseClient.auth.getUser();
+        if(!u.data.user) throw new Error("Sesión expirada");
+
+        const hoy = new Date().toLocaleDateString('en-CA');
+        const materia = (window.currentAulaMateria || 'N/A').trim();
+        const trimActivo = window._trimestreActivoParaPase || await window.getTrimestreActivoPaseLista(materia, window.currentAulaGrupoId);
+        if(!trimActivo) {
+            window.showToast("Todos los trimestres están cerrados.", "error");
+            return;
+        }
+
+        await supabaseClient.from('asistencia_sesiones').upsert({
+            grupo_id: String(window.currentAulaGrupoId), 
+            materia: materia, 
+            fecha: hoy, 
+            maestro_id: u.data.user.id, 
+            estado: modo,
+            plantel_id: state.plantelId,
+            trimestre: trimActivo
+        }, { onConflict: 'plantel_id, grupo_id, materia, fecha' });
+
+        window.showToast(`Sesión en modo ${modo.toUpperCase()} activada.`, "success");
+        window.updateSessionUI(); // Esto actualiza también los botones de QR por si acaso
+        window.loadListaAsistenciaManual();
+    } catch(err) {
+        window.showToast("Error: " + err.message, "error");
+    }
+};
+
+window.loadListaAsistenciaManual = async () => {
+    const contenedor = document.getElementById('listaAlumnosManual');
+    const statusMsg = document.getElementById('asistenciaManualStatusMsg');
+    const btnCerrar = document.getElementById('btnCerrarManual');
+    
+    if(!contenedor) return;
+    contenedor.innerHTML = '<div style="text-align:center; padding: 20px;"><i class="fa-solid fa-spinner fa-spin"></i> Cargando lista...</div>';
+    
+    try {
+        const hoy = new Date().toLocaleDateString('en-CA');
+        const materia = (window.currentAulaMateria || 'N/A').trim();
+        const rawVal = String(window.currentAulaGrupoId);
+        
+        // Ver estado de la sesión
+        const { data: sesion } = await supabaseClient.from('asistencia_sesiones')
+            .select('estado')
+            .eq('grupo_id', rawVal)
+            .eq('materia', materia)
+            .eq('fecha', hoy)
+            .eq('plantel_id', state.plantelId)
+            .maybeSingle();
+            
+        let estadoSesion = sesion?.estado || 'pendiente';
+        
+        if (statusMsg) {
+            if (estadoSesion === 'abierto' || estadoSesion === 'asistencia') statusMsg.innerHTML = '<i class="fa-solid fa-clock" style="color:var(--primary)"></i> MODO PUNTUAL';
+            else if (estadoSesion === 'retardo') statusMsg.innerHTML = '<i class="fa-solid fa-stopwatch" style="color:var(--warning)"></i> MODO RETARDO';
+            else if (estadoSesion === 'cerrado') statusMsg.innerHTML = '<i class="fa-solid fa-lock" style="color:var(--danger)"></i> SESIÓN CERRADA';
+            else statusMsg.innerHTML = '<i class="fa-solid fa-circle-dot"></i> ESPERANDO INICIO';
+        }
+
+        if(btnCerrar) {
+            btnCerrar.style.display = (estadoSesion !== 'cerrado' && estadoSesion !== 'pendiente') ? 'inline-flex' : 'none';
+        }
+
+        // Obtener alumnos
+        const isTec = rawVal.startsWith('grado:');
+        let gid = isTec ? null : rawVal;
+        let targetGrado = isTec ? rawVal.replace('grado:', '').split('|')[0].trim() : null;
+        let taller = isTec ? rawVal.split('|')[1]?.trim() : null;
+
+        let alumnosQuery = supabaseClient.from('alumnos').select('id, nombre, matricula').eq('plantel_id', state.plantelId).order('nombre');
+        if(isTec) {
+            const gNorm = targetGrado.includes('°') ? targetGrado : targetGrado + '°';
+            const cleanMat = taller.replace(/tecnología|tecnologia/gi, '').trim();
+            alumnosQuery = alumnosQuery.eq('grado', gNorm.trim()).ilike('taller', `%${cleanMat || taller}%`);
+        } else {
+            alumnosQuery = alumnosQuery.eq('grupo_id', gid);
+        }
+        
+        const { data: alumnos } = await alumnosQuery;
+        
+        if (!alumnos || alumnos.length === 0) {
+            contenedor.innerHTML = '<div style="text-align:center; padding: 20px; color:var(--text-muted)">No hay alumnos registrados en este grupo.</div>';
+            return;
+        }
+
+        // Obtener asistencias de hoy
+        let queryReg = supabaseClient.from('asistencias')
+            .select('alumno_id, estado, id')
+            .gte('creado_en', new Date(`${hoy}T00:00:00`).toISOString())
+            .lte('creado_en', new Date(`${hoy}T23:59:59.999`).toISOString())
+            .eq('materia', materia)
+            .eq('plantel_id', state.plantelId);
+            
+        if(isTec) {
+            queryReg = queryReg.is('grupo_id', null);
+        } else {
+            queryReg = queryReg.eq('grupo_id', rawVal);
+        }
+
+        const { data: asistencias } = await queryReg;
+        const asistMap = {};
+        (asistencias || []).forEach(a => {
+            asistMap[a.alumno_id] = a;
+        });
+
+        let html = '';
+        alumnos.forEach((al, index) => {
+            const reg = asistMap[al.id];
+            let estadoActual = reg ? reg.estado : (estadoSesion === 'cerrado' ? 'Falta' : 'Pendiente');
+            
+            let colorBorder = 'var(--border)';
+            let bgColor = 'white';
+            if (estadoActual === 'Asistencia') { colorBorder = 'var(--primary)'; bgColor = '#e0e7ff'; }
+            if (estadoActual === 'Retardo') { colorBorder = 'var(--warning)'; bgColor = '#fef3c7'; }
+            if (estadoActual === 'Falta') { colorBorder = 'var(--danger)'; bgColor = '#fee2e2'; }
+            
+            // Si la sesión no ha iniciado, bloquear
+            const disabledState = (estadoSesion === 'cerrado' || estadoSesion === 'pendiente') ? 'disabled' : '';
+            const opacityState = disabledState ? 'opacity:0.6;' : '';
+
+            html += `
+            <div style="display:flex; justify-content:space-between; align-items:center; padding:12px; border:1px solid ${colorBorder}; background:${bgColor}; border-radius:8px; ${opacityState}">
+                <div style="flex:1;">
+                    <div style="font-weight:600; font-size:0.95rem;">${index+1}. ${al.nombre}</div>
+                    <div style="font-size:0.75rem; color:var(--text-muted);">${al.matricula || 'Sin matrícula'}</div>
+                </div>
+                <div style="display:flex; gap:5px;">
+                    <button class="btn btn-sm ${estadoActual==='Asistencia'?'btn-primary':'btn-outline'}" onclick="window.marcarAsistenciaManual('${al.id}', 'Asistencia')" ${disabledState} style="padding:6px 10px;">A</button>
+                    <button class="btn btn-sm ${estadoActual==='Retardo'?'btn-warning':'btn-outline'}" onclick="window.marcarAsistenciaManual('${al.id}', 'Retardo')" ${disabledState} style="padding:6px 10px;">R</button>
+                    <button class="btn btn-sm ${estadoActual==='Falta'?'btn-danger':'btn-outline'}" onclick="window.marcarAsistenciaManual('${al.id}', 'Falta')" ${disabledState} style="padding:6px 10px;">F</button>
+                </div>
+            </div>`;
+        });
+        
+        contenedor.innerHTML = html;
+        
+    } catch (err) {
+        contenedor.innerHTML = '<div style="color:var(--danger); text-align:center;">Error al cargar lista.</div>';
+        console.error(err);
+    }
+};
+
+window.marcarAsistenciaManual = async (alumnoId, estado) => {
+    try {
+        const u = await supabaseClient.auth.getUser();
+        if(!u.data.user) throw new Error("Sesión expirada");
+        
+        const hoy = new Date().toLocaleDateString('en-CA');
+        const materiaGuardar = (window.currentAulaMateria || 'N/A').trim();
+        const grupoId = String(window.currentAulaGrupoId);
+        const trim = window._trimestreActivoParaPase || state.selectedMaestroTrimestre || 1;
+        
+        // Mostrar feedback inmediato visualmente (optimistic UI) podría hacerse, pero recargar la lista es más seguro
+        
+        const { data: existente } = await supabaseClient.from('asistencias')
+            .select('id')
+            .eq('alumno_id', alumnoId)
+            .eq('materia', materiaGuardar)
+            .gte('creado_en', `${hoy}T00:00:00Z`)
+            .lte('creado_en', `${hoy}T23:59:59Z`)
+            .eq('plantel_id', state.plantelId)
+            .maybeSingle();
+            
+        if (existente) {
+            await supabaseClient.from('asistencias').update({ estado: estado }).eq('id', existente.id);
+        } else {
+            await supabaseClient.from('asistencias').insert([{
+                alumno_id: alumnoId, 
+                registrador_id: u.data.user.id, 
+                estado: estado,
+                materia: materiaGuardar,
+                grupo_id: grupoId.startsWith('grado:') ? null : grupoId,
+                fecha: hoy,
+                plantel_id: state.plantelId,
+                trimestre: trim
+            }]);
+        }
+        
+        // Si marcamos retardo, mandar comunicado como el QR? 
+        if (estado === 'Retardo' && !existente) {
+            await supabaseClient.from('comunicados').insert([{
+                autor_id: u.data.user.id, 
+                titulo: '⚠️ AVISO DE RETARDO', 
+                audiencia: 'Alumno_' + alumnoId,
+                mensaje: `Hola. Se ha registrado un RETARDO en la materia: "${materiaGuardar}" el día de hoy (${hoy}). \n\nRecuerda que la puntualidad es parte de tu evaluación formativa.`,
+                plantel_id: state.plantelId
+            }]);
+        }
+
+        window.loadListaAsistenciaManual();
+    } catch(err) {
+        window.showToast("Error: " + err.message, "error");
     }
 };
