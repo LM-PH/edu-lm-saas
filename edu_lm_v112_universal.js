@@ -2750,15 +2750,12 @@ function renderMaestroAula() {
                     <i class="fa-solid fa-circle-dot"></i> Estado de Sesión
                  </div>
                  
-                 <div style="display:grid; grid-template-columns: 1fr 1fr 1fr; gap:8px;">
+                 <div style="display:grid; grid-template-columns: 1fr 1fr; gap:8px;">
                     <button id="btnAbrirManual" class="btn btn-primary" style="padding:10px 5px; font-weight:bold; border-radius:10px;" onclick="window.abrirSesionManual('abierto')">
-                       <i class="fa-solid fa-clock"></i> Abrir a Tiempo
-                    </button>
-                    <button id="btnRetardoManual" class="btn btn-warning" style="padding:10px 5px; font-weight:bold; border-radius:10px;" onclick="window.abrirSesionManual('retardo')">
-                       <i class="fa-solid fa-stopwatch"></i> Abrir Retardo
+                       <i class="fa-solid fa-clock"></i> Abrir Pase de Lista
                     </button>
                     <button id="btnCerrarManual" class="btn btn-danger" style="padding:10px 5px; font-weight:bold; border-radius:10px; display:none;" onclick="window.confirmarCierreSesion()">
-                       <i class="fa-solid fa-lock"></i> Cerrar Sesión
+                       <i class="fa-solid fa-lock"></i> Cerrar Pase de Lista
                     </button>
                  </div>
               </div>
@@ -21774,8 +21771,7 @@ window.loadListaAsistenciaManual = async () => {
         let estadoSesion = sesion?.estado || 'pendiente';
         
         if (statusMsg) {
-            if (estadoSesion === 'abierto' || estadoSesion === 'asistencia') statusMsg.innerHTML = '<i class="fa-solid fa-clock" style="color:var(--primary)"></i> MODO PUNTUAL';
-            else if (estadoSesion === 'retardo') statusMsg.innerHTML = '<i class="fa-solid fa-stopwatch" style="color:var(--warning)"></i> MODO RETARDO';
+            if (estadoSesion === 'abierto' || estadoSesion === 'asistencia' || estadoSesion === 'retardo') statusMsg.innerHTML = '<i class="fa-solid fa-clock" style="color:var(--primary)"></i> PASE DE LISTA ABIERTO';
             else if (estadoSesion === 'cerrado') statusMsg.innerHTML = '<i class="fa-solid fa-lock" style="color:var(--danger)"></i> SESIÓN CERRADA';
             else statusMsg.innerHTML = '<i class="fa-solid fa-circle-dot"></i> ESPERANDO INICIO';
         }
