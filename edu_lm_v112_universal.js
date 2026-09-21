@@ -20888,7 +20888,8 @@ window.confirmarInscripcionMasiva = async () => {
             }
             const autoPass = 'st' + Math.floor(Math.random() * 9000 + 1000);
             
-            const matricula = 'AL-' + Math.floor(Math.random() * 90000 + 10000);
+            // Generate a more robust unique matricula (AL- + 4 digits of timestamp + 4 random digits)
+            const matricula = 'AL-' + Date.now().toString().slice(-4) + Math.floor(Math.random() * 9000 + 1000);
             
             // 0. Resolver grupo_id (UUID)
             const gradoLimpio = row.grado.replace('°', '').trim();
