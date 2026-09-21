@@ -2843,25 +2843,41 @@ function renderMaestroActividades() {
       </div>
     </div>
     
-    <!-- Modal QR Escáner -->
+    <!-- Modal Evaluación (QR y Manual) -->
     <div id="modalQREvaluacion" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.8); z-index:9999; justify-content:center; align-items:center;">
-       <div style="background:white; padding:24px; border-radius:12px; width:400px; max-width:90%; position:relative;">
+       <div style="background:white; padding:24px; border-radius:12px; width:450px; max-width:95%; position:relative; max-height:90vh; display:flex; flex-direction:column;">
           <button class="btn-close" style="position:absolute; top:12px; right:12px; border:none; background:none; font-size:1.5rem; cursor:pointer;" onclick="window.cerrarQREvaluacion()">&times;</button>
-          <h3 style="margin-top:0;">Evaluación QR Rápida</h3>
-          <p id="qrActividadInfo" style="color:var(--text-muted); font-size:0.9rem; margin-bottom:16px;">Escaneando para: Actividad</p>
-          <div style="text-align:right; margin-bottom:10px;">
-             <button class="btn btn-xs btn-info" onclick="window.toggleCameraMode()"><i class="fa-solid fa-camera-rotate"></i> Girar</button>
-          </div>
-          <div id="qr-reader-eval" style="width:100%; max-width:350px; margin: 0 auto;"></div>
+          <h3 style="margin-top:0;">Evaluación de Actividad</h3>
+          <p id="qrActividadInfo" style="color:var(--text-muted); font-size:0.9rem; margin-bottom:10px;">Cargando...</p>
           
-          <div id="panelCalificacionQR" style="display:none; margin-top:20px;">
-             <h4 style="color:var(--primary); margin-bottom:8px;" id="qrAlumnoEncontrado">Alumno...</h4>
-             <label class="form-label">Calificación / Nota</label>
-             <div style="display:flex; gap:8px;">
-               <input type="text" id="inCalificacionQR" class="form-input" style="flex:1" placeholder="Ej. 10, Entregado, Incompleto" value="10">
-               <button class="btn btn-success" onclick="window.guardarEvaluacionQR()"><i class="fa-solid fa-check"></i> Asentar</button>
-             </div>
+          <div style="display:flex; gap:10px; margin-bottom:15px; flex-shrink:0;">
+             <button id="btnEvalQRTab" class="btn btn-primary" style="flex:1" onclick="window.switchModoEval('qr')"><i class="fa-solid fa-qrcode"></i> Escáner QR</button>
+             <button id="btnEvalManualTab" class="btn btn-outline" style="flex:1" onclick="window.switchModoEval('manual')"><i class="fa-solid fa-list"></i> Lista Manual</button>
           </div>
+
+          <!-- MODO QR -->
+          <div id="contenedorEvalQR" style="overflow-y:auto;">
+              <div style="text-align:right; margin-bottom:10px;">
+                 <button class="btn btn-xs btn-info" onclick="window.toggleCameraMode()"><i class="fa-solid fa-camera-rotate"></i> Girar Cámara</button>
+              </div>
+              <div id="qr-reader-eval" style="width:100%; max-width:350px; margin: 0 auto;"></div>
+              
+              <div id="panelCalificacionQR" style="display:none; margin-top:20px;">
+                 <h4 style="color:var(--primary); margin-bottom:8px;" id="qrAlumnoEncontrado">Alumno...</h4>
+                 <label class="form-label">Calificación / Nota</label>
+                 <div style="display:flex; gap:8px;">
+                   <input type="text" id="inCalificacionQR" class="form-input" style="flex:1" placeholder="Ej. 10, Entregado, Incompleto" value="10">
+                   <button class="btn btn-success" onclick="window.guardarEvaluacionQR()"><i class="fa-solid fa-check"></i> Asentar</button>
+                 </div>
+              </div>
+          </div>
+
+          <!-- MODO MANUAL -->
+          <div id="contenedorEvalManual" style="display:none; overflow-y:auto; flex:1;">
+              <div id="listaAlumnosEvalManual" style="display:flex; flex-direction:column; gap:8px; padding-right:5px; padding-bottom:20px;">
+              </div>
+          </div>
+
        </div>
     </div>
   `;
@@ -10834,10 +10850,14 @@ window.abrirQREvaluacion = (actId, actTitulo, actGrupoId, actTargetGrado, actMat
     document.getElementById('modalQREvaluacion').style.display = 'flex';
     document.getElementById('panelCalificacionQR').style.display = 'none';
     
+    window.switchModoEval('qr');
+};
+
+window.startEvalScanner = () => {
+    if(!document.getElementById('qr-reader-eval')) return;
     if(qrEvalScanner) {
         try { qrEvalScanner.stop().catch(()=>{}); } catch(e){}
     }
-    
     document.getElementById('qr-reader-eval').innerHTML = '';
     qrEvalScanner = new Html5Qrcode("qr-reader-eval");
     
@@ -10911,6 +10931,140 @@ window.guardarEvaluacionQR = async () => {
     } catch(err) {
         console.error(err);
         alert("Error crítico al guardar: " + (err.message || 'Error desconocido') + ". \nRevisa permisos RLS o la conexión.");
+    }
+};
+
+window.switchModoEval = (modo) => {
+    const tabQR = document.getElementById('btnEvalQRTab');
+    const tabManual = document.getElementById('btnEvalManualTab');
+    const contQR = document.getElementById('contenedorEvalQR');
+    const contManual = document.getElementById('contenedorEvalManual');
+    
+    if (modo === 'qr') {
+        if(tabQR) tabQR.className = 'btn btn-primary';
+        if(tabManual) tabManual.className = 'btn btn-outline';
+        if(contQR) contQR.style.display = 'block';
+        if(contManual) contManual.style.display = 'none';
+        window.startEvalScanner();
+    } else {
+        if(tabQR) tabQR.className = 'btn btn-outline';
+        if(tabManual) tabManual.className = 'btn btn-primary';
+        if(contQR) contQR.style.display = 'none';
+        if(contManual) contManual.style.display = 'flex';
+        if(qrEvalScanner) {
+            try { qrEvalScanner.stop().catch(()=>{}); } catch(e){}
+        }
+        window.loadListaEvalManual();
+    }
+};
+
+window.loadListaEvalManual = async () => {
+    const contenedor = document.getElementById('listaAlumnosEvalManual');
+    if(!contenedor) return;
+    
+    if(!currentActividadId || !window._lastEvalParams) {
+        contenedor.innerHTML = '<div style="padding:20px; text-align:center; color:var(--text-muted)">Error: No hay actividad seleccionada.</div>';
+        return;
+    }
+    
+    contenedor.innerHTML = '<div style="padding:20px; text-align:center;"><i class="fa-solid fa-spinner fa-spin"></i> Cargando lista...</div>';
+    
+    try {
+        const [actId, actTitulo, actGrupoId, actTargetGrado, actMateria] = window._lastEvalParams;
+        const isTec = !actGrupoId && !!actTargetGrado;
+        
+        let alumnosQuery = supabaseClient.from('alumnos').select('id, nombre, matricula, grado, taller').eq('plantel_id', state.plantelId).order('nombre');
+        if(isTec) {
+            const gNorm = actTargetGrado.includes('°') ? actTargetGrado : actTargetGrado + '°';
+            const cleanMat = actMateria.replace(/tecnología|tecnologia/gi, '').trim();
+            alumnosQuery = alumnosQuery.eq('grado', gNorm.trim()).ilike('taller', `%${cleanMat || actMateria}%`);
+        } else {
+            alumnosQuery = alumnosQuery.eq('grupo_id', actGrupoId);
+        }
+        
+        const { data: alumnos } = await alumnosQuery;
+        
+        if (!alumnos || alumnos.length === 0) {
+            contenedor.innerHTML = '<div style="text-align:center; padding: 20px; color:var(--text-muted)">No hay alumnos registrados en este grupo.</div>';
+            return;
+        }
+
+        // Cargar evaluaciones existentes
+        const { data: evals } = await supabaseClient.from('evaluaciones_actividades')
+            .select('alumno_id, calificacion')
+            .eq('actividad_id', currentActividadId)
+            .eq('plantel_id', state.plantelId);
+            
+        const evalMap = {};
+        (evals || []).forEach(e => { evalMap[e.alumno_id] = e.calificacion; });
+
+        let html = '';
+        alumnos.forEach((al, index) => {
+            const nota = evalMap[al.id] || '';
+            const statusColor = nota ? 'var(--success)' : 'var(--text-muted)';
+            const borderStyle = nota ? 'border:1px solid var(--success);' : 'border:1px solid var(--border);';
+            
+            html += `
+            <div style="display:flex; justify-content:space-between; align-items:center; padding:12px; ${borderStyle} background:white; border-radius:8px;">
+                <div style="flex:1;">
+                    <div style="font-weight:600; font-size:0.95rem;">${index+1}. ${al.nombre}</div>
+                    <div style="font-size:0.75rem; color:var(--text-muted);">${al.matricula || 'Sin matrícula'}</div>
+                </div>
+                <div style="display:flex; gap:5px; align-items:center;">
+                    <input type="text" id="in_eval_${al.id}" class="form-input" style="width:70px; margin:0; text-align:center; border-color:${statusColor}" placeholder="-" value="${nota}">
+                    <button id="btn_save_eval_${al.id}" class="btn btn-sm ${nota ? 'btn-success' : 'btn-primary'}" onclick="window.guardarEvaluacionListaManual('${al.id}')" style="padding:6px 12px;">
+                        <i class="fa-solid ${nota ? 'fa-check' : 'fa-save'}"></i>
+                    </button>
+                </div>
+            </div>`;
+        });
+        
+        contenedor.innerHTML = html;
+        
+    } catch(err) {
+        console.error(err);
+        contenedor.innerHTML = '<div style="color:var(--danger); padding:20px;">Error al cargar la lista.</div>';
+    }
+};
+
+window.guardarEvaluacionListaManual = async (alumnoId) => {
+    const input = document.getElementById(`in_eval_${alumnoId}`);
+    const btn = document.getElementById(`btn_save_eval_${alumnoId}`);
+    if(!input || !btn || !currentActividadId) return;
+    
+    const nota = input.value.trim();
+    if(!nota) {
+        if(window.showToast) window.showToast("Ingresa una calificación", "warning");
+        else alert("Ingresa una calificación");
+        return;
+    }
+    
+    // Optimistic UI update
+    const prevIcon = btn.innerHTML;
+    btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i>';
+    btn.disabled = true;
+    
+    try {
+        const { error } = await supabaseClient.from('evaluaciones_actividades')
+          .upsert({ actividad_id: currentActividadId, alumno_id: alumnoId, calificacion: nota, plantel_id: state.plantelId }, { onConflict: 'actividad_id, alumno_id' });
+        
+        if(error) throw error;
+        
+        // Update UI to success state
+        btn.className = 'btn btn-sm btn-success';
+        btn.innerHTML = '<i class="fa-solid fa-check"></i>';
+        input.style.borderColor = 'var(--success)';
+        input.parentElement.parentElement.style.borderColor = 'var(--success)';
+        btn.disabled = false;
+        
+        // No cerramos modal para que siga evaluando a los demás
+        window.loadActividadesMaestro(); // Refresh background list subtly
+    } catch(err) {
+        console.error(err);
+        if(window.showToast) window.showToast("Error al guardar: " + err.message, "error");
+        else alert("Error al guardar: " + err.message);
+        btn.innerHTML = prevIcon;
+        btn.disabled = false;
     }
 };
 
