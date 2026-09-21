@@ -11222,6 +11222,7 @@ window.cargarAlumnosLista = async () => {
                 .select('alumno_id, estado, creado_en')
                 .in('alumno_id', alumnoIds)
                 .eq('materia', materiaLimpia)
+                .eq('plantel_id', state.plantelId)
                 .order('creado_en');
             if (currentTrim) qAsist = qAsist.eq('trimestre', currentTrim);
             const { data: asistenciasRegistradas } = await qAsist;
