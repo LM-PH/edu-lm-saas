@@ -21869,15 +21869,15 @@ window.loadListaAsistenciaManual = async () => {
             const opacityState = disabledState ? 'opacity:0.6;' : '';
 
             html += `
-            <div style="display:flex; justify-content:space-between; align-items:center; padding:12px; border:1px solid ${colorBorder}; background:${bgColor}; border-radius:8px; ${opacityState}">
+            <div id="row_al_${al.id}" style="display:flex; justify-content:space-between; align-items:center; padding:12px; border:1px solid ${colorBorder}; background:${bgColor}; border-radius:8px; ${opacityState}">
                 <div style="flex:1;">
                     <div style="font-weight:600; font-size:0.95rem;">${index+1}. ${al.nombre}</div>
                     <div style="font-size:0.75rem; color:var(--text-muted);">${al.matricula || 'Sin matrícula'}</div>
                 </div>
                 <div style="display:flex; gap:5px;">
-                    <button class="btn btn-sm ${estadoActual==='Asistencia'?'btn-primary':'btn-outline'}" onclick="window.marcarAsistenciaManual('${al.id}', 'Asistencia')" ${disabledState} style="padding:6px 10px;">A</button>
-                    <button class="btn btn-sm ${estadoActual==='Retardo'?'btn-warning':'btn-outline'}" onclick="window.marcarAsistenciaManual('${al.id}', 'Retardo')" ${disabledState} style="padding:6px 10px;">R</button>
-                    <button class="btn btn-sm ${estadoActual==='Falta'?'btn-danger':'btn-outline'}" onclick="window.marcarAsistenciaManual('${al.id}', 'Falta')" ${disabledState} style="padding:6px 10px;">F</button>
+                    <button id="btn_A_${al.id}" class="btn btn-sm ${estadoActual==='Asistencia'?'btn-primary':'btn-outline'}" onclick="window.marcarAsistenciaManual('${al.id}', 'Asistencia')" ${disabledState} style="padding:6px 10px;">A</button>
+                    <button id="btn_R_${al.id}" class="btn btn-sm ${estadoActual==='Retardo'?'btn-warning':'btn-outline'}" onclick="window.marcarAsistenciaManual('${al.id}', 'Retardo')" ${disabledState} style="padding:6px 10px;">R</button>
+                    <button id="btn_F_${al.id}" class="btn btn-sm ${estadoActual==='Falta'?'btn-danger':'btn-outline'}" onclick="window.marcarAsistenciaManual('${al.id}', 'Falta')" ${disabledState} style="padding:6px 10px;">F</button>
                 </div>
             </div>`;
         });
@@ -21902,6 +21902,22 @@ window.marcarAsistenciaManual = async (alumnoId, estado) => {
         
         // Mostrar feedback inmediato visualmente (optimistic UI) podría hacerse, pero recargar la lista es más seguro
         
+        // Actualización Visual Inmediata (Optimistic UI)
+        const row = document.getElementById(`row_al_${alumnoId}`);
+        const btnA = document.getElementById(`btn_A_${alumnoId}`);
+        const btnR = document.getElementById(`btn_R_${alumnoId}`);
+        const btnF = document.getElementById(`btn_F_${alumnoId}`);
+        
+        if (row && btnA && btnR && btnF) {
+            btnA.className = 'btn btn-sm btn-outline';
+            btnR.className = 'btn btn-sm btn-outline';
+            btnF.className = 'btn btn-sm btn-outline';
+            
+            if (estado === 'Asistencia') { btnA.className = 'btn btn-sm btn-primary'; row.style.borderColor = 'var(--primary)'; row.style.background = '#e0e7ff'; }
+            if (estado === 'Retardo') { btnR.className = 'btn btn-sm btn-warning'; row.style.borderColor = 'var(--warning)'; row.style.background = '#fef3c7'; }
+            if (estado === 'Falta') { btnF.className = 'btn btn-sm btn-danger'; row.style.borderColor = 'var(--danger)'; row.style.background = '#fee2e2'; }
+        }
+
         const { data: existente } = await supabaseClient.from('asistencias')
             .select('id, estado')
             .eq('alumno_id', alumnoId)
@@ -21926,8 +21942,9 @@ window.marcarAsistenciaManual = async (alumnoId, estado) => {
             }]);
         }
 
-        window.loadListaAsistenciaManual();
     } catch(err) {
         window.showToast("Error: " + err.message, "error");
+        // Si hay error, recargamos la lista para restaurar el estado real
+        if(window.loadListaAsistenciaManual) window.loadListaAsistenciaManual();
     }
 };
