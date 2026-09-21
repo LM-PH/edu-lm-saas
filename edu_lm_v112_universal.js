@@ -12967,15 +12967,7 @@ window.guardarAsistenciaQR = async (matricula, grupoId) => {
         }]);
         if(error) throw error;
 
-        if (estFinal === 'Retardo') {
-            await supabaseClient.from('comunicados').insert([{
-                autor_id: u.data.user.id, 
-                titulo: '⚠️ AVISO DE RETARDO', 
-                audiencia: 'Alumno_' + alumno.id,
-                mensaje: `Hola. Se ha registrado un RETARDO en la materia: "${materiaGuardar}" el día de hoy (${hoy}). \n\nRecuerda que la puntualidad es parte de tu evaluación formativa.`,
-                plantel_id: state.plantelId
-            }]);
-        }
+
 
         // Incrementar contador localmente
         if (typeof window._qrScanCount === 'number') {
@@ -13051,17 +13043,55 @@ window.finalizarSesionAsistencia = async () => {
                 plantel_id: state.plantelId,
                 trimestre: window._trimestreActivoParaPase || state.selectedMaestroTrimestre || 1
             })));
-
-            // 2. Enviar comunicados de inasistencia (Aviso a los alumnos/padres)
-            await supabaseClient.from('comunicados').insert(faltantes.map(al => ({
-                autor_id: u.data.user.id, 
-                titulo: '⚠️ AVISO DE INASISTENCIA', 
-                audiencia: 'Alumno_' + al.id,
-                mensaje: `Se ha registrado una FALTA en la materia: "${materia}" el día de hoy (${hoy}). \n\nRecuerda que las inasistencias acumuladas afectan tu porcentaje de aprobación.`,
-                plantel_id: state.plantelId
-            })));
         }
-        // Nota: Los retardos ahora se envían al momento de registrar en guardarAsistenciaQR
+
+        // 2. Enviar comunicados diferidos (Retardos y Faltas)
+        const retardos = reg.filter(r => r.estado === 'Retardo').map(r => r.alumno_id);
+        const faltasExplicit = reg.filter(r => r.estado === 'Falta').map(r => r.alumno_id);
+        const todasFaltas = [...faltasExplicit, ...faltantes.map(a => a.id)];
+
+        // Consultar comunicados ya enviados hoy para no duplicar
+        const { data: comunicadosHoy } = await supabaseClient.from('comunicados')
+            .select('audiencia, titulo')
+            .gte('fecha_envio', `${hoy}T00:00:00Z`)
+            .lte('fecha_envio', `${hoy}T23:59:59.999Z`)
+            .eq('plantel_id', state.plantelId)
+            .ilike('mensaje', `%${materia}%`);
+            
+        const enviadosRetardo = (comunicadosHoy || []).filter(c => c.titulo.includes('RETARDO')).map(c => c.audiencia);
+        const enviadosFalta = (comunicadosHoy || []).filter(c => c.titulo.includes('INASISTENCIA')).map(c => c.audiencia);
+
+        let comunicadosAInsertar = [];
+        
+        retardos.forEach(al_id => {
+            const aud = 'Alumno_' + al_id;
+            if (!enviadosRetardo.includes(aud)) {
+                comunicadosAInsertar.push({
+                    autor_id: u.data.user.id, 
+                    titulo: '⚠️ AVISO DE RETARDO', 
+                    audiencia: aud,
+                    mensaje: `Hola. Se ha registrado un RETARDO en la materia: "${materia}" el día de hoy (${hoy}). \n\nRecuerda que la puntualidad es parte de tu evaluación formativa.`,
+                    plantel_id: state.plantelId
+                });
+            }
+        });
+
+        todasFaltas.forEach(al_id => {
+            const aud = 'Alumno_' + al_id;
+            if (!enviadosFalta.includes(aud)) {
+                comunicadosAInsertar.push({
+                    autor_id: u.data.user.id, 
+                    titulo: '⚠️ AVISO DE INASISTENCIA', 
+                    audiencia: aud,
+                    mensaje: `Se ha registrado una FALTA en la materia: "${materia}" el día de hoy (${hoy}). \n\nRecuerda que las inasistencias acumuladas afectan tu porcentaje de aprobación.`,
+                    plantel_id: state.plantelId
+                });
+            }
+        });
+
+        if (comunicadosAInsertar.length > 0) {
+            await supabaseClient.from('comunicados').insert(comunicadosAInsertar);
+        }
         if(window._mScanner) { await window._mScanner.stop().catch(()=>{}); window._mScanner = null; document.getElementById('reader-maestro').style.display='none'; }
         window._currentAsistenciaModo = null;
         window.showToast("Pase de lista cerrado. Faltas y avisos procesativos.", "success");
@@ -21881,13 +21911,8 @@ window.marcarAsistenciaManual = async (alumnoId, estado) => {
             .eq('plantel_id', state.plantelId)
             .maybeSingle();
             
-        let enviarRetardo = false;
-        let enviarFalta = false;
-
         if (existente) {
             await supabaseClient.from('asistencias').update({ estado: estado }).eq('id', existente.id);
-            if (existente.estado !== 'Retardo' && estado === 'Retardo') enviarRetardo = true;
-            if (existente.estado !== 'Falta' && estado === 'Falta') enviarFalta = true;
         } else {
             await supabaseClient.from('asistencias').insert([{
                 alumno_id: alumnoId, 
@@ -21898,26 +21923,6 @@ window.marcarAsistenciaManual = async (alumnoId, estado) => {
                 fecha: hoy,
                 plantel_id: state.plantelId,
                 trimestre: trim
-            }]);
-            if (estado === 'Retardo') enviarRetardo = true;
-            if (estado === 'Falta') enviarFalta = true;
-        }
-        
-        if (enviarRetardo) {
-            await supabaseClient.from('comunicados').insert([{
-                autor_id: u.data.user.id, 
-                titulo: '⚠️ AVISO DE RETARDO', 
-                audiencia: 'Alumno_' + alumnoId,
-                mensaje: `Hola. Se ha registrado un RETARDO en la materia: "${materiaGuardar}" el día de hoy (${hoy}). \n\nRecuerda que la puntualidad es parte de tu evaluación formativa.`,
-                plantel_id: state.plantelId
-            }]);
-        } else if (enviarFalta) {
-            await supabaseClient.from('comunicados').insert([{
-                autor_id: u.data.user.id, 
-                titulo: '⚠️ AVISO DE INASISTENCIA', 
-                audiencia: 'Alumno_' + alumnoId,
-                mensaje: `Se ha registrado una FALTA en la materia: "${materiaGuardar}" el día de hoy (${hoy}). \n\nRecuerda que las inasistencias acumuladas afectan tu porcentaje de aprobación.`,
-                plantel_id: state.plantelId
             }]);
         }
 
