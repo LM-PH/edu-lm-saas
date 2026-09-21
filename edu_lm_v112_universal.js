@@ -21872,7 +21872,7 @@ window.marcarAsistenciaManual = async (alumnoId, estado) => {
         // Mostrar feedback inmediato visualmente (optimistic UI) podría hacerse, pero recargar la lista es más seguro
         
         const { data: existente } = await supabaseClient.from('asistencias')
-            .select('id')
+            .select('id, estado')
             .eq('alumno_id', alumnoId)
             .eq('materia', materiaGuardar)
             .gte('creado_en', `${hoy}T00:00:00Z`)
@@ -21880,8 +21880,13 @@ window.marcarAsistenciaManual = async (alumnoId, estado) => {
             .eq('plantel_id', state.plantelId)
             .maybeSingle();
             
+        let enviarRetardo = false;
+        let enviarFalta = false;
+
         if (existente) {
             await supabaseClient.from('asistencias').update({ estado: estado }).eq('id', existente.id);
+            if (existente.estado !== 'Retardo' && estado === 'Retardo') enviarRetardo = true;
+            if (existente.estado !== 'Falta' && estado === 'Falta') enviarFalta = true;
         } else {
             await supabaseClient.from('asistencias').insert([{
                 alumno_id: alumnoId, 
@@ -21893,15 +21898,24 @@ window.marcarAsistenciaManual = async (alumnoId, estado) => {
                 plantel_id: state.plantelId,
                 trimestre: trim
             }]);
+            if (estado === 'Retardo') enviarRetardo = true;
+            if (estado === 'Falta') enviarFalta = true;
         }
         
-        // Si marcamos retardo, mandar comunicado como el QR? 
-        if (estado === 'Retardo' && !existente) {
+        if (enviarRetardo) {
             await supabaseClient.from('comunicados').insert([{
                 autor_id: u.data.user.id, 
                 titulo: '⚠️ AVISO DE RETARDO', 
                 audiencia: 'Alumno_' + alumnoId,
                 mensaje: `Hola. Se ha registrado un RETARDO en la materia: "${materiaGuardar}" el día de hoy (${hoy}). \n\nRecuerda que la puntualidad es parte de tu evaluación formativa.`,
+                plantel_id: state.plantelId
+            }]);
+        } else if (enviarFalta) {
+            await supabaseClient.from('comunicados').insert([{
+                autor_id: u.data.user.id, 
+                titulo: '⚠️ AVISO DE INASISTENCIA', 
+                audiencia: 'Alumno_' + alumnoId,
+                mensaje: `Se ha registrado una FALTA en la materia: "${materiaGuardar}" el día de hoy (${hoy}). \n\nRecuerda que las inasistencias acumuladas afectan tu porcentaje de aprobación.`,
                 plantel_id: state.plantelId
             }]);
         }
