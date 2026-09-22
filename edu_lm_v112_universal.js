@@ -9179,8 +9179,8 @@ window.registrarJustificanteMedico = async () => {
             alumno_id: aid,
             autor_id: state.user.id,
             motivo: motivo,
-            fecha_inicio: inicio,
-            fecha_fin: fin,
+            fecha_inicio: inicio + 'T12:00:00Z',
+            fecha_fin: fin + 'T12:00:00Z',
             plantel_id: state.plantelId
         }).select().single();
         
