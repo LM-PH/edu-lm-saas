@@ -1148,6 +1148,7 @@ CREATE TABLE IF NOT EXISTS public.biblioteca_prestamos (
     alumno_id uuid REFERENCES public.alumnos(id) ON DELETE CASCADE,
     tipo text NOT NULL,
     recurso text NOT NULL,
+    destino text DEFAULT 'escuela',
     condicion_entrega text,
     condicion_devolucion text,
     profesor_solicitante text,

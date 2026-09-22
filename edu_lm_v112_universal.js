@@ -18369,6 +18369,14 @@ async function renderBibliotecaPrestamos() {
                <input type="text" id="bibRecurso" class="form-input" placeholder="Ej. El Principito / Chromebook #12">
             </div>
             
+            <div class="form-group">
+               <label class="form-label">Destino del Préstamo</label>
+               <select id="bibDestino" class="form-select">
+                  <option value="escuela">Para la escuela</option>
+                  <option value="casa">Para su casa</option>
+               </select>
+            </div>
+            
             <div class="form-group" id="bibCondGrp">
                <label class="form-label">Condición o Detalles (Opcional)</label>
                <input type="text" id="bibCondEntrega" class="form-input" placeholder="Ej. Pantalla rayada, faltan piezas, etc.">
@@ -18483,7 +18491,7 @@ window.loadBibliotecaPrestamos = async () => {
                   <div style="flex:1;">
                      <div style="font-weight:700; font-size:1rem; color:var(--text-main); margin-bottom:4px;">${p.recurso}</div>
                      <div style="font-size:0.85rem; color:var(--text-muted); margin-bottom:2px;"><i class="fa-regular fa-user"></i> ${p.alumnos?.nombre || 'Alumno'} (${p.alumnos?.grupos?.nombre || ''})</div>
-                     <div style="font-size:0.75rem; color:var(--text-muted);"><i class="fa-regular fa-clock"></i> Prestado: ${f}</div>
+                     <div style="font-size:0.75rem; color:var(--text-muted);"><i class="fa-regular fa-clock"></i> Prestado: ${f} &nbsp;&bull;&nbsp; <i class="${p.destino === 'casa' ? 'fa-solid fa-house' : 'fa-solid fa-school'}"></i> Para: ${p.destino === 'casa' ? 'Casa' : 'Escuela'}</div>
                      ${p.condicion_entrega ? `<div style="margin-top:4px; font-size:0.75rem; background:#fffbeb; color:#d97706; padding:4px 8px; border-radius:4px; display:inline-block;"><i class="fa-solid fa-triangle-exclamation"></i> Entregado con: ${p.condicion_entrega}</div>` : ''}
                      ${p.profesor_solicitante ? `<div style="margin-top:4px; font-size:0.75rem; color:var(--text-muted);"><i class="fa-solid fa-chalkboard-user"></i> Solicitado por: ${p.profesor_solicitante} ${p.modulo_solicitante ? `(${p.modulo_solicitante})` : ''}</div>` : ''}
                   </div>
@@ -18505,6 +18513,7 @@ window.guardarPrestamoBiblioteca = async () => {
     const alumno_id = document.getElementById('bibAluId').value;
     const tipo = document.getElementById('bibTipo').value;
     const recurso = document.getElementById('bibRecurso').value.trim();
+    const destino = document.getElementById('bibDestino') ? document.getElementById('bibDestino').value : 'escuela';
     const condicion_entrega = document.getElementById('bibCondEntrega').value.trim();
     const profesor_solicitante = document.getElementById('bibProfSolicitante')?.value.trim() || null;
     const modulo_solicitante = document.getElementById('bibModuloSolicitante')?.value.trim() || null;
@@ -18514,7 +18523,7 @@ window.guardarPrestamoBiblioteca = async () => {
     
     try {
         const { error } = await supabaseClient.from('biblioteca_prestamos').insert([{
-            alumno_id, tipo, recurso, condicion_entrega, profesor_solicitante, modulo_solicitante, plantel_id: state.plantelId
+            alumno_id, tipo, recurso, destino, condicion_entrega, profesor_solicitante, modulo_solicitante, plantel_id: state.plantelId
         }]);
         if(error) throw error;
         
@@ -19003,6 +19012,7 @@ window.imprimirHistorialBiblioteca = async () => {
                     <span>Hora: ${fPrestamo}</span>
                 </div>
                 <p><strong>Alumno:</strong> ${p.alumnos?.nombre || 'S/D'} | <strong>Matrícula:</strong> ${p.alumnos?.matricula || 'S/D'} | <strong>Grupo:</strong> ${p.alumnos?.grupos?.nombre || 'S/G'}</p>
+                <p><strong>Destino:</strong> ${p.destino === 'casa' ? 'Para su casa' : 'Para la escuela'}</p>
                 <p><strong>Condición Inicial:</strong> ${p.condicion_entrega || 'Buena'}</p>
                 ${p.profesor_solicitante ? `<p><strong>Solicitado por Profesor:</strong> ${p.profesor_solicitante} ${p.modulo_solicitante ? `(${p.modulo_solicitante})` : ''}</p>` : ''}
                 <div class="text-muted" style="margin-top: 10px;">
@@ -19126,7 +19136,7 @@ window.loadHistorialBiblioteca = async (fecha) => {
                   <div style="flex:1;">
                      <div style="font-weight:700; font-size:1rem; color:var(--text-main); margin-bottom:4px;">${p.recurso}</div>
                      <div style="font-size:0.85rem; color:var(--text-muted); margin-bottom:2px;"><i class="fa-regular fa-user"></i> ${p.alumnos?.nombre || 'Alumno'} (${p.alumnos?.grupos?.nombre || ''})</div>
-                     <div style="font-size:0.75rem; color:var(--text-muted);"><i class="fa-regular fa-clock"></i> Prestado: ${f}</div>
+                     <div style="font-size:0.75rem; color:var(--text-muted);"><i class="fa-regular fa-clock"></i> Prestado: ${f} &nbsp;&bull;&nbsp; <i class="${p.destino === 'casa' ? 'fa-solid fa-house' : 'fa-solid fa-school'}"></i> Para: ${p.destino === 'casa' ? 'Casa' : 'Escuela'}</div>
                      ${p.condicion_entrega ? `<div style="margin-top:4px; font-size:0.75rem; color:var(--text-muted);">Condición inicial: ${p.condicion_entrega}</div>` : ''}
                      ${p.profesor_solicitante ? `<div style="margin-top:4px; font-size:0.75rem; color:var(--text-muted);"><i class="fa-solid fa-chalkboard-user"></i> Solicitado por: ${p.profesor_solicitante} ${p.modulo_solicitante ? `(${p.modulo_solicitante})` : ''}</div>` : ''}
                   </div>
