@@ -10643,6 +10643,9 @@ window.loadActividadesMaestro = async () => {
                     <button class="btn btn-outline" style="border-color:var(--danger); color:var(--danger); font-size:0.8rem; padding:6px 12px;" onclick="window.finalizarActividad('${act.id}')">
                         <i class="fa-solid fa-box-archive"></i> Cerrar
                     </button>
+                    <button class="btn btn-outline" style="border-color:var(--danger); color:var(--danger); font-size:0.8rem; padding:6px 12px;" onclick="window.eliminarActividadMaestro('${act.id}')">
+                        <i class="fa-solid fa-trash-can"></i>
+                    </button>
                 </div>`;
 
             return `
