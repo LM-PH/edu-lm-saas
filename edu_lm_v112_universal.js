@@ -14344,7 +14344,8 @@ window.cargarRubrosParaActividad = async () => {
         } else {
             q = q.eq('grupo_id', gid);
         }
-        const { data: encuadre } = await q.maybeSingle();
+        const { data: _encuadreArr } = await q.order('fecha_creacion', { ascending: false }).limit(1);
+        const encuadre = _encuadreArr && _encuadreArr.length > 0 ? _encuadreArr[0] : null;
 
         if(encuadre && encuadre.rubros && encuadre.rubros.length > 0) {
              actR.innerHTML = '<option value="">No aplica (Extra)</option>' + encuadre.rubros.map(r => {
@@ -14396,7 +14397,8 @@ window.cargarEncuadreActivo = async () => {
         } else {
             q = q.eq('grupo_id', gid);
         }
-        const { data: enc } = await q.maybeSingle();
+        const { data: _encArr } = await q.order('fecha_creacion', { ascending: false }).limit(1);
+        const enc = _encArr && _encArr.length > 0 ? _encArr[0] : null;
         
         if (enc && enc.rubros) {
             window.rubros = enc.rubros;
@@ -14465,15 +14467,15 @@ window.cargarEncuadreActivo = async () => {
         const u = await supabaseClient.auth.getUser();
 
         // 0. Verificar si ya fue enviado antes (RESTRICTIVO POR TRIMESTRE)
-        const { data: encExistente } = await supabaseClient
+        const { data: _encExArr } = await supabaseClient
             .from('encuadres')
             .select('id, notificacion_enviada, fecha_envio_notif')
             .eq('plantel_id', state.plantelId)
             .eq('maestro_id', u.data.user.id)
             .eq('materia', mat)
             .eq('trimestre', window.currentTrimestre || 1)
-            .match(isTec ? { target_grado: targetGrado } : { grupo_id: gid })
-            .maybeSingle();
+            .match(isTec ? { target_grado: targetGrado } : { grupo_id: gid }).order('fecha_creacion', { ascending: false }).limit(1);
+        const encExistente = _encExArr && _encExArr.length > 0 ? _encExArr[0] : null;
 
         if(encExistente && encExistente.notificacion_enviada) {
             const fecha = new Date(encExistente.fecha_envio_notif).toLocaleString();
@@ -14533,7 +14535,8 @@ window.cargarEncuadreActivo = async () => {
             if(isTec) qEncId = qEncId.is('grupo_id', null).eq('target_grado', targetGrado);
             else qEncId = qEncId.eq('grupo_id', gid);
             
-            const { data: encObj } = await qEncId.maybeSingle();
+            const { data: _encObjArr } = await qEncId.order('fecha_creacion', { ascending: false }).limit(1);
+            const encObj = _encObjArr && _encObjArr.length > 0 ? _encObjArr[0] : null;
 
             const rubrosTexto = window.rubros.map(r => `• ${r.name}: ${r.val}%`).join('\n');
             const labelTri = (window.currentTrimestre || 1) + "° Trimestre";
