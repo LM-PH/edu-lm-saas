@@ -2527,7 +2527,7 @@ window.loadComunicadosAdmin = async (fechaFiltro = null) => {
             return `
             <div style="border-left:4px solid ${color}; padding:12px 14px; background:var(--page-bg); border-radius:8px; border:1px solid var(--border);">
                 <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:6px; gap:8px; flex-wrap:wrap;">
-                    <span style="font-weight:600; color:var(--text-main); font-size:0.95rem;">${c.titulo}</span>
+                    <span style="font-weight:600; color:var(--text-main); font-size:0.95rem;">${(c.titulo || '').replace(/\s*\[TALLER:.*?\]/gi, '')}</span>
                     <span style="font-size:0.7rem; background:${color}22; color:${color}; padding:2px 8px; border-radius:20px; white-space:nowrap; font-weight:600;">${audText}</span>
                 </div>
                 <p style="font-size:0.85rem; color:var(--text-main); margin:0 0 8px 0; white-space:pre-wrap;">${(c.mensaje || '').replace(/\[REF_ID:.*?\]/gi, '').trim()}</p>
@@ -9220,7 +9220,9 @@ window.notificarMaestrosJustificante = async (alumnoId, motivo, inicio, fin) => 
             return;
         }
 
-        const mensaje = `Se informa que el alumno(a) **${al.nombre}** cuenta con justificante médico del **${new Date(inicio).toLocaleDateString()}** al **${new Date(fin).toLocaleDateString()}** por motivo de: ${motivo}. Favor de brindar las facilidades académicas necesarias.`;
+        const fInicio = new Date(inicio + 'T12:00:00').toLocaleDateString();
+        const fFin = new Date(fin + 'T12:00:00').toLocaleDateString();
+        const mensaje = `Se informa que el alumno(a) **${al.nombre}** cuenta con justificante médico del **${fInicio}** al **${fFin}** por motivo de: ${motivo}. Favor de brindar las facilidades académicas necesarias.`;
 
         // Añadir el taller al título si existe para filtrar correctamente a los maestros de tecnología
         const tallerTag = al.taller ? ` [TALLER:${al.taller}]` : '';
@@ -9940,7 +9942,7 @@ window.loadTimelineAlumno = async (mostrarHistorial = false, selectedDateStr = n
              <div class="timeline-icon" style="border-color: ${tipoColor}; background:white;"><i class="fa-solid ${icon}" style="color: ${tipoColor};"></i></div>
              <div class="timeline-content" style="position:relative">
                <div style="font-size:0.75rem; color: var(--text-muted); float:right;">${date}</div>
-               <h4 style="color: ${tipoColor}; margin:0 0 4px 0;">${c.titulo}</h4>
+               <h4 style="color: ${tipoColor}; margin:0 0 4px 0;">${(c.titulo || '').replace(/\s*\[TALLER:.*?\]/gi, '')}</h4>
                <p style="font-size: 0.85rem; white-space:pre-wrap; margin-bottom:10px;">${(c.mensaje || '').replace(/\[REF_ID:.*?\]/gi, '').trim()}</p>
                
                <div style="display:flex; justify-content:space-between; align-items:center; gap:10px;">
@@ -10532,7 +10534,7 @@ window.loadTimelinePersonal = async (selectedDate) => {
                     <i class="fa-solid fa-${iconAud}"></i> ${nameMap[c.audiencia] || c.audiencia}
                  </span>
               </div>
-              <h3 style="color: var(--text-main); margin:0 0 10px 0; font-size:1.1rem; line-height:1.4;">${c.titulo}</h3>
+              <h3 style="color: var(--text-main); margin:0 0 10px 0; font-size:1.1rem; line-height:1.4;">${(c.titulo || '').replace(/\s*\[TALLER:.*?\]/gi, '')}</h3>
               <p style="font-size: 0.9rem; color: var(--text-muted); white-space:pre-wrap; margin:0; line-height:1.6;">${(c.mensaje || '').replace(/\[REF_ID:.*?\]/gi, '').trim()}</p>
               ${btnAdjunto}
            </div>
@@ -20567,7 +20569,7 @@ function renderAlumnoFichaSalud() {
 window.loadAlumnoSaludForm = () => {
     const c = window.saludCuestionarioActual;
     if(!c) return;
-    document.getElementById('saludAlumnoTitulo').innerText = c.titulo;
+    document.getElementById('saludAlumnoTitulo').innerText = (c.titulo || '').replace(/\s*\[TALLER:.*?\]/gi, '');
     const cont = document.getElementById('saludAlumnoFormContainer');
     
     let html = '';
@@ -21874,7 +21876,7 @@ window.loadComunicadosEnviadosMaestro = async () => {
             }
             return `
             <div style="background:var(--page-bg); border:1px solid var(--border); padding:12px; border-radius:8px; display:flex; flex-direction:column; gap:8px; box-shadow:0 1px 3px rgba(0,0,0,0.03);">
-               <div><strong style="color:var(--primary); font-size:0.95rem;">${c.titulo}</strong></div>
+               <div><strong style="color:var(--primary); font-size:0.95rem;">${(c.titulo || '').replace(/\s*\[TALLER:.*?\]/gi, '')}</strong></div>
                <div style="font-size:0.8rem; color:var(--secondary);">Enviado a: ${audLabel} - ${new Date(c.fecha_envio).toLocaleString('es-MX')}</div>
                <div style="font-size:0.85rem; color:var(--text-color); white-space:pre-wrap; opacity:0.85; max-height:80px; overflow:hidden; text-overflow:ellipsis;">${(c.mensaje || '').replace(/\[REF_ID:.*?\]/gi, '').trim()}</div>
             </div>
