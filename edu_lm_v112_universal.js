@@ -14338,7 +14338,7 @@ window.cargarRubrosParaActividad = async () => {
     const trimSelected = document.getElementById('actTrimestre')?.value || 1;
 
     try {
-        let q = supabaseClient.from('encuadres').select('rubros').eq('plantel_id', state.plantelId).eq('materia', mat).eq('trimestre', trimSelected);
+        let q = supabaseClient.from('encuadres').select('rubros').eq('plantel_id', state.plantelId).eq('maestro_id', state.user.id).eq('materia', mat).eq('trimestre', trimSelected);
         if(isTec) {
             q = q.is('grupo_id', null).eq('target_grado', targetGrado);
         } else {
@@ -14387,6 +14387,7 @@ window.cargarEncuadreActivo = async () => {
         let q = supabaseClient.from('encuadres')
             .select('rubros, notificacion_enviada, fecha_envio_notif')
             .eq('plantel_id', state.plantelId)
+            .eq('maestro_id', state.user.id)
             .eq('materia', mat)
             .eq('trimestre', window.currentTrimestre || 1);
 
