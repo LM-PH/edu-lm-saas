@@ -22145,6 +22145,35 @@ window.editarAlumnoModal = async (alumnoId) => {
         const { data: alumno, error } = await supabaseClient.from('alumnos').select('*').eq('id', alumnoId).single();
         if (error) throw error;
         
+        let tecsHtml = '<option value="">Sin Asignar / Sin Tecnología</option>';
+        let customTecInput = `<input type="text" id="editAlTaller" class="form-input" style="margin-top:8px; display:none;" placeholder="Escribe la tecnología manualmente..." value="${alumno.taller || ''}">`;
+        
+        if (alumno.grado) {
+            const { data: asig } = await supabaseClient.from('asignaciones_maestros')
+                .select('materia')
+                .eq('target_grado', alumno.grado)
+                .eq('plantel_id', state.plantelId || window.state?.plantelId);
+            
+            if (asig && asig.length > 0) {
+                const mats = [...new Set(asig.map(d => d.materia))];
+                let matched = false;
+                mats.forEach(t => {
+                    const isSelected = (alumno.taller || '').trim().toLowerCase() === t.trim().toLowerCase() ? 'selected' : '';
+                    if (isSelected) matched = true;
+                    tecsHtml += `<option value="${t}" ${isSelected}>${t}</option>`;
+                });
+                
+                // Si el alumno tiene un taller pero no está en la lista de maestros, agregarlo como opción seleccionada
+                if (alumno.taller && !matched) {
+                    tecsHtml += `<option value="${alumno.taller}" selected>${alumno.taller} (Personalizado)</option>`;
+                }
+            } else if (alumno.taller) {
+                tecsHtml += `<option value="${alumno.taller}" selected>${alumno.taller}</option>`;
+            }
+        } else if (alumno.taller) {
+            tecsHtml += `<option value="${alumno.taller}" selected>${alumno.taller}</option>`;
+        }
+
         const modalId = 'modalEditarAlumnoAdmin';
         let existing = document.getElementById(modalId);
         if(existing) existing.remove();
@@ -22177,8 +22206,20 @@ window.editarAlumnoModal = async (alumnoId) => {
                 <input type="text" id="editAlEmail" class="form-input" value="${alumno.contacto_email || ''}">
             </div>
             <div class="form-group">
-                <label class="form-label">Tecnología / Taller</label>
-                <input type="text" id="editAlTaller" class="form-input" placeholder="Ej. Informática, Diseño, Ofimática" value="${alumno.taller || ''}">
+                <label class="form-label">Tecnología / Taller (Grado ${alumno.grado || '?'})</label>
+                <select id="editAlTallerSelect" class="form-select" onchange="
+                    const customInput = document.getElementById('editAlTallerCustom');
+                    if (this.value === 'OTRO') {
+                        customInput.style.display = 'block';
+                        customInput.focus();
+                    } else {
+                        customInput.style.display = 'none';
+                    }
+                ">
+                    ${tecsHtml}
+                    <option value="OTRO">✏️ Otro (Escribir manualmente...)</option>
+                </select>
+                <input type="text" id="editAlTallerCustom" class="form-input" style="margin-top:8px; display:none;" placeholder="Escribe la tecnología manualmente..." value="">
             </div>
             
             <div style="display:flex; gap:10px; margin-top:20px;">
@@ -22200,7 +22241,11 @@ window.guardarEdicionAlumno = async (alumnoId) => {
         const curp = document.getElementById('editAlCurp').value.trim();
         const matricula = document.getElementById('editAlMatricula').value.trim();
         const email = document.getElementById('editAlEmail').value.trim().toLowerCase();
-        const taller = document.getElementById('editAlTaller').value.trim();
+        
+        let taller = document.getElementById('editAlTallerSelect').value;
+        if (taller === 'OTRO') {
+            taller = document.getElementById('editAlTallerCustom').value.trim();
+        }
         
         if (!nombre || !matricula) {
             return window.showToast("El nombre y la matrícula son obligatorios.", "error");
