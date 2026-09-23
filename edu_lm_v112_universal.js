@@ -8770,7 +8770,12 @@ window.updateNotificationBadge = async (clearAll = false) => {
         }
 
         let query = supabaseClient.from('comunicados').select('id, tipo, titulo').in('audiencia', audArr).eq('plantel_id', state.plantelId);
-        if(creadoEn) query = query.gte('fecha_envio', creadoEn);
+        if (userRole === 'alumno' || userRole === 'estudiante') {
+            const now = new Date();
+            const startYear = now.getMonth() >= 7 ? now.getFullYear() : now.getFullYear() - 1;
+            const cicloInicio = new Date(startYear, 7, 1).toISOString();
+            query = query.gte('fecha_envio', cicloInicio);
+        }
 
         const { data: coms, error } = await query;
         if(error || !coms) return;
@@ -9875,9 +9880,12 @@ window.loadTimelineAlumno = async (mostrarHistorial = false, selectedDateStr = n
 
         console.log(">>> [TIMELINE] Buscando comunicados para audiencia:", audArr);
         let query = supabaseClient.from('comunicados').select('*').in('audiencia', audArr).eq('plantel_id', state.plantelId).order('fecha_envio', { ascending: false });
-        if(al && al.creado_en) {
-            query = query.gte('fecha_envio', al.creado_en);
-        }
+        
+        // Historial desde inicio de ciclo escolar para nuevos alumnos
+        const now = new Date();
+        const startYear = now.getMonth() >= 7 ? now.getFullYear() : now.getFullYear() - 1;
+        const cicloInicio = new Date(startYear, 7, 1).toISOString();
+        query = query.gte('fecha_envio', cicloInicio);
 
         if(mostrarHistorial) {
             const fecha = selectedDateStr || document.getElementById('filtroFechaAvisos').value;
