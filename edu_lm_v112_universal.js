@@ -16702,9 +16702,16 @@ window.loadListasAdminPersonal = async (searchTerm = '') => {
                         <div style="font-size:0.7rem;">Desde: ${new Date(p.created_at).toLocaleDateString()}</div>
                     </td>
                     <td style="padding:12px; text-align:center;">
-                        <span class="badge ${roleClass}">${p.grupo_nom ? `Grupo ${p.grupo_nom}` : (roleLabels[p.rol] || p.rol)}</span>
+                        <span class="badge ${roleClass}" style="display:block; margin-bottom:4px;">${p.grupo_nom ? `Grupo ${p.grupo_nom}` : (roleLabels[p.rol] || p.rol)}</span>
+                        ${p.taller ? `<span class="badge badge-outline" style="font-size:0.7rem;"><i class="fa-solid fa-microchip"></i> ${p.taller}</span>` : ''}
                     </td>
                     <td style="padding:12px; text-align:center;">
+                        ${p.rol === 'alumno' ? `
+                        <button class="btn btn-outline btn-xs" 
+                                style="color:var(--primary); border-color:var(--primary); margin-bottom:5px; width:100%;" 
+                                onclick="window.editarAlumnoModal('${p.id}')">
+                            <i class="fa-solid fa-pen-to-square"></i> Editar Datos
+                        </button><br>` : ''}
                         <button class="btn btn-outline btn-xs" 
                                 style="color:var(--danger); border-color:var(--danger);" 
                                 onclick="window.eliminarPersona('${p.id}', '${p.email}', '${p.nombre}', '${p.rol}')">
@@ -22129,3 +22136,104 @@ window.marcarAsistenciaManual = async (alumnoId, estado) => {
         if(window.loadListaAsistenciaManual) window.loadListaAsistenciaManual();
     }
 };
+
+// ==========================================
+// EDICIÓN DE ALUMNOS (DIRECTIVOS/ADMIN)
+// ==========================================
+window.editarAlumnoModal = async (alumnoId) => {
+    try {
+        const { data: alumno, error } = await supabaseClient.from('alumnos').select('*').eq('id', alumnoId).single();
+        if (error) throw error;
+        
+        const modalId = 'modalEditarAlumnoAdmin';
+        let existing = document.getElementById(modalId);
+        if(existing) existing.remove();
+        
+        const div = document.createElement('div');
+        div.id = modalId;
+        div.style.cssText = 'position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); z-index:9999; display:flex; justify-content:center; align-items:center; padding:20px;';
+        
+        div.innerHTML = `
+        <div style="background:white; border-radius:12px; width:100%; max-width:500px; padding:20px; box-shadow:0 4px 15px rgba(0,0,0,0.2); max-height:90vh; overflow-y:auto;">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
+                <h3 style="margin:0; color:var(--primary);"><i class="fa-solid fa-user-pen"></i> Editar Datos del Alumno</h3>
+                <button onclick="document.getElementById('${modalId}').remove()" style="background:none; border:none; cursor:pointer; font-size:1.2rem; color:var(--text-muted);"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            
+            <div class="form-group">
+                <label class="form-label">Nombre Completo</label>
+                <input type="text" id="editAlNombre" class="form-input" value="${alumno.nombre || ''}">
+            </div>
+            <div class="form-group">
+                <label class="form-label">CURP</label>
+                <input type="text" id="editAlCurp" class="form-input" value="${alumno.curp || ''}">
+            </div>
+            <div class="form-group">
+                <label class="form-label">Matrícula</label>
+                <input type="text" id="editAlMatricula" class="form-input" value="${alumno.matricula || ''}">
+            </div>
+            <div class="form-group">
+                <label class="form-label">Correo Electrónico (Opcional)</label>
+                <input type="text" id="editAlEmail" class="form-input" value="${alumno.contacto_email || ''}">
+            </div>
+            <div class="form-group">
+                <label class="form-label">Tecnología / Taller</label>
+                <input type="text" id="editAlTaller" class="form-input" placeholder="Ej. Informática, Diseño, Ofimática" value="${alumno.taller || ''}">
+            </div>
+            
+            <div style="display:flex; gap:10px; margin-top:20px;">
+                <button class="btn btn-outline" style="flex:1;" onclick="document.getElementById('${modalId}').remove()">Cancelar</button>
+                <button class="btn btn-primary" style="flex:1;" onclick="window.guardarEdicionAlumno('${alumnoId}')">Guardar Cambios</button>
+            </div>
+        </div>
+        `;
+        document.body.appendChild(div);
+    } catch (e) {
+        console.error(e);
+        window.showToast("Error al cargar datos del alumno", "error");
+    }
+};
+
+window.guardarEdicionAlumno = async (alumnoId) => {
+    try {
+        const nombre = document.getElementById('editAlNombre').value.trim();
+        const curp = document.getElementById('editAlCurp').value.trim();
+        const matricula = document.getElementById('editAlMatricula').value.trim();
+        const email = document.getElementById('editAlEmail').value.trim().toLowerCase();
+        const taller = document.getElementById('editAlTaller').value.trim();
+        
+        if (!nombre || !matricula) {
+            return window.showToast("El nombre y la matrícula son obligatorios.", "error");
+        }
+        
+        // 1. Obtener el email anterior
+        const { data: oldData } = await supabaseClient.from('alumnos').select('contacto_email').eq('id', alumnoId).single();
+        const oldEmail = oldData?.contacto_email;
+
+        // 2. Actualizar alumno en bd
+        const { error: errUpdate } = await supabaseClient.from('alumnos').update({
+            nombre: nombre,
+            curp: curp,
+            matricula: matricula,
+            contacto_email: email || null,
+            taller: taller || null
+        }).eq('id', alumnoId);
+        
+        if (errUpdate) throw errUpdate;
+
+        // 3. Si cambió el correo y estaba en perfiles_permitidos, actualizarlo
+        if (oldEmail && email && oldEmail !== email) {
+            await supabaseClient.from('perfiles_permitidos').update({ email: email }).eq('email', oldEmail);
+        }
+
+        window.showToast("Datos actualizados correctamente", "success");
+        document.getElementById('modalEditarAlumnoAdmin').remove();
+        
+        // Refrescar lista
+        if (window.loadPersonalDirectivo) window.loadPersonalDirectivo();
+    } catch (e) {
+        console.error(e);
+        window.showToast("Error al guardar: " + (e.message || "Valida que el CURP o matrícula no estén duplicados"), "error");
+    }
+};
+
