@@ -12773,8 +12773,10 @@ function attachDOMEvents() {
           if (email && !email.includes('@')) email = email + '@edulm.local';
           const grado = document.getElementById('gradoInput').value;
           const grupoNom = document.getElementById('grupoInput').value;
-          const estatura = document.getElementById('estatura')?.value;
-          const peso = document.getElementById('peso')?.value;
+          const estVal = document.getElementById('estatura')?.value;
+          const estatura = estVal ? parseFloat(estVal) : null;
+          const pesoVal = document.getElementById('peso')?.value;
+          const peso = pesoVal ? parseFloat(pesoVal) : null;
           const tallaZapato = document.getElementById('tallaZapato')?.value;
           const tallerValue = tlInput ? tlInput.value : null;
 
