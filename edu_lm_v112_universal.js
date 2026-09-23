@@ -6046,6 +6046,38 @@ window.generarInasistenciasMasivas = async () => {
                 plantel_id: state.plantelId
             }));
             await supabaseClient.from('comunicados').insert(msgInserts);
+
+            // --- ALERTA ACUMULACIÓN FALTAS ENTRADA ---
+            try {
+                const { data: histoAccesos } = await supabaseClient.from('accesos_plantel')
+                     .select('alumno_id')
+                     .eq('estado', 'Inasistencia')
+                     .eq('plantel_id', state.plantelId)
+                     .in('alumno_id', faltantes.map(f => f.id));
+                
+                let conteoInasistencias = {};
+                if (histoAccesos) {
+                     histoAccesos.forEach(a => {
+                          conteoInasistencias[a.alumno_id] = (conteoInasistencias[a.alumno_id] || 0) + 1;
+                     });
+                }
+                
+                // Disparar si llegan a 3, 4, 5... (cada que falten después de 3)
+                const alumnosAlertaEntrada = faltantes.filter(f => conteoInasistencias[f.id] >= 3);
+                
+                if(alumnosAlertaEntrada.length > 0) {
+                     const alertasInserts = alumnosAlertaEntrada.map(f => ({
+                          autor_id: u.data.user?.id,
+                          titulo: "🚨 ALERTA GRAVE: Acumulación de Inasistencias al Plantel",
+                          audiencia: `Alumno_${f.id}`,
+                          mensaje: `⚠️ ATENCIÓN: El alumno ha acumulado ${conteoInasistencias[f.id]} INASISTENCIAS GENERALES al plantel durante este periodo. \n\nSe solicita a los padres de familia y a Trabajo Social tomar acciones inmediatas y presentar justificaciones pertinentes.`,
+                          plantel_id: state.plantelId
+                     }));
+                     await supabaseClient.from('comunicados').insert(alertasInserts);
+                }
+            } catch(e) { console.error("Error alertas inasistencia general:", e); }
+            // ------------------------------------------
+
         }
 
         // ACCIÓN B: Avisar RETARDOS (aquellos que ya se registraron como tal hoy)
@@ -13218,6 +13250,53 @@ window.finalizarSesionAsistencia = async () => {
         const retardos = reg.filter(r => r.estado === 'Retardo').map(r => r.alumno_id);
         const faltasExplicit = reg.filter(r => r.estado === 'Falta').map(r => r.alumno_id);
         const todasFaltas = [...faltasExplicit, ...faltantes.map(a => a.id)];
+
+        // --- ALERTA EVASIÓN DE CLASE Y ACUMULACIÓN ---
+        try {
+            if (todasFaltas.length > 0) {
+                // a) Ver si SÍ entraron al plantel hoy
+                const { data: accesosHoy } = await supabaseClient.from('accesos_plantel')
+                     .select('alumno_id, estado')
+                     .in('alumno_id', todasFaltas)
+                     .eq('fecha', hoy)
+                     .eq('plantel_id', state.plantelId);
+                
+                // Los que entraron a la escuela (Asistencia o Retardo) pero NO a clase
+                const evasoresHoyIds = (accesosHoy || [])
+                     .filter(a => a.estado === 'Asistencia' || a.estado === 'Retardo')
+                     .map(a => a.alumno_id);
+                     
+                if (evasoresHoyIds.length > 0) {
+                     // b) Contar cuántas faltas llevan EN ESTA MATERIA durante el trimestre
+                     const { data: faltasMat } = await supabaseClient.from('asistencias')
+                          .select('alumno_id')
+                          .in('alumno_id', evasoresHoyIds)
+                          .eq('estado', 'Falta')
+                          .eq('materia', materia)
+                          .eq('trimestre', window._trimestreActivoParaPase || state.selectedMaestroTrimestre || 1);
+                     
+                     let conteoMat = {};
+                     if (faltasMat) {
+                          faltasMat.forEach(f => {
+                               conteoMat[f.alumno_id] = (conteoMat[f.alumno_id] || 0) + 1;
+                          });
+                     }
+                     
+                     const evasoresAlerta = evasoresHoyIds.filter(id => conteoMat[id] >= 3);
+                     if (evasoresAlerta.length > 0) {
+                          const evasoresInserts = evasoresAlerta.map(id => ({
+                               autor_id: u.data.user?.id,
+                               titulo: `🚨 ALERTA GRAVE: Evasión de Clase (${materia})`,
+                               audiencia: `Alumno_${id}`,
+                               mensaje: `⚠️ ATENCIÓN: El alumno registró ingreso al plantel el día de hoy, pero NO se presentó a la clase de ${materia}. \n\nAdicionalmente, acumula ${conteoMat[id]} faltas en esta asignatura. Se requiere atención inmediata por parte de Prefectura y Trabajo Social.`,
+                               plantel_id: state.plantelId
+                          }));
+                          await supabaseClient.from('comunicados').insert(evasoresInserts);
+                     }
+                }
+            }
+        } catch(e) { console.error("Error alertas evasión clase:", e); }
+        // ----------------------------------------------
 
         // Consultar comunicados ya enviados hoy para no duplicar
         const { data: comunicadosHoy } = await supabaseClient.from('comunicados')
