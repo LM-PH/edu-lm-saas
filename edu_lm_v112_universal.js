@@ -22510,12 +22510,7 @@ window.descargarAdminListaPDF = async (esVacia = false) => {
     const totalCols = esVacia ? 32 : 3;
     const esHorizontal = esVacia;
     
-    let fontSizePx = Math.max(5.0, Math.min(10.0, (240 / (n + 8)) - (totalCols > 8 ? 0.8 : 0)));
-    let fontSize = fontSizePx.toFixed(1) + 'px';
-    let padV = Math.max(0, Math.min(3.5, (120 / n) - 1.8)).toFixed(1) + 'px';
-    let padH = Math.max(1, Math.min(4, (160 / n))).toFixed(1) + 'px';
-    let paddingCell = `${padV} ${padH}`;
-    let logoHeight = Math.max(30, Math.min(65, 450 / n)).toFixed(0) + 'px';
+    let fontSize = esVacia ? '11px' : '14px';
     
     let tableContentHtml = '';
     
