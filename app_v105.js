@@ -9523,15 +9523,15 @@ window.descargarAdminListaPDF = async (esVacia = false) => {
     const esHorizontal = esVacia;
     
     // Dynamic fit logic to ensure ALL students fit perfectly on exactly ONE page
-    let availableHeight = esHorizontal ? 650 : 900; // Available px for rows after header
-    let rowHeight = availableHeight / Math.max(n, 1);
+    let availableHeight = esHorizontal ? 620 : 880; // Safe margins for A4
+    let rowHeight = Math.floor(availableHeight / Math.max(n + 2, 1)); // +2 to account for header and borders
     
-    // Maximize font size up to 16px, but constrain if there are many rows or 30 columns
-    let calcFont = Math.max(9, Math.min(16, rowHeight * 0.7)); 
-    if (esVacia) calcFont = Math.min(calcFont, 12);
+    // Maximize font size up to 14px, but constrain if there are many rows
+    let calcFont = Math.max(7.5, Math.min(14, rowHeight * 0.65)); 
+    if (esVacia) calcFont = Math.min(calcFont, 10.5);
     
     let fontSize = calcFont.toFixed(1) + 'px';
-    let padV = Math.max(1, (rowHeight - calcFont) / 2).toFixed(1) + 'px';
+    let padV = Math.max(1, Math.floor((rowHeight - calcFont - 1.5) / 2)).toFixed(0) + 'px';
     
     let tableContentHtml = '';
     
@@ -9574,7 +9574,7 @@ window.descargarAdminListaPDF = async (esVacia = false) => {
     }
 
     const htmlToPrint = `
-    <div style="font-family: Arial, sans-serif; background:white; color:black; width:100%; min-height: 1040px; display:flex; flex-direction:column; box-sizing:border-box; padding:20px;">
+    <div style="font-family: Arial, sans-serif; background:white; color:black; width:100%; height: 1010px; max-height: 1010px; overflow:hidden; display:flex; flex-direction:column; box-sizing:border-box; padding:20px;">
         <table style="width:100%; border-collapse:collapse; margin-bottom:5px;">
             <tr>
                 <td style="width:15%; text-align:center; vertical-align:middle;">
@@ -9598,6 +9598,7 @@ window.descargarAdminListaPDF = async (esVacia = false) => {
         <style>
             #adminPdfTable th, #adminPdfTable td {
                 padding: ${padV} 6px !important;
+                line-height: 1.1;
             }
         </style>
         <table id="adminPdfTable" style="width:100%; flex-grow:1; border-collapse:collapse; font-size:${fontSize};" border="1" bordercolor="#ccc">
