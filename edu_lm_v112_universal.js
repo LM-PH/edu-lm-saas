@@ -21664,7 +21664,13 @@ window.calcularCargaHorariaAuto = async function(maestroId) {
                 // Contar cuántos bloques de horario (filas en horarios_maestros) tiene para esta asignación
                 let horasEnHorario = horariosList.filter(s => {
                     const matchMateria = (s.materia === asig.materia || s.materia === materiaNombre);
-                    const matchGrupo = (s.grupo_id === asig.grupo_id);
+                    let matchGrupo = false;
+                    if (asig.grupo_id) {
+                        matchGrupo = (s.grupo_id === asig.grupo_id);
+                    } else {
+                        // Para tecnologías o talleres sin grupo_id, hacer match por target_grado
+                        matchGrupo = (!s.grupo_id && String(s.target_grado) === String(asig.target_grado));
+                    }
                     return matchMateria && matchGrupo;
                 }).length;
                 
