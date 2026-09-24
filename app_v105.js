@@ -9527,7 +9527,7 @@ window.descargarAdminListaPDF = async (esVacia = false) => {
     let padV = Math.max(0, Math.min(3.5, (120 / n) - 1.8)).toFixed(1) + 'px';
     let padH = Math.max(1, Math.min(4, (160 / n))).toFixed(1) + 'px';
     let paddingCell = `${padV} ${padH}`;
-    let logoHeight = Math.max(18, Math.min(35, 450 / n)).toFixed(0) + 'px';
+    let logoHeight = Math.max(30, Math.min(65, 450 / n)).toFixed(0) + 'px';
     
     let tableContentHtml = '';
     
@@ -9574,7 +9574,7 @@ window.descargarAdminListaPDF = async (esVacia = false) => {
         <table style="width:100%; border-collapse:collapse; margin-bottom:5px;">
             <tr>
                 <td style="width:15%; text-align:center; vertical-align:middle;">
-                    ${schoolLogo ? `<img src="${schoolLogo}" style="max-height:${logoHeight}; max-width:60px; object-fit:contain;" crossorigin="anonymous">` : ''}
+                    ${schoolLogo ? `<img src="${schoolLogo}" style="max-height:${logoHeight}; max-width:100px; object-fit:contain;" crossorigin="anonymous">` : ''}
                 </td>
                 <td style="text-align:center; vertical-align:middle;">
                     <h2 style="margin:0; font-size:1.1em; color:#111;">${schoolName}</h2>
