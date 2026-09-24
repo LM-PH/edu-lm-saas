@@ -9522,7 +9522,16 @@ window.descargarAdminListaPDF = async (esVacia = false) => {
     const totalCols = esVacia ? 32 : 3;
     const esHorizontal = esVacia;
     
-    let fontSize = esVacia ? '11px' : '14px';
+    // Dynamic fit logic to ensure ALL students fit perfectly on exactly ONE page
+    let availableHeight = esHorizontal ? 650 : 900; // Available px for rows after header
+    let rowHeight = availableHeight / Math.max(n, 1);
+    
+    // Maximize font size up to 16px, but constrain if there are many rows or 30 columns
+    let calcFont = Math.max(9, Math.min(16, rowHeight * 0.7)); 
+    if (esVacia) calcFont = Math.min(calcFont, 12);
+    
+    let fontSize = calcFont.toFixed(1) + 'px';
+    let padV = Math.max(1, (rowHeight - calcFont) / 2).toFixed(1) + 'px';
     
     let tableContentHtml = '';
     
@@ -9565,7 +9574,7 @@ window.descargarAdminListaPDF = async (esVacia = false) => {
     }
 
     const htmlToPrint = `
-    <div style="font-family: Arial, sans-serif; background:white; color:black; width:100%; height: 1060px; display:flex; flex-direction:column; box-sizing:border-box; padding:20px;">
+    <div style="font-family: Arial, sans-serif; background:white; color:black; width:100%; min-height: 1040px; display:flex; flex-direction:column; box-sizing:border-box; padding:20px;">
         <table style="width:100%; border-collapse:collapse; margin-bottom:5px;">
             <tr>
                 <td style="width:15%; text-align:center; vertical-align:middle;">
@@ -9588,18 +9597,12 @@ window.descargarAdminListaPDF = async (esVacia = false) => {
         
         <style>
             #adminPdfTable th, #adminPdfTable td {
-                padding: 4px 6px !important;
+                padding: ${padV} 6px !important;
             }
         </style>
         <table id="adminPdfTable" style="width:100%; flex-grow:1; border-collapse:collapse; font-size:${fontSize};" border="1" bordercolor="#ccc">
             ${tableContentHtml}
         </table>
-        
-        <div style="margin-top:auto; text-align:center; padding-top:20px;">
-           <p style="margin:0; font-size:0.8em;">________________________________________________</p>
-           <p style="margin:3px 0 0 0; font-size:0.8em; font-weight:bold;">${directorName}</p>
-           <p style="margin:2px 0 0 0; font-size:0.7em; color:#555;">Sello y Firma (Dirección)</p>
-        </div>
     </div>`;
 
     const opt = {
