@@ -9433,9 +9433,8 @@ window.loadAdminListasGrupos = async () => {
     if(!sel) return;
     try {
         const { data: grupos } = await supabaseClient.from('grupos')
-           .select('id, nombre, grado')
+           .select('id, nombre')
            .eq('plantel_id', state.plantelId)
-           .order('grado', {ascending: true})
            .order('nombre', {ascending: true});
            
         if(grupos && grupos.length > 0) {
