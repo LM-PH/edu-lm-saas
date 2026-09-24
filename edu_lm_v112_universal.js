@@ -22558,11 +22558,11 @@ window.descargarAdminListaPDF = async (esVacia = false) => {
     }
 
     const htmlToPrint = `
-    <div style="font-family: Arial, sans-serif; background:white; color:black; width:100%; height:100%; box-sizing:border-box; padding:20px;">
+    <div style="font-family: Arial, sans-serif; background:white; color:black; width:100%; height: 1060px; display:flex; flex-direction:column; box-sizing:border-box; padding:20px;">
         <table style="width:100%; border-collapse:collapse; margin-bottom:5px;">
             <tr>
                 <td style="width:15%; text-align:center; vertical-align:middle;">
-                    ${schoolLogo ? `<img src="${schoolLogo}" style="max-height:${logoHeight}; max-width:100px; object-fit:contain;" crossorigin="anonymous">` : ''}
+                    ${schoolLogo ? `<img src="${schoolLogo}" style="height:90px; max-width:140px; object-fit:contain;" crossorigin="anonymous">` : ''}
                 </td>
                 <td style="text-align:center; vertical-align:middle;">
                     <h2 style="margin:0; font-size:1.1em; color:#111;">${schoolName}</h2>
@@ -22581,14 +22581,14 @@ window.descargarAdminListaPDF = async (esVacia = false) => {
         
         <style>
             #adminPdfTable th, #adminPdfTable td {
-                padding: ${paddingCell} !important;
+                padding: 4px 6px !important;
             }
         </style>
-        <table id="adminPdfTable" style="width:100%; border-collapse:collapse; font-size:${fontSize};" border="1" bordercolor="#ccc">
+        <table id="adminPdfTable" style="width:100%; flex-grow:1; border-collapse:collapse; font-size:${fontSize};" border="1" bordercolor="#ccc">
             ${tableContentHtml}
         </table>
         
-        <div style="margin-top:20px; text-align:center;">
+        <div style="margin-top:auto; text-align:center; padding-top:20px;">
            <p style="margin:0; font-size:0.8em;">________________________________________________</p>
            <p style="margin:3px 0 0 0; font-size:0.8em; font-weight:bold;">${directorName}</p>
            <p style="margin:2px 0 0 0; font-size:0.7em; color:#555;">Sello y Firma (Dirección)</p>
