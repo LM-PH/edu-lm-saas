@@ -5668,7 +5668,7 @@ window.loadActividadesDocente = async () => {
                     </button>
                 </div>` :
                 `<div style="display:flex; gap:8px;">
-                    <button class="btn btn-outline" style="border-color:var(--success); color:var(--success); font-size:0.8rem; padding:6px 12px;" onclick="window.abrirQREvaluacion('${act.id}', '${act.titulo.replace(/'/g, "\\'")}', '${act.grupo_id || ''}', '${act.target_grado || ''}', '${act.materia || ''}')">
+                    <button class="btn btn-outline" style="border-color:var(--success); color:var(--success); font-size:0.8rem; padding:6px 12px;" onclick="window.abrirQREvaluacion('${act.id}', '${act.titulo.replace(/'/g, "\\'").replace(/"/g, '&quot;').replace(/[\\n\\r]/g, ' ')}', '${act.grupo_id || ''}', '${act.target_grado || ''}', '${act.materia || ''}')">
                         <i class="fa-solid fa-qrcode"></i> Evaluar QR
                     </button>
                     <button class="btn btn-outline" style="border-color:var(--danger); color:var(--danger); font-size:0.8rem; padding:6px 12px;" onclick="window.finalizarActividad('${act.id}')">

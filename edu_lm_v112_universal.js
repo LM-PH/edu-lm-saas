@@ -3746,7 +3746,7 @@ window.buscarAlumnoExpedienteReportes = async (term) => {
         }
         
         res.innerHTML = data.map(a => `
-            <div style="padding:10px; border-bottom:1px solid var(--border); cursor:pointer;" onclick="window.selectAlumnoExpedienteReportes('${a.id}', '${a.nombre.replace(/'/g, "\\'")}')">
+            <div style="padding:10px; border-bottom:1px solid var(--border); cursor:pointer;" onclick="window.selectAlumnoExpedienteReportes('${a.id}', '${a.nombre.replace(/'/g, "\\'").replace(/"/g, '&quot;').replace(/[\\n\\r]/g, ' ')}')">
                 <strong style="color:var(--primary)">${a.nombre}</strong> <small style="color:var(--text-muted)">(${a.grupos?.nombre || 'S/G'}) - ${a.matricula || 'Sin matrícula'}</small>
             </div>
         `).join('');
@@ -10679,7 +10679,7 @@ window.loadActividadesMaestro = async () => {
                     </button>
                 </div>` :
                 `<div style="display:flex; gap:8px;">
-                    <button class="btn btn-outline" style="border-color:var(--success); color:var(--success); font-size:0.8rem; padding:6px 12px;" onclick="window.abrirQREvaluacion('${act.id}', '${act.titulo.replace(/'/g, "\\'")}', '${act.grupo_id || ''}', '${act.target_grado || ''}', '${act.materia || ''}')">
+                    <button class="btn btn-outline" style="border-color:var(--success); color:var(--success); font-size:0.8rem; padding:6px 12px;" onclick="window.abrirQREvaluacion('${act.id}', '${act.titulo.replace(/'/g, "\\'").replace(/"/g, '&quot;').replace(/[\\n\\r]/g, ' ')}', '${act.grupo_id || ''}', '${act.target_grado || ''}', '${act.materia || ''}')">
                         <i class="fa-solid fa-qrcode"></i> Evaluar QR
                     </button>
                     <button class="btn btn-outline" style="border-color:var(--danger); color:var(--danger); font-size:0.8rem; padding:6px 12px;" onclick="window.finalizarActividad('${act.id}')">
