@@ -9591,7 +9591,12 @@ window.descargarAdminListaPDF = async (esVacia = false) => {
         
         <div style="border-top:1px solid #111; border-bottom:1px solid #111; height:3px; margin-bottom:10px;"></div>
         
-        <table style="width:100%; border-collapse:collapse; font-size:${fontSize};" border="1" bordercolor="#ccc" cellpadding="2">
+        <style>
+            #adminPdfTable th, #adminPdfTable td {
+                padding: ${paddingCell} !important;
+            }
+        </style>
+        <table id="adminPdfTable" style="width:100%; border-collapse:collapse; font-size:${fontSize};" border="1" bordercolor="#ccc">
             ${tableContentHtml}
         </table>
         
