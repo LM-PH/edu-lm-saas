@@ -9392,20 +9392,30 @@ function renderAdminListas() {
     </div>
     
     <div class="card">
-        <div style="display:flex; gap:16px; align-items:flex-end; margin-bottom: 24px; flex-wrap:wrap;">
+        <div style="display:flex; gap:16px; align-items:flex-end; margin-bottom: 24px; flex-wrap:wrap; justify-content: space-between; width:100%;">
             <div>
                 <label style="font-weight:600; font-size:0.9rem; margin-bottom:4px; display:block;">Seleccionar Grupo:</label>
                 <select class="form-select" id="adminListaGrupoSelect" onchange="window.cargarAdminListaPreview()">
                     <option value="">Cargando grupos...</option>
                 </select>
             </div>
-            <div>
-                <button class="btn btn-outline" style="border-color:#6366f1; color:#6366f1" onclick="window.descargarAdminListaPDF(true)" title="Descargar plantilla de asistencia en blanco (30 columnas)">
-                    <i class="fa-solid fa-calendar-check"></i> Formato Asistencia
-                </button>
-                <button class="btn btn-primary" onclick="window.descargarAdminListaPDF(false)">
-                    <i class="fa-solid fa-file-pdf"></i> Lista Simple
-                </button>
+            <div style="display:flex; flex-direction:column; gap:8px;">
+                <div style="display:flex; gap:8px; justify-content:flex-end;">
+                    <button class="btn btn-outline" style="border-color:#6366f1; color:#6366f1; padding: 6px 12px; font-size:0.85rem;" onclick="window.descargarAdminListaPDF(true)">
+                        <i class="fa-solid fa-file-pdf"></i> PDF (Asistencia)
+                    </button>
+                    <button class="btn btn-primary" style="padding: 6px 12px; font-size:0.85rem;" onclick="window.descargarAdminListaPDF(false)">
+                        <i class="fa-solid fa-file-pdf"></i> PDF (Simple)
+                    </button>
+                </div>
+                <div style="display:flex; gap:8px; justify-content:flex-end;">
+                    <button class="btn btn-outline" style="border-color:#2563eb; color:#2563eb; padding: 6px 12px; font-size:0.85rem;" onclick="window.descargarAdminListaDOC(true)">
+                        <i class="fa-solid fa-file-word"></i> Word (Asistencia)
+                    </button>
+                    <button class="btn btn-outline" style="border-color:#2563eb; color:#2563eb; background:#eff6ff; padding: 6px 12px; font-size:0.85rem;" onclick="window.descargarAdminListaDOC(false)">
+                        <i class="fa-solid fa-file-word"></i> Word (Simple)
+                    </button>
+                </div>
             </div>
         </div>
         
@@ -9620,4 +9630,84 @@ window.descargarAdminListaPDF = async (esVacia = false) => {
         console.error(err);
         alert("Error al generar PDF: " + err.message);
     }
+};
+window.descargarAdminListaDOC = async (esVacia = false) => {
+    const sel = document.getElementById('adminListaGrupoSelect');
+    const tbody = document.getElementById('adminListaPreviewTbody');
+    
+    if(!sel || !sel.value || !tbody || tbody.innerText.includes("Seleccione") || tbody.innerText.includes("Cargando") || tbody.innerText.includes("No tiene")) {
+        return alert("Seleccione un grupo con alumnos primero.");
+    }
+    
+    const grupoName = sel.options[sel.selectedIndex].text;
+    const rowsList = Array.from(tbody.querySelectorAll('tr'));
+    
+    const schoolName = CONFIG.schoolName;
+    const fecha = new Date().toLocaleDateString('es-MX', {day:'2-digit', month:'2-digit', year:'numeric'});
+    
+    let tableContentHtml = '';
+    
+    if (esVacia) {
+        const numCols = 30;
+        let headers = `<th style="width:20px; border:1px solid #ccc; padding:4px;">No.</th><th style="text-align:left; min-width: 130px; border:1px solid #ccc; padding:4px;">Nombre del Alumno</th>`;
+        for(let i=1; i<=numCols; i++) headers += `<th style="width:12px; font-weight:normal; border:1px solid #ccc; padding:4px;">${i}</th>`;
+        tableContentHtml += `<thead><tr style="background-color:#f8f9fa">${headers}</tr></thead><tbody>`;
+        
+        rowsList.forEach((tr, index) => {
+            const nombre = tr.cells[1].innerText;
+            let row = `<tr><td style="text-align:center; border:1px solid #ccc; padding:4px;">${index + 1}</td><td style="border:1px solid #ccc; padding:4px;">${nombre}</td>`;
+            for(let i=0; i<numCols; i++) row += `<td style="border:1px solid #ccc; padding:4px;"></td>`;
+            row += `</tr>`;
+            tableContentHtml += row;
+        });
+        tableContentHtml += '</tbody>';
+    } else {
+        tableContentHtml += `
+          <thead>
+             <tr style="background-color:#f8f9fa">
+                <th style="width:40px; text-align:center; border:1px solid #ccc; padding:4px;">No.</th>
+                <th style="text-align:left; border:1px solid #ccc; padding:4px;">Nombre del Alumno</th>
+                <th style="text-align:center; border:1px solid #ccc; padding:4px;">Matrícula / Folio</th>
+             </tr>
+          </thead>
+          <tbody>
+        `;
+        rowsList.forEach((tr, index) => {
+            const nombre = tr.cells[1].innerText;
+            const matricula = tr.cells[2].innerText;
+            tableContentHtml += `
+            <tr>
+                <td style="text-align:center; border:1px solid #ccc; padding:4px;">${index + 1}</td>
+                <td style="border:1px solid #ccc; padding:4px;">${nombre}</td>
+                <td style="text-align:center; border:1px solid #ccc; padding:4px;">${matricula}</td>
+            </tr>`;
+        });
+        tableContentHtml += '</tbody>';
+    }
+
+    const htmlToPrint = `
+    <html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40">
+    <head>
+    <meta charset="utf-8">
+    <title>Lista ${grupoName}</title>
+    </head>
+    <body style="font-family: Arial, sans-serif;">
+        <h2 style="text-align:center;">${schoolName}</h2>
+        <h3 style="text-align:center;">LISTA OFICIAL DE GRUPO: ${grupoName}</h3>
+        <p style="text-align:right;">Fecha: ${fecha}</p>
+        <table style="width:100%; border-collapse:collapse;" border="1">
+            ${tableContentHtml}
+        </table>
+    </body>
+    </html>`;
+    
+    const blob = new Blob(['\ufeff', htmlToPrint], { type: 'application/msword' });
+    const url = URL.createObjectURL(blob);
+    let downloadLink = document.createElement("a");
+    document.body.appendChild(downloadLink);
+    downloadLink.href = url;
+    downloadLink.download = `Lista_${grupoName}.doc`;
+    downloadLink.click();
+    document.body.removeChild(downloadLink);
+    URL.revokeObjectURL(url);
 };
