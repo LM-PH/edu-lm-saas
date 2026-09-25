@@ -35,6 +35,7 @@
     <script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.min.js"></script>
     <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+    <script src="https://unpkg.com/docx@7.8.2/build/index.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     
     <!-- Flatpickr JS -->
@@ -42,13 +43,13 @@
     <script src="https://cdn.jsdelivr.net/npm/flatpickr/dist/l10n/es.js"></script>
 
     <!-- Lógica Principal Sincronizada (v114 + Watchdog v1) -->
-    <script src="edu_lm_v112_universal.js?v=819"></script>
+    <script src="edu_lm_v112_universal.js?v=820"></script>
 
     <!-- Service Worker Registration -->
     <script>
       if ('serviceWorker' in navigator) {
         window.addEventListener('load', () => {
-          navigator.serviceWorker.register('./sw.js?v=402')
+          navigator.serviceWorker.register('./sw.js?v=403')
             .then(reg => {
                 console.log('Edu-LM PWA: Service Worker registrado.', reg);
                 reg.onupdatefound = () => {

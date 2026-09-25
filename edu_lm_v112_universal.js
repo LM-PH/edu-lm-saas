@@ -22627,75 +22627,144 @@ window.descargarAdminListaDOC = async (esVacia = false) => {
         return alert("Seleccione un grupo con alumnos primero.");
     }
     
+    if (!window.docx) {
+        return alert("La biblioteca de Word se está cargando. Por favor, intenta de nuevo en un segundo.");
+    }
+    
+    const { Document, Packer, Paragraph, TextRun, Table, TableRow, TableCell, WidthType, AlignmentType, VerticalAlign, BorderStyle } = window.docx;
+
     const grupoName = sel.options[sel.selectedIndex].text;
     const rowsList = Array.from(tbody.querySelectorAll('tr'));
     
     const schoolName = CONFIG.schoolName;
     const fecha = new Date().toLocaleDateString('es-MX', {day:'2-digit', month:'2-digit', year:'numeric'});
     
-    let tableContentHtml = '';
+    // Extraer datos de la tabla visual
+    const alumnos = rowsList.map(tr => {
+        return {
+            nombre: tr.cells[1].innerText,
+            matricula: tr.cells[2].innerText
+        };
+    });
+
+    let tableRows = [];
+    const headerCells = [];
     
+    headerCells.push(new TableCell({
+        children: [new Paragraph({ text: "No.", alignment: AlignmentType.CENTER, style: "HeaderStyle" })],
+        verticalAlign: VerticalAlign.CENTER,
+        width: { size: 5, type: WidthType.PERCENTAGE },
+        shading: { fill: "f8f9fa" }
+    }));
+    
+    headerCells.push(new TableCell({
+        children: [new Paragraph({ text: "Nombre del Alumno", style: "HeaderStyle" })],
+        verticalAlign: VerticalAlign.CENTER,
+        width: { size: esVacia ? 35 : 65, type: WidthType.PERCENTAGE },
+        shading: { fill: "f8f9fa" }
+    }));
+
     if (esVacia) {
-        const numCols = 30;
-        let headers = `<th style="width:20px; border:1px solid #ccc; padding:4px;">No.</th><th style="text-align:left; min-width: 130px; border:1px solid #ccc; padding:4px;">Nombre del Alumno</th>`;
-        for(let i=1; i<=numCols; i++) headers += `<th style="width:12px; font-weight:normal; border:1px solid #ccc; padding:4px;">${i}</th>`;
-        tableContentHtml += `<thead><tr style="background-color:#f8f9fa">${headers}</tr></thead><tbody>`;
-        
-        rowsList.forEach((tr, index) => {
-            const nombre = tr.cells[1].innerText;
-            let row = `<tr><td style="text-align:center; border:1px solid #ccc; padding:4px;">${index + 1}</td><td style="border:1px solid #ccc; padding:4px;">${nombre}</td>`;
-            for(let i=0; i<numCols; i++) row += `<td style="border:1px solid #ccc; padding:4px;"></td>`;
-            row += `</tr>`;
-            tableContentHtml += row;
-        });
-        tableContentHtml += '</tbody>';
+        for (let i = 1; i <= 30; i++) {
+            headerCells.push(new TableCell({
+                children: [new Paragraph({ text: i.toString(), alignment: AlignmentType.CENTER, style: "HeaderStyle" })],
+                verticalAlign: VerticalAlign.CENTER,
+                width: { size: 2, type: WidthType.PERCENTAGE },
+                shading: { fill: "f8f9fa" }
+            }));
+        }
     } else {
-        tableContentHtml += `
-          <thead>
-             <tr style="background-color:#f8f9fa">
-                <th style="width:40px; text-align:center; border:1px solid #ccc; padding:4px;">No.</th>
-                <th style="text-align:left; border:1px solid #ccc; padding:4px;">Nombre del Alumno</th>
-                <th style="text-align:center; border:1px solid #ccc; padding:4px;">Matrícula / Folio</th>
-             </tr>
-          </thead>
-          <tbody>
-        `;
-        rowsList.forEach((tr, index) => {
-            const nombre = tr.cells[1].innerText;
-            const matricula = tr.cells[2].innerText;
-            tableContentHtml += `
-            <tr>
-                <td style="text-align:center; border:1px solid #ccc; padding:4px;">${index + 1}</td>
-                <td style="border:1px solid #ccc; padding:4px;">${nombre}</td>
-                <td style="text-align:center; border:1px solid #ccc; padding:4px;">${matricula}</td>
-            </tr>`;
-        });
-        tableContentHtml += '</tbody>';
+        headerCells.push(new TableCell({
+            children: [new Paragraph({ text: "Matrícula / Folio", alignment: AlignmentType.CENTER, style: "HeaderStyle" })],
+            verticalAlign: VerticalAlign.CENTER,
+            width: { size: 30, type: WidthType.PERCENTAGE },
+            shading: { fill: "f8f9fa" }
+        }));
     }
 
-    const htmlToPrint = `
-    <html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40">
-    <head>
-    <meta charset="utf-8">
-    <title>Lista ${grupoName}</title>
-    </head>
-    <body style="font-family: Arial, sans-serif;">
-        <h2 style="text-align:center;">${schoolName}</h2>
-        <h3 style="text-align:center;">LISTA OFICIAL DE GRUPO: ${grupoName}</h3>
-        <p style="text-align:right;">Fecha: ${fecha}</p>
-        <table style="width:100%; border-collapse:collapse;" border="1">
-            ${tableContentHtml}
-        </table>
-    </body>
-    </html>`;
+    tableRows.push(new TableRow({ children: headerCells, tableHeader: true }));
+
+    alumnos.forEach((a, index) => {
+        const rowCells = [];
+        rowCells.push(new TableCell({
+            children: [new Paragraph({ text: (index + 1).toString(), alignment: AlignmentType.CENTER, style: "NormalStyle" })],
+            verticalAlign: VerticalAlign.CENTER
+        }));
+        rowCells.push(new TableCell({
+            children: [new Paragraph({ text: a.nombre, style: "NormalStyle" })],
+            verticalAlign: VerticalAlign.CENTER
+        }));
+
+        if (esVacia) {
+            for (let i = 1; i <= 30; i++) {
+                rowCells.push(new TableCell({ children: [new Paragraph({ text: "" })] }));
+            }
+        } else {
+            rowCells.push(new TableCell({
+                children: [new Paragraph({ text: a.matricula || "-", alignment: AlignmentType.CENTER, style: "NormalStyle" })],
+                verticalAlign: VerticalAlign.CENTER
+            }));
+        }
+        tableRows.push(new TableRow({ children: rowCells }));
+    });
+
+    const doc = new Document({
+        styles: {
+            paragraphStyles: [
+                {
+                    id: "HeaderStyle",
+                    name: "Header Style",
+                    basedOn: "Normal",
+                    next: "Normal",
+                    run: { bold: true, size: 20, font: "Arial" }, // size in half-points (20 = 10pt)
+                    paragraph: { spacing: { before: 60, after: 60 } }
+                },
+                {
+                    id: "NormalStyle",
+                    name: "Normal Style",
+                    basedOn: "Normal",
+                    next: "Normal",
+                    run: { size: 20, font: "Arial" },
+                    paragraph: { spacing: { before: 60, after: 60 } }
+                }
+            ]
+        },
+        sections: [{
+            properties: {
+                page: {
+                    margin: { top: 1000, right: 1000, bottom: 1000, left: 1000 },
+                    size: { 
+                        width: esVacia ? 16838 : 11906,
+                        height: esVacia ? 11906 : 16838,
+                        orientation: esVacia ? "landscape" : "portrait"
+                    }
+                }
+            },
+            children: [
+                new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: schoolName, bold: true, size: 28, font: "Arial" })] }),
+                new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: `LISTA OFICIAL DE GRUPO: ${grupoName}`, bold: true, size: 24, font: "Arial" })] }),
+                new Paragraph({ alignment: AlignmentType.RIGHT, children: [new TextRun({ text: `Fecha: ${fecha}`, size: 20, font: "Arial" })] }),
+                new Paragraph({ text: "" }),
+                new Table({
+                    rows: tableRows,
+                    width: { size: 100, type: WidthType.PERCENTAGE }
+                })
+            ]
+        }]
+    });
     
-    const blob = new Blob(['\ufeff', htmlToPrint], { type: 'application/msword' });
-    const url = URL.createObjectURL(blob);
-    let downloadLink = document.createElement("a");
-    document.body.appendChild(downloadLink);
-    downloadLink.href = url;
-    downloadLink.download = `Lista_${grupoName}.doc`;
-    downloadLink.click();
-    document.body.removeChild(downloadLink);
-    URL.revokeObjectURL(url);
+    try {
+        const blob = await Packer.toBlob(doc);
+        const url = URL.createObjectURL(blob);
+        let downloadLink = document.createElement("a");
+        document.body.appendChild(downloadLink);
+        downloadLink.href = url;
+        downloadLink.download = `Lista_${grupoName}.docx`;
+        downloadLink.click();
+        document.body.removeChild(downloadLink);
+        URL.revokeObjectURL(url);
+    } catch(err) {
+        console.error(err);
+        alert("Ocurrió un error al generar el documento DOCX.");
+    }
 };
