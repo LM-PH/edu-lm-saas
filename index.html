@@ -43,13 +43,13 @@
     <script src="https://cdn.jsdelivr.net/npm/flatpickr/dist/l10n/es.js"></script>
 
     <!-- Lógica Principal Sincronizada (v114 + Watchdog v1) -->
-    <script src="edu_lm_v112_universal.js?v=820"></script>
+    <script src="edu_lm_v112_universal.js?v=821"></script>
 
     <!-- Service Worker Registration -->
     <script>
       if ('serviceWorker' in navigator) {
         window.addEventListener('load', () => {
-          navigator.serviceWorker.register('./sw.js?v=403')
+          navigator.serviceWorker.register('./sw.js?v=404')
             .then(reg => {
                 console.log('Edu-LM PWA: Service Worker registrado.', reg);
                 reg.onupdatefound = () => {

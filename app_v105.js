@@ -9631,32 +9631,6 @@ window.descargarAdminListaPDF = async (esVacia = false) => {
         alert("Error al generar PDF: " + err.message);
     }
 };
-window.descargarAdminListaDOC = async (esVacia = false) => {
-    const sel = document.getElementById('adminListaGrupoSelect');
-    const tbody = document.getElementById('adminListaPreviewTbody');
-    
-    if(!sel || !sel.value || !tbody || tbody.innerText.includes("Seleccione") || tbody.innerText.includes("Cargando") || tbody.innerText.includes("No tiene")) {
-        return alert("Seleccione un grupo con alumnos primero.");
-    }
-    
-    if (!window.docx) {
-        return alert("La biblioteca de Word se está cargando. Por favor, intenta de nuevo en un segundo.");
-    }
-    
-    const { Document, Packer, Paragraph, TextRun, Table, TableRow, TableCell, WidthType, AlignmentType, VerticalAlign, BorderStyle } = window.docx;
-
-    const grupoName = sel.options[sel.selectedIndex].text;
-    const rowsList = Array.from(tbody.querySelectorAll('tr'));
-    
-    const schoolName = CONFIG.schoolName;
-    const fecha = new Date().toLocaleDateString('es-MX', {day:'2-digit', month:'2-digit', year:'numeric'});
-    
-    // Extraer datos de la tabla visual
-    const alumnos = rowsList.map(tr => {
-        return {
-            nombre: tr.cells[1].innerText,
-            matricula: tr.cells[2].innerText
-        };
     });
 
     let tableRows = [];
@@ -9760,6 +9734,166 @@ window.descargarAdminListaDOC = async (esVacia = false) => {
                 new Table({
                     rows: tableRows,
                     width: { size: 100, type: WidthType.PERCENTAGE }
+                })
+            ]
+        }]
+    });
+    
+    try {
+        const blob = await Packer.toBlob(doc);
+        const url = URL.createObjectURL(blob);
+        let downloadLink = document.createElement("a");
+        document.body.appendChild(downloadLink);
+        downloadLink.href = url;
+        downloadLink.download = `Lista_${grupoName}.docx`;
+        downloadLink.click();
+        document.body.removeChild(downloadLink);
+        URL.revokeObjectURL(url);
+    } catch(err) {
+        console.error(err);
+        alert("Ocurrió un error al generar el documento DOCX.");
+    }
+};
+window.descargarAdminListaDOC = async (esVacia = false) => {
+    const sel = document.getElementById('adminListaGrupoSelect');
+    const tbody = document.getElementById('adminListaPreviewTbody');
+    
+    if(!sel || !sel.value || !tbody || tbody.innerText.includes("Seleccione") || tbody.innerText.includes("Cargando") || tbody.innerText.includes("No tiene")) {
+        return alert("Seleccione un grupo con alumnos primero.");
+    }
+    
+    if (!window.docx) {
+        return alert("La biblioteca de Word se está cargando. Por favor, intenta de nuevo en un segundo.");
+    }
+    
+    const { Document, Packer, Paragraph, TextRun, Table, TableRow, TableCell, WidthType, AlignmentType, VerticalAlign, TableLayoutType } = window.docx;
+
+    const grupoName = sel.options[sel.selectedIndex].text;
+    const rowsList = Array.from(tbody.querySelectorAll('tr'));
+    
+    const schoolName = CONFIG.schoolName;
+    const fecha = new Date().toLocaleDateString('es-MX', {day:'2-digit', month:'2-digit', year:'numeric'});
+    
+    const alumnos = rowsList.map(tr => {
+        return {
+            nombre: tr.cells[1].innerText,
+            matricula: tr.cells[2].innerText
+        };
+    });
+
+    let tableRows = [];
+    const headerCells = [];
+    
+    headerCells.push(new TableCell({
+        children: [new Paragraph({ text: "No.", alignment: AlignmentType.CENTER, style: "HeaderStyle" })],
+        verticalAlign: VerticalAlign.CENTER,
+        shading: { fill: "f8f9fa" }
+    }));
+    
+    headerCells.push(new TableCell({
+        children: [new Paragraph({ text: "Nombre del Alumno", style: "HeaderStyle" })],
+        verticalAlign: VerticalAlign.CENTER,
+        shading: { fill: "f8f9fa" }
+    }));
+
+    if (esVacia) {
+        for (let i = 1; i <= 30; i++) {
+            headerCells.push(new TableCell({
+                children: [new Paragraph({ text: i.toString(), alignment: AlignmentType.CENTER, style: "HeaderStyle" })],
+                verticalAlign: VerticalAlign.CENTER,
+                shading: { fill: "f8f9fa" }
+            }));
+        }
+    } else {
+        headerCells.push(new TableCell({
+            children: [new Paragraph({ text: "Matrícula / Folio", alignment: AlignmentType.CENTER, style: "HeaderStyle" })],
+            verticalAlign: VerticalAlign.CENTER,
+            shading: { fill: "f8f9fa" }
+        }));
+    }
+
+    tableRows.push(new TableRow({ children: headerCells, tableHeader: true }));
+
+    alumnos.forEach((a, index) => {
+        const rowCells = [];
+        rowCells.push(new TableCell({
+            children: [new Paragraph({ text: (index + 1).toString(), alignment: AlignmentType.CENTER, style: "NormalStyle" })],
+            verticalAlign: VerticalAlign.CENTER
+        }));
+        rowCells.push(new TableCell({
+            children: [new Paragraph({ text: a.nombre, style: "NormalStyle" })],
+            verticalAlign: VerticalAlign.CENTER
+        }));
+
+        if (esVacia) {
+            for (let i = 1; i <= 30; i++) {
+                rowCells.push(new TableCell({ 
+                    children: [new Paragraph({ text: "" })]
+                }));
+            }
+        } else {
+            rowCells.push(new TableCell({
+                children: [new Paragraph({ text: a.matricula || "-", alignment: AlignmentType.CENTER, style: "NormalStyle" })],
+                verticalAlign: VerticalAlign.CENTER
+            }));
+        }
+        tableRows.push(new TableRow({ children: rowCells }));
+    });
+
+    let colWidths = [];
+    if (esVacia) {
+        colWidths.push(500);  // No.
+        colWidths.push(4600); // Nombre
+        for (let i = 0; i < 30; i++) colWidths.push(337);
+    } else {
+        colWidths.push(600);  // No.
+        colWidths.push(7000); // Nombre
+        colWidths.push(2700); // Matricula
+    }
+
+    const doc = new Document({
+        styles: {
+            paragraphStyles: [
+                {
+                    id: "HeaderStyle",
+                    name: "Header Style",
+                    basedOn: "Normal",
+                    next: "Normal",
+                    run: { bold: true, size: 18, font: "Arial" }, // 9pt
+                    paragraph: { spacing: { before: 40, after: 40 } }
+                },
+                {
+                    id: "NormalStyle",
+                    name: "Normal Style",
+                    basedOn: "Normal",
+                    next: "Normal",
+                    run: { size: 18, font: "Arial" }, // 9pt
+                    paragraph: { spacing: { before: 40, after: 40 } }
+                }
+            ]
+        },
+        sections: [{
+            properties: {
+                page: {
+                    margin: { top: 800, right: 800, bottom: 800, left: 800 },
+                    size: { 
+                        width: esVacia ? 16838 : 11906,
+                        height: esVacia ? 11906 : 16838,
+                        orientation: esVacia ? "landscape" : "portrait"
+                    }
+                }
+            },
+            children: [
+                new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: schoolName, bold: true, size: 24, font: "Arial" })] }),
+                new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: `LISTA OFICIAL DE GRUPO: ${grupoName}`, bold: true, size: 20, font: "Arial" })] }),
+                new Paragraph({ alignment: AlignmentType.RIGHT, children: [new TextRun({ text: `Fecha: ${fecha}`, size: 18, font: "Arial" })] }),
+                new Paragraph({ text: "", spacing: { after: 200 } }),
+                new Table({
+                    rows: tableRows,
+                    width: { size: 100, type: WidthType.PERCENTAGE },
+                    layout: TableLayoutType.FIXED,
+                    columnWidths: colWidths,
+                    margins: { top: 60, bottom: 60, left: 60, right: 60 }
                 })
             ]
         }]
