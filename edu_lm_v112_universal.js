@@ -2823,11 +2823,14 @@ function renderMaestroActividades() {
       <div class="card" style="flex: 2; min-width: 400px;">
          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
             <h3 style="margin:0;">Gestión de Actividades</h3>
-            <div class="tabs" style="display:flex; background:var(--page-bg); padding:4px; border-radius:8px; gap:4px; align-items:center;">
+            <div class="tabs" style="display:flex; background:var(--page-bg); padding:4px; border-radius:8px; gap:4px; align-items:center; flex-wrap:wrap;">
                 <select id="filtroTrimestreAct" class="form-select" style="margin:0; padding:4px 8px; font-size:0.8rem; width:120px;" onchange="window.loadActividadesMaestro()">
                     <option value="1">1° Trimestre</option>
                     <option value="2">2° Trimestre</option>
                     <option value="3">3° Trimestre</option>
+                </select>
+                <select id="filtroGrupoAct" class="form-select" style="margin:0; padding:4px 8px; font-size:0.8rem; width:150px;" onchange="window.loadActividadesMaestro()">
+                    <option value="">Todos los grupos</option>
                 </select>
                 <div style="width:1px; height:20px; background:var(--border); margin:0 4px;"></div>
                 <button class="btn btn-sm" id="tabActsVigentes" onclick="window.cambiarTabActividades('vigentes')" style="background:white; border:1px solid var(--border); border-radius:6px; padding:6px 12px; font-size:0.85rem; font-weight:600; cursor:pointer;">
@@ -10634,18 +10637,27 @@ window.loadActividadesMaestro = async () => {
                .or('grupo_id.not.is.null,target_grado.not.is.null');
                
             if(!errAsigs && asigs) {
-                selGrupo.innerHTML = '<option value="">-- Selecciona --</option>' + 
-                   asigs.map(a => {
+                const optionsHTML = asigs.map(a => {
                        if(a.grupos) return `<option value="${a.grupos.id}|${a.materia}">${a.materia} - ${a.grupos.nombre}</option>`;
                        if(a.target_grado) return `<option value="grado:${a.target_grado}|${a.materia}">${a.materia} - Grado ${a.target_grado} (Tecnología)</option>`;
                        return '';
                    }).filter(Boolean).join('');
+                selGrupo.innerHTML = '<option value="">-- Selecciona --</option>' + optionsHTML;
+                
+                const filtroGrupo = document.getElementById('filtroGrupoAct');
+                if (filtroGrupo) {
+                    // Mantener la opción seleccionada si ya había una
+                    const currentVal = filtroGrupo.value;
+                    filtroGrupo.innerHTML = '<option value="">Todos los grupos</option>' + optionsHTML;
+                    if (currentVal) filtroGrupo.value = currentVal;
+                }
             }
         }
 
         // Fetch actividades del maestro filtradas por pestaña y trimestre
         const isFinalizada = currentTab === 'archivo';
         const trimSelected = document.getElementById('filtroTrimestreAct')?.value || 1;
+        const filtroGrupoVal = document.getElementById('filtroGrupoAct')?.value;
         
         const { data: misActividades, error: errAct } = await supabaseClient.from('actividades_maestro')
            .select('*, grupos(nombre), evaluaciones_actividades(id)')
@@ -10657,7 +10669,23 @@ window.loadActividadesMaestro = async () => {
            
         if(errAct) throw errAct;
 
-        if(!misActividades || misActividades.length === 0) {
+        let actividadesMostrar = misActividades || [];
+        if (filtroGrupoVal) {
+             const parts = filtroGrupoVal.split('|');
+             const targetGrupo = parts[0];
+             const targetMateria = parts[1];
+             actividadesMostrar = actividadesMostrar.filter(act => {
+                 let matchGroup = false;
+                 if (targetGrupo.startsWith('grado:')) {
+                     matchGroup = (act.target_grado == targetGrupo.split(':')[1]);
+                 } else {
+                     matchGroup = (act.grupo_id == targetGrupo);
+                 }
+                 return matchGroup && act.materia === targetMateria;
+             });
+        }
+
+        if(actividadesMostrar.length === 0) {
             constLista.innerHTML = `<div style="text-align:center; padding:40px; color:var(--text-muted)">
                 <i class="fa-solid fa-folder-open fa-2x" style="opacity:0.2; margin-bottom:10px; display:block;"></i>
                 No hay actividades ${isFinalizada ? 'archivadas' : 'vigentes'} actualmente.
@@ -10665,7 +10693,7 @@ window.loadActividadesMaestro = async () => {
             return;
         }
 
-        constLista.innerHTML = misActividades.map(act => {
+        constLista.innerHTML = actividadesMostrar.map(act => {
             const count = act.evaluaciones_actividades ? act.evaluaciones_actividades.length : 0;
             const fechaTxt = isFinalizada ? 
                 `<span style="font-size:0.75rem; color:var(--text-muted); background:var(--page-bg); padding:2px 8px; border-radius:4px;">Cerrada el: ${new Date(act.fecha_finalizacion).toLocaleDateString()}</span>` : 
