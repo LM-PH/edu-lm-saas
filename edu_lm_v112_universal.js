@@ -11077,23 +11077,28 @@ window.loadListaEvalManual = async () => {
         let html = '';
         alumnos.forEach((al, index) => {
             const nota = evalMap[al.id] || '';
-            const statusColor = nota ? 'var(--success)' : 'var(--text-muted)';
+            const statusColor = nota ? 'var(--success)' : 'var(--border)';
             const borderStyle = nota ? 'border:1px solid var(--success);' : 'border:1px solid var(--border);';
             
             html += `
-            <div style="display:flex; justify-content:space-between; align-items:center; padding:12px; ${borderStyle} background:white; border-radius:8px;">
+            <div id="row_eval_${al.id}" style="display:flex; justify-content:space-between; align-items:center; padding:12px; ${borderStyle} background:white; border-radius:8px; margin-bottom: 8px;">
                 <div style="flex:1;">
                     <div style="font-weight:600; font-size:0.95rem;">${index+1}. ${al.nombre}</div>
                     <div style="font-size:0.75rem; color:var(--text-muted);">${al.matricula || 'Sin matrícula'}</div>
                 </div>
                 <div style="display:flex; gap:5px; align-items:center;">
-                    <input type="text" id="in_eval_${al.id}" class="form-input" style="width:70px; margin:0; text-align:center; border-color:${statusColor}" placeholder="-" value="${nota}">
-                    <button id="btn_save_eval_${al.id}" class="btn btn-sm ${nota ? 'btn-success' : 'btn-primary'}" onclick="window.guardarEvaluacionListaManual('${al.id}')" style="padding:6px 12px;">
-                        <i class="fa-solid ${nota ? 'fa-check' : 'fa-save'}"></i>
-                    </button>
+                    <input type="text" id="in_eval_${al.id}" data-alumnoid="${al.id}" class="form-input eval-manual-input" style="width:70px; margin:0; text-align:center; border-color:${nota ? 'var(--success)' : 'var(--border)'}" placeholder="-" value="${nota}">
                 </div>
             </div>`;
         });
+        
+        html += `
+            <div style="margin-top: 15px; position: sticky; bottom: 0; background: white; padding: 10px 0; border-top: 1px solid var(--border); z-index: 10;">
+                <button id="btn_save_all_evals" class="btn btn-primary" style="width: 100%; font-size: 1rem; padding: 12px;" onclick="window.guardarTodasEvaluacionesManual()">
+                    <i class="fa-solid fa-save"></i> Guardar Calificaciones
+                </button>
+            </div>
+        `;
         
         contenedor.innerHTML = html;
         
@@ -11103,42 +11108,60 @@ window.loadListaEvalManual = async () => {
     }
 };
 
-window.guardarEvaluacionListaManual = async (alumnoId) => {
-    const input = document.getElementById(`in_eval_${alumnoId}`);
-    const btn = document.getElementById(`btn_save_eval_${alumnoId}`);
-    if(!input || !btn || !currentActividadId) return;
+window.guardarTodasEvaluacionesManual = async () => {
+    const btn = document.getElementById('btn_save_all_evals');
+    if(!btn || !currentActividadId) return;
     
-    const nota = input.value.trim();
-    if(!nota) {
-        if(window.showToast) window.showToast("Ingresa una calificación", "warning");
-        else alert("Ingresa una calificación");
+    const inputs = document.querySelectorAll('.eval-manual-input');
+    const toSave = [];
+    inputs.forEach(input => {
+        const nota = input.value.trim();
+        const alumnoId = input.getAttribute('data-alumnoid');
+        
+        if(nota !== "") {
+            toSave.push({
+                actividad_id: currentActividadId,
+                alumno_id: alumnoId,
+                calificacion: nota,
+                plantel_id: state.plantelId
+            });
+        }
+    });
+    
+    if(toSave.length === 0) {
+        if(window.showToast) window.showToast("No hay calificaciones para guardar", "info");
+        else alert("No hay calificaciones para guardar");
         return;
     }
     
-    // Optimistic UI update
-    const prevIcon = btn.innerHTML;
-    btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i>';
+    const prevHTML = btn.innerHTML;
+    btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Guardando...';
     btn.disabled = true;
     
     try {
         const { error } = await supabaseClient.from('evaluaciones_actividades')
-          .upsert({ actividad_id: currentActividadId, alumno_id: alumnoId, calificacion: nota, plantel_id: state.plantelId }, { onConflict: 'actividad_id, alumno_id' });
+          .upsert(toSave, { onConflict: 'actividad_id, alumno_id' });
         
         if(error) throw error;
         
-        // Update UI to success state
-        btn.className = 'btn btn-sm btn-success';
-        btn.innerHTML = '<i class="fa-solid fa-check"></i>';
-        input.style.borderColor = 'var(--success)';
-        input.parentElement.parentElement.style.borderColor = 'var(--success)';
-        btn.disabled = false;
+        if(window.showToast) window.showToast("Todas las calificaciones guardadas exitosamente", "success");
+        else alert("Calificaciones guardadas exitosamente.");
         
-        // La lista de fondo se actualizará hasta que el maestro cierre el modal
+        // Update UI to success state
+        inputs.forEach(input => {
+            if(input.value.trim() !== "") {
+                input.style.borderColor = 'var(--success)';
+                const row = document.getElementById(`row_eval_${input.getAttribute('data-alumnoid')}`);
+                if(row) row.style.borderColor = 'var(--success)';
+            }
+        });
+        
     } catch(err) {
         console.error(err);
         if(window.showToast) window.showToast("Error al guardar: " + err.message, "error");
         else alert("Error al guardar: " + err.message);
-        btn.innerHTML = prevIcon;
+    } finally {
+        btn.innerHTML = prevHTML;
         btn.disabled = false;
     }
 };
