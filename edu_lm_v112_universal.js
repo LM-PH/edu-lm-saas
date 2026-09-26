@@ -4815,14 +4815,17 @@ window.showAlumnoExpediente = async (idAlumno, context = 'completo') => {
         const id = String(idAlumno).trim();
         const [alRes, repsRes, intervsRes, saludRes] = await Promise.all([
             supabaseClient.from('alumnos').select('*, grupos(nombre)').eq('id', id).single(),
-            supabaseClient.from('reportes_conducta').select('*, perfiles(nombre)').eq('alumno_id', id).order('fecha', { ascending: false }),
-            supabaseClient.from('intervenciones_conducta').select('*').eq('alumno_id', id).order('fecha', { ascending: false }),
+            supabaseClient.from('reportes_conducta').select('*, perfiles(nombre)').eq('alumno_id', id),
+            supabaseClient.from('intervenciones_conducta').select('*').eq('alumno_id', id),
             supabaseClient.from('fichas_salud').select('*').eq('alumno_id', id).order('fecha_envio', { ascending: false }).limit(1)
         ]);
 
         const al = alRes.data;
-        const reps = repsRes.data || [];
-        const intervs = intervsRes.data || [];
+        
+        // Ordenamiento en JS para evitar crasheos si la DB renombró la columna de fecha
+        const reps = (repsRes.data || []).sort((a,b) => new Date(b.creado_en || b.fecha || b.created_at) - new Date(a.creado_en || a.fecha || a.created_at));
+        const intervs = (intervsRes.data || []).sort((a,b) => new Date(b.creado_en || b.fecha || b.created_at) - new Date(a.creado_en || a.fecha || a.created_at));
+        
         const fichaSalud = (saludRes.data && saludRes.data.length > 0) ? saludRes.data[0] : null;
 
         if(!al) throw new Error("Alumno no encontrado");
@@ -5051,15 +5054,15 @@ window.imprimirExpediente = async (idAlumno, modo = 'completo') => {
         const id = String(idAlumno).trim();
         const [alRes, repsRes, intervsRes, plantelRes, saludRes] = await Promise.all([
             supabaseClient.from('alumnos').select('*, grupos(nombre)').eq('id', id).single(),
-            supabaseClient.from('reportes_conducta').select('*, perfiles(nombre)').eq('alumno_id', id).order('fecha', { ascending: false }),
-            supabaseClient.from('intervenciones_conducta').select('*').eq('alumno_id', id).order('fecha', { ascending: false }),
+            supabaseClient.from('reportes_conducta').select('*, perfiles(nombre)').eq('alumno_id', id),
+            supabaseClient.from('intervenciones_conducta').select('*').eq('alumno_id', id),
             supabaseClient.from('planteles').select('nombre, logo_url, cct').eq('id', state.plantelId).single(),
             supabaseClient.from('fichas_salud').select('*').eq('alumno_id', id).order('fecha_envio', { ascending: false }).limit(1)
         ]);
 
         const al = alRes.data;
-        const reps = repsRes.data || [];
-        const intervs = intervsRes.data || [];
+        const reps = (repsRes.data || []).sort((a,b) => new Date(b.creado_en || b.fecha || b.created_at) - new Date(a.creado_en || a.fecha || a.created_at));
+        const intervs = (intervsRes.data || []).sort((a,b) => new Date(b.creado_en || b.fecha || b.created_at) - new Date(a.creado_en || a.fecha || a.created_at));
         const schoolName = (plantelRes.data?.nombre || 'Escuela') + (plantelRes.data?.cct ? '<br><span style="font-size:0.75em; color:#555; font-weight:normal;">C.C.T. ' + plantelRes.data?.cct + '</span>' : '');
         const schoolLogo = window.getCleanLogoUrl(plantelRes.data?.logo_url) || null;
         const fichaSalud = (saludRes.data && saludRes.data.length > 0) ? saludRes.data[0] : null;
