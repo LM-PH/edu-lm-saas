@@ -3310,7 +3310,7 @@ function renderApoyoReportes() {
   setTimeout(() => { 
       if(!isMaestro && !isBiblioteca && window.loadCitatoriosApoyo) window.loadCitatoriosApoyo();
       if(!isMaestro && !isBiblioteca && window.cargarProtocolosEscuela) window.cargarProtocolosEscuela();
-      // Ocultamos la auto-carga de mis reportes; ahora es por búsqueda
+      if((isMaestro || isBiblioteca) && window.buscarMisReportes) window.buscarMisReportes('');
   }, 150);
   
   const subtitle = isMaestro ? 'Reportes de Incidencias Disciplinarias' : (isBiblioteca ? 'Biblioteca y Aula de Medios | Registro y Levante de Reportes' : 'Personal de Apoyo | Triage y Mediación Escolar');
@@ -3772,41 +3772,40 @@ window.buscarMisReportes = async (term = '') => {
     const container = document.getElementById('contenedorMisReportes');
     if(!container) return;
     
-    if(!term || term.trim().length === 0) {
-        container.innerHTML = '<div style="text-align:center; padding:30px; color:var(--text-muted); grid-column:1/-1;"><i class="fa-solid fa-search" style="font-size:2rem; margin-bottom:10px; display:block;"></i>Utiliza el buscador de arriba para encontrar los reportes que has levantado.</div>';
-        return;
-    }
-
-    container.innerHTML = '<div style="text-align:center; padding:30px; color:var(--text-muted); grid-column:1/-1;"><i class="fa-solid fa-spinner fa-spin"></i> Buscando...</div>';
+    container.innerHTML = '<div style="text-align:center; padding:30px; color:var(--text-muted); grid-column:1/-1;"><i class="fa-solid fa-spinner fa-spin"></i> Cargando...</div>';
     
     try {
         const u = await supabaseClient.auth.getUser();
         if(!u.data.user) return;
         
-        // Primero buscamos los alumnos que coincidan con el término
-        const { data: alumnosMatch, error: errAlum } = await supabaseClient
-            .from('alumnos')
-            .select('id')
-            .eq('plantel_id', state.plantelId)
-            .or(`nombre.ilike.%${term}%,matricula.ilike.%${term}%`)
-            .limit(20);
-            
-        if(errAlum) throw errAlum;
-        
-        if(!alumnosMatch || alumnosMatch.length === 0) {
-            container.innerHTML = '<div style="text-align:center; padding:30px; color:var(--text-muted); grid-column:1/-1;">No se encontraron reportes tuyos para ese alumno.</div>';
-            return;
-        }
-        
-        const ids = alumnosMatch.map(a => a.id);
-        
-        const { data, error } = await supabaseClient.from('reportes_conducta')
+        let query = supabaseClient.from('reportes_conducta')
             .select('id, descripcion, gravedad, resuelto, fecha, alumnos!inner(nombre, matricula, grupo_id)')
             .eq('autor_id', u.data.user.id)
             .eq('plantel_id', state.plantelId)
-            .in('alumno_id', ids)
             .order('fecha', { ascending: false })
             .limit(50);
+        
+        if(term && term.trim().length > 0) {
+            // Primero buscamos los alumnos que coincidan con el término
+            const { data: alumnosMatch, error: errAlum } = await supabaseClient
+                .from('alumnos')
+                .select('id')
+                .eq('plantel_id', state.plantelId)
+                .or(`nombre.ilike.%${term}%,matricula.ilike.%${term}%`)
+                .limit(20);
+                
+            if(errAlum) throw errAlum;
+            
+            if(!alumnosMatch || alumnosMatch.length === 0) {
+                container.innerHTML = '<div style="text-align:center; padding:30px; color:var(--text-muted); grid-column:1/-1;">No se encontraron reportes tuyos para ese alumno.</div>';
+                return;
+            }
+            
+            const ids = alumnosMatch.map(a => a.id);
+            query = query.in('alumno_id', ids);
+        }
+        
+        const { data, error } = await query;
             
         if(error) throw error;
         
@@ -4519,6 +4518,7 @@ window.guardarReporteApoyo = async () => {
         // Refrescar lista
         if(window.loadHistorialReportesApoyo) window.loadHistorialReportesApoyo();
         if(window.loadFocosRojos) window.loadFocosRojos();
+        if(window.buscarMisReportes) window.buscarMisReportes(document.getElementById('busquedaMisReportesInput')?.value || '');
         
     } catch(e) {
         console.error(e);
