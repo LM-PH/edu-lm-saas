@@ -3779,10 +3779,10 @@ window.buscarMisReportes = async (term = '') => {
         if(!u.data.user) return;
         
         let query = supabaseClient.from('reportes_conducta')
-            .select('id, descripcion, gravedad, resuelto, fecha, alumnos!inner(nombre, matricula, grupo_id)')
+            .select('*, alumnos!inner(nombre, matricula, grupo_id)')
             .eq('autor_id', u.data.user.id)
             .eq('plantel_id', state.plantelId)
-            .order('fecha', { ascending: false })
+            .order('creado_en', { ascending: false })
             .limit(50);
         
         if(term && term.trim().length > 0) {
@@ -3805,9 +3805,29 @@ window.buscarMisReportes = async (term = '') => {
             query = query.in('alumno_id', ids);
         }
         
-        const { data, error } = await query;
+        let { data, error } = await query;
             
-        if(error) throw error;
+        if(error) {
+            // Fallback en caso de que la columna sea 'fecha' y no 'creado_en' (refactor de DB)
+            console.warn("Fallo al buscar mis reportes con creado_en, intentando con fecha:", error);
+            let queryFallback = supabaseClient.from('reportes_conducta')
+                .select('*, alumnos!inner(nombre, matricula, grupo_id)')
+                .eq('autor_id', u.data.user.id)
+                .eq('plantel_id', state.plantelId)
+                .order('fecha', { ascending: false })
+                .limit(50);
+            
+            if (term && term.trim().length > 0) {
+                // 'ids' ya fue validado arriba
+                const { data: alumnosMatch } = await supabaseClient.from('alumnos').select('id').eq('plantel_id', state.plantelId).or(`nombre.ilike.%${term}%,matricula.ilike.%${term}%`).limit(20);
+                if (alumnosMatch && alumnosMatch.length > 0) {
+                    queryFallback = queryFallback.in('alumno_id', alumnosMatch.map(a => a.id));
+                }
+            }
+            const fallbackRes = await queryFallback;
+            data = fallbackRes.data;
+            if(fallbackRes.error) throw fallbackRes.error;
+        }
         
         if(!data || data.length === 0) {
             container.innerHTML = '<div style="text-align:center; padding:30px; color:var(--text-muted); grid-column:1/-1;">No has levantado ningún reporte a tus alumnos aún.</div>';
@@ -3816,7 +3836,7 @@ window.buscarMisReportes = async (term = '') => {
         
         let html = '';
         data.forEach(r => {
-            const fechaVal = r.fecha || r.created_at;
+            const fechaVal = r.creado_en || r.fecha || r.created_at;
             const fechaDate = fechaVal ? new Date(fechaVal).toLocaleDateString() : 'N/A';
             const badgeCls = r.resuelto ? 'success' : (r.gravedad === 'Grave' ? 'danger' : (r.gravedad === 'Moderado' ? 'warning' : 'info'));
             const alumnoNombre = r.alumnos ? r.alumnos.nombre : 'Alumno Desconocido';
