@@ -19763,18 +19763,48 @@ window.importarPreguntasPsicosocial = async (event) => {
             throw new Error("Formato no soportado. Usa PDF o DOCX.");
         }
 
-        const textArray = text.split('\n').map(l => l.trim()).filter(l => l.length > 5);
-        let count = 0;
+        const textArray = text.split('\n').map(l => l.trim()).filter(l => l.length > 2);
+        let questions = [];
+        let currentQuestion = null;
+
         textArray.forEach(line => {
             line = line.replace(/\s+/g, ' ');
-            const isQuestion = /^(¿|\d+\.|[a-zA-Z]\))/.test(line) || line.includes('?');
-            if (isQuestion) {
+            
+            const isQuestion = /^(¿|\d+[\.\-\)])/.test(line) || line.includes('?');
+            
+            let isOption = false;
+            let optText = line;
+            const explicitOptionMatch = line.match(/^([a-zA-Z][\.\)]|[\-\*\•\○\>])\s+(.+)/);
+            
+            if (explicitOptionMatch) {
+                isOption = true;
+                optText = explicitOptionMatch[2].trim();
+            } else if (currentQuestion && !isQuestion && line.length < 60 && !line.endsWith('.')) {
+                isOption = true;
+            }
+
+            if (isOption && currentQuestion && !line.includes('?')) {
+                currentQuestion.opciones.push(optText);
+                currentQuestion.tipo = 'select';
+            } else if (isQuestion) {
                 let cleanText = line.replace(/^(\d+[\.\-\)]|[a-zA-Z]\))\s*/, '').trim();
-                window.psicoBuilderAddQuestion({ titulo: cleanText, tipo: 'text' });
-                count++;
+                currentQuestion = { titulo: cleanText, tipo: 'text', opciones: [] };
+                questions.push(currentQuestion);
+            } else {
+                if (!currentQuestion) {
+                    // Ignorar posibles encabezados o títulos antes de la primera pregunta
+                } else if (currentQuestion.opciones.length === 0) {
+                    // Continuación del texto de la pregunta actual
+                    currentQuestion.titulo += " " + line;
+                } else {
+                    // Párrafo después de opciones, posiblemente una pregunta sin formato
+                    currentQuestion = { titulo: line, tipo: 'text', opciones: [] };
+                    questions.push(currentQuestion);
+                }
             }
         });
         
+        let count = questions.length;
         if (count === 0) {
             if(confirm("No se detectó el formato clásico de preguntas (¿...?, 1., a)). ¿Desea importar cada párrafo como una pregunta?")) {
                 textArray.forEach(line => {
@@ -19782,10 +19812,15 @@ window.importarPreguntasPsicosocial = async (event) => {
                      count++;
                 });
             }
+        } else {
+            questions.forEach(q => {
+                let opcionesStr = q.opciones.join(', ');
+                window.psicoBuilderAddQuestion({ titulo: q.titulo, tipo: q.tipo, opciones: opcionesStr });
+            });
         }
         
         if(count > 0) {
-            window.showToast(`Se importaron ${count} preguntas`, "success");
+            window.showToast(`Se importaron ${count} preguntas automáticamente`, "success");
         } else {
             window.showToast("No se importaron preguntas", "warning");
         }
