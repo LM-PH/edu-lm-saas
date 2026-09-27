@@ -17001,7 +17001,7 @@ window.eliminarPersona = async (idPermitido, email, nombre, rol = '') => {
         return window.showToast("No tienes permisos para editar o dar de baja a un Director.", "error");
     }
 
-    const isDirectivo = state.role === 'directivo' || state.role === 'secretaria_direccion';
+    const isDirectivo = state.role === 'directivo';
     const confirmMsg = isDirectivo 
         ? `⚠️ ¿Deseas ELIMINAR AHORA a "${nombre}" (${email})? Esta acción es inmediata.`
         : `⚠️ ¿Deseas SOLICITAR LA BAJA de "${nombre}" (${email})? El Directivo deberá autorizar este movimiento.`;
