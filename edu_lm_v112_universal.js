@@ -22068,9 +22068,15 @@ window.calcularCargaHorariaAuto = async function(maestroId) {
         let detalleTexto = "";
         let jsonCarga = [];
         
+        let groupedHorarios = {};
+        
+        // 1. Inicializar con las asignaciones oficiales para asegurar que aparezcan (incluso si tienen 0 horas)
         if(asignaciones && asignaciones.length > 0) {
-            for(const asig of asignaciones) {
-                // Determine group name and ID
+            asignaciones.forEach(asig => {
+                let groupIdKey = asig.grupo_id || ('grado_' + asig.target_grado);
+                const materiaNombre = mMap[asig.materia_id] || asig.materia || 'Materia Desconocida';
+                let key = materiaNombre.toLowerCase().trim() + '_' + groupIdKey;
+                
                 let grupoNombre = 'Grupo Desconocido';
                 if(asig.grupo_id && gMap[asig.grupo_id]) {
                     grupoNombre = gMap[asig.grupo_id];
@@ -22078,34 +22084,76 @@ window.calcularCargaHorariaAuto = async function(maestroId) {
                     grupoNombre = asig.target_grado + ' (Taller/Club)';
                 }
                 
-                const materiaNombre = mMap[asig.materia_id] || asig.materia || 'Materia Desconocida';
-                
-                // Ignorar filas basura/corruptas que no tienen grupo ni grado asignado
-                if (grupoNombre === 'Grupo Desconocido') continue;
-                
-                // Contar cuántos bloques de horario (filas en horarios_maestros) tiene para esta asignación
-                let horasEnHorario = horariosList.filter(s => {
-                    const matchMateria = (s.materia === asig.materia || s.materia === materiaNombre);
-                    let matchGrupo = false;
-                    if (asig.grupo_id) {
-                        matchGrupo = (s.grupo_id === asig.grupo_id);
-                    } else {
-                        // Para tecnologías o talleres sin grupo_id, hacer match por target_grado
-                        matchGrupo = (!s.grupo_id && String(s.target_grado) === String(asig.target_grado));
+                if (grupoNombre !== 'Grupo Desconocido') {
+                    groupedHorarios[key] = {
+                        materia: materiaNombre,
+                        grupoNombre: grupoNombre,
+                        grupo_id: asig.grupo_id,
+                        target_grado: asig.target_grado,
+                        materia_id: asig.materia_id,
+                        horas: 0
+                    };
+                }
+            });
+        }
+        
+        // 2. Sumar absolutamente todos los módulos registrados en el horario de clases (horarios_maestros)
+        horariosList.forEach(s => {
+            let groupIdKey = s.grupo_id || ('grado_' + s.target_grado);
+            let materiaNombre = s.materia || 'Materia Desconocida';
+            let key = materiaNombre.toLowerCase().trim() + '_' + groupIdKey;
+            
+            // Si el bloque de horario no coincide exactamente con la llave de asignación, intentar buscar similitud
+            if (!groupedHorarios[key]) {
+                let matchedKey = null;
+                for (let k in groupedHorarios) {
+                    if (groupedHorarios[k].grupo_id === s.grupo_id && String(groupedHorarios[k].target_grado) === String(s.target_grado)) {
+                        if (groupedHorarios[k].materia.toLowerCase().trim() === materiaNombre.toLowerCase().trim()) {
+                            matchedKey = k; break;
+                        }
                     }
-                    return matchMateria && matchGrupo;
-                }).length;
+                }
                 
-                detalleTexto += `${materiaNombre} (${grupoNombre}) - ${horasEnHorario} hrs\\n`;
-                totalHoras += horasEnHorario;
-                jsonCarga.push({ materia: materiaNombre, grupo: grupoNombre, horas: horasEnHorario, materia_id: asig.materia_id, grupo_id: asig.grupo_id });
+                if (matchedKey) {
+                    key = matchedKey;
+                } else {
+                    // Si de plano no está en asignaciones, lo agregamos para no perder las horas
+                    let grupoNombre = 'Sin Grupo';
+                    if (s.grupo_id && gMap[s.grupo_id]) {
+                        grupoNombre = gMap[s.grupo_id];
+                    } else if (s.target_grado) {
+                        grupoNombre = s.target_grado + ' (Taller/Club)';
+                    }
+                    groupedHorarios[key] = {
+                        materia: materiaNombre,
+                        grupoNombre: grupoNombre,
+                        grupo_id: s.grupo_id,
+                        target_grado: s.target_grado,
+                        materia_id: null,
+                        horas: 0
+                    };
+                }
             }
             
-            if(jsonCarga.length === 0) {
-                detalleTexto = "No hay grupos válidos con horas asignadas para este docente.";
-            }
-        } else {
-            detalleTexto = "No se encontraron asignaciones de materias para este docente.\\nVerifica en 'Grupos y Asignación' usando su correo.";
+            groupedHorarios[key].horas++;
+            totalHoras++;
+        });
+
+        // 3. Formatear la salida
+        for (let k in groupedHorarios) {
+            let item = groupedHorarios[k];
+            detalleTexto += `${item.materia} (${item.grupoNombre}) - ${item.horas} hrs\\n`;
+            jsonCarga.push({
+                materia: item.materia,
+                grupo: item.grupoNombre,
+                horas: item.horas,
+                materia_id: item.materia_id,
+                grupo_id: item.grupo_id
+            });
+        }
+        
+        if(jsonCarga.length === 0) {
+            detalleTexto = "No se encontraron asignaciones ni módulos de horario para este docente.";
         }
         
         document.getElementById('exp_horas').value = totalHoras;
