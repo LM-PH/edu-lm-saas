@@ -16965,7 +16965,8 @@ window.loadListasAdminPersonal = async (searchTerm = '') => {
                         ${p.taller ? `<span class="badge badge-outline" style="font-size:0.7rem;"><i class="fa-solid fa-microchip"></i> ${p.taller}</span>` : ''}
                     </td>
                     <td style="padding:12px; text-align:center;">
-                        ${p.rol === 'alumno' ? `
+                        ${(state.role === 'secretaria_direccion' && p.rol === 'directivo') ? '' : 
+                        (p.rol === 'alumno' ? `
                         <button class="btn btn-outline btn-xs" 
                                 style="color:var(--primary); border-color:var(--primary); margin-bottom:5px; width:100%;" 
                                 onclick="window.editarAlumnoModal('${p.id}')">
@@ -16975,12 +16976,14 @@ window.loadListasAdminPersonal = async (searchTerm = '') => {
                                 style="color:var(--primary); border-color:var(--primary); margin-bottom:5px; width:100%;" 
                                 onclick="window.editarPersonalModal('${p.id}')">
                             <i class="fa-solid fa-pen-to-square"></i> Editar Datos
-                        </button><br>`}
+                        </button><br>`)}
+                        
+                        ${(state.role === 'secretaria_direccion' && p.rol === 'directivo') ? '' : `
                         <button class="btn btn-outline btn-xs" 
                                 style="color:var(--danger); border-color:var(--danger);" 
                                 onclick="window.eliminarPersona('${p.id}', '${p.email}', '${p.nombre}', '${p.rol}')">
                             <i class="fa-solid fa-trash-can"></i> Quitar Permiso
-                        </button>
+                        </button>`}
                     </td>
                 </tr>
             `;
@@ -16994,6 +16997,10 @@ window.loadListasAdminPersonal = async (searchTerm = '') => {
 };
 
 window.eliminarPersona = async (idPermitido, email, nombre, rol = '') => {
+    if (state.role === 'secretaria_direccion' && rol === 'directivo') {
+        return window.showToast("No tienes permisos para editar o dar de baja a un Director.", "error");
+    }
+
     const isDirectivo = state.role === 'directivo' || state.role === 'secretaria_direccion';
     const confirmMsg = isDirectivo 
         ? `⚠️ ¿Deseas ELIMINAR AHORA a "${nombre}" (${email})? Esta acción es inmediata.`
@@ -22788,6 +22795,10 @@ window.editarPersonalModal = async (personalId) => {
     try {
         const { data: personal, error } = await supabaseClient.from('perfiles_permitidos').select('*').eq('id', personalId).single();
         if (error) throw error;
+        
+        if (state.role === 'secretaria_direccion' && personal.rol === 'directivo') {
+            return window.showToast("No tienes permisos para editar a un Director.", "error");
+        }
 
         const modalId = 'modalEditarPersonalAdmin';
         let existing = document.getElementById(modalId);
