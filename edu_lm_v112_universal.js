@@ -5691,6 +5691,19 @@ function renderApoyoPrefectura() {
             </div>
         </div>
     </div>
+    
+    <!-- Modal Registro Manual Entrada -->
+    <div id="modalRegistroManualEntrada" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); z-index:9999; backdrop-filter:blur(4px);">
+        <div style="background:white; width:90%; max-width:400px; margin:50px auto; border-radius:15px; padding:20px; box-shadow:0 10px 25px rgba(0,0,0,0.2); position:relative;">
+            <button onclick="document.getElementById('modalRegistroManualEntrada').style.display='none'" style="position:absolute; top:15px; right:15px; border:none; background:none; font-size:1.5rem; cursor:pointer; color:var(--text-muted)">&times;</button>
+            <h3 style="margin-top:0; color:var(--primary);"><i class="fa-solid fa-keyboard"></i> Registro Manual</h3>
+            <p style="font-size:0.9rem; color:var(--text-muted);">Busca al alumno por nombre o matrícula para registrar su entrada.</p>
+            <div style="position:relative;">
+                <input type="text" id="busquedaManualEntrada" class="form-input" placeholder="Nombre o Matrícula..." onkeyup="window.buscarAlumnoManual(this.value, 'entrada')" style="border-radius:10px; width:100%; margin-bottom: 0;">
+                <div id="resBusquedaManualEntrada" style="display:none; position:absolute; top:100%; left:0; width:100%; background:white; border:1px solid var(--border); border-radius:8px; max-height:200px; overflow-y:auto; z-index:1000; box-shadow:0 5px 15px rgba(0,0,0,0.1);"></div>
+            </div>
+        </div>
+    </div>
   `;
 }
 
@@ -6394,6 +6407,19 @@ function renderApoyoTSEscaner() {
                         <tr><td colspan="3" style="text-align:center; padding:20px;">Sin selección</td></tr>
                     </tbody>
                 </table>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Modal Registro Manual Salida -->
+    <div id="modalRegistroManualSalida" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); z-index:9999; backdrop-filter:blur(4px);">
+        <div style="background:white; width:90%; max-width:400px; margin:50px auto; border-radius:15px; padding:20px; box-shadow:0 10px 25px rgba(0,0,0,0.2); position:relative;">
+            <button onclick="document.getElementById('modalRegistroManualSalida').style.display='none'" style="position:absolute; top:15px; right:15px; border:none; background:none; font-size:1.5rem; cursor:pointer; color:var(--text-muted)">&times;</button>
+            <h3 style="margin-top:0; color:var(--warning);"><i class="fa-solid fa-keyboard"></i> Registro Manual de Salida</h3>
+            <p style="font-size:0.9rem; color:var(--text-muted);">Busca al alumno por nombre o matrícula para registrar su salida.</p>
+            <div style="position:relative;">
+                <input type="text" id="busquedaManualSalida" class="form-input" placeholder="Nombre o Matrícula..." onkeyup="window.buscarAlumnoManual(this.value, 'salida')" style="border-radius:10px; width:100%; margin-bottom: 0;">
+                <div id="resBusquedaManualSalida" style="display:none; position:absolute; top:100%; left:0; width:100%; background:white; border:1px solid var(--border); border-radius:8px; max-height:200px; overflow-y:auto; z-index:1000; box-shadow:0 5px 15px rgba(0,0,0,0.1);"></div>
             </div>
         </div>
     </div>
@@ -13518,10 +13544,14 @@ window.stopPrefScanner = async () => {
 };
 
 window.registroManualEntrada = () => {
-    const matricula = prompt("Ingresa la MATRÍCULA del alumno (Registro Manual de Entrada):");
-    if (matricula && matricula.trim() !== "") {
-        window.registrarAsistenciaPrefectura(matricula.trim());
+    document.getElementById('modalRegistroManualEntrada').style.display = 'block';
+    const input = document.getElementById('busquedaManualEntrada');
+    if (input) {
+        input.value = '';
+        input.focus();
     }
+    const resDiv = document.getElementById('resBusquedaManualEntrada');
+    if (resDiv) resDiv.style.display = 'none';
 };
 
 window.registrarAsistenciaPrefectura = async (uid) => {
@@ -13766,12 +13796,60 @@ window.startTSScanner = async (mode = 'metralleta') => {
 };
 
 window.registroManualSalida = () => {
-    const matricula = prompt("Ingresa la MATRÍCULA del alumno (Registro Manual de Salida):");
-    if (matricula && matricula.trim() !== "") {
-        if (window.tsScanMode === 'anticipada') {
-            window.prepararSalidaAnticipada(matricula.trim());
+    document.getElementById('modalRegistroManualSalida').style.display = 'block';
+    const input = document.getElementById('busquedaManualSalida');
+    if (input) {
+        input.value = '';
+        input.focus();
+    }
+    const resDiv = document.getElementById('resBusquedaManualSalida');
+    if (resDiv) resDiv.style.display = 'none';
+};
+
+window.buscarAlumnoManual = async (val, mode) => {
+    const resId = mode === 'entrada' ? 'resBusquedaManualEntrada' : 'resBusquedaManualSalida';
+    const resDiv = document.getElementById(resId);
+    if(!val || val.length < 2) {
+        resDiv.style.display = 'none';
+        return;
+    }
+    try {
+        let pId = state.plantelId || state.user?.user_metadata?.plantel_id;
+        
+        let query = supabaseClient.from('alumnos').select('id, nombre, matricula, grupos(nombre)');
+        if(pId) query = query.eq('plantel_id', pId);
+        query = query.or(`nombre.ilike.%${val}%,matricula.ilike.%${val}%`).limit(10);
+
+        const { data, error } = await query;
+
+        if(error) throw error;
+        if(data && data.length > 0) {
+            resDiv.innerHTML = data.map(a => `
+                <div style="padding:10px; border-bottom:1px solid var(--border); cursor:pointer; font-size:0.85rem; text-align:left;" 
+                     onmouseover="this.style.background='#f0f0f0'" 
+                     onmouseout="this.style.background='white'"
+                     onclick="window.seleccionarAlumnoManual('${a.matricula || a.id}', '${mode}')">
+                    <b>${a.nombre}</b><br><small style="color:var(--text-muted)">${a.matricula || 'Sin matrícula'} - ${a.grupos?.nombre || 'S/G'}</small>
+                </div>
+            `).join('');
+            resDiv.style.display = 'block';
         } else {
-            window.registrarAsistenciaTS(matricula.trim());
+            resDiv.innerHTML = '<div style="padding:10px; font-size:0.85rem; color:var(--text-muted); text-align:left;">No se encontraron alumnos</div>';
+            resDiv.style.display = 'block';
+        }
+    } catch(e) { console.error(e); }
+};
+
+window.seleccionarAlumnoManual = (idOrMatricula, mode) => {
+    if (mode === 'entrada') {
+        document.getElementById('modalRegistroManualEntrada').style.display = 'none';
+        window.registrarAsistenciaPrefectura(idOrMatricula);
+    } else {
+        document.getElementById('modalRegistroManualSalida').style.display = 'none';
+        if (window.tsScanMode === 'anticipada') {
+            window.prepararSalidaAnticipada(idOrMatricula);
+        } else {
+            window.registrarAsistenciaTS(idOrMatricula);
         }
     }
 };
