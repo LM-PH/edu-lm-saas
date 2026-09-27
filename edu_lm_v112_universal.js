@@ -20693,9 +20693,13 @@ function renderApoyoFichasSalud() {
             </div>
 
             <div style="background:#f8f9fa; border:1px solid var(--border); border-radius:8px; padding:15px; margin-bottom:20px;">
-                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px;">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px; flex-wrap:wrap; gap:10px;">
                     <h4 style="margin:0;">Preguntas de la Ficha</h4>
-                    <button class="btn btn-sm btn-outline" onclick="window.saludBuilderAddQuestion()"><i class="fa-solid fa-plus"></i> Añadir Pregunta</button>
+                    <div style="display:flex; gap:10px;">
+                        <input type="file" id="fileImportarSalud" accept=".pdf,.docx" style="display:none;" onchange="window.importarPreguntasSalud(event)">
+                        <button class="btn btn-sm btn-info" onclick="document.getElementById('fileImportarSalud').click()"><i class="fa-solid fa-file-import"></i> Importar PDF/DOCX</button>
+                        <button class="btn btn-sm btn-outline" onclick="window.saludBuilderAddQuestion()"><i class="fa-solid fa-plus"></i> Añadir Pregunta</button>
+                    </div>
                 </div>
                 <div id="saludBuilderPreguntas" style="display:flex; flex-direction:column; gap:5px;">
                     <!-- Preguntas predeterminadas se agregarán por JS -->
@@ -20766,17 +20770,137 @@ window.switchTabFichaSalud = (btn, tabId) => {
     document.getElementById(tabId).style.display = 'block';
 };
 
-window.saludBuilderAddQuestion = (val = '') => {
+window.importarPreguntasSalud = async (event) => {
+    const file = event.target.files[0];
+    if(!file) return;
+    
+    window.showToast("Analizando documento...", "info");
+    try {
+        let text = "";
+        const ext = file.name.split('.').pop().toLowerCase();
+        
+        if (ext === 'pdf') {
+            if(typeof window.pdfjsLib === 'undefined') throw new Error("Librería PDF no cargada. Por favor recarga la página e intenta de nuevo.");
+            const arrayBuffer = await file.arrayBuffer();
+            const pdf = await window.pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+            for (let i = 1; i <= pdf.numPages; i++) {
+                const page = await pdf.getPage(i);
+                const textContent = await page.getTextContent();
+                let lastY = -1;
+                textContent.items.forEach(item => {
+                    if (lastY !== item.transform[5] && lastY !== -1) {
+                        text += '\n';
+                    }
+                    text += item.str + " ";
+                    lastY = item.transform[5];
+                });
+                text += '\n';
+            }
+        } else if (ext === 'docx') {
+            if(typeof mammoth === 'undefined') throw new Error("Librería DOCX no cargada");
+            const arrayBuffer = await file.arrayBuffer();
+            const result = await mammoth.extractRawText({ arrayBuffer: arrayBuffer });
+            text = result.value;
+        } else {
+            throw new Error("Formato no soportado. Usa PDF o DOCX.");
+        }
+
+        const textArray = text.split('\n').map(l => l.trim()).filter(l => l.length > 2);
+        let questions = [];
+        let currentQuestion = null;
+
+        textArray.forEach(line => {
+            line = line.replace(/\s+/g, ' ');
+            
+            const isQuestion = /^(¿|\d+[\.\-\)])/.test(line) || line.includes('?');
+            
+            let isOption = false;
+            let optText = line;
+            const explicitOptionMatch = line.match(/^([a-zA-Z][\.\)]|[\-\*\•\○\>])\s+(.+)/);
+            
+            if (explicitOptionMatch) {
+                isOption = true;
+                optText = explicitOptionMatch[2].trim();
+            } else if (currentQuestion && !isQuestion && line.length < 60 && !line.endsWith('.')) {
+                isOption = true;
+            }
+
+            if (isOption && currentQuestion && !line.includes('?')) {
+                currentQuestion.opciones.push(optText);
+                currentQuestion.tipo = 'select';
+            } else if (isQuestion) {
+                let cleanText = line.replace(/^(\d+[\.\-\)]|[a-zA-Z]\))\s*/, '').trim();
+                currentQuestion = { titulo: cleanText, tipo: 'text', opciones: [] };
+                questions.push(currentQuestion);
+            } else {
+                if (!currentQuestion) {
+                } else if (currentQuestion.opciones.length === 0) {
+                    currentQuestion.titulo += " " + line;
+                } else {
+                    currentQuestion = { titulo: line, tipo: 'text', opciones: [] };
+                    questions.push(currentQuestion);
+                }
+            }
+        });
+        
+        let count = questions.length;
+        if (count === 0) {
+            if(confirm("No se detectó el formato clásico de preguntas (¿...?, 1., a)). ¿Desea importar cada párrafo como una pregunta?")) {
+                textArray.forEach(line => {
+                     window.saludBuilderAddQuestion({ titulo: line, tipo: 'text', opciones: '' });
+                     count++;
+                });
+            }
+        } else {
+            questions.forEach(q => {
+                let opcionesStr = q.opciones.join(', ');
+                window.saludBuilderAddQuestion({ titulo: q.titulo, tipo: q.tipo, opciones: opcionesStr });
+            });
+        }
+        
+        if(count > 0) {
+            window.showToast(`Se importaron ${count} preguntas automáticamente`, "success");
+        } else {
+            window.showToast("No se importaron preguntas", "warning");
+        }
+    } catch(e) {
+        console.error(e);
+        window.showToast("Error al importar: " + e.message, "error");
+    }
+    event.target.value = '';
+};
+
+window.saludBuilderAddQuestion = (q = null) => {
+    let pre = typeof q === 'string' ? { titulo: q, tipo: 'text', opciones: '' } : (q || { titulo: '', tipo: 'select', opciones: 'Buena, Regular, Mala' });
+    const id = 'sq_' + Date.now() + Math.floor(Math.random()*1000);
     const c = document.getElementById('saludBuilderPreguntas');
     const div = document.createElement('div');
-    div.style.display = 'flex'; div.style.gap = '10px'; div.style.marginBottom = '5px';
+    div.id = id;
+    div.style.cssText = 'background:white; border:1px solid var(--border); padding:15px; border-radius:8px; position:relative; margin-bottom:10px;';
+    
     div.innerHTML = `
-        <input type="text" class="form-input salud-question-input" style="flex:1; margin:0;" placeholder="Escribe la pregunta médica..." value="${val}">
-        <select class="form-input salud-question-type" style="width:150px; margin:0;">
-            <option value="text">Texto Corto</option>
-            <option value="textarea">Texto Largo</option>
-        </select>
-        <button class="btn btn-sm btn-outline" style="color:var(--danger); border-color:var(--danger);" onclick="this.parentElement.remove()"><i class="fa-solid fa-trash"></i></button>
+        <div style="position:absolute; top:10px; right:10px;">
+            <button class="btn btn-sm" style="background:#ef4444; color:white; padding:4px 8px;" onclick="document.getElementById('${id}').remove()"><i class="fa-solid fa-trash"></i></button>
+        </div>
+        <div style="display:flex; gap:15px; margin-bottom:10px; padding-right:30px;">
+            <div style="flex:2;">
+                <label style="font-size:0.8rem;">Pregunta:</label>
+                <input type="text" class="form-input salud-question-input" placeholder="Escribe la pregunta médica..." value="${pre.titulo}" required>
+            </div>
+            <div style="flex:1;">
+                <label style="font-size:0.8rem;">Tipo:</label>
+                <select class="form-input salud-question-type" onchange="this.parentElement.nextElementSibling.style.display = (this.value==='select' || this.value==='checkbox') ? 'block' : 'none'">
+                    <option value="select" ${pre.tipo==='select'?'selected':''}>Opción Múltiple (Desplegable)</option>
+                    <option value="checkbox" ${pre.tipo==='checkbox'?'selected':''}>Casillas (Múltiples opciones)</option>
+                    <option value="text" ${pre.tipo==='text'?'selected':''}>Texto Corto</option>
+                    <option value="textarea" ${pre.tipo==='textarea'?'selected':''}>Párrafo (Texto Largo)</option>
+                </select>
+            </div>
+        </div>
+        <div class="salud-q-opciones-container" style="display:${(pre.tipo==='select' || pre.tipo==='checkbox') ? 'block':'none'};">
+            <label style="font-size:0.8rem;">Opciones (separadas por coma):</label>
+            <input type="text" class="form-input salud-question-opciones" placeholder="Ej. Sí, No, A veces" value="${pre.opciones || ''}">
+        </div>
     `;
     c.appendChild(div);
 };
@@ -20785,10 +20909,11 @@ window.enviarFichaSalud = async () => {
     const titulo = document.getElementById('saludBuilderTitulo').value.trim();
     if(!titulo) return window.showToast('Ponle título a la ficha médica', 'error');
 
-    const qs = Array.from(document.querySelectorAll('.salud-question-input')).map((el, i) => {
+    const qs = Array.from(document.querySelectorAll('#saludBuilderPreguntas > div')).map((div) => {
         return {
-            pregunta: el.value.trim(),
-            tipo: el.nextElementSibling.value
+            pregunta: div.querySelector('.salud-question-input').value.trim(),
+            tipo: div.querySelector('.salud-question-type').value,
+            opciones: div.querySelector('.salud-question-opciones') ? div.querySelector('.salud-question-opciones').value.trim() : ''
         };
     }).filter(q => q.pregunta !== '');
 
