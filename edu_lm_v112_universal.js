@@ -16970,7 +16970,12 @@ window.loadListasAdminPersonal = async (searchTerm = '') => {
                                 style="color:var(--primary); border-color:var(--primary); margin-bottom:5px; width:100%;" 
                                 onclick="window.editarAlumnoModal('${p.id}')">
                             <i class="fa-solid fa-pen-to-square"></i> Editar Datos
-                        </button><br>` : ''}
+                        </button><br>` : `
+                        <button class="btn btn-outline btn-xs" 
+                                style="color:var(--primary); border-color:var(--primary); margin-bottom:5px; width:100%;" 
+                                onclick="window.editarPersonalModal('${p.id}')">
+                            <i class="fa-solid fa-pen-to-square"></i> Editar Datos
+                        </button><br>`}
                         <button class="btn btn-outline btn-xs" 
                                 style="color:var(--danger); border-color:var(--danger);" 
                                 onclick="window.eliminarPersona('${p.id}', '${p.email}', '${p.nombre}', '${p.rol}')">
@@ -22776,6 +22781,101 @@ window.guardarEdicionAlumno = async (alumnoId) => {
     } catch (e) {
         console.error(e);
         window.showToast("Error al guardar: " + (e.message || "Valida que el CURP o matrícula no estén duplicados"), "error");
+    }
+};
+
+window.editarPersonalModal = async (personalId) => {
+    try {
+        const { data: personal, error } = await supabaseClient.from('perfiles_permitidos').select('*').eq('id', personalId).single();
+        if (error) throw error;
+
+        const modalId = 'modalEditarPersonalAdmin';
+        let existing = document.getElementById(modalId);
+        if(existing) existing.remove();
+        
+        const div = document.createElement('div');
+        div.id = modalId;
+        div.style.cssText = 'position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); z-index:9999; display:flex; justify-content:center; align-items:center; padding:20px;';
+        
+        div.innerHTML = `
+        <div style="background:white; border-radius:12px; width:100%; max-width:500px; padding:20px; box-shadow:0 4px 15px rgba(0,0,0,0.2); max-height:90vh; overflow-y:auto;">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
+                <h3 style="margin:0; color:var(--primary);"><i class="fa-solid fa-user-pen"></i> Editar Personal</h3>
+                <button onclick="document.getElementById('${modalId}').remove()" style="background:none; border:none; cursor:pointer; font-size:1.2rem; color:var(--text-muted);"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            
+            <div class="form-group">
+                <label class="form-label">Nombre Completo</label>
+                <input type="text" id="editPerNombre" class="form-input" value="${personal.nombre || ''}" required>
+            </div>
+            
+            <div class="form-group">
+                <label class="form-label">Correo Electrónico (Para iniciar sesión)</label>
+                <input type="email" id="editPerEmail" class="form-input" value="${personal.email || ''}" required>
+            </div>
+
+            <div class="form-group">
+                <label class="form-label">Rol del Sistema</label>
+                <select id="editPerRol" class="form-input">
+                    <option value="admin" ${personal.rol==='admin'?'selected':''}>Administrador</option>
+                    <option value="secretaria_direccion" ${personal.rol==='secretaria_direccion'?'selected':''}>Secretaría de Dirección</option>
+                    <option value="maestro" ${personal.rol==='maestro'?'selected':''}>Maestro (Docente)</option>
+                    <option value="apoyo" ${personal.rol==='apoyo'?'selected':''}>Personal de Apoyo (TS / Prefectura)</option>
+                    <option value="directivo" ${personal.rol==='directivo'?'selected':''}>Directivo</option>
+                    <option value="biblioteca" ${personal.rol==='biblioteca'?'selected':''}>Biblioteca</option>
+                </select>
+            </div>
+            
+            <div style="margin-top:20px; display:flex; gap:10px; justify-content:flex-end;">
+                <button class="btn btn-outline" onclick="document.getElementById('${modalId}').remove()">Cancelar</button>
+                <button class="btn btn-primary" onclick="window.guardarEdicionPersonal('${personal.id}', '${personal.email}')"><i class="fa-solid fa-save"></i> Guardar Cambios</button>
+            </div>
+        </div>`;
+        document.body.appendChild(div);
+    } catch(e) {
+        console.error(e);
+        window.showToast("Error al cargar datos del personal", "error");
+    }
+};
+
+window.guardarEdicionPersonal = async (personalId, oldEmail) => {
+    try {
+        const nombre = document.getElementById('editPerNombre').value.trim();
+        const email = document.getElementById('editPerEmail').value.trim().toLowerCase();
+        const rol = document.getElementById('editPerRol').value;
+
+        if (!nombre || !email) {
+            return window.showToast("El nombre y el correo son obligatorios.", "error");
+        }
+
+        // 1. Update in perfiles_permitidos
+        const { error: errUpdate } = await supabaseClient.from('perfiles_permitidos').update({
+            nombre: nombre,
+            email: email,
+            rol: rol
+        }).eq('id', personalId);
+        
+        if (errUpdate) throw errUpdate;
+
+        // 2. Update in perfiles (if the user has logged in before, they have an entry in perfiles matching oldEmail)
+        if (oldEmail) {
+            await supabaseClient.from('perfiles').update({
+                nombre: nombre,
+                rol: rol,
+                email: email
+            }).eq('email', oldEmail);
+        }
+
+        window.showToast("Datos actualizados correctamente", "success");
+        document.getElementById('modalEditarPersonalAdmin').remove();
+        
+        // Refrescar lista
+        const searchInput = document.getElementById('busquedaPersonalAutorizado');
+        const searchValue = searchInput ? searchInput.value : '';
+        if (window.loadListasAdminPersonal) window.loadListasAdminPersonal(searchValue);
+    } catch (e) {
+        console.error(e);
+        window.showToast("Error al guardar cambios", "error");
     }
 };
 
