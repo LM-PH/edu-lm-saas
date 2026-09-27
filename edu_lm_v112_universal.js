@@ -22135,8 +22135,23 @@ window.calcularCargaHorariaAuto = async function(maestroId) {
                 }
             }
             
-            groupedHorarios[key].horas++;
-            totalHoras++;
+            let blockHours = 1;
+            if (s.hora_inicio && s.hora_fin) {
+                try {
+                    let [h1, m1] = s.hora_inicio.split(':').map(Number);
+                    let [h2, m2] = s.hora_fin.split(':').map(Number);
+                    if (!isNaN(h1) && !isNaN(m1) && !isNaN(h2) && !isNaN(m2)) {
+                        let diffMinutes = (h2 * 60 + m2) - (h1 * 60 + m1);
+                        if (diffMinutes > 0) {
+                            blockHours = Math.round(diffMinutes / 50);
+                            if (blockHours < 1) blockHours = 1;
+                        }
+                    }
+                } catch(e) {}
+            }
+            
+            groupedHorarios[key].horas += blockHours;
+            totalHoras += blockHours;
         });
 
         // 3. Formatear la salida
