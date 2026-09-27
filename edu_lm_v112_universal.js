@@ -5644,7 +5644,7 @@ function renderApoyoPrefectura() {
         
         <div id="pref-feedback" style="margin-top:20px; width:100%; max-width:500px; min-height:80px;"></div>
         
-        <div style="display:flex; gap:12px; margin-top:20px;">
+        <div style="display:flex; gap:12px; margin-top:20px; flex-wrap:wrap; justify-content:center;">
             <button id="btn-stop-pref" class="btn btn-outline" onclick="window.pausePrefScanner()" style="display:none; border-radius:30px; padding:10px 25px;">
                 <i class="fa-solid fa-power-off"></i> Pausar Cámara
             </button>
@@ -5653,6 +5653,9 @@ function renderApoyoPrefectura() {
             </button>
             <button class="btn btn-info" onclick="window.toggleCameraMode()" style="border-radius:30px; padding:10px 25px;">
                 <i class="fa-solid fa-camera-rotate"></i> Girar Cámara
+            </button>
+            <button class="btn btn-secondary" onclick="window.registroManualEntrada()" style="border-radius:30px; padding:10px 25px; background:var(--page-bg); border:1px solid var(--border); color:var(--text-color);">
+                <i class="fa-solid fa-keyboard"></i> Registro Manual
             </button>
         </div>
     </div>
@@ -6307,7 +6310,7 @@ function renderApoyoTSEscaner() {
         
         <div id="ts-feedback" style="margin-top:20px; width:100%; max-width:500px; min-height:80px;"></div>
         
-        <div style="display:flex; gap:12px; margin-top:20px;">
+        <div style="display:flex; gap:12px; margin-top:20px; flex-wrap:wrap; justify-content:center;">
             <button id="btn-stop-ts" class="btn btn-outline" onclick="window.pauseTSScanner()" style="display:none; border-radius:30px; padding:10px 25px;">
                 <i class="fa-solid fa-power-off"></i> Pausar Cámara
             </button>
@@ -6319,6 +6322,9 @@ function renderApoyoTSEscaner() {
             </button>
             <button id="btnModoAnticipada" class="btn btn-warning" onclick="window.activarModoAnticipada()" style="border-radius:30px; padding:10px 25px;">
                 <i class="fa-solid fa-clock"></i> Modo Salida Anticipada
+            </button>
+            <button class="btn btn-secondary" onclick="window.registroManualSalida()" style="border-radius:30px; padding:10px 25px; background:var(--page-bg); border:1px solid var(--border); color:var(--text-color);">
+                <i class="fa-solid fa-keyboard"></i> Registro Manual
             </button>
         </div>
     </div>
@@ -13511,6 +13517,13 @@ window.stopPrefScanner = async () => {
     } catch(e) { console.error("Error stop Pref scanner", e); }
 };
 
+window.registroManualEntrada = () => {
+    const matricula = prompt("Ingresa la MATRÍCULA del alumno (Registro Manual de Entrada):");
+    if (matricula && matricula.trim() !== "") {
+        window.registrarAsistenciaPrefectura(matricula.trim());
+    }
+};
+
 window.registrarAsistenciaPrefectura = async (uid) => {
     // Evitar escaneos duplicados inmediatos en modo metralleta
     if(window._lastScan === uid && (Date.now() - (window._lastScanTime || 0)) < 2000) return;
@@ -13750,6 +13763,17 @@ window.startTSScanner = async (mode = 'metralleta') => {
             (errorMessage) => { /* ignore */ }
         );
     } catch(e) { console.error("Error al iniciar cámara TS:", e); }
+};
+
+window.registroManualSalida = () => {
+    const matricula = prompt("Ingresa la MATRÍCULA del alumno (Registro Manual de Salida):");
+    if (matricula && matricula.trim() !== "") {
+        if (window.tsScanMode === 'anticipada') {
+            window.prepararSalidaAnticipada(matricula.trim());
+        } else {
+            window.registrarAsistenciaTS(matricula.trim());
+        }
+    }
 };
 
 window.registrarAsistenciaTS = async (qrText) => {
