@@ -19503,9 +19503,13 @@ function renderApoyoPsicosocial() {
             </div>
 
             <div style="background:#f8f9fa; border:1px solid var(--border); border-radius:8px; padding:15px; margin-bottom:20px;">
-                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px;">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px; flex-wrap:wrap; gap:10px;">
                     <h4 style="margin:0;">Preguntas del Cuestionario</h4>
-                    <button class="btn btn-sm btn-outline" onclick="window.psicoBuilderAddQuestion()"><i class="fa-solid fa-plus"></i> Añadir Pregunta</button>
+                    <div style="display:flex; gap:10px;">
+                        <input type="file" id="fileImportarPsico" accept=".pdf,.docx" style="display:none;" onchange="window.importarPreguntasPsicosocial(event)">
+                        <button class="btn btn-sm btn-info" onclick="document.getElementById('fileImportarPsico').click()"><i class="fa-solid fa-file-import"></i> Importar PDF/DOCX</button>
+                        <button class="btn btn-sm btn-outline" onclick="window.psicoBuilderAddQuestion()"><i class="fa-solid fa-plus"></i> Añadir Pregunta</button>
+                    </div>
                 </div>
                 <div id="psicoBuilderPreguntas" style="display:flex; flex-direction:column; gap:5px;">
                     <!-- Preguntas dinámicas aquí -->
@@ -19722,6 +19726,74 @@ window.imprimirExpedientePsicosocial = async (nombre, estId) => {
         console.error(e);
         window.showToast('Error al imprimir expediente', 'error');
     }
+};
+
+window.importarPreguntasPsicosocial = async (event) => {
+    const file = event.target.files[0];
+    if(!file) return;
+    
+    window.showToast("Analizando documento...", "info");
+    try {
+        let text = "";
+        const ext = file.name.split('.').pop().toLowerCase();
+        
+        if (ext === 'pdf') {
+            if(typeof pdfjsLib === 'undefined') throw new Error("Librería PDF no cargada");
+            const arrayBuffer = await file.arrayBuffer();
+            const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+            for (let i = 1; i <= pdf.numPages; i++) {
+                const page = await pdf.getPage(i);
+                const textContent = await page.getTextContent();
+                let lastY = -1;
+                textContent.items.forEach(item => {
+                    if (lastY !== item.transform[5] && lastY !== -1) {
+                        text += '\n';
+                    }
+                    text += item.str + " ";
+                    lastY = item.transform[5];
+                });
+                text += '\n';
+            }
+        } else if (ext === 'docx') {
+            if(typeof mammoth === 'undefined') throw new Error("Librería DOCX no cargada");
+            const arrayBuffer = await file.arrayBuffer();
+            const result = await mammoth.extractRawText({ arrayBuffer: arrayBuffer });
+            text = result.value;
+        } else {
+            throw new Error("Formato no soportado. Usa PDF o DOCX.");
+        }
+
+        const textArray = text.split('\n').map(l => l.trim()).filter(l => l.length > 5);
+        let count = 0;
+        textArray.forEach(line => {
+            line = line.replace(/\s+/g, ' ');
+            const isQuestion = /^(¿|\d+\.|[a-zA-Z]\))/.test(line) || line.includes('?');
+            if (isQuestion) {
+                let cleanText = line.replace(/^(\d+[\.\-\)]|[a-zA-Z]\))\s*/, '').trim();
+                window.psicoBuilderAddQuestion({ titulo: cleanText, tipo: 'text' });
+                count++;
+            }
+        });
+        
+        if (count === 0) {
+            if(confirm("No se detectó el formato clásico de preguntas (¿...?, 1., a)). ¿Desea importar cada párrafo como una pregunta?")) {
+                textArray.forEach(line => {
+                     window.psicoBuilderAddQuestion({ titulo: line, tipo: 'text' });
+                     count++;
+                });
+            }
+        }
+        
+        if(count > 0) {
+            window.showToast(`Se importaron ${count} preguntas`, "success");
+        } else {
+            window.showToast("No se importaron preguntas", "warning");
+        }
+    } catch(e) {
+        console.error(e);
+        window.showToast("Error al importar: " + e.message, "error");
+    }
+    event.target.value = '';
 };
 
 window.psicoBuilderAddQuestion = (q = null) => {
