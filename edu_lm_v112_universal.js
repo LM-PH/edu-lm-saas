@@ -19738,9 +19738,9 @@ window.importarPreguntasPsicosocial = async (event) => {
         const ext = file.name.split('.').pop().toLowerCase();
         
         if (ext === 'pdf') {
-            if(typeof pdfjsLib === 'undefined') throw new Error("Librería PDF no cargada");
+            if(typeof window.pdfjsLib === 'undefined') throw new Error("Librería PDF no cargada. Por favor recarga la página e intenta de nuevo.");
             const arrayBuffer = await file.arrayBuffer();
-            const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+            const pdf = await window.pdfjsLib.getDocument({ data: arrayBuffer }).promise;
             for (let i = 1; i <= pdf.numPages; i++) {
                 const page = await pdf.getPage(i);
                 const textContent = await page.getTextContent();
