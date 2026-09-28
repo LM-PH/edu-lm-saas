@@ -16720,23 +16720,29 @@ const startApp = async () => {
                 // Normalización Crítica (Unificación de Sinónimos)
                 if ((rawRole === 'administrativo' || rawRole === 'admin')) rawRole = 'admin';
                 if (rawRole === 'maestro') rawRole = 'maestro';
+                
+                // Guardamos el rol real para la interfaz gráfica
+                let uiRole = rawRole;
+                
+                // Hack para RLS: secretaria_direccion no tiene políticas RLS en todas las tablas, 
+                // así que en el backend (perfiles y JWT) la operamos con permisos de 'directivo'
+                let dbRole = rawRole;
+                if (dbRole === 'secretaria_direccion') {
+                    dbRole = 'directivo';
+                }
 
                 // 4. LIMPIEZA PROFUNDA: Sincronizar Metadatos y Perfil si hay discrepancias
                 if (allowed && !isMasterUser) {
-                    const needsMetadataSync = (session.user.user_metadata?.rol !== allowed.rol);
-                    const needsProfileSync = (!profile || profile.rol !== allowed.rol || profile.plantel_id !== allowed.plantel_id);
+                    const needsMetadataSync = (session.user.user_metadata?.rol !== dbRole);
+                    const needsProfileSync = (!profile || profile.rol !== dbRole || profile.plantel_id !== allowed.plantel_id);
 
                     if (needsMetadataSync || needsProfileSync) {
-                        console.warn(">>> SEGURIDAD: Detectada desincronía de identidad. Corrigiendo...");
-                        
-                        let syncRole = allowed.rol;
-                        if(syncRole === 'maestro') syncRole = 'maestro';
-                        if(syncRole === 'administrativo' || syncRole === 'admin') syncRole = 'admin';
+                        console.warn(">>> SEGURIDAD: Detectada desincronía de identidad. Corrigiendo backend role a " + dbRole + "...");
 
                         // Sincronizar Perfil DB
                         await client.from('perfiles').upsert([{
                             id: session.user.id,
-                            rol: syncRole,
+                            rol: dbRole,
                             nombre: allowed.nombre,
                             plantel_id: allowed.plantel_id
                         }]);
@@ -16744,18 +16750,15 @@ const startApp = async () => {
                         // Sincronizar Metadatos JWT
                         await client.auth.updateUser({
                             data: {
-                                rol: syncRole,
+                                rol: dbRole,
                                 nombre: allowed.nombre,
                                 plantel_id: allowed.plantel_id
                             }
                         });
-                        
-                        // Forzar el rol correcto en el estado actual
-                        rawRole = syncRole;
                     }
                 }
 
-                state.role = rawRole;
+                state.role = uiRole;
                 state.userName = finalName;
                 state.plantelId = finalPlantel;
                 state.schoolConfigured = true;
