@@ -18628,8 +18628,36 @@ async function renderBibliotecaDashboard() {
     `;
 }
 
+window.loadPersonalBibliotecaSelect = async () => {
+    const sel = document.getElementById('bibProfSolicitante');
+    if(!sel) return;
+    try {
+        const { data, error } = await supabaseClient.from('perfiles_permitidos')
+            .select('nombre, rol')
+            .neq('rol', 'alumno')
+            .eq('plantel_id', state.plantelId)
+            .order('nombre');
+        
+        if (error) throw error;
+        
+        let html = '<option value="">-- Ninguno / Uso del alumno --</option>';
+        if (data) {
+            data.forEach(p => {
+                const nombreLimpio = p.nombre || 'Sin Nombre';
+                const rolesMap = { 'admin': 'ADMIN', 'maestro': 'MAESTRO', 'apoyo': 'APOYO', 'directivo': 'DIRECTIVO', 'secretaria_direccion': 'SECRETARÍA', 'biblioteca': 'BIBLIOTECA' };
+                const rolLimpio = rolesMap[p.rol] || p.rol.toUpperCase();
+                html += `<option value="${nombreLimpio}">[${rolLimpio}] ${nombreLimpio}</option>`;
+            });
+        }
+        sel.innerHTML = html;
+    } catch(err) {
+        console.error(err);
+    }
+};
+
 async function renderBibliotecaPrestamos() {
     setTimeout(window.loadBibliotecaPrestamos, 100);
+    setTimeout(window.loadPersonalBibliotecaSelect, 150);
     return `
       <div class="page-header">
          <h2 class="page-title"><i class="fa-solid fa-hand-holding-hand"></i> Préstamos a Alumnos</h2>
@@ -18684,8 +18712,10 @@ async function renderBibliotecaPrestamos() {
             </div>
             
             <div class="form-group">
-               <label class="form-label">Profesor que solicita (Opcional)</label>
-               <input type="text" id="bibProfSolicitante" class="form-input" placeholder="Ej. Mtro. Juan Pérez">
+               <label class="form-label">Personal de escuela que solicita (Opcional)</label>
+               <select id="bibProfSolicitante" class="form-select">
+                   <option value="">-- Ninguno / Uso del alumno --</option>
+               </select>
             </div>
             
             <div class="form-group">
