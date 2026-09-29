@@ -23426,24 +23426,31 @@ window.descargarAdminListaDOC = async (esVacia = false) => {
 
 window.forzarReseteoPassword = async (recordId, currentEmailInput) => {
     if(!currentEmailInput || currentEmailInput.trim() === '') {
-        return alert("Debes colocar un correo válido para resetear la contraseña.");
+        return alert("Debes colocar el correo nuevo válido en la caja de texto antes de resetear la contraseña.");
     }
+    
+    // Pedir el correo viejo explícitamente para asegurar que lo encontramos en Auth
+    const oldEmail = window.prompt("IMPORTANTE:\nPara poder localizar la cuenta de seguridad, necesitamos el CORREO VIEJO (el original que tenía antes de los cambios).\n\nEscribe aquí el correo viejo exacto:");
+    if (!oldEmail || oldEmail.trim() === '') {
+        return alert("Cancelado: Es obligatorio ingresar el correo viejo para encontrar la cuenta.");
+    }
+
     const newPass = 'st' + Math.floor(Math.random() * 9000 + 1000);
-    const confirm = window.confirm(`¿Estás seguro de que deseas forzar el reseteo de contraseña?\n\nNueva contraseña temporal será: ${newPass}\nSe actualizará también el correo de inicio de sesión.`);
-    if(!confirm) return;
+    const confirmMsg = `¿Confirmar reseteo forzado?\n\nCorreo Viejo (búsqueda): ${oldEmail}\nCorreo Nuevo: ${currentEmailInput}\nNueva Contraseña: ${newPass}`;
+    if(!window.confirm(confirmMsg)) return;
 
     try {
         const { data: rpcData, error: rpcErr } = await supabaseClient.rpc('actualizar_acceso_usuario', {
-            p_old_email: currentEmailInput.trim().toLowerCase(),
+            p_old_email: oldEmail.trim().toLowerCase(),
             p_new_email: currentEmailInput.trim().toLowerCase(),
             p_new_password: newPass
         });
         
         if (rpcErr || (rpcData && !rpcData.success)) {
             console.error("Auth RPC Error:", rpcErr || (rpcData ? rpcData.error : ''));
-            alert("⚠️ Error: No se pudo actualizar. Asegúrate de haber ejecutado el código SQL en Supabase para crear la función 'actualizar_acceso_usuario'.");
+            alert("⚠️ Error: " + (rpcData ? rpcData.error : rpcErr.message) + "\n\n1. Revisa que el correo viejo sea correcto.\n2. Asegúrate de haber ejecutado el nuevo código SQL.");
         } else {
-            alert(`¡Éxito! Contraseña y acceso reseteados.\n\nNuevo Acceso:\nCorreo: ${currentEmailInput}\nClave: ${newPass}`);
+            alert(`¡Éxito! Contraseña y acceso reseteados.\n\nEl alumno/personal ya puede entrar con:\nCorreo: ${currentEmailInput}\nClave: ${newPass}`);
             // Force refresh UI
             if (window.loadPersonalDirectivo) window.loadPersonalDirectivo();
             const searchInput = document.getElementById('busquedaPersonalAutorizado');
