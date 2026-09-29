@@ -22809,8 +22809,11 @@ window.editarAlumnoModal = async (alumnoId) => {
                 <input type="text" id="editAlMatricula" class="form-input" value="${alumno.matricula || ''}">
             </div>
             <div class="form-group">
-                <label class="form-label">Correo Electrónico (Opcional)</label>
-                <input type="text" id="editAlEmail" class="form-input" value="${alumno.contacto_email || ''}">
+                <label class="form-label">Correo Electrónico (Acceso Auth)</label>
+                <div style="display:flex; gap:10px;">
+                    <input type="text" id="editAlEmail" class="form-input" value="${alumno.contacto_email || ''}" style="flex:1;">
+                    <button class="btn btn-outline" style="white-space:nowrap;" onclick="window.forzarReseteoPassword('${alumno.id}', document.getElementById('editAlEmail').value)"><i class="fa-solid fa-key"></i> Resetear Clave</button>
+                </div>
             </div>
             <div class="form-group">
                 <label class="form-label">Tecnología / Taller (Grado ${alumno.grado || '?'})</label>
@@ -22932,7 +22935,10 @@ window.editarPersonalModal = async (personalId) => {
             
             <div class="form-group">
                 <label class="form-label">Correo Electrónico (Para iniciar sesión)</label>
-                <input type="email" id="editPerEmail" class="form-input" value="${personal.email || ''}" required>
+                <div style="display:flex; gap:10px;">
+                    <input type="email" id="editPerEmail" class="form-input" value="${personal.email || ''}" style="flex:1;" required>
+                    <button class="btn btn-outline" style="white-space:nowrap;" onclick="window.forzarReseteoPassword('${personal.id}', document.getElementById('editPerEmail').value)"><i class="fa-solid fa-key"></i> Resetear Clave</button>
+                </div>
             </div>
 
             <div class="form-group">
@@ -23415,5 +23421,36 @@ window.descargarAdminListaDOC = async (esVacia = false) => {
     } catch(err) {
         console.error(err);
         alert("Ocurrió un error al generar el documento DOCX.");
+    }
+};
+
+window.forzarReseteoPassword = async (recordId, currentEmailInput) => {
+    if(!currentEmailInput || currentEmailInput.trim() === '') {
+        return alert("Debes colocar un correo válido para resetear la contraseña.");
+    }
+    const newPass = 'st' + Math.floor(Math.random() * 9000 + 1000);
+    const confirm = window.confirm(`¿Estás seguro de que deseas forzar el reseteo de contraseña?\n\nNueva contraseña temporal será: ${newPass}\nSe actualizará también el correo de inicio de sesión.`);
+    if(!confirm) return;
+
+    try {
+        const { data: rpcData, error: rpcErr } = await supabaseClient.rpc('actualizar_acceso_usuario', {
+            p_old_email: currentEmailInput.trim().toLowerCase(),
+            p_new_email: currentEmailInput.trim().toLowerCase(),
+            p_new_password: newPass
+        });
+        
+        if (rpcErr || (rpcData && !rpcData.success)) {
+            console.error("Auth RPC Error:", rpcErr || (rpcData ? rpcData.error : ''));
+            alert("⚠️ Error: No se pudo actualizar. Asegúrate de haber ejecutado el código SQL en Supabase para crear la función 'actualizar_acceso_usuario'.");
+        } else {
+            alert(`¡Éxito! Contraseña y acceso reseteados.\n\nNuevo Acceso:\nCorreo: ${currentEmailInput}\nClave: ${newPass}`);
+            // Force refresh UI
+            if (window.loadPersonalDirectivo) window.loadPersonalDirectivo();
+            const searchInput = document.getElementById('busquedaPersonalAutorizado');
+            if (window.loadListasAdminPersonal) window.loadListasAdminPersonal(searchInput ? searchInput.value : '');
+        }
+    } catch(e) {
+        console.error(e);
+        alert("Error de red o permisos.");
     }
 };
