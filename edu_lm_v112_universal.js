@@ -22882,8 +22882,12 @@ window.guardarEdicionAlumno = async (alumnoId) => {
                 p_old_email: oldEmail,
                 p_new_email: email
             });
-            if (rpcErr) console.error("Error al actualizar email en auth:", rpcErr);
-            else if (rpcData && !rpcData.success) console.warn("Aviso Auth:", rpcData.error);
+            if (rpcErr || (rpcData && !rpcData.success)) {
+                console.error("Auth RPC Error:", rpcErr || (rpcData ? rpcData.error : ''));
+                alert("⚠️ ATENCIÓN: El correo se actualizó en la lista, pero NO en el acceso de seguridad.\n\nAsegúrate de haber ejecutado el código SQL en Supabase. Si ya lo hiciste, el usuario no fue encontrado (quizás el correo viejo no coincidía).");
+            } else {
+                window.showToast("Correo de acceso Auth actualizado", "success");
+            }
         }
 
         window.showToast("Datos actualizados correctamente", "success");
@@ -22983,7 +22987,12 @@ window.guardarEdicionPersonal = async (personalId, oldEmail) => {
                     p_old_email: oldEmail,
                     p_new_email: email
                 });
-                if (rpcErr) console.error("Error al actualizar email en auth:", rpcErr);
+                if (rpcErr || (rpcData && !rpcData.success)) {
+                    console.error("Auth RPC Error:", rpcErr || (rpcData ? rpcData.error : ''));
+                    alert("⚠️ ATENCIÓN: El correo se actualizó en la lista, pero NO en el acceso de seguridad.\n\nAsegúrate de haber ejecutado el código SQL en Supabase.");
+                } else {
+                    window.showToast("Correo de acceso Auth actualizado", "success");
+                }
             }
         }
 
