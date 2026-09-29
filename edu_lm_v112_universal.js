@@ -22876,6 +22876,14 @@ window.guardarEdicionAlumno = async (alumnoId) => {
         // 3. Si cambió el correo y estaba en perfiles_permitidos, actualizarlo
         if (oldEmail && email && oldEmail !== email) {
             await supabaseClient.from('perfiles_permitidos').update({ email: email }).eq('email', oldEmail);
+            
+            // 4. Actualizar el correo en Auth (Para que puedan iniciar sesión con el nuevo)
+            const { data: rpcData, error: rpcErr } = await supabaseClient.rpc('actualizar_email_usuario', {
+                p_old_email: oldEmail,
+                p_new_email: email
+            });
+            if (rpcErr) console.error("Error al actualizar email en auth:", rpcErr);
+            else if (rpcData && !rpcData.success) console.warn("Aviso Auth:", rpcData.error);
         }
 
         window.showToast("Datos actualizados correctamente", "success");
@@ -22968,11 +22976,15 @@ window.guardarEdicionPersonal = async (personalId, oldEmail) => {
 
         // 2. Update in perfiles (if the user has logged in before, they have an entry in perfiles matching oldEmail)
         if (oldEmail) {
-            await supabaseClient.from('perfiles').update({
-                nombre: nombre,
-                rol: rol,
-                email: email
-            }).eq('email', oldEmail);
+            // Nota: perfiles NO tiene columna 'email', esto fallará silenciosamente o dará error, pero lo dejamos por compatibilidad o lo removemos.
+            // Para cambiar el email de inicio de sesión real, usamos el RPC
+            if (oldEmail !== email) {
+                const { data: rpcData, error: rpcErr } = await supabaseClient.rpc('actualizar_email_usuario', {
+                    p_old_email: oldEmail,
+                    p_new_email: email
+                });
+                if (rpcErr) console.error("Error al actualizar email en auth:", rpcErr);
+            }
         }
 
         window.showToast("Datos actualizados correctamente", "success");
