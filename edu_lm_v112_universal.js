@@ -6667,11 +6667,15 @@ function renderAlumnoTramites() {
                <option value="Boleta de calificación del trimestre">Boleta de calificación del trimestre</option>
                <option value="Reposición de credencial escolar">Reposición de credencial escolar</option>
            </select>
-           <label class="form-label">Modalidad de Entrega</label>
-           <select id="selModalidadEntrega" class="form-select" style="margin-bottom:12px;">
-               <option value="Digital">Digital (Documento PDF)</option>
-               <option value="Presencial">Presencial al alumno</option>
+           <label class="form-label">Motivo o propósito del documento</label>
+           <textarea id="tramiteMotivo" class="form-input" style="margin-bottom:12px; resize:vertical; min-height:60px;" placeholder="Especifica para qué trámite requieres el documento..."></textarea>
+           
+           <label class="form-label">¿Quién recogerá el documento? (Entrega Presencial)</label>
+           <select id="selQuienRecoge" class="form-select" style="margin-bottom:12px;">
+               <option value="Padre de familia o Tutor">Padre de familia o Tutor</option>
+               <option value="El alumno(a)">El alumno(a)</option>
            </select>
+           
            <button class="btn btn-primary" style="width:100%" onclick="window.solicitarTramiteAlumno()">Solicitar Trámite</button>
            <button class="btn btn-outline" style="width:100%; margin-top:10px" onclick="window.loadMisTramites()">Recargar Listado</button>
         </div>
@@ -6685,10 +6689,13 @@ function renderAlumnoTramites() {
 
 window.solicitarTramiteAlumno = async () => {
     const tipoRaw = document.getElementById('selNuevoTramite')?.value;
-    const mod = document.getElementById('selModalidadEntrega')?.value || 'Digital';
-    if(!tipoRaw) return alert("Selecciona un tipo de trámite.");
+    const motivo = document.getElementById('tramiteMotivo')?.value.trim();
+    const quienRecoge = document.getElementById('selQuienRecoge')?.value;
     
-    const tipoFinal = tipoRaw + (mod === 'Presencial' ? ' (Entrega Presencial)' : ' (Entrega Digital)');
+    if(!tipoRaw) return alert("Selecciona un tipo de trámite.");
+    if(!motivo) return alert("Por favor especifica el motivo o para qué trámite requieres el documento.");
+    
+    const tipoFinal = tipoRaw;
 
     try {
         const uRes = await supabaseClient.auth.getUser();
@@ -6707,11 +6714,17 @@ window.solicitarTramiteAlumno = async () => {
             alumno_id: alumno.id,
             tipo: tipoFinal,
             estado: 'Pendiente',
-            plantel_id: state.plantelId
+            plantel_id: state.plantelId,
+            motivo: motivo,
+            quien_recoge: quienRecoge
         }]);
 
         if(error) throw error;
-        alert(`✅ Trámite "${tipoFinal}" solicitado correctamente. El área administrativa lo procesará a la brevedad.`);
+        
+        // Limpiar formulario
+        if (document.getElementById('tramiteMotivo')) document.getElementById('tramiteMotivo').value = '';
+        
+        alert(`✅ Trámite solicitado correctamente.\n\nSe te avisará por este medio cuando ya se tenga elaborado el documento que solicitaste para que pasen a recogerlo de forma presencial.`);
         window.loadMisTramites();
     } catch(e) {
         console.error(e);
@@ -6751,20 +6764,33 @@ window.loadMisTramites = async () => {
             return;
         }
 
-        const colores = { Pendiente: 'var(--warning)', Subido: 'var(--success)', Entregado: 'var(--success)' };
-        const iconos = { Pendiente: 'fa-clock', Subido: 'fa-check-circle', Entregado: 'fa-handshake' };
+        const colores = { Pendiente: 'var(--warning)', Elaborada: 'var(--info)', Entregada: 'var(--success)', Subido: 'var(--success)', Entregado: 'var(--success)' };
+        const iconos = { Pendiente: 'fa-clock', Elaborada: 'fa-file-signature', Entregada: 'fa-handshake', Subido: 'fa-check-circle', Entregado: 'fa-handshake' };
 
         cont.innerHTML = data.map(t => {
             const fecha = new Date(t.creado_en).toLocaleDateString('es-MX', { dateStyle: 'medium' });
             const color = colores[t.estado] || 'var(--text-muted)';
             const icon = iconos[t.estado] || 'fa-file';
-            const btnDoc = t.archivo_url
-                ? `<a href="${t.archivo_url}" target="_blank" class="btn btn-outline btn-xs" style="margin-top:8px; border-color:var(--success); color:var(--success); display:inline-flex; gap:6px; align-items:center;"><i class="fa-solid fa-file-pdf"></i> Ver documento listo</a>`
+            
+            let btnDoc = t.archivo_url
+                ? `<a href="${t.archivo_url}" target="_blank" class="btn btn-outline btn-xs" style="margin-top:8px; border-color:var(--success); color:var(--success); display:inline-flex; gap:6px; align-items:center;"><i class="fa-solid fa-file-pdf"></i> Ver documento antiguo</a>`
                 : '';
+                
+            let motivoHtml = '';
+            if (t.motivo) {
+                motivoHtml = `<div style="font-size:0.85rem; color:var(--text-muted); margin-top:4px;"><b>Motivo:</b> ${t.motivo}</div>`;
+            }
+            if (t.quien_recoge) {
+                motivoHtml += `<div style="font-size:0.85rem; color:var(--text-muted); margin-top:2px;"><b>Recoge:</b> ${t.quien_recoge}</div>`;
+            }
+
             return `
             <div style="background:var(--surface); border:1px solid var(--border); border-left:4px solid ${color}; border-radius:10px; padding:14px 16px; margin-bottom:12px;">
-                <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">
-                    <span style="font-weight:600; color:var(--text-main);">${t.tipo}</span>
+                <div style="display:flex; justify-content:space-between; align-items:flex-start; flex-wrap:wrap; gap:8px;">
+                    <div>
+                        <span style="font-weight:600; color:var(--text-main);">${t.tipo}</span>
+                        ${motivoHtml}
+                    </div>
                     <span style="font-size:0.75rem; color:${color}; font-weight:600; display:flex; align-items:center; gap:4px;">
                         <i class="fa-solid ${icon}"></i> ${t.estado}
                     </span>
@@ -6790,7 +6816,7 @@ window.loadTramitesAdmin = async () => {
             .from('tramites')
             .select('*, alumnos(nombre, matricula)')
             .eq('plantel_id', state.plantelId)
-            .eq('estado', 'Pendiente')
+            .in('estado', ['Pendiente', 'Elaborada'])
             .order('creado_en', { ascending: false });
 
         if(error) throw error;
@@ -6800,31 +6826,29 @@ window.loadTramitesAdmin = async () => {
             return;
         }
 
-        const colores = { Pendiente: 'var(--warning)', Subido: 'var(--success)', Entregado: 'var(--success)' };
+        const colores = { Pendiente: 'var(--warning)', Elaborada: 'var(--info)', Subido: 'var(--success)', Entregado: 'var(--success)', Entregada: 'var(--success)' };
 
         cont.innerHTML = data.map(t => {
             const fecha = new Date(t.creado_en).toLocaleDateString('es-MX', { dateStyle: 'medium' });
             const alumnoNombre = t.alumnos ? `${t.alumnos.nombre} (${t.alumnos.matricula})` : 'Alumno desconocido';
             const color = colores[t.estado] || 'var(--text-muted)';
-            const isPresencial = t.tipo.includes('Entrega Presencial');
+            
+            // Tratamos todo como presencial para esta nueva version
             let btnSubir = '';
             
             if (t.estado === 'Pendiente') {
-                if (isPresencial) {
-                    btnSubir = `<button class="btn btn-primary btn-xs" style="margin-top:8px;" onclick="window.marcarTramiteEntregado('${t.id}')">
-                        <i class="fa-solid fa-handshake"></i> Marcar como Entregado
-                    </button>`;
-                } else {
-                    btnSubir = `<button class="btn btn-success btn-xs" style="margin-top:8px;" onclick="window.selectAlumnoTramite('${t.alumno_id}', '${(t.alumnos?.nombre||'').replace(/'/g,"\\'")}', '${t.alumnos?.matricula||''}', '${t.tipo}', '${t.id}');">
-                        <i class="fa-solid fa-upload"></i> Atender Solicitud
-                    </button>`;
-                }
-            } else {
-                if (!isPresencial && t.archivo_url) {
-                    btnSubir = `<a href="${t.archivo_url}" target="_blank" class="btn btn-outline btn-xs" style="margin-top:8px; color:var(--success); border-color:var(--success);"><i class="fa-solid fa-eye"></i> Ver documento</a>`;
-                }
+                btnSubir = `<button class="btn btn-info btn-xs" style="margin-top:8px; display:inline-flex; gap:6px; align-items:center;" onclick="window.marcarTramiteElaborado('${t.id}', '${t.alumno_id}')">
+                    <i class="fa-solid fa-file-signature"></i> Marcar como Elaborada
+                </button>`;
+            } else if (t.estado === 'Elaborada') {
+                btnSubir = `<button class="btn btn-success btn-xs" style="margin-top:8px; display:inline-flex; gap:6px; align-items:center;" onclick="window.marcarTramiteEntregado('${t.id}')">
+                    <i class="fa-solid fa-handshake"></i> Marcar como Entregada
+                </button>`;
             }
-
+            
+            let detallesExtra = '';
+            if (t.motivo) detallesExtra += `<div style="font-size:0.8rem; margin-top:4px;"><b>Motivo:</b> ${t.motivo}</div>`;
+            if (t.quien_recoge) detallesExtra += `<div style="font-size:0.8rem; margin-top:2px;"><b>Recoge:</b> ${t.quien_recoge}</div>`;
             return `
             <div style="background:var(--surface); border:1px solid var(--border); border-left:4px solid ${color}; border-radius:10px; padding:14px 16px; margin-bottom:12px;">
                 <div style="display:flex; justify-content:space-between; align-items:flex-start; flex-wrap:wrap; gap:6px;">
@@ -6832,6 +6856,7 @@ window.loadTramitesAdmin = async () => {
                         <div style="font-weight:600; color:var(--text-main); margin-bottom:4px;">${t.tipo}</div>
                         <div style="font-size:0.8rem; color:var(--text-muted);"><i class="fa-solid fa-user"></i> ${alumnoNombre}</div>
                         <div style="font-size:0.78rem; color:var(--text-muted);"><i class="fa-regular fa-clock"></i> ${fecha}</div>
+                        ${detallesExtra}
                     </div>
                     <span style="font-size:0.75rem; color:${color}; font-weight:600; padding:3px 10px; background:${color}20; border-radius:20px;">${t.estado}</span>
                 </div>
@@ -23459,5 +23484,32 @@ window.forzarReseteoPassword = async (recordId, currentEmailInput) => {
     } catch(e) {
         console.error(e);
         alert("Error de red o permisos.");
+    }
+};
+
+window.marcarTramiteElaborado = async (tramiteId, alumnoId) => {
+    if(!confirm("¿Confirmas que este documento ya está elaborado y listo para entregarse? Se le notificará al estudiante.")) return;
+    try {
+        const uRes = await supabaseClient.auth.getUser();
+        
+        const { error } = await supabaseClient.from('tramites').update({ estado: 'Elaborada', admin_id: state.user.id }).eq('id', tramiteId);
+        if(error) throw error;
+        
+        // Enviar aviso
+        if (alumnoId) {
+            await supabaseClient.from('comunicados').insert([{
+                autor_id: uRes.data?.user?.id,
+                titulo: "Trámite Elaborado",
+                mensaje: "El documento que solicitaste ya se encuentra elaborado. Puedes pasar de forma presencial a recogerlo en el área administrativa.",
+                audiencia: `Alumno_${alumnoId}`,
+                plantel_id: state.plantelId
+            }]);
+        }
+        
+        window.showToast("Trámite marcado como elaborado.", "info");
+        if(window.loadTramitesAdmin) window.loadTramitesAdmin();
+    } catch(e) {
+        console.error(e);
+        window.showToast("Error al actualizar estado.", "danger");
     }
 };
