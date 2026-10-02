@@ -6814,7 +6814,7 @@ window.loadTramitesAdmin = async () => {
     try {
         const { data, error } = await supabaseClient
             .from('tramites')
-            .select('*, alumnos(nombre, matricula)')
+            .select('*, alumnos(nombre, matricula, grado, grupos(nombre))')
             .eq('plantel_id', state.plantelId)
             .in('estado', ['Pendiente', 'Elaborada'])
             .order('creado_en', { ascending: false });
@@ -6830,7 +6830,15 @@ window.loadTramitesAdmin = async () => {
 
         cont.innerHTML = data.map(t => {
             const fecha = new Date(t.creado_en).toLocaleDateString('es-MX', { dateStyle: 'medium' });
-            const alumnoNombre = t.alumnos ? `${t.alumnos.nombre} (${t.alumnos.matricula})` : 'Alumno desconocido';
+            
+            let extraInfo = '';
+            if (t.alumnos) {
+                const gr = t.alumnos.grado || 'S/G';
+                const gp = t.alumnos.grupos?.nombre || 'S/G';
+                extraInfo = ` | Grado: ${gr} - Grupo: ${gp}`;
+            }
+            
+            const alumnoNombre = t.alumnos ? `${t.alumnos.nombre} (${t.alumnos.matricula})${extraInfo}` : 'Alumno desconocido';
             const color = colores[t.estado] || 'var(--text-muted)';
             
             // Tratamos todo como presencial para esta nueva version
