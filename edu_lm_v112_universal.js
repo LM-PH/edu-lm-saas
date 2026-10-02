@@ -11995,7 +11995,7 @@ window.cargarBoletasGrupo = async () => {
                    <input type="number" class="form-input input-calificacion" 
                           data-alumno="${al.id}" 
                           ${inputAttr}
-                          value="${displayVal}" step="0.1" min="0" max="10">
+                          value="${displayVal}" step="0.1" min="5" max="10">
                 </td>
              </tr>`;
         }
@@ -12116,7 +12116,13 @@ window.sellarYEnviarCalificaciones = async () => {
         const materiaClean = materiaText.trim();
 
         inputs.forEach(inp => {
-            const calif = parseFloat(inp.value) || 0;
+            let calif = parseFloat(inp.value) || 0;
+            
+            // Regla de negocio: calificación mínima reprobatoria es 5
+            if (calif < 5.0) {
+                calif = 5.0;
+            }
+            
             const alId = inp.getAttribute('data-alumno');
             
             updates.push({
