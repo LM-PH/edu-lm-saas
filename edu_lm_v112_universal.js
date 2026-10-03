@@ -18706,7 +18706,7 @@ async function renderBibliotecaPrestamos() {
          <div class="card" style="flex:1; min-width:300px;">
             <h3 style="margin-bottom:15px">Registrar Préstamo</h3>
             <div class="form-group" style="position:relative;">
-               <label class="form-label">Buscar Alumno (Nombre o Matrícula)</label>
+               <label class="form-label">Buscar Alumno o Personal (Nombre o Matrícula)</label>
                <input type="text" id="bibSearchAlumno" class="form-input" placeholder="Escribe para buscar..." oninput="window.bibLiveSearchAlumno(this.value)">
                <div id="bibResSearchAlumno" style="display:none; position:absolute; top:100%; left:0; right:0; background:white; border:1px solid var(--border); border-radius:8px; box-shadow:0 4px 6px -1px rgba(0,0,0,0.1); z-index:10; max-height:200px; overflow-y:auto;"></div>
             </div>
@@ -18790,30 +18790,52 @@ window.bibLiveSearchAlumno = async (q) => {
             if(pId) state.plantelId = pId;
         }
 
-        let query = supabaseClient.from('alumnos').select('id, nombre, matricula, grupos(nombre)');
-        if(pId) query = query.eq('plantel_id', pId);
-        query = query.or(`nombre.ilike.%${term}%,matricula.ilike.%${term}%`).limit(10);
+        let queryAl = supabaseClient.from('alumnos').select('id, nombre, matricula, grupos(nombre)');
+        let queryProf = supabaseClient.from('perfiles_permitidos').select('id, nombre, rol');
         
-        const { data, error } = await query;
-        if(error) console.error("[BibSearchError]", error);
+        if(pId) { 
+            queryAl = queryAl.eq('plantel_id', pId); 
+            queryProf = queryProf.eq('plantel_id', pId); 
+        }
+        
+        queryAl = queryAl.or(`nombre.ilike.%${term}%,matricula.ilike.%${term}%`).limit(10);
+        queryProf = queryProf.or(`nombre.ilike.%${term}%`).neq('rol', 'alumno').limit(10);
+        
+        const [resAl, resProf] = await Promise.all([queryAl, queryProf]);
+        
+        const data = [
+            ...(resAl.data || []).map(a => ({...a, tipoPersona: 'alumno'})),
+            ...(resProf.data || []).map(p => ({...p, tipoPersona: 'personal'}))
+        ];
         
         if(!data || data.length === 0) { 
-            res.innerHTML='<p style="padding:10px; color:var(--text-muted); text-align:center; font-style:italic;">No se encontraron alumnos</p>'; 
+            res.innerHTML='<p style="padding:10px; color:var(--text-muted); text-align:center; font-style:italic;">No se encontraron personas</p>'; 
             res.style.display='block'; 
             return; 
         }
+        
         res.style.display='block';
-        res.innerHTML = data.map(a => `
-            <div style="padding:10px; border-bottom:1px solid var(--border); cursor:pointer;" onclick="window.bibSelectAlumno('${a.id}', '${a.nombre.replace(/'/g, "\\'")}', '${a.grupos?.nombre || 'Sin Grupo'}')">
-               <div style="font-weight:600; font-size:0.85rem;">${a.nombre}</div>
-               <div style="font-size:0.75rem; color:var(--text-muted)">${a.matricula || 'Sin matrícula'} - ${a.grupos?.nombre || 'Sin Grupo'}</div>
+        res.innerHTML = data.map(a => {
+            const subtitulo = a.tipoPersona === 'alumno' 
+                ? `${a.matricula || 'Sin matrícula'} - ${a.grupos?.nombre || 'Sin Grupo'}`
+                : `Personal (${(a.rol || '').toUpperCase()})`;
+            const icon = a.tipoPersona === 'alumno' ? 'fa-user' : 'fa-chalkboard-user';
+                
+            return `
+            <div style="padding:10px; border-bottom:1px solid var(--border); cursor:pointer; display:flex; gap:10px; align-items:center;" onclick="window.bibSelectAlumno('${a.id}', '${a.nombre.replace(/'/g, "\\'")}', '${subtitulo.replace(/'/g, "\\'")}', '${a.tipoPersona}')">
+               <div style="color:var(--text-muted);"><i class="fa-solid ${icon}"></i></div>
+               <div>
+                   <div style="font-weight:600; font-size:0.85rem;">${a.nombre}</div>
+                   <div style="font-size:0.75rem; color:var(--text-muted)">${subtitulo}</div>
+               </div>
             </div>
-        `).join('');
+        `}).join('');
     } catch(e) { console.error(e); }
 };
 
-window.bibSelectAlumno = (id, nombre, grupo) => {
+window.bibSelectAlumno = (id, nombre, grupo, tipoPersona) => {
     document.getElementById('bibAluId').value = id;
+    document.getElementById('bibAluId').setAttribute('data-tipo', tipoPersona || 'alumno');
     document.getElementById('bibAluNom').innerText = nombre;
     document.getElementById('bibAluGrp').innerText = grupo;
     document.getElementById('bibAlumnoSeleccionado').style.display = 'block';
@@ -18833,7 +18855,7 @@ window.loadBibliotecaPrestamos = async () => {
     if(!container) return;
     try {
         const { data, error } = await supabaseClient.from('biblioteca_prestamos')
-            .select('*, alumnos(nombre, grupos(nombre))')
+            .select('*, alumnos(nombre, grupos(nombre)), perfiles_permitidos(nombre, rol)')
             .eq('plantel_id', state.plantelId)
             .eq('devuelto', false)
             .order('creado_en', { ascending: false });
@@ -18853,6 +18875,18 @@ window.loadBibliotecaPrestamos = async () => {
             else if (p.tipo === 'juego') { icon = '<i class="fa-solid fa-chess-knight" style="color:#10b981"></i>'; bg = '#d1fae5'; }
             const f = new Date(p.creado_en || p.fecha_prestamo).toLocaleString([], {day:'2-digit', month:'short', hour:'2-digit', minute:'2-digit'});
             
+            let personaNombre = 'Desconocido';
+            let personaIcon = 'fa-user';
+            
+            if (p.alumnos) {
+                personaNombre = `${p.alumnos.nombre} (${p.alumnos.grupos?.nombre || 'S/G'})`;
+            } else if (p.perfiles_permitidos) {
+                personaNombre = `${p.perfiles_permitidos.nombre} (Personal: ${(p.perfiles_permitidos.rol || '').toUpperCase()})`;
+                personaIcon = 'fa-chalkboard-user';
+            } else if (p.alumno_id) {
+                personaNombre = 'Alumno (Sin Nombre)';
+            }
+            
             return `
                <div style="border:1px solid var(--border); border-radius:12px; padding:16px; margin-bottom:12px; display:flex; gap:16px; align-items:center;">
                   <div style="width:48px; height:48px; border-radius:12px; background:${bg}; display:flex; align-items:center; justify-content:center; font-size:1.5rem;">
@@ -18860,7 +18894,7 @@ window.loadBibliotecaPrestamos = async () => {
                   </div>
                   <div style="flex:1;">
                      <div style="font-weight:700; font-size:1rem; color:var(--text-main); margin-bottom:4px;">${p.recurso}</div>
-                     <div style="font-size:0.85rem; color:var(--text-muted); margin-bottom:2px;"><i class="fa-regular fa-user"></i> ${p.alumnos?.nombre || 'Alumno'} (${p.alumnos?.grupos?.nombre || ''})</div>
+                     <div style="font-size:0.85rem; color:var(--text-muted); margin-bottom:2px;"><i class="fa-solid ${personaIcon}"></i> ${personaNombre}</div>
                      <div style="font-size:0.75rem; color:var(--text-muted);"><i class="fa-regular fa-clock"></i> Prestado: ${f} &nbsp;&bull;&nbsp; <i class="${p.destino === 'casa' ? 'fa-solid fa-house' : 'fa-solid fa-school'}"></i> Para: ${p.destino === 'casa' ? 'Casa' : 'Escuela'}</div>
                      ${p.condicion_entrega ? `<div style="margin-top:4px; font-size:0.75rem; background:#fffbeb; color:#d97706; padding:4px 8px; border-radius:4px; display:inline-block;"><i class="fa-solid fa-triangle-exclamation"></i> Entregado con: ${p.condicion_entrega}</div>` : ''}
                      ${p.profesor_solicitante ? `<div style="margin-top:4px; font-size:0.75rem; color:var(--text-muted);"><i class="fa-solid fa-chalkboard-user"></i> Solicitado por: ${p.profesor_solicitante} ${p.modulo_solicitante ? `(${p.modulo_solicitante})` : ''}</div>` : ''}
@@ -18880,7 +18914,8 @@ window.loadBibliotecaPrestamos = async () => {
 };
 
 window.guardarPrestamoBiblioteca = async () => {
-    const alumno_id = document.getElementById('bibAluId').value;
+    const persona_id = document.getElementById('bibAluId').value;
+    const tipoPersona = document.getElementById('bibAluId').getAttribute('data-tipo');
     const tipo = document.getElementById('bibTipo').value;
     const recurso = document.getElementById('bibRecurso').value.trim();
     const destino = document.getElementById('bibDestino') ? document.getElementById('bibDestino').value : 'escuela';
@@ -18888,13 +18923,21 @@ window.guardarPrestamoBiblioteca = async () => {
     const profesor_solicitante = document.getElementById('bibProfSolicitante')?.value.trim() || null;
     const modulo_solicitante = document.getElementById('bibModuloSolicitante')?.value.trim() || null;
     
-    if(!alumno_id) return window.showToast("Selecciona un alumno.", "error");
+    if(!persona_id) return window.showToast("Selecciona a una persona (Alumno o Profesor).", "error");
     if(!recurso) return window.showToast("Escribe el nombre del libro o equipo.", "error");
     
     try {
-        const { error } = await supabaseClient.from('biblioteca_prestamos').insert([{
-            alumno_id, tipo, recurso, destino, condicion_entrega, profesor_solicitante, modulo_solicitante, plantel_id: state.plantelId
-        }]);
+        const payload = {
+            tipo, recurso, destino, condicion_entrega, profesor_solicitante, modulo_solicitante, plantel_id: state.plantelId
+        };
+        
+        if (tipoPersona === 'personal') {
+            payload.personal_id = persona_id;
+        } else {
+            payload.alumno_id = persona_id;
+        }
+
+        const { error } = await supabaseClient.from('biblioteca_prestamos').insert([payload]);
         if(error) throw error;
         
         window.showToast("Préstamo registrado exitosamente.", "success");
