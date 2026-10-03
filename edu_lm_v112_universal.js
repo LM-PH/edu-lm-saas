@@ -2795,9 +2795,15 @@ function renderMaestroActividades() {
           <textarea class="form-input" id="actDesc" rows="2" placeholder="Detalles de la entrega..."></textarea>
         </div>
         <div class="form-group">
-          <label class="form-label">Materia y Grupo</label>
-          <select class="form-select" id="actMateriaGrupo" onchange="window.cargarRubrosParaActividad()">
-             <option value="">Cargando asignaciones...</option>
+          <label class="form-label">Materia / Disciplina</label>
+          <select class="form-select" id="actMateria" onchange="window.actRenderGruposParaMateria()">
+             <option value="">Cargando materias...</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Asignar a Grupo(s)</label>
+          <select class="form-select" id="actGrupoMulti" onchange="window.cargarRubrosParaActividad()">
+             <option value="">-- Selecciona Materia Primero --</option>
           </select>
         </div>
         <div class="form-group">
@@ -10717,24 +10723,30 @@ window.loadActividadesMaestro = async () => {
         const email = currentUser.data.user.email;
 
         // Cargar seleccionables (solo si existe el select y está vacío/default)
-        if (selGrupo && (selGrupo.innerHTML.includes("Cargando") || selGrupo.options.length <= 1)) {
+        const actM = document.getElementById('actMateria');
+        if (actM && (actM.innerHTML.includes("Cargando") || actM.options.length <= 1)) {
             const { data: asigs, error: errAsigs } = await supabaseClient.from('asignaciones_maestros')
                .select('materia, grupo_id, target_grado, grupos(id, nombre)')
                .eq('plantel_id', state.plantelId)
-               .eq('docente_email', email).eq('plantel_id', state.plantelId)
+               .eq('docente_email', email)
                .or('grupo_id.not.is.null,target_grado.not.is.null');
                
             if(!errAsigs && asigs) {
+                window.globalAsignacionesMaestro = asigs;
+                
+                // Materias unicas
+                const matUnicas = [...new Set(asigs.map(a => a.materia))];
+                actM.innerHTML = '<option value="">-- Selecciona Materia --</option>' + matUnicas.map(m => `<option value="${m}">${m}</option>`).join('');
+                
+                // Llenar el filtro inferior (filtroGrupoAct) con los grupos combinados como antes
                 const optionsHTML = asigs.map(a => {
                        if(a.grupos) return `<option value="${a.grupos.id}|${a.materia}">${a.materia} - ${a.grupos.nombre}</option>`;
                        if(a.target_grado) return `<option value="grado:${a.target_grado}|${a.materia}">${a.materia} - Grado ${a.target_grado} (Tecnología)</option>`;
                        return '';
                    }).filter(Boolean).join('');
-                selGrupo.innerHTML = '<option value="">-- Selecciona --</option>' + optionsHTML;
-                
+                   
                 const filtroGrupo = document.getElementById('filtroGrupoAct');
                 if (filtroGrupo) {
-                    // Mantener la opción seleccionada si ya había una
                     const currentVal = filtroGrupo.value;
                     filtroGrupo.innerHTML = '<option value="">Todos los grupos</option>' + optionsHTML;
                     if (currentVal) filtroGrupo.value = currentVal;
@@ -10947,13 +10959,9 @@ window.eliminarActividadMaestro = async (id) => {
 window.agregarActividad = async () => {
     const titulo = document.getElementById('actTitulo').value;
     const desc = document.getElementById('actDesc').value;
-    const val = document.getElementById('actMateriaGrupo').value;
+    const valMulti = document.getElementById('actGrupoMulti').value;
     
-    if(!titulo || !val) return alert("Rellena el titulo y selecciona materia/grupo.");
-    const [idPart, materia] = val.split('|');
-    const isTec = idPart.startsWith('grado:');
-    const grupo_id = isTec ? null : idPart;
-    const target_grado = isTec ? idPart.replace('grado:', '') : null;
+    if(!titulo || !valMulti) return alert("Rellena el titulo y selecciona el grupo destino.");
     
     try {
        const user = (await supabaseClient.auth.getUser()).data.user;
@@ -10969,18 +10977,28 @@ window.agregarActividad = async () => {
        
        const trimVal = document.getElementById('actTrimestre').value || 1;
        
-       const { error: errInsert } = await supabaseClient.from('actividades_maestro').insert([{
-           maestro_id: user.id,
-           titulo: titulo,
-           descripcion: desc,
-           materia: (materia || '').trim(),
-           grupo_id: grupo_id,
-           target_grado: target_grado,
-           rubro_name: rubroName,
-           rubro_peso: rubroPeso,
-           trimestre: parseInt(trimVal),
-           plantel_id: state.plantelId
-       }]);
+       // Soportar múltiples grupos si seleccionó "Todos mis grupos"
+       const itemsToInsert = valMulti.split(',').map(val => {
+           const [idPart, materia] = val.split('|');
+           const isTec = idPart.startsWith('grado:');
+           const grupo_id = isTec ? null : idPart;
+           const target_grado = isTec ? idPart.replace('grado:', '') : null;
+           
+           return {
+               maestro_id: user.id,
+               titulo: titulo,
+               descripcion: desc,
+               materia: (materia || '').trim(),
+               grupo_id: grupo_id,
+               target_grado: target_grado,
+               rubro_name: rubroName,
+               rubro_peso: rubroPeso,
+               trimestre: parseInt(trimVal),
+               plantel_id: state.plantelId
+           };
+       });
+       
+       const { error: errInsert } = await supabaseClient.from('actividades_maestro').insert(itemsToInsert);
        
        if (errInsert) {
            throw errInsert;
@@ -14629,14 +14647,16 @@ window.loadGruposEncuadre = async () => {
 };
 
 window.cargarRubrosParaActividad = async () => {
-    const actMG = document.getElementById('actMateriaGrupo');
+    const actMG = document.getElementById('actGrupoMulti');
     const actR = document.getElementById('actRubro');
     if(!actMG || !actR) return;
     
     actR.innerHTML = '<option value="">Cargando rubros...</option>';
     if(!actMG.value) { actR.innerHTML = '<option value="">-- Selecciona Grupo Primero --</option>'; return; }
     
-    const [idPart, mat] = actMG.value.split('|');
+    // Si selecciona "Todos mis grupos", el value es "ID1|Mat,ID2|Mat". Agarramos el primero para buscar el encuadre.
+    const firstVal = actMG.value.split(',')[0];
+    const [idPart, mat] = firstVal.split('|');
     const isTec = idPart.startsWith('grado:');
     const gid = isTec ? null : idPart;
     const targetGrado = isTec ? idPart.replace('grado:', '') : null;
@@ -23569,4 +23589,51 @@ window.marcarTramiteElaborado = async (tramiteId, alumnoId) => {
         console.error(e);
         window.showToast("Error al actualizar estado.", "danger");
     }
+};
+window.globalAsignacionesMaestro = [];
+
+window.actRenderGruposParaMateria = () => {
+    const actM = document.getElementById('actMateria');
+    const actG = document.getElementById('actGrupoMulti');
+    const actR = document.getElementById('actRubro');
+    
+    if(!actM || !actG) return;
+    actR.innerHTML = '<option value="">-- Selecciona Grupo Primero --</option>';
+    
+    const matSel = actM.value;
+    if(!matSel) {
+        actG.innerHTML = '<option value="">-- Selecciona Materia Primero --</option>';
+        return;
+    }
+    
+    // Filtrar asignaciones de esta materia
+    const asigs = window.globalAsignacionesMaestro.filter(a => a.materia === matSel);
+    
+    let options = '<option value="">-- Selecciona un Grupo --</option>';
+    
+    const esTec = asigs.some(a => !!a.target_grado);
+    
+    if(esTec) {
+        // Para tecnología, las opciones ya son por grado
+        asigs.forEach(a => {
+            if(a.target_grado) {
+                options += `<option value="grado:${a.target_grado}|${a.materia}">Grado ${a.target_grado}</option>`;
+            }
+        });
+    } else {
+        // Grupos regulares
+        if(asigs.length > 1) {
+            // Opción para asignar a todos los grupos a la vez
+            const allVals = asigs.map(a => `${a.grupos.id}|${a.materia}`).join(',');
+            options += `<option value="${allVals}">⭐ TODOS mis grupos de esta materia</option>`;
+        }
+        
+        asigs.forEach(a => {
+            if(a.grupos) {
+                options += `<option value="${a.grupos.id}|${a.materia}">${a.grupos.nombre}</option>`;
+            }
+        });
+    }
+    
+    actG.innerHTML = options;
 };
