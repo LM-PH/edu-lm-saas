@@ -11021,6 +11021,7 @@ window.confirmarCopiarActividad = async (actId) => {
 };
 
 
+window.reabrirActividad = async (id) => {
     try {
         const { error } = await supabaseClient.from('actividades_maestro')
             .update({ finalizada: false, fecha_finalizacion: null })
