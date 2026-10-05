@@ -10772,16 +10772,16 @@ window.loadActividadesMaestro = async () => {
         let actividadesMostrar = misActividades || [];
         if (filtroGrupoVal) {
              const parts = filtroGrupoVal.split('|');
-             const targetGrupo = parts[0];
-             const targetMateria = parts[1];
+             const targetGrupo = (parts[0] || '').trim();
+             const targetMateria = (parts[1] || '').trim();
              actividadesMostrar = actividadesMostrar.filter(act => {
                  let matchGroup = false;
                  if (targetGrupo.startsWith('grado:')) {
-                     matchGroup = (act.target_grado == targetGrupo.split(':')[1]);
+                     matchGroup = ((act.target_grado || '').trim() === targetGrupo.split(':')[1].trim());
                  } else {
-                     matchGroup = (act.grupo_id == targetGrupo);
+                     matchGroup = ((act.grupo_id || '').trim() === targetGrupo);
                  }
-                 return matchGroup && act.materia === targetMateria;
+                 return matchGroup && (act.materia || '').trim() === targetMateria;
              });
         }
 
@@ -23626,6 +23626,30 @@ window.actRenderGruposParaMateria = () => {
             // Opción para asignar a todos los grupos a la vez
             const allVals = asigs.map(a => `${a.grupos.id}|${a.materia}`).join(',');
             options += `<option value="${allVals}">⭐ TODOS mis grupos de esta materia</option>`;
+            
+            // Opciones por grado
+            const gruposPorGrado = {};
+            asigs.forEach(a => {
+                if(a.grupos && a.grupos.nombre) {
+                    const m = a.grupos.nombre.match(/^(\d+)/);
+                    if(m) {
+                        const grado = m[1];
+                        if(!gruposPorGrado[grado]) gruposPorGrado[grado] = [];
+                        gruposPorGrado[grado].push(a);
+                    }
+                }
+            });
+            
+            const gradosUnicos = Object.keys(gruposPorGrado);
+            if(gradosUnicos.length > 0) {
+                gradosUnicos.sort().forEach(grado => {
+                    const asigsGrado = gruposPorGrado[grado];
+                    if(asigsGrado.length > 1) {
+                        const valsGrado = asigsGrado.map(a => `${a.grupos.id}|${a.materia}`).join(',');
+                        options += `<option value="${valsGrado}">⭐ TODOS los grupos de ${grado}° de esta materia</option>`;
+                    }
+                });
+            }
         }
         
         asigs.forEach(a => {
