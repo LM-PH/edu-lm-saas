@@ -10804,6 +10804,9 @@ window.loadActividadesMaestro = async () => {
                     <button class="btn btn-outline" style="border-color:var(--primary); color:var(--primary); font-size:0.8rem; padding:6px 12px;" onclick="window.reabrirActividad('${act.id}')">
                         <i class="fa-solid fa-rotate-left"></i> Reabrir
                     </button>
+                    <button class="btn btn-outline" style="border-color:var(--primary); color:var(--primary); font-size:0.8rem; padding:6px 12px;" onclick="window.abrirModalCopiarActividad('${act.id}')">
+                        <i class="fa-solid fa-copy"></i> Asignar a grupos
+                    </button>
                     <button class="btn btn-outline" style="border-color:var(--danger); color:var(--danger); font-size:0.8rem; padding:6px 12px;" onclick="window.eliminarActividadMaestro('${act.id}')">
                         <i class="fa-solid fa-trash-can"></i>
                     </button>
@@ -10811,6 +10814,9 @@ window.loadActividadesMaestro = async () => {
                 `<div style="display:flex; gap:8px;">
                     <button class="btn btn-outline" style="border-color:var(--success); color:var(--success); font-size:0.8rem; padding:6px 12px;" onclick="window.abrirQREvaluacion('${act.id}', '${act.titulo.replace(/'/g, "\\'").replace(/"/g, '&quot;').replace(/[\\n\\r]/g, ' ')}', '${act.grupo_id || ''}', '${act.target_grado || ''}', '${act.materia || ''}')">
                         <i class="fa-solid fa-qrcode"></i> Evaluar QR
+                    </button>
+                    <button class="btn btn-outline" style="border-color:var(--primary); color:var(--primary); font-size:0.8rem; padding:6px 12px;" onclick="window.abrirModalCopiarActividad('${act.id}')">
+                        <i class="fa-solid fa-copy"></i> Asignar a grupos
                     </button>
                     <button class="btn btn-outline" style="border-color:var(--danger); color:var(--danger); font-size:0.8rem; padding:6px 12px;" onclick="window.finalizarActividad('${act.id}')">
                         <i class="fa-solid fa-box-archive"></i> Cerrar
@@ -10925,7 +10931,96 @@ window.finalizarActividad = async (id) => {
 };
 
 
-window.reabrirActividad = async (id) => {
+window.abrirModalCopiarActividad = async (actId) => {
+    let act = null;
+    const { data: fetchAct, error } = await supabaseClient.from('actividades_maestro').select('*').eq('id', actId).single();
+    if(error || !fetchAct) return alert("Error al cargar la actividad");
+    act = fetchAct;
+
+    const modalId = 'modalCopiarActividad';
+    let existing = document.getElementById(modalId);
+    if(existing) existing.remove();
+
+    const div = document.createElement('div');
+    div.id = modalId;
+    div.className = 'modal-backdrop';
+    div.style = 'display:flex; position:fixed; z-index:100; left:0; top:0; width:100%; height:100%; background:rgba(0,0,0,0.5); backdrop-filter:blur(4px); justify-content:center; align-items:center;';
+
+    const asigs = (window.globalAsignacionesMaestro || []).filter(a => a.materia === act.materia);
+    
+    let checkboxesHTML = '';
+    asigs.forEach(a => {
+        const isCurrent = (act.target_grado && act.target_grado == a.target_grado) || (act.grupo_id && act.grupo_id == a.grupo_id);
+        if(!isCurrent) {
+            const val = a.grupos ? a.grupos.id : `grado:${a.target_grado}`;
+            const label = a.grupos ? a.grupos.nombre : `Grado ${a.target_grado}`;
+            checkboxesHTML += `<label style="display:block; margin-bottom:8px; cursor:pointer;"><input type="checkbox" name="copyToGroup" value="${val}" style="margin-right:8px;"> ${label}</label>`;
+        }
+    });
+
+    if(checkboxesHTML === '') {
+        checkboxesHTML = '<p style="color:var(--text-muted); font-size:0.9rem;">No hay otros grupos asignados para esta materia.</p>';
+    }
+
+    div.innerHTML = `
+        <div class="modal-content" style="max-width:500px; width:90%; padding:24px; background:white; border-radius:12px; box-shadow:0 10px 25px rgba(0,0,0,0.1); position:relative; overflow-y:auto; max-height:90vh;">
+            <button onclick="document.getElementById('${modalId}').remove()" style="position:absolute; right:15px; top:15px; background:none; border:none; color:var(--text-muted); cursor:pointer;"><i class="fa-solid fa-xmark fa-xl"></i></button>
+            <h3 style="margin-top:0; color:var(--text-main);">Asignar a otros grupos</h3>
+            <p style="font-size:0.9rem; color:var(--text-muted); margin-bottom:16px;">Selecciona los grupos a los que deseas asignar la actividad <strong>"${act.titulo}"</strong>.</p>
+            <div style="background:#f8fafc; padding:12px; border-radius:8px; margin-bottom:20px; border:1px solid var(--border);">
+                ${checkboxesHTML}
+            </div>
+            <div style="display:flex; gap:12px;">
+                <button class="btn btn-primary" style="flex:1" onclick="window.confirmarCopiarActividad('${act.id}')" ${checkboxesHTML.includes('checkbox') ? '' : 'disabled'}>Asignar Actividad</button>
+                <button class="btn btn-outline" style="flex:1" onclick="document.getElementById('${modalId}').remove()">Cancelar</button>
+            </div>
+        </div>
+    `;
+    document.body.appendChild(div);
+};
+
+window.confirmarCopiarActividad = async (actId) => {
+    const checkboxes = document.querySelectorAll('input[name="copyToGroup"]:checked');
+    if(checkboxes.length === 0) return alert("Selecciona al menos un grupo.");
+
+    try {
+        const { data: act, error: errFetch } = await supabaseClient.from('actividades_maestro').select('*').eq('id', actId).single();
+        if(errFetch || !act) throw errFetch;
+
+        const itemsToInsert = Array.from(checkboxes).map(cb => {
+            const val = cb.value;
+            const isTec = val.startsWith('grado:');
+            const grupo_id = isTec ? null : val;
+            const target_grado = isTec ? val.replace('grado:', '') : null;
+            
+            return {
+                maestro_id: act.maestro_id,
+                titulo: act.titulo,
+                descripcion: act.descripcion,
+                materia: act.materia,
+                grupo_id: grupo_id,
+                target_grado: target_grado,
+                rubro_name: act.rubro_name,
+                rubro_peso: act.rubro_peso,
+                trimestre: act.trimestre,
+                plantel_id: act.plantel_id,
+                finalizada: false
+            };
+        });
+
+        const { error: errInsert } = await supabaseClient.from('actividades_maestro').insert(itemsToInsert);
+        if(errInsert) throw errInsert;
+
+        alert("Actividad asignada exitosamente a los grupos seleccionados.");
+        document.getElementById('modalCopiarActividad').remove();
+        window.loadActividadesMaestro();
+    } catch(err) {
+        console.error(err);
+        alert("Error al asignar actividad: " + (err.message || err));
+    }
+};
+
+
     try {
         const { error } = await supabaseClient.from('actividades_maestro')
             .update({ finalizada: false, fecha_finalizacion: null })
