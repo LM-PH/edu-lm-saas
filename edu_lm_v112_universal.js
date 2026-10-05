@@ -10946,7 +10946,7 @@ window.abrirModalCopiarActividad = async (actId) => {
     div.className = 'modal-backdrop';
     div.style = 'display:flex; position:fixed; z-index:100; left:0; top:0; width:100%; height:100%; background:rgba(0,0,0,0.5); backdrop-filter:blur(4px); justify-content:center; align-items:center;';
 
-    const asigs = (window.globalAsignacionesMaestro || []).filter(a => a.materia === act.materia);
+    const asigs = (window.globalAsignacionesMaestro || []).filter(a => (a.materia || '').trim() === (act.materia || '').trim());
     
     let checkboxesHTML = '';
     asigs.forEach(a => {
