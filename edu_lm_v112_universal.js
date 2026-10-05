@@ -2038,7 +2038,7 @@ function renderAdminTramites() {
     </div>
 
     <!-- Modal de Carga de Trámite -->
-    <div id="modalTramiteCarga" class="modal" style="display:none; position:fixed; z-index:100; left:0; top:0; width:100%; height:100%; background:rgba(0,0,0,0.5); backdrop-filter:blur(4px);">
+    <div id="modalTramiteCarga" class="modal" style="display:none; position:fixed; z-index:100; left:0; top:0; width:100%; height:100%; background:rgba(0,0,0,0.5); backdrop-filter:blur(4px); overflow-y:auto;">
       <div class="card shadow-lg" style="margin: 10% auto; width: 90%; max-width: 500px; padding: 24px; position:relative;">
           <button onclick="document.getElementById('modalTramiteCarga').style.display='none'" style="position:absolute; right:15px; top:15px; background:none; border:none; color:var(--text-muted); cursor:pointer;"><i class="fa-solid fa-xmark fa-xl"></i></button>
           
@@ -3249,8 +3249,8 @@ function renderApoyoDashboard() {
     </div>
 
     <!-- Modal de Atención a Foco Rojo (Inyectado para funcionalidad de botón Atender) -->
-    <div id="modalAtencionFoco" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); z-index:10000; backdrop-filter:blur(4px);">
-        <div class="card" style="max-width:600px; margin:40px auto; padding:25px; position:relative; box-shadow:var(--shadow-lg);">
+    <div id="modalAtencionFoco" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); z-index:10000; backdrop-filter:blur(4px); overflow-y:auto;">
+        <div class="card" style="max-width:600px; width:95%; margin:40px auto; padding:25px; position:relative; box-shadow:var(--shadow-lg);">
             <button onclick="document.getElementById('modalAtencionFoco').style.display='none'" style="position:absolute; top:15px; right:15px; border:none; background:none; font-size:1.5rem; cursor:pointer; color:var(--text-muted)">&times;</button>
             <h3 style="margin-top:0; color:var(--success)"><i class="fa-solid fa-handshake"></i> Atención y Resolución</h3>
             
@@ -3436,8 +3436,8 @@ function renderApoyoReportes() {
     </div>
 
     <!-- Modal de Creación de Reporte -->
-    <div id="modalNuevoReporteApoyo" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); z-index:9999; backdrop-filter:blur(4px);">
-        <div class="card" style="max-width:500px; margin:50px auto; padding:25px; position:relative; box-shadow:var(--shadow-lg);">
+    <div id="modalNuevoReporteApoyo" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); z-index:9999; backdrop-filter:blur(4px); overflow-y:auto;">
+        <div class="card" style="max-width:500px; width:95%; margin:40px auto; padding:25px; position:relative; box-shadow:var(--shadow-lg);">
             <button onclick="document.getElementById('modalNuevoReporteApoyo').style.display='none'" style="position:absolute; top:15px; right:15px; border:none; background:none; font-size:1.5rem; cursor:pointer; color:var(--text-muted)">&times;</button>
             <h3 style="margin-top:0;"><i class="fa-solid fa-file-signature"></i> Levantar Nuevo Reporte</h3>
             
@@ -3489,8 +3489,8 @@ function renderApoyoReportes() {
     </div>
 
     <!-- Modal Nuevo Citatorio -->
-    <div id="modalNuevoCitatorio" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); z-index:9999; backdrop-filter:blur(4px);">
-        <div class="card" style="max-width:500px; margin:50px auto; padding:25px; position:relative; box-shadow:var(--shadow-lg);">
+    <div id="modalNuevoCitatorio" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); z-index:9999; backdrop-filter:blur(4px); overflow-y:auto;">
+        <div class="card" style="max-width:500px; width:95%; margin:40px auto; padding:25px; position:relative; box-shadow:var(--shadow-lg);">
             <button onclick="document.getElementById('modalNuevoCitatorio').style.display='none'" style="position:absolute; top:15px; right:15px; border:none; background:none; font-size:1.5rem; cursor:pointer; color:var(--text-muted)">&times;</button>
             <h3 style="margin-top:0; color:#856404;"><i class="fa-solid fa-envelope-circle-check"></i> Redactar Nuevo Citatorio</h3>
             
@@ -3520,8 +3520,8 @@ function renderApoyoReportes() {
     </div>
 
     <!-- Modal de Atención a Citatorio / RESOLUCIÓN -->
-    <div id="modalAtencionFoco" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); z-index:10000; backdrop-filter:blur(4px);">
-        <div class="card" style="max-width:600px; margin:40px auto; padding:25px; position:relative; box-shadow:var(--shadow-lg);">
+    <div id="modalAtencionFoco" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); z-index:10000; backdrop-filter:blur(4px); overflow-y:auto;">
+        <div class="card" style="max-width:600px; width:95%; margin:40px auto; padding:25px; position:relative; box-shadow:var(--shadow-lg);">
             <button onclick="document.getElementById('modalAtencionFoco').style.display='none'" style="position:absolute; top:15px; right:15px; border:none; background:none; font-size:1.5rem; cursor:pointer; color:var(--text-muted)">&times;</button>
             <h3 style="margin-top:0; color:var(--success)"><i class="fa-solid fa-handshake"></i> Atención y Resolución de Incidencias</h3>
             <p style="font-size:0.85rem; color:var(--text-muted); margin-bottom:20px;">Documenta la junta con el padre de familia y los compromisos acordados.</p>
@@ -3550,8 +3550,8 @@ function renderApoyoReportes() {
     </div>
 
     <!-- Modal de Configuración de Protocolos -->
-    <div id="modalProtocolos" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); z-index:9999; backdrop-filter:blur(4px);">
-        <div class="card" style="max-width:600px; margin:40px auto; padding:25px; position:relative; box-shadow:var(--shadow-lg);">
+    <div id="modalProtocolos" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); z-index:9999; backdrop-filter:blur(4px); overflow-y:auto;">
+        <div class="card" style="max-width:600px; width:95%; margin:40px auto; padding:25px; position:relative; box-shadow:var(--shadow-lg);">
             <button onclick="document.getElementById('modalProtocolos').style.display='none'" style="position:absolute; top:15px; right:15px; border:none; background:none; font-size:1.5rem; cursor:pointer; color:var(--text-muted)">&times;</button>
             <h3 style="margin-top:0; color:var(--info)"><i class="fa-solid fa-list-ol"></i> Protocolos de Seguimiento</h3>
             <p style="font-size:0.85rem; color:var(--text-muted); margin-bottom:20px;">Establece qué acciones se tomarán al acumular cierta cantidad de reportes.</p>
@@ -5699,7 +5699,7 @@ function renderApoyoPrefectura() {
     </div>
     
     <!-- Modal Registro Manual Entrada -->
-    <div id="modalRegistroManualEntrada" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); z-index:9999; backdrop-filter:blur(4px);">
+    <div id="modalRegistroManualEntrada" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); z-index:9999; backdrop-filter:blur(4px); overflow-y:auto;">
         <div style="background:white; width:90%; max-width:400px; margin:50px auto; border-radius:15px; padding:20px; box-shadow:0 10px 25px rgba(0,0,0,0.2); position:relative;">
             <button onclick="document.getElementById('modalRegistroManualEntrada').style.display='none'" style="position:absolute; top:15px; right:15px; border:none; background:none; font-size:1.5rem; cursor:pointer; color:var(--text-muted)">&times;</button>
             <h3 style="margin-top:0; color:var(--primary);"><i class="fa-solid fa-keyboard"></i> Registro Manual</h3>
@@ -6349,7 +6349,7 @@ function renderApoyoTSEscaner() {
     </div>
 
     <!-- Modal Salida Anticipada -->
-    <div id="modalSalidaAnticipada" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); z-index:9999; backdrop-filter:blur(4px);">
+    <div id="modalSalidaAnticipada" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); z-index:9999; backdrop-filter:blur(4px); overflow-y:auto;">
         <div style="background:white; width:90%; max-width:400px; margin:50px auto; border-radius:15px; padding:20px; box-shadow:0 10px 25px rgba(0,0,0,0.2); position:relative;">
             <button onclick="document.getElementById('modalSalidaAnticipada').style.display='none'" style="position:absolute; top:15px; right:15px; border:none; background:none; font-size:1.5rem; cursor:pointer; color:var(--text-muted)">&times;</button>
             <h3 style="margin-top:0; color:var(--warning);"><i class="fa-solid fa-person-walking-arrow-right"></i> Salida Anticipada</h3>
@@ -6418,7 +6418,7 @@ function renderApoyoTSEscaner() {
     </div>
     
     <!-- Modal Registro Manual Salida -->
-    <div id="modalRegistroManualSalida" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); z-index:9999; backdrop-filter:blur(4px);">
+    <div id="modalRegistroManualSalida" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); z-index:9999; backdrop-filter:blur(4px); overflow-y:auto;">
         <div style="background:white; width:90%; max-width:400px; margin:50px auto; border-radius:15px; padding:20px; box-shadow:0 10px 25px rgba(0,0,0,0.2); position:relative;">
             <button onclick="document.getElementById('modalRegistroManualSalida').style.display='none'" style="position:absolute; top:15px; right:15px; border:none; background:none; font-size:1.5rem; cursor:pointer; color:var(--text-muted)">&times;</button>
             <h3 style="margin-top:0; color:var(--warning);"><i class="fa-solid fa-keyboard"></i> Registro Manual de Salida</h3>

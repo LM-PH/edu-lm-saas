@@ -834,10 +834,10 @@ body {
   inset: 0;
   background: rgba(15, 23, 42, 0.6);
   backdrop-filter: blur(4px);
-  display: grid;
-  place-items: center;
   z-index: 100;
   animation: fadeIn 0.2s ease-out;
+  overflow-y: auto;
+  display: block;
 }
 .modal-content {
   background: var(--surface);
@@ -846,6 +846,7 @@ body {
   border-radius: var(--radius-lg);
   padding: 32px;
   box-shadow: var(--shadow-lg);
+  margin: 40px auto;
 }
 .modal-close {
   float: right;
