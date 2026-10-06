@@ -13944,17 +13944,15 @@ window.startTSScanner = async (mode = 'metralleta') => {
             { fps: 30, qrbox: { width: 250, height: 250 } },
             (decodedText, decodedResult) => {
                 if(window.tsScanMode === 'metralleta') {
-                    if(window._lastScanned !== decodedText) {
-                        window._lastScanned = decodedText;
-                        window.registrarAsistenciaTS(decodedText.trim());
-                        setTimeout(() => { window._lastScanned = null; }, 800);
-                    }
+                    if(window._lastScanned === decodedText && (Date.now() - (window._lastScanTime || 0)) < 3000) return;
+                    window._lastScanned = decodedText;
+                    window._lastScanTime = Date.now();
+                    window.registrarAsistenciaTS(decodedText.trim());
                 } else if(window.tsScanMode === 'anticipada') {
-                    if(window._lastScanned !== decodedText) {
-                        window._lastScanned = decodedText;
-                        window.prepararSalidaAnticipada(decodedText.trim());
-                        setTimeout(() => { window._lastScanned = null; }, 800);
-                    }
+                    if(window._lastScanned === decodedText && (Date.now() - (window._lastScanTime || 0)) < 3000) return;
+                    window._lastScanned = decodedText;
+                    window._lastScanTime = Date.now();
+                    window.prepararSalidaAnticipada(decodedText.trim());
                 } else {
                     window.registrarAsistenciaTS(decodedText.trim());
                     window.stopTSScanner();
