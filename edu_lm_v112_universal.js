@@ -20611,14 +20611,22 @@ window.initFlatpickrAvisos = async (isAlumno = false) => {
     const userId = uRes.data?.user?.id;
     const userRole = state.role || '';
     
-    let { data } = await supabaseClient
-        .from('comunicados')
-        .select('fecha_envio, audiencia, titulo, tipo')
-        .eq('plantel_id', state.plantelId)
-        .order('fecha_envio', { ascending: false })
-        .limit(30000);
-
-    if(!data) data = [];
+    let allData = [];
+    let page = 0;
+    const pageSize = 1000;
+    while(true) {
+        let { data } = await supabaseClient
+            .from('comunicados')
+            .select('fecha_envio, audiencia, titulo, tipo')
+            .eq('plantel_id', state.plantelId)
+            .order('fecha_envio', { ascending: false })
+            .range(page * pageSize, (page + 1) * pageSize - 1);
+        
+        if (data && data.length > 0) allData.push(...data);
+        if (!data || data.length < pageSize) break;
+        page++;
+    }
+    let data = allData;
 
     let datesWithComs = [];
 
