@@ -18829,7 +18829,6 @@ window.loadPersonalBibliotecaSelect = async () => {
 async function renderBibliotecaPrestamos() {
     setTimeout(window.loadBibliotecaPrestamos, 100);
     setTimeout(window.loadPersonalBibliotecaSelect, 150);
-    setTimeout(window.bibCambiarTipoPrestatario, 200);
     return `
       <div class="page-header">
          <h2 class="page-title"><i class="fa-solid fa-hand-holding-hand"></i> Préstamos a Alumnos</h2>
@@ -18838,19 +18837,21 @@ async function renderBibliotecaPrestamos() {
       <div style="display:flex; gap:20px; align-items:flex-start; flex-wrap:wrap;">
          <div class="card" style="flex:1; min-width:300px;">
             <h3 style="margin-bottom:15px">Registrar Préstamo</h3>
-            <div class="form-group">
-               <label class="form-label">Tipo de Usuario a Prestar</label>
-               <select id="bibTipoPersonaSelect" class="form-select" onchange="window.bibCambiarTipoPrestatario()">
-                  <option value="alumno">Alumno</option>
-                  <option value="personal">Personal de la Escuela</option>
-               </select>
+            <div class="form-group" style="position:relative;">
+               <label class="form-label">Buscar Alumno o Personal (Nombre o Matrícula)</label>
+               <input type="text" id="bibSearchAlumno" class="form-input" placeholder="Escribe para buscar..." oninput="window.bibLiveSearchAlumno(this.value)">
+               <div id="bibResSearchAlumno" style="display:none; position:absolute; top:100%; left:0; right:0; background:white; border:1px solid var(--border); border-radius:8px; box-shadow:0 4px 6px -1px rgba(0,0,0,0.1); z-index:10; max-height:200px; overflow-y:auto;"></div>
             </div>
             
-            <div class="form-group">
-               <label class="form-label" id="bibLblUsuarioSelect">Seleccionar Alumno</label>
-               <select id="bibUsuarioSelect" class="form-select">
-                  <option value="">Cargando alumnos...</option>
-               </select>
+            <div id="bibAlumnoSeleccionado" style="display:none; padding:12px; background:#eff6ff; border:1px solid #bfdbfe; border-radius:8px; margin-bottom:15px;">
+               <div style="display:flex; justify-content:space-between; align-items:center;">
+                  <div>
+                     <div style="font-weight:600; color:#1e3a8a;" id="bibAluNom"></div>
+                     <div style="font-size:0.8rem; color:#3b82f6;" id="bibAluGrp"></div>
+                  </div>
+                  <button class="btn btn-outline btn-xs" onclick="window.bibDeselectAlumno()">Cambiar</button>
+               </div>
+               <input type="hidden" id="bibAluId">
             </div>
 
             <div class="form-group">
@@ -18908,16 +18909,11 @@ async function renderBibliotecaPrestamos() {
     `;
 }
 
-window.bibCambiarTipoPrestatario = async () => {
-    const tipo = document.getElementById('bibTipoPersonaSelect')?.value || 'alumno';
-    const select = document.getElementById('bibUsuarioSelect');
-    const lbl = document.getElementById('bibLblUsuarioSelect');
-    
-    if(!select) return;
-    
-    select.innerHTML = '<option value="">Cargando...</option>';
-    if(lbl) lbl.innerText = tipo === 'alumno' ? 'Seleccionar Alumno' : 'Seleccionar Personal';
-    
+window.bibLiveSearchAlumno = async (q) => {
+    const res = document.getElementById('bibResSearchAlumno');
+    if(!res) return;
+    const term = q ? q.trim() : '';
+    if(term.length < 1) { res.style.display='none'; return; }
     try {
         let pId = state.plantelId || state.user?.user_metadata?.plantel_id;
         if(!pId && state.user?.id) {
@@ -18926,35 +18922,64 @@ window.bibCambiarTipoPrestatario = async () => {
             if(pId) state.plantelId = pId;
         }
 
-        if(tipo === 'alumno') {
-            let queryAl = supabaseClient.from('alumnos').select('id, nombre, matricula, grupos(nombre)');
-            if(pId) queryAl = queryAl.eq('plantel_id', pId);
-            const { data } = await queryAl.order('nombre');
-            
-            if(data && data.length > 0) {
-                select.innerHTML = '<option value="">-- Selecciona un Alumno --</option>' + data.map(a => 
-                    `<option value="${a.id}">${a.nombre} (${a.matricula || 'Sin matrícula'} - ${a.grupos?.nombre || 'S/G'})</option>`
-                ).join('');
-            } else {
-                select.innerHTML = '<option value="">No hay alumnos registrados</option>';
-            }
-        } else {
-            let queryProf = supabaseClient.from('perfiles_permitidos').select('id, nombre, rol').neq('rol', 'alumno');
-            if(pId) queryProf = queryProf.eq('plantel_id', pId);
-            const { data } = await queryProf.order('nombre');
-            
-            if(data && data.length > 0) {
-                select.innerHTML = '<option value="">-- Selecciona Personal --</option>' + data.map(p => 
-                    `<option value="${p.id}">[${(p.rol || '').toUpperCase()}] ${p.nombre}</option>`
-                ).join('');
-            } else {
-                select.innerHTML = '<option value="">No hay personal registrado</option>';
-            }
+        let queryAl = supabaseClient.from('alumnos').select('id, nombre, matricula, grupos(nombre)');
+        let queryProf = supabaseClient.from('perfiles_permitidos').select('id, nombre, rol');
+        
+        if(pId) { 
+            queryAl = queryAl.eq('plantel_id', pId); 
+            queryProf = queryProf.eq('plantel_id', pId); 
         }
-    } catch(e) {
-        console.error(e);
-        select.innerHTML = '<option value="">Error al cargar opciones</option>';
-    }
+        
+        queryAl = queryAl.or(`nombre.ilike.%${term}%,matricula.ilike.%${term}%`).limit(10);
+        queryProf = queryProf.or(`nombre.ilike.%${term}%`).neq('rol', 'alumno').limit(10);
+        
+        const [resAl, resProf] = await Promise.all([queryAl, queryProf]);
+        
+        const data = [
+            ...(resAl.data || []).map(a => ({...a, tipoPersona: 'alumno'})),
+            ...(resProf.data || []).map(p => ({...p, tipoPersona: 'personal'}))
+        ];
+        
+        if(!data || data.length === 0) { 
+            res.innerHTML='<p style="padding:10px; color:var(--text-muted); text-align:center; font-style:italic;">No se encontraron personas</p>'; 
+            res.style.display='block'; 
+            return; 
+        }
+        
+        res.style.display='block';
+        res.innerHTML = data.map(a => {
+            const subtitulo = a.tipoPersona === 'alumno' 
+                ? `${a.matricula || 'Sin matrícula'} - ${a.grupos?.nombre || 'Sin Grupo'}`
+                : `Personal (${(a.rol || '').toUpperCase()})`;
+            const icon = a.tipoPersona === 'alumno' ? 'fa-user' : 'fa-chalkboard-user';
+                
+            return `
+            <div style="padding:10px; border-bottom:1px solid var(--border); cursor:pointer; display:flex; gap:10px; align-items:center;" onclick="window.bibSelectAlumno('${a.id}', '${a.nombre.replace(/'/g, "\\'")}', '${subtitulo.replace(/'/g, "\\'")}', '${a.tipoPersona}')">
+               <div style="color:var(--text-muted);"><i class="fa-solid ${icon}"></i></div>
+               <div>
+                   <div style="font-weight:600; font-size:0.85rem;">${a.nombre}</div>
+                   <div style="font-size:0.75rem; color:var(--text-muted)">${subtitulo}</div>
+               </div>
+            </div>
+        `}).join('');
+    } catch(e) { console.error(e); }
+};
+
+window.bibSelectAlumno = (id, nombre, grupo, tipoPersona) => {
+    document.getElementById('bibAluId').value = id;
+    document.getElementById('bibAluId').setAttribute('data-tipo', tipoPersona || 'alumno');
+    document.getElementById('bibAluNom').innerText = nombre;
+    document.getElementById('bibAluGrp').innerText = grupo;
+    document.getElementById('bibAlumnoSeleccionado').style.display = 'block';
+    document.getElementById('bibResSearchAlumno').style.display = 'none';
+    document.getElementById('bibSearchAlumno').value = '';
+    document.getElementById('bibSearchAlumno').parentElement.style.display = 'none';
+};
+
+window.bibDeselectAlumno = () => {
+    document.getElementById('bibAluId').value = '';
+    document.getElementById('bibAlumnoSeleccionado').style.display = 'none';
+    document.getElementById('bibSearchAlumno').parentElement.style.display = 'block';
 };
 
 window.loadBibliotecaPrestamos = async () => {
@@ -19021,8 +19046,8 @@ window.loadBibliotecaPrestamos = async () => {
 };
 
 window.guardarPrestamoBiblioteca = async () => {
-    const persona_id = document.getElementById('bibUsuarioSelect')?.value;
-    const tipoPersona = document.getElementById('bibTipoPersonaSelect')?.value || 'alumno';
+    const persona_id = document.getElementById('bibAluId').value;
+    const tipoPersona = document.getElementById('bibAluId').getAttribute('data-tipo');
     const tipo = document.getElementById('bibTipo').value;
     const recurso = document.getElementById('bibRecurso').value.trim();
     const destino = document.getElementById('bibDestino') ? document.getElementById('bibDestino').value : 'escuela';
@@ -19052,7 +19077,7 @@ window.guardarPrestamoBiblioteca = async () => {
         document.getElementById('bibCondEntrega').value = '';
         if(document.getElementById('bibProfSolicitante')) document.getElementById('bibProfSolicitante').value = '';
         if(document.getElementById('bibModuloSolicitante')) document.getElementById('bibModuloSolicitante').value = '';
-        if(document.getElementById('bibUsuarioSelect')) document.getElementById('bibUsuarioSelect').value = '';
+        window.bibDeselectAlumno();
         window.loadBibliotecaPrestamos();
     } catch(e) {
         console.error(e);
