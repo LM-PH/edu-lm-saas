@@ -18837,8 +18837,16 @@ async function renderBibliotecaPrestamos() {
       <div style="display:flex; gap:20px; align-items:flex-start; flex-wrap:wrap;">
          <div class="card" style="flex:1; min-width:300px;">
             <h3 style="margin-bottom:15px">Registrar Préstamo</h3>
-            <div class="form-group" style="position:relative;">
-               <label class="form-label">Buscar Alumno o Personal (Nombre o Matrícula)</label>
+            <div class="form-group">
+               <label class="form-label">Prestar a:</label>
+               <div style="display:flex; gap:15px; align-items:center;">
+                  <label style="display:flex; align-items:center; gap:5px;"><input type="radio" name="bibTipoPersonaRad" value="alumno" checked onchange="window.bibLimpiarBusqueda()"> Alumno</label>
+                  <label style="display:flex; align-items:center; gap:5px;"><input type="radio" name="bibTipoPersonaRad" value="personal" onchange="window.bibLimpiarBusqueda()"> Personal de la Escuela</label>
+               </div>
+            </div>
+
+            <div class="form-group" style="position:relative;" id="bibContenedorBusqueda">
+               <label class="form-label">Buscar (Nombre o Matrícula)</label>
                <input type="text" id="bibSearchAlumno" class="form-input" placeholder="Escribe para buscar..." oninput="window.bibLiveSearchAlumno(this.value)">
                <div id="bibResSearchAlumno" style="display:none; position:absolute; top:100%; left:0; right:0; background:white; border:1px solid var(--border); border-radius:8px; box-shadow:0 4px 6px -1px rgba(0,0,0,0.1); z-index:10; max-height:200px; overflow-y:auto;"></div>
             </div>
@@ -18909,6 +18917,11 @@ async function renderBibliotecaPrestamos() {
     `;
 }
 
+window.bibLimpiarBusqueda = () => {
+    document.getElementById('bibSearchAlumno').value = '';
+    document.getElementById('bibResSearchAlumno').style.display = 'none';
+};
+
 window.bibLiveSearchAlumno = async (q) => {
     const res = document.getElementById('bibResSearchAlumno');
     if(!res) return;
@@ -18922,18 +18935,20 @@ window.bibLiveSearchAlumno = async (q) => {
             if(pId) state.plantelId = pId;
         }
 
-        let queryAl = supabaseClient.from('alumnos').select('id, nombre, matricula, grupos(nombre)');
-        let queryProf = supabaseClient.from('perfiles_permitidos').select('id, nombre, rol');
-        
-        if(pId) { 
-            queryAl = queryAl.eq('plantel_id', pId); 
-            queryProf = queryProf.eq('plantel_id', pId); 
+        const tipo = document.querySelector('input[name="bibTipoPersonaRad"]:checked').value;
+        let resAl = { data: [] }, resProf = { data: [] };
+
+        if(tipo === 'alumno') {
+            let queryAl = supabaseClient.from('alumnos').select('id, nombre, matricula, grupos(nombre)');
+            if(pId) queryAl = queryAl.eq('plantel_id', pId);
+            queryAl = queryAl.or(`nombre.ilike.%${term}%,matricula.ilike.%${term}%`).limit(10);
+            resAl = await queryAl;
+        } else {
+            let queryProf = supabaseClient.from('perfiles_permitidos').select('id, nombre, rol');
+            if(pId) queryProf = queryProf.eq('plantel_id', pId);
+            queryProf = queryProf.or(`nombre.ilike.%${term}%`).neq('rol', 'alumno').limit(10);
+            resProf = await queryProf;
         }
-        
-        queryAl = queryAl.or(`nombre.ilike.%${term}%,matricula.ilike.%${term}%`).limit(10);
-        queryProf = queryProf.or(`nombre.ilike.%${term}%`).neq('rol', 'alumno').limit(10);
-        
-        const [resAl, resProf] = await Promise.all([queryAl, queryProf]);
         
         const data = [
             ...(resAl.data || []).map(a => ({...a, tipoPersona: 'alumno'})),
