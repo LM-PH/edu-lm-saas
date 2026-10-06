@@ -11135,7 +11135,7 @@ window.startEvalScanner = () => {
     document.getElementById('qr-reader-eval').innerHTML = '';
     qrEvalScanner = new Html5Qrcode("qr-reader-eval");
     
-    qrEvalScanner.start({ facingMode: state.cameraMode }, { fps: 10, qrbox: {width: 250, height: 250} }, async (decodedText) => {
+    qrEvalScanner.start({ facingMode: state.cameraMode }, { fps: 30, qrbox: {width: 250, height: 250} }, async (decodedText) => {
         try { await qrEvalScanner.stop(); } catch(e){}
         document.getElementById('qr-reader-eval').innerHTML = '<div style="color:var(--success); text-align:center; padding:20px;"><i class="fa-solid fa-check-circle fa-3x"></i><p>QR Detectado</p></div>';
         
@@ -13357,12 +13357,17 @@ window.startMaestroQR = async () => {
     if(window._mScanner) { await window._mScanner.stop().catch(()=>{}); window._mScanner = null; }
     window._mScanner = new Html5Qrcode("reader-maestro");
     window._isProcessingQR = false;
-    await window._mScanner.start({ facingMode: state.cameraMode }, { fps: 10, qrbox: { width: 250, height: 250 } }, 
+    await window._mScanner.start({ facingMode: state.cameraMode }, { fps: 30, qrbox: { width: 250, height: 250 } }, 
         async (decodedText) => {
+            if(window._lastScan === decodedText && (Date.now() - (window._lastScanTime || 0)) < 3000) return;
             if(window._isProcessingQR) return;
+            
+            window._lastScan = decodedText;
+            window._lastScanTime = Date.now();
             window._isProcessingQR = true;
+            
             try { await window.guardarAsistenciaQR(decodedText, window.currentAulaGrupoId); }
-            finally { setTimeout(() => { window._isProcessingQR = false; }, 2000); }
+            finally { window._isProcessingQR = false; }
         }, () => {}
     ).catch(err => { console.error(err); window.showToast("Cámara bloqueada", "error"); });
 };
@@ -13648,7 +13653,7 @@ window.startPrefScanner = async (mode = 'metralleta') => {
             window._prefScanner = new Html5Qrcode("reader-prefectura");
             await window._prefScanner.start(
                 { facingMode: state.cameraMode },
-                { fps: 15, qrbox: { width: 250, height: 250 } },
+                { fps: 30, qrbox: { width: 250, height: 250 } },
                 (decodedText) => { 
                     window.registrarAsistenciaPrefectura(decodedText.trim());
                 },
@@ -13936,19 +13941,19 @@ window.startTSScanner = async (mode = 'metralleta') => {
         
         await window._tsScanner.start(
             { facingMode: window._tsCurrentCamera },
-            { fps: 10, qrbox: { width: 250, height: 250 } },
+            { fps: 30, qrbox: { width: 250, height: 250 } },
             (decodedText, decodedResult) => {
                 if(window.tsScanMode === 'metralleta') {
                     if(window._lastScanned !== decodedText) {
                         window._lastScanned = decodedText;
                         window.registrarAsistenciaTS(decodedText.trim());
-                        setTimeout(() => { window._lastScanned = null; }, 3000);
+                        setTimeout(() => { window._lastScanned = null; }, 800);
                     }
                 } else if(window.tsScanMode === 'anticipada') {
                     if(window._lastScanned !== decodedText) {
                         window._lastScanned = decodedText;
                         window.prepararSalidaAnticipada(decodedText.trim());
-                        setTimeout(() => { window._lastScanned = null; }, 3000);
+                        setTimeout(() => { window._lastScanned = null; }, 800);
                     }
                 } else {
                     window.registrarAsistenciaTS(decodedText.trim());
@@ -15830,7 +15835,7 @@ window.initFirmaBoletasQR = () => {
     }
 
     const scanner = new Html5QrcodeScanner('firmaQrReader', {
-        fps: 15,
+        fps: 30,
         qrbox: { width: 220, height: 220 },
         rememberLastUsedCamera: true,
         showTorchButtonIfSupported: true,

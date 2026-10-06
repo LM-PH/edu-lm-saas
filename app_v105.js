@@ -5824,7 +5824,7 @@ window.abrirQREvaluacion = (actId, actTitulo, actGrupoId, actTargetGrado, actMat
     document.getElementById('qr-reader-eval').innerHTML = '';
     qrEvalScanner = new Html5Qrcode("qr-reader-eval");
     
-    qrEvalScanner.start({ facingMode: "environment" }, { fps: 10, qrbox: {width: 250, height: 250} }, async (decodedText) => {
+    qrEvalScanner.start({ facingMode: "environment" }, { fps: 30, qrbox: {width: 250, height: 250} }, async (decodedText) => {
         try { await qrEvalScanner.stop(); } catch(e){}
         document.getElementById('qr-reader-eval').innerHTML = '<div style="color:var(--success); text-align:center; padding:20px;"><i class="fa-solid fa-check-circle fa-3x"></i><p>QR Detectado</p></div>';
         
@@ -7352,12 +7352,17 @@ window.startMaestroQR = async () => {
     if(window._mScanner) { await window._mScanner.stop().catch(()=>{}); window._mScanner = null; }
     window._mScanner = new Html5Qrcode("reader-maestro");
     window._isProcessingQR = false;
-    await window._mScanner.start({ facingMode: "environment" }, { fps: 10, qrbox: { width: 250, height: 250 } }, 
+    await window._mScanner.start({ facingMode: "environment" }, { fps: 30, qrbox: { width: 250, height: 250 } }, 
         async (decodedText) => {
+            if(window._lastScan === decodedText && (Date.now() - (window._lastScanTime || 0)) < 3000) return;
             if(window._isProcessingQR) return;
+            
+            window._lastScan = decodedText;
+            window._lastScanTime = Date.now();
             window._isProcessingQR = true;
+            
             try { await window.guardarAsistenciaQR(decodedText, window.currentAulaGrupoId); }
-            finally { setTimeout(() => { window._isProcessingQR = false; }, 2000); }
+            finally { window._isProcessingQR = false; }
         }, () => {}
     ).catch(err => { console.error(err); window.showToast("Cámara bloqueada", "error"); });
 };
@@ -7542,7 +7547,7 @@ window.startPrefScanner = async (mode = 'metralleta') => {
             window._prefScanner = new Html5Qrcode("reader-prefectura");
             await window._prefScanner.start(
                 { facingMode: "environment" },
-                { fps: 15, qrbox: { width: 250, height: 250 } },
+                { fps: 30, qrbox: { width: 250, height: 250 } },
                 (decodedText) => { 
                     // Ya no truncamos a 36, enviamos el texto completo para buscar matrícula
                     window.registrarAsistenciaPrefectura(decodedText.trim());
