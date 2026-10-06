@@ -11143,8 +11143,17 @@ window.startEvalScanner = () => {
         document.getElementById('qr-reader-eval').innerHTML = '<div style="color:var(--success); text-align:center; padding:20px;"><i class="fa-solid fa-check-circle fa-3x"></i><p>QR Detectado</p></div>';
         
         try {
-           // Buscamos por matrícula (que es lo que se codifica en el QR)
-           const { data: alumno } = await supabaseClient.from('alumnos').select('id, nombre, grupo_id, grado, taller').eq('matricula', decodedText).eq('plantel_id', state.plantelId).single();
+           // Buscamos por matrícula o ID (que es lo que se codifica en el QR)
+           let alumno = null;
+           const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(decodedText);
+           if (isUUID) {
+               const { data } = await supabaseClient.from('alumnos').select('id, nombre, grupo_id, grado, taller').eq('id', decodedText).maybeSingle();
+               alumno = data;
+           }
+           if (!alumno) {
+               const { data } = await supabaseClient.from('alumnos').select('id, nombre, grupo_id, grado, taller').eq('matricula', decodedText).eq('plantel_id', state.plantelId).maybeSingle();
+               alumno = data;
+           }
            
            if(alumno) {
                if(isTec) {
@@ -13369,7 +13378,14 @@ window.guardarAsistenciaQR = async (matricula, grupoId) => {
         const materia = (window.currentAulaMateria || 'N/A').trim();
         const [sessionRes, studentRes] = await Promise.all([
             supabaseClient.from('asistencia_sesiones').select('estado').eq('grupo_id', String(grupoId)).eq('materia', materia).eq('fecha', hoy).eq('plantel_id', state.plantelId).maybeSingle(),
-            supabaseClient.from('alumnos').select('id, nombre, grupo_id, grado, taller').eq('matricula', matricula).eq('plantel_id', state.plantelId).maybeSingle()
+            (async () => {
+                const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(matricula);
+                if (isUUID) {
+                    const res = await supabaseClient.from('alumnos').select('id, nombre, grupo_id, grado, taller').eq('id', matricula).maybeSingle();
+                    if (res.data) return res;
+                }
+                return await supabaseClient.from('alumnos').select('id, nombre, grupo_id, grado, taller').eq('matricula', matricula).eq('plantel_id', state.plantelId).maybeSingle();
+            })()
         ]);
         const sesion = sessionRes.data;
         const alumno = studentRes.data;
@@ -17409,11 +17425,11 @@ window.renderAdminHorarios = () => {
                             <div style="display:grid; grid-template-columns: 1fr 1fr; gap:12px;">
                                 <div class="form-group">
                                     <label class="form-label">Hora de Inicio</label>
-                                    <input type="text" id="timeInicioDocente" class="form-input" placeholder="Ej: 07:00">
+                                    <input type="time" id="timeInicioDocente" class="form-input">
                                 </div>
                                 <div class="form-group">
                                     <label class="form-label">Hora de Fin</label>
-                                    <input type="text" id="timeFinDocente" class="form-input" placeholder="Ej: 07:50">
+                                    <input type="time" id="timeFinDocente" class="form-input">
                                 </div>
                             </div>
                             
@@ -17530,7 +17546,7 @@ window.cargarAsignacionesYHorarioDocente = async () => {
         
         // Ordenar slots por día y luego por orden
         const dayOrder = { 'Lunes': 1, 'Martes': 2, 'Miércoles': 3, 'Jueves': 4, 'Viernes': 5 };
-        const hmToMin = (hm) => { if(!hm) return 0; const p = hm.split(':'); return parseInt(p[0]||0)*60 + parseInt(p[1]||0); };
+        const hmToMin = (hm) => { if(!hm) return 0; const p = hm.split(/[:.]/); return parseInt(p[0]||0)*60 + parseInt(p[1]||0); };
         slots.sort((a, b) => {
             const valA = (dayOrder[a.dia] || 9) * 10000 + hmToMin(a.hora_inicio);
             const valB = (dayOrder[b.dia] || 9) * 10000 + hmToMin(b.hora_inicio);
@@ -17608,7 +17624,7 @@ window.guardarHorarioDocente = async () => {
     
     const timeToMinutes = (t) => {
         if(!t) return 0;
-        const parts = t.split(':');
+        const parts = t.split(/[:.]/);
         const h = parseInt(parts[0]) || 0;
         const m = parseInt(parts[1]) || 0;
         return h * 60 + m;
@@ -17618,7 +17634,7 @@ window.guardarHorarioDocente = async () => {
     const mEnd = timeToMinutes(hora_fin);
     
     if (mStart >= mEnd) {
-        return alert("La hora de inicio debe ser anterior a la hora de fin.");
+        return alert("La hora de inicio debe ser anterior a la hora de fin. (Asegúrate de usar formato de 24 horas, ej. 13:40 en lugar de 1:40 PM)");
     }
     
     window.showToast("Validando empalmes...", "info");
@@ -17979,7 +17995,7 @@ window.loadMaestroHorario = async () => {
         
         // Ordenar slots por día y orden
         const dayOrder = { 'Lunes': 1, 'Martes': 2, 'Miércoles': 3, 'Jueves': 4, 'Viernes': 5 };
-        const hmToMin = (hm) => { if(!hm) return 0; const p = hm.split(':'); return parseInt(p[0]||0)*60 + parseInt(p[1]||0); };
+        const hmToMin = (hm) => { if(!hm) return 0; const p = hm.split(/[:.]/); return parseInt(p[0]||0)*60 + parseInt(p[1]||0); };
         slots.sort((a, b) => {
             const valA = (dayOrder[a.dia] || 9) * 10000 + hmToMin(a.hora_inicio);
             const valB = (dayOrder[b.dia] || 9) * 10000 + hmToMin(b.hora_inicio);
@@ -18060,7 +18076,7 @@ window.imprimirHorarioDocente = async (email, name) => {
         // 3. Generar la cuadrícula
         const timeToMinutes = (t) => {
             if(!t) return 0;
-            const parts = t.split(':');
+            const parts = t.split(/[:.]/);
             const h = parseInt(parts[0]) || 0;
             const m = parseInt(parts[1]) || 0;
             return h * 60 + m;
@@ -18332,7 +18348,7 @@ window.seleccionarDocenteApoyo = async (email, name) => {
         
         // Ordenar slots
         const dayOrder = { 'Lunes': 1, 'Martes': 2, 'Miércoles': 3, 'Jueves': 4, 'Viernes': 5 };
-        const hmToMin = (hm) => { if(!hm) return 0; const p = hm.split(':'); return parseInt(p[0]||0)*60 + parseInt(p[1]||0); };
+        const hmToMin = (hm) => { if(!hm) return 0; const p = hm.split(/[:.]/); return parseInt(p[0]||0)*60 + parseInt(p[1]||0); };
         slots.sort((a, b) => {
             const valA = (dayOrder[a.dia] || 9) * 10000 + hmToMin(a.hora_inicio);
             const valB = (dayOrder[b.dia] || 9) * 10000 + hmToMin(b.hora_inicio);
@@ -22371,8 +22387,8 @@ window.calcularCargaHorariaAuto = async function(maestroId) {
             let blockHours = 1;
             if (s.hora_inicio && s.hora_fin) {
                 try {
-                    let [h1, m1] = s.hora_inicio.split(':').map(Number);
-                    let [h2, m2] = s.hora_fin.split(':').map(Number);
+                    let [h1, m1] = s.hora_inicio.split(/[:.]/).map(Number);
+                    let [h2, m2] = s.hora_fin.split(/[:.]/).map(Number);
                     if (!isNaN(h1) && !isNaN(m1) && !isNaN(h2) && !isNaN(m2)) {
                         let diffMinutes = (h2 * 60 + m2) - (h1 * 60 + m1);
                         if (diffMinutes > 0) {

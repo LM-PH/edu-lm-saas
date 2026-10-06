@@ -5832,8 +5832,17 @@ window.abrirQREvaluacion = (actId, actTitulo, actGrupoId, actTargetGrado, actMat
         document.getElementById('qr-reader-eval').innerHTML = '<div style="color:var(--success); text-align:center; padding:20px;"><i class="fa-solid fa-check-circle fa-3x"></i><p>QR Detectado</p></div>';
         
         try {
-           // Buscamos por matrícula (que es lo que se codifica en el QR)
-           const { data: alumno } = await supabaseClient.from('alumnos').select('id, nombre, grupo_id, grado, taller').eq('matricula', decodedText).single();
+           // Buscamos por matrícula o ID (que es lo que se codifica en el QR)
+           let alumno = null;
+           const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(decodedText);
+           if (isUUID) {
+               const { data } = await supabaseClient.from('alumnos').select('id, nombre, grupo_id, grado, taller').eq('id', decodedText).maybeSingle();
+               alumno = data;
+           }
+           if (!alumno) {
+               const { data } = await supabaseClient.from('alumnos').select('id, nombre, grupo_id, grado, taller').eq('matricula', decodedText).maybeSingle();
+               alumno = data;
+           }
            
            if(alumno) {
                if(isTec) {
@@ -7364,7 +7373,14 @@ window.guardarAsistenciaQR = async (matricula, grupoId) => {
         const materia = (window.currentAulaMateria || 'N/A').trim();
         const [sessionRes, studentRes] = await Promise.all([
             supabaseClient.from('asistencia_sesiones').select('estado').eq('grupo_id', String(grupoId)).eq('materia', materia).eq('fecha', hoy).maybeSingle(),
-            supabaseClient.from('alumnos').select('id, nombre, grupo_id, grado, taller').eq('matricula', matricula).maybeSingle()
+            (async () => {
+                const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(matricula);
+                if (isUUID) {
+                    const res = await supabaseClient.from('alumnos').select('id, nombre, grupo_id, grado, taller').eq('id', matricula).maybeSingle();
+                    if (res.data) return res;
+                }
+                return await supabaseClient.from('alumnos').select('id, nombre, grupo_id, grado, taller').eq('matricula', matricula).maybeSingle();
+            })()
         ]);
         const sesion = sessionRes.data;
         const alumno = studentRes.data;
