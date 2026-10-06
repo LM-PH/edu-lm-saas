@@ -5101,11 +5101,8 @@ window.loadTimelineAlumno = async (mostrarHistorial = false) => {
            .in('audiencia', audArr)
            .order('fecha_envio', { ascending: false });
 
-        // Historial desde inicio de ciclo escolar para nuevos alumnos
-        const now = new Date();
-        const startYear = now.getMonth() >= 7 ? now.getFullYear() : now.getFullYear() - 1;
-        const cicloInicio = new Date(startYear, 7, 1).toISOString();
-        query = query.gte('fecha_envio', cicloInicio);
+        // Historial sin límite de fecha para cargar todos los comunicados
+
 
         if(mostrarHistorial) {
             const fecha = document.getElementById('filtroFechaAvisos').value;

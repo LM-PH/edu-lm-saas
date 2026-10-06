@@ -10012,11 +10012,8 @@ window.loadTimelineAlumno = async (mostrarHistorial = false, selectedDateStr = n
         console.log(">>> [TIMELINE] Buscando comunicados para audiencia:", audArr);
         let query = supabaseClient.from('comunicados').select('*').in('audiencia', audArr).eq('plantel_id', state.plantelId).order('fecha_envio', { ascending: false });
         
-        // Historial desde inicio de ciclo escolar para nuevos alumnos
-        const now = new Date();
-        const startYear = now.getMonth() >= 7 ? now.getFullYear() : now.getFullYear() - 1;
-        const cicloInicio = new Date(startYear, 7, 1).toISOString();
-        query = query.gte('fecha_envio', cicloInicio);
+        // Historial sin límite de fecha para cargar todos los comunicados
+
 
         if(mostrarHistorial) {
             const fecha = selectedDateStr || document.getElementById('filtroFechaAvisos').value;
@@ -20611,17 +20608,12 @@ window.initFlatpickrAvisos = async (isAlumno = false) => {
     const userId = uRes.data?.user?.id;
     const userRole = state.role || '';
     
-    const now = new Date();
-    const startYear = now.getMonth() >= 7 ? now.getFullYear() : now.getFullYear() - 1;
-    const cicloInicio = new Date(startYear, 7, 1).toISOString();
-
     let { data } = await supabaseClient
         .from('comunicados')
         .select('fecha_envio, audiencia, titulo, tipo')
         .eq('plantel_id', state.plantelId)
-        .gte('fecha_envio', cicloInicio)
         .order('fecha_envio', { ascending: false })
-        .limit(3000);
+        .limit(30000);
 
     if(!data) data = [];
 
