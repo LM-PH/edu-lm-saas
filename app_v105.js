@@ -3510,7 +3510,7 @@ function renderAlumnoCredencial() {
              <h2 id="credName" style="color: var(--primary); margin-bottom: 4px;">Cargando...</h2>
              <span id="credMatricula" class="badge" style="background: var(--page-bg); color: var(--text-muted);">Matrícula: ...</span>
              <h3 id="credGrupo" style="font-weight: 800; font-size: 1.8rem; color: var(--primary); margin-top:20px;">...</h3>
-             <p style="text-transform: uppercase; font-size: 0.7rem; color: var(--secondary); margin-top:8px;">Secundaria Técnica 150</p>
+             <p id="credPlantel" style="text-transform: uppercase; font-size: 0.7rem; color: var(--secondary); margin-top:8px;">...</p>
         </div>
       </div>
     </div>
@@ -3522,12 +3522,13 @@ window.loadCredencialAlumno = async () => {
     const nameEl = document.getElementById('credName');
     const matEl = document.getElementById('credMatricula');
     const grEl = document.getElementById('credGrupo');
+    const plantelEl = document.getElementById('credPlantel');
     
     if(!qrCont || !state.user?.email) return;
 
     try {
         const { data, error } = await supabaseClient.from('alumnos')
-            .select('*, grupos(nombre)')
+            .select('*, grupos(nombre), planteles(nombre)')
             .eq('contacto_email', state.user.email)
             .single();
             
@@ -3540,6 +3541,7 @@ window.loadCredencialAlumno = async () => {
         nameEl.innerText = data.nombre;
         matEl.innerText = "Matrícula: " + data.matricula;
         grEl.innerText = data.grupos?.nombre || "Sin Grupo";
+        if(plantelEl) plantelEl.innerText = data.planteles?.nombre || "Secundaria Técnica";
 
         // Generar QR
         qrCont.innerHTML = '';
