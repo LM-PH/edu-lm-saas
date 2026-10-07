@@ -14917,8 +14917,20 @@ window.cargarEncuadreActivo = async () => {
         const encExistente = _encExArr && _encExArr.length > 0 ? _encExArr[0] : null;
 
         if(encExistente && encExistente.notificacion_enviada) {
-            const fecha = new Date(encExistente.fecha_envio_notif).toLocaleString();
-            return alert(`⚠️ Este encuadre ya fue enviado el ${fecha}.\nUsa el botón de "Limpiar Registro" para habilitar un nuevo envío.`);
+            // El usuario modifica el encuadre: borramos la notificación anterior y las firmas para evitar duplicados
+            const { data: coms } = await supabaseClient.from('comunicados')
+                .select('id')
+                .eq('plantel_id', state.plantelId)
+                .eq('autor_id', u.data.user.id)
+                .ilike('mensaje', `%[REF_ID: ${encExistente.id}]%`);
+            
+            if(coms && coms.length > 0) {
+                const cIds = coms.map(c => c.id);
+                await supabaseClient.from('comunicados_vistos').delete().in('comunicado_id', cIds);
+                await supabaseClient.from('comunicados').delete().in('id', cIds);
+            }
+            
+            await supabaseClient.from('firmas_encuadre').delete().eq('encuadre_id', encExistente.id);
         }
 
         btn.disabled = true;
