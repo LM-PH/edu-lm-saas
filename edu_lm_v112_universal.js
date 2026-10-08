@@ -11801,6 +11801,7 @@ window.cargarAlumnosLista = async () => {
             `;
             
         } else if (tipo === 'resumen_admin') {
+            const currentTrimNum = state.selectedMaestroTrimestre === 'final' ? 4 : parseInt(state.selectedMaestroTrimestre || 1);
             const currentTrim = state.selectedMaestroTrimestre || 1;
             const isModoFinal = currentTrim === 'final';
             const materiaLimpia = (materia || '').trim();
@@ -11823,6 +11824,23 @@ window.cargarAlumnosLista = async () => {
             }
 
             const alumnoIds = alumnos.map(a => a.id);
+
+            // Fetch Oficial Historial
+            let histQuery = supabaseClient.from('calificaciones')
+                .select('alumno_id, calificacion, trimestre, materia_nombre')
+                .eq('plantel_id', state.plantelId)
+                .in('alumno_id', alumnoIds);
+            if(isModoFinal) {
+                histQuery = histQuery.in('trimestre', [1, 2, 3, 4]);
+            } else {
+                histQuery = histQuery.eq('trimestre', currentTrim);
+            }
+            const { data: rawHistorial } = await histQuery;
+            const historial = (rawHistorial || []).filter(h => 
+                !materiaLimpia || (h.materia_nombre || '').trim().toLowerCase() === materiaLimpia.toLowerCase()
+            );
+
+            // Fetch Asistencias
             let qAsist = supabaseClient.from('asistencias')
                 .select('alumno_id, estado, creado_en')
                 .in('alumno_id', alumnoIds)
@@ -11852,39 +11870,60 @@ window.cargarAlumnosLista = async () => {
             cabecera.innerHTML = `<tr>
                 <th style="padding:12px; text-align:left; min-width:200px;">Alumno (Apellido)</th>
                 <th style="padding:12px; text-align:center;">Asistencias (%)</th>
-                <th style="padding:12px; text-align:center;">Promedio ${isModoFinal ? 'Final' : 'T' + currentTrim}</th>
+                <th style="padding:12px; text-align:center;">Calif. ${isModoFinal ? 'Final' : 'T' + currentTrim}</th>
                 <th style="padding:12px; text-align:center;">Estatus</th>
              </tr>`;
+
+            const redondearCalificacionSep = (val) => {
+                if (val === null || val === undefined || isNaN(val)) return 0;
+                const num = parseFloat(val);
+                if (num <= 0) return 0;
+                if (num < 6.0) return Math.floor(num); 
+                return Math.round(num); 
+            };
 
             for(let al of alumnos) {
                 const initials = al.nombre.substring(0,2).toUpperCase();
                 let promFinalNum = 0;
+                let currentSettledVal = null;
 
                 if (isModoFinal) {
-                    let promsTrim = { 1: 0, 2: 0, 3: 0 };
-                    [1, 2, 3].forEach(t => {
-                        const actsT = acts.filter(a => a.trimestre === t);
-                        if(actsT.length === 0) return;
-                        let rubroGroups = {}, hasRubros = false, sumSimple = 0, countSimple = 0;
-                        actsT.forEach(act => {
-                            const ev = evals.find(e => e.alumno_id === al.id && e.actividad_id === act.id);
-                            const val = ev ? parseFloat(ev.calificacion) || 0 : 0;
-                            if(act.rubro_name) {
-                                hasRubros = true;
-                                if(!rubroGroups[act.rubro_name]) rubroGroups[act.rubro_name] = { suma: 0, count: 0, peso: parseFloat(act.rubro_peso) || 0 };
-                                rubroGroups[act.rubro_name].count++;
-                                if(ev) rubroGroups[act.rubro_name].suma += val;
-                            } else if(ev) { sumSimple += val; countSimple++; }
+                    let t1 = historial?.find(h => h.alumno_id === al.id && h.trimestre === 1)?.calificacion || 0;
+                    let t2 = historial?.find(h => h.alumno_id === al.id && h.trimestre === 2)?.calificacion || 0;
+                    let t3 = historial?.find(h => h.alumno_id === al.id && h.trimestre === 3)?.calificacion || 0;
+                    
+                    // If no settled grades exist, fallback to calculated
+                    if (t1 === 0 && t2 === 0 && t3 === 0) {
+                        let promsTrim = { 1: 0, 2: 0, 3: 0 };
+                        [1, 2, 3].forEach(t => {
+                            const actsT = acts.filter(a => a.trimestre === t);
+                            if(actsT.length === 0) return;
+                            let rubroGroups = {}, hasRubros = false, sumSimple = 0, countSimple = 0;
+                            actsT.forEach(act => {
+                                const ev = evals.find(e => e.alumno_id === al.id && e.actividad_id === act.id);
+                                const val = ev ? parseFloat(ev.calificacion) || 0 : 0;
+                                if(act.rubro_name) {
+                                    hasRubros = true;
+                                    if(!rubroGroups[act.rubro_name]) rubroGroups[act.rubro_name] = { suma: 0, count: 0, peso: parseFloat(act.rubro_peso) || 0 };
+                                    rubroGroups[act.rubro_name].count++;
+                                    if(ev) rubroGroups[act.rubro_name].suma += val;
+                                } else if(ev) { sumSimple += val; countSimple++; }
+                            });
+                            if(hasRubros) {
+                                Object.values(rubroGroups).forEach(rg => { if(rg.count > 0) promsTrim[t] += (rg.suma / rg.count) * (rg.peso / 100); });
+                            } else { promsTrim[t] = countSimple > 0 ? (sumSimple / countSimple) : 0; }
                         });
-                        if(hasRubros) {
-                            Object.values(rubroGroups).forEach(rg => { if(rg.count > 0) promsTrim[t] += (rg.suma / rg.count) * (rg.peso / 100); });
-                        } else { promsTrim[t] = countSimple > 0 ? (sumSimple / countSimple) : 0; }
-                    });
-                    promFinalNum = ((promsTrim[1] + promsTrim[2] + promsTrim[3]) / 3);
+                        t1 = redondearCalificacionSep(promsTrim[1]);
+                        t2 = redondearCalificacionSep(promsTrim[2]);
+                        t3 = redondearCalificacionSep(promsTrim[3]);
+                    }
+                    
+                    promFinalNum = (t1 + t2 + t3) / 3;
+                    currentSettledVal = historial?.find(h => h.alumno_id === al.id && h.trimestre === 4)?.calificacion;
                 } else {
-                    let sumNotas = 0, countNotas = 0;
-                    let rubroGroups = {}, hasRubros = false;
                     if(hasActs) {
+                        let sumNotas = 0, countNotas = 0;
+                        let rubroGroups = {}, hasRubros = false;
                         acts.forEach(act => {
                             const ev = evals.find(e => e.alumno_id === al.id && e.actividad_id === act.id);
                             let val = 0, isValida = false;
@@ -11899,13 +11938,17 @@ window.cargarAlumnosLista = async () => {
                                 if(isValida) rubroGroups[act.rubro_name].suma += val;
                             }
                         });
+                        if (hasRubros) {
+                            Object.values(rubroGroups).forEach(rg => { if (rg.count > 0) promFinalNum += (rg.suma / rg.count) * (rg.peso / 100); });
+                        } else {
+                            promFinalNum = acts.length > 0 ? (sumNotas / acts.length) : 0;
+                        }
                     }
-                    if (hasRubros) {
-                        Object.values(rubroGroups).forEach(rg => { if (rg.count > 0) promFinalNum += (rg.suma / rg.count) * (rg.peso / 100); });
-                    } else {
-                        promFinalNum = acts.length > 0 ? (sumNotas / acts.length) : 0;
-                    }
+                    currentSettledVal = historial?.find(h => h.alumno_id === al.id)?.calificacion;
                 }
+
+                const promRounded = redondearCalificacionSep(promFinalNum);
+                const displayVal = currentSettledVal !== undefined && currentSettledVal !== null ? currentSettledVal : promRounded;
 
                 let asistenciasConteo = 0;
                 if (asistenciasRegistradas && totalDias > 0) {
@@ -11918,7 +11961,7 @@ window.cargarAlumnosLista = async () => {
                 }
                 let pctAsist = totalDias > 0 ? Math.round((asistenciasConteo / totalDias) * 100) : 100;
                 
-                let badge = promFinalNum < 6 ? '<span class="badge" style="background:#fee2e2; color:#991b1b">Reprobado</span>' : '<span class="badge" style="background:#d1fae5; color:#065f46">Aprobado</span>';
+                let badge = displayVal < 6 ? '<span class="badge" style="background:#fee2e2; color:#991b1b">Reprobado</span>' : '<span class="badge" style="background:#d1fae5; color:#065f46">Aprobado</span>';
                 
                 htmlRows += `
                 <tr style="border-bottom:1px solid var(--border)">
@@ -11927,13 +11970,12 @@ window.cargarAlumnosLista = async () => {
                        <div><span style="font-weight:600;">${al.nombre}</span> <br> <span style="font-size:0.75rem; color:var(--text-muted)">${al.matricula}</span></div>
                     </td>
                     <td style="text-align:center; padding:12px;"><b>${pctAsist}%</b></td>
-                    <td style="text-align:center; padding:12px; font-weight:bold; color:var(--primary); font-size:1.1rem;">${promFinalNum.toFixed(2)}</td>
+                    <td style="text-align:center; padding:12px; font-weight:bold; color:var(--primary); font-size:1.1rem;">${Number(displayVal).toFixed(1)}</td>
                     <td style="text-align:center; padding:12px;">${badge}</td>
                 </tr>`;
             }
             
             if (statsCont) statsCont.innerHTML = '';
-
         } else {
             // MODO ASISTENCIAS - Simplificado para este contexto pero manteniendo el orden
             statsCont.innerHTML = '';
