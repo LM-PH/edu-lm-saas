@@ -4999,29 +4999,107 @@ window.loadBoletasAlumno = async () => {
             `;
         }
 
-        // Agrupar por periodo
-        const periodos = [...new Set(califs.map(c => c.trimestre))].sort((a,b) => b-a);
-        let tablesHtml = periodos.map(p => {
-            const pCalifs = califs.filter(c => c.trimestre === p);
-            const prom = (pCalifs.reduce((acc, curr) => acc + curr.calificacion, 0) / pCalifs.length).toFixed(1);
+// Generar vista consolidada en columnas
+        let tablesHtml = '';
+        if (califs && califs.length > 0) {
+            const byMateria = {};
+            const trimestresDetectados = new Set();
             
-            return `
-                <div class="card" style="padding:0; overflow:hidden; border-radius:15px; margin-bottom:20px; border:1px solid var(--border)">
-                    <div style="background:var(--page-bg); padding:15px; border-bottom:1px solid var(--border); display:flex; justify-content:space-between; align-items:center;">
-                       <h4 style="margin:0; font-size:1rem;">Trimestre ${p}</h4>
-                       <span class="badge" style="background:var(--primary); color:white; font-size:0.9rem; padding:4px 10px;">Promedio: ${prom}</span>
-                    </div>
-                    <table class="grades-table-pdf-source" data-trimestre="${p}" style="width:100%; border-collapse: collapse;">
-                        ${pCalifs.map(c => `
-                            <tr style="border-bottom: 1px solid var(--border);">
-                                <td style="padding:12px 15px; font-size:0.85rem; color:var(--text-main)">${c.materia_nombre}</td>
-                                <td style="padding:12px 15px; text-align:right; font-weight:bold; color:var(--primary); font-size:1rem;">${c.calificacion}</td>
+            califs.forEach(c => {
+                const nom = c.materia_nombre || (c.materia_id && c.materia_id.nombre) || 'Materia';
+                const t = parseInt(c.trimestre);
+                if (!isNaN(t)) {
+                    trimestresDetectados.add(t);
+                    if(!byMateria[nom]) byMateria[nom] = {};
+                    byMateria[nom][t] = c.calificacion;
+                }
+            });
+            
+            const trims = Array.from(trimestresDetectados).sort((a,b) => a - b);
+            
+            let headersHtml = '<th style="padding:14px 20px; font-size:0.85rem; color:var(--text-muted); text-align:left;">Materia</th>';
+            trims.forEach(t => {
+                const label = t == 4 ? "Final" : `T${t}`;
+                headersHtml += `<th style="padding:14px; text-align:center; font-size:0.85rem; color:var(--text-muted);">${label}</th>`;
+            });
+            
+            let rowsHtml = '';
+            const materiasKeys = Object.keys(byMateria).sort((a,b) => a.localeCompare(b));
+            
+            materiasKeys.forEach(mat => {
+                rowsHtml += `<tr style="border-bottom: 1px solid var(--border);">`;
+                rowsHtml += `<td style="padding:14px 20px; font-size:0.9rem; color:var(--text-main); font-weight:500;">${mat}</td>`;
+                
+                trims.forEach(t => {
+                    const cal = byMateria[mat][t];
+                    const calStr = cal !== undefined ? cal : '-';
+                    rowsHtml += `<td style="padding:14px; text-align:center; font-weight:800; color:var(--primary); font-size:1.1rem;">${calStr}</td>`;
+                });
+                
+                rowsHtml += `</tr>`;
+            });
+            
+            let promediosRow = '<tr style="border-bottom: 1px solid var(--border); background: #f8fafc;"><td style="padding:14px 20px; text-align:right; font-size:0.85rem; color:var(--text-muted); font-weight:bold;">PROMEDIO</td>';
+            let lastTrimProm = 0;
+            
+            trims.forEach(t => {
+                let sum = 0;
+                let count = 0;
+                materiasKeys.forEach(mat => {
+                    const cal = byMateria[mat][t];
+                    if(cal !== undefined) {
+                        sum += parseFloat(cal);
+                        count++;
+                    }
+                });
+                const prom = count > 0 ? (sum / count).toFixed(1) : '-';
+                if(count > 0) lastTrimProm = parseFloat(prom);
+                promediosRow += `<td style="padding:14px; text-align:center; font-weight:900; color:var(--text-main); font-size:1.1rem;">${prom}</td>`;
+            });
+            promediosRow += '</tr>';
+            
+            let sLabel = "EN RIESGO", sColor = "var(--danger)", sIcon = "fa-triangle-exclamation", sMsg = "Se requiere atención académica urgente.";
+            if(lastTrimProm >= 6.0 && lastTrimProm <= 7.5) {
+                sLabel = "REGULAR"; sColor = "#f59e0b"; sIcon = "fa-bell"; sMsg = "Aprobado, pero hay oportunidad de mejorar tus hábitos de estudio.";
+            } else if(lastTrimProm >= 7.6 && lastTrimProm <= 9.0) {
+                sLabel = "BUENO"; sColor = "var(--primary)"; sIcon = "fa-thumbs-up"; sMsg = "Buen trabajo. Sigue esforzándote para alcanzar la excelencia.";
+            } else if(lastTrimProm >= 9.1) {
+                sLabel = "EXCELENCIA"; sColor = "#10b981"; sIcon = "fa-trophy"; sMsg = "¡Felicidades! Tienes un desempeño sobresaliente. Sigue con esa disciplina.";
+            }
+            if(lastTrimProm === 0) { sLabel = "SIN EVALUAR"; sColor = "var(--text-muted)"; sIcon = "fa-clock"; sMsg = "Esperando evaluación."; }
+
+            tablesHtml = `
+            <div class="card" style="padding:0; overflow:hidden; border-radius:18px; margin-bottom:24px; border:1px solid var(--border); box-shadow: 0 4px 12px rgba(0,0,0,0.03);">
+                <div style="background:var(--page-bg); padding:18px 20px; border-bottom:1px solid var(--border); display:flex; justify-content:space-between; align-items:center;">
+                   <h4 style="margin:0; font-size:1.1rem; font-weight:800; color:var(--primary);">Concentrado de Evaluaciones</h4>
+                </div>
+                <div style="overflow-x:auto;">
+                    <table class="grades-table-pdf-source" data-trimestre="Todas" style="width:100%; border-collapse: collapse; min-width:300px;">
+                        <thead>
+                            <tr style="border-bottom: 1px solid var(--border); background: #f8fafc;">
+                                ${headersHtml}
                             </tr>
-                        `).join('')}
+                        </thead>
+                        <tbody>
+                            ${rowsHtml}
+                            ${promediosRow}
+                        </tbody>
                     </table>
                 </div>
-            `;
-        }).join('');
+                
+                <div style="background: #f8fafc; padding: 16px 20px; border-top: 2px solid ${sColor};">
+                    <div style="display:flex; gap:12px; align-items:flex-start;">
+                        <div style="width:36px; height:36px; border-radius:10px; background:${sColor}20; color:${sColor}; display:flex; align-items:center; justify-content:center; flex-shrink:0;">
+                            <i class="fa-solid ${sIcon}"></i>
+                        </div>
+                        <div>
+                            <div style="font-size:0.7rem; font-weight:900; color:${sColor}; letter-spacing:0.5px; margin-bottom:2px;">ESTADO (TRIMESTRE MÁS RECIENTE): ${sLabel}</div>
+                            <div style="font-size:0.85rem; color:var(--text-muted); line-height:1.4; font-weight:500;">${sMsg}</div>
+                        </div>
+                    </div>
+                </div>
+            </div>`;
+        }
 
         cont.innerHTML = `
             <div style="margin-bottom:20px; display:flex; justify-content:space-between; align-items:center;">
@@ -5088,7 +5166,9 @@ window.descargarBoletaPDF = async (aluId, nombre, matricula) => {
             t.style.width = "100%";
             t.style.border = "1px solid #ccc";
             t.style.marginTop = "20px";
-            return `<h3>Trimestre ${table.dataset.trimestre}</h3>${t.outerHTML}`;
+            const trim = table.dataset.trimestre;
+            const displayTrim = trim === 'Todas' ? 'CONCENTRADO DE EVALUACIONES' : `Trimestre ${trim}`;
+            return `<h3>${displayTrim}</h3>${t.outerHTML}`;
         }).join('');
 
         printWindow.document.write(`
@@ -6220,9 +6300,11 @@ window.cargarAlumnosLista = async () => {
                 let actHeaders = hasActs 
                     ? acts.map(a => {
                         const actTituloSafe = a.titulo.replace(/'/g, "\\'");
-                        return `<th style="padding:12px; text-align:center; max-width:80px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;" title="${a.titulo} - ${a.rubro_name ? a.rubro_name : 'Sin Rubro'}">
+                        return `<th style="padding:12px; text-align:center; max-width:90px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;" title="${a.titulo} - ${a.rubro_name ? a.rubro_name : 'Sin Rubro'}">
+                            <button class="btn btn-outline" style="border-color:var(--primary); color:var(--primary); font-size:0.6rem; padding:2px 4px; margin-bottom:4px; width:100%; display:flex; align-items:center; justify-content:center; gap:4px; border-radius:4px;" onclick="window.evaluarActividadMasiva('${a.id}', '${actTituloSafe}')" title="Asignar misma calificación a todos">
+                                <i class="fa-solid fa-bolt"></i> Masivo
+                            </button>
                             ${a.titulo}
-                            <i class="fa-solid fa-bolt" style="cursor:pointer; color:var(--primary); font-size:0.85em; margin-left:4px;" title="Asignar misma calificación a todos" onclick="window.evaluarActividadMasiva('${a.id}', '${actTituloSafe}')"></i>
                             <br><span style="font-size:0.7rem; color:var(--text-muted); font-weight:normal">${a.rubro_name ? (a.rubro_peso+'%') : 'Extra'}</span>
                         </th>`;
                     }).join('')
