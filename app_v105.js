@@ -6134,12 +6134,14 @@ window.cargarAlumnosLista = async () => {
                         acts.forEach(act => {
                             const cellEval = evals.find(e => e.alumno_id === al.id && e.actividad_id === act.id);
                             let val = 0, isValida = false;
-                            if(cellEval && cellEval.calificacion) {
-                                actCells += `<td style="text-align:center; padding:12px; font-weight:bold; color:var(--primary)">${cellEval.calificacion}</td>`;
+                            const actTituloSafe = act.titulo.replace(/'/g, "\\'");
+                            
+                            if(cellEval && cellEval.calificacion !== undefined && cellEval.calificacion !== null) {
+                                actCells += `<td style="text-align:center; padding:12px; font-weight:bold; color:var(--primary); cursor:pointer;" title="Click para editar" onclick="window.editarCalificacionLista('${al.id}', '${act.id}', '${cellEval.calificacion}', '${actTituloSafe}')">${cellEval.calificacion} <i class="fa-solid fa-pen" style="font-size:0.6em; opacity:0.5;"></i></td>`;
                                 val = parseFloat(cellEval.calificacion) || 0;
                                 sumNotas += val; countNotas++; isValida = true;
                             } else {
-                                actCells += `<td style="text-align:center; padding:12px; color:var(--text-muted)">-</td>`;
+                                actCells += `<td style="text-align:center; padding:12px; color:var(--text-muted); cursor:pointer;" title="Click para calificar" onclick="window.editarCalificacionLista('${al.id}', '${act.id}', '', '${actTituloSafe}')">- <i class="fa-solid fa-plus" style="font-size:0.6em; opacity:0.5;"></i></td>`;
                             }
                             if(act.rubro_name) {
                                 hasRubros = true;
@@ -6325,6 +6327,46 @@ window.cargarAlumnosLista = async () => {
     } catch(err) {
         console.error(err);
         tbody.innerHTML = '<tr><td colspan="4" style="text-align:center; padding: 20px; color:var(--danger)">Error al cargar seguimiento.</td></tr>';
+    }
+};
+
+window.editarCalificacionLista = async (alumnoId, actividadId, currentCal, actTitulo) => {
+    let promptMsg = currentCal ? `Editar calificación para "${actTitulo}" (Actual: ${currentCal}):` : `Asignar calificación para "${actTitulo}":`;
+    let newVal = prompt(promptMsg, currentCal);
+    if(newVal === null) return;
+    newVal = newVal.trim();
+    if(newVal === "") {
+        // Option to delete the grade if empty?
+        if(!confirm("¿Deseas eliminar esta calificación y dejarla en blanco?")) return;
+        try {
+            await supabaseClient.from('evaluaciones_actividades').delete().eq('actividad_id', actividadId).eq('alumno_id', alumnoId);
+            window.showToast("Calificación eliminada", "info");
+            window.cargarAlumnosLista();
+        } catch(e) {
+            console.error(e);
+            alert("Error al eliminar: " + e.message);
+        }
+        return;
+    }
+    
+    let numVal = parseFloat(newVal);
+    if(isNaN(numVal) || numVal < 0 || numVal > 10) return alert("Calificación inválida. Debe ser un número entre 0 y 10.");
+
+    try {
+        const { error } = await supabaseClient.from('evaluaciones_actividades').upsert({
+            actividad_id: actividadId,
+            alumno_id: alumnoId,
+            calificacion: numVal,
+            fecha_evaluacion: new Date().toISOString(),
+            plantel_id: state.plantelId
+        }, { onConflict: 'actividad_id,alumno_id' });
+
+        if(error) throw error;
+        window.showToast("Calificación actualizada", "success");
+        window.cargarAlumnosLista();
+    } catch(e) {
+        console.error(e);
+        alert("Error al actualizar: " + e.message);
     }
 };
 
