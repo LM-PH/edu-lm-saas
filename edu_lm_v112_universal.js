@@ -1835,14 +1835,80 @@ function renderAdminGrupos() {
 // ADMIN PAGES - EXTENDED (CALIFICACIONES Y TRAMITES)
 // ========================
 
+window.loadMaestrosAdminList = async () => {
+    const sel = document.getElementById('adminSelMaestro');
+    if(!sel) return;
+    
+    sel.innerHTML = '<option value="">Cargando maestros...</option>';
+    try {
+        const { data, error } = await supabaseClient
+            .from('perfiles')
+            .select('id, nombre')
+            .eq('plantel_id', state.plantelId)
+            .eq('rol', 'Maestro')
+            .order('nombre');
+            
+        if(error) throw error;
+        
+        sel.innerHTML = '<option value="">-- Seleccione un Maestro --</option>' + (data || []).map(m => `<option value="${m.id}">${m.nombre}</option>`).join('');
+        
+    } catch(err) {
+        console.error(err);
+        sel.innerHTML = '<option value="">Error al cargar maestros</option>';
+    }
+};
+
+window.cargarMateriasMaestroAdmin = async (maestroId) => {
+    const selG = document.getElementById('listaMaestroGrupo');
+    if(!selG) return;
+    
+    if(!maestroId) {
+        selG.innerHTML = '<option value="">Seleccione un maestro primero...</option>';
+        return;
+    }
+    
+    selG.innerHTML = '<option value="">Cargando materias...</option>';
+    try {
+        const { data: asignaciones, error } = await supabaseClient
+            .from('asignaciones_maestros')
+            .select('id, grupo_id, materia, target_grado, grupos(nombre)')
+            .eq('maestro_id', maestroId)
+            .order('id');
+            
+        if(error) throw error;
+        
+        if(!asignaciones || asignaciones.length === 0) {
+            selG.innerHTML = '<option value="">El maestro no tiene materias asignadas</option>';
+            return;
+        }
+
+        let optsHTML = '<option value="">-- Seleccione Materia/Grupo --</option>';
+        
+        asignaciones.forEach(a => {
+            if(a.grupo_id) {
+                optsHTML += `<option value="${a.grupo_id}|${a.materia}">${a.materia} - ${a.grupos ? a.grupos.nombre : 'Grupo ' + a.grupo_id}</option>`;
+            } else if(a.target_grado) {
+                optsHTML += `<option value="grado:${a.target_grado}|${a.materia}">${a.materia} - Grado ${a.target_grado}</option>`;
+            }
+        });
+        
+        selG.innerHTML = optsHTML;
+        
+    } catch(err) {
+        console.error(err);
+        selG.innerHTML = '<option value="">Error al cargar materias</option>';
+    }
+};
+
 window.switchAdminCalificacionesTab = (tab) => {
     const btnConcentrado = document.getElementById('btn-tab-concentrado');
     const btnEstadisticas = document.getElementById('btn-tab-estadisticas');
+    const btnMaestros = document.getElementById('btn-tab-maestros');
     
-    const allBtns = [btnConcentrado, btnEstadisticas].filter(Boolean);
+    const allBtns = [btnConcentrado, btnEstadisticas, btnMaestros].filter(Boolean);
     allBtns.forEach(b => { b.className = 'btn btn-outline'; b.style.background = 'white'; });
 
-    const allViews = ['view-concentrado','view-estadisticas'];
+    const allViews = ['view-concentrado','view-estadisticas', 'view-maestros'];
     allViews.forEach(v => { const el = document.getElementById(v); if(el) el.style.display = 'none'; });
 
     if(tab === 'concentrado') {
@@ -1853,8 +1919,12 @@ window.switchAdminCalificacionesTab = (tab) => {
         if(btnEstadisticas) { btnEstadisticas.className = 'btn btn-primary'; btnEstadisticas.style.background = ''; }
         const el = document.getElementById('view-estadisticas');
         if(el) { el.style.display = 'flex'; el.style.animation = 'fadeIn 0.4s'; }
+    } else if(tab === 'maestros') {
+        if(btnMaestros) { btnMaestros.className = 'btn btn-primary'; btnMaestros.style.background = ''; }
+        const el = document.getElementById('view-maestros');
+        if(el) { el.style.display = 'flex'; el.style.animation = 'fadeIn 0.4s'; }
+        if(window.loadMaestrosAdminList) window.loadMaestrosAdminList();
     }
-
 };
 
 window.handleAlcanceEstadisticaChange = () => {
@@ -1882,6 +1952,7 @@ function renderAdminCalificaciones() {
       <div style="display:flex; gap:10px; flex-wrap:wrap;">
           <button id="btn-tab-concentrado" class="btn btn-primary" onclick="window.switchAdminCalificacionesTab('concentrado')"><i class="fa-solid fa-list-check"></i> Concentrado por Grupo</button>
           <button id="btn-tab-estadisticas" class="btn btn-outline" onclick="window.switchAdminCalificacionesTab('estadisticas')" style="background:white;"><i class="fa-solid fa-chart-pie"></i> Estadística de Aprobación</button>
+          <button id="btn-tab-maestros" class="btn btn-outline" onclick="window.switchAdminCalificacionesTab('maestros')" style="background:white;"><i class="fa-solid fa-chalkboard-user"></i> Reportes por Maestro</button>
       </div>
     </div>
 
@@ -1992,6 +2063,69 @@ function renderAdminCalificaciones() {
         <div id="estadisticasDashboardContent" style="min-height:300px; display:flex; flex-direction:column; justify-content:center; align-items:center; text-align:center;">
            <i class="fa-solid fa-chart-line" style="font-size:3rem; color:var(--border); margin-bottom:15px;"></i>
            <p style="color:var(--text-muted);">Selecciona los filtros y haz clic en "Generar Estadística" para visualizar los datos.</p>
+        </div>
+      </div>
+    </div>
+    
+    <!-- VISTA 3: REPORTES POR MAESTRO -->
+    <div id="view-maestros" style="display:none; gap:24px; flex-wrap:wrap;">
+      <div class="card" style="flex:1; min-width:320px; align-self: flex-start;">
+         <h3 style="margin-bottom:12px">Filtros de Búsqueda</h3>
+         <p style="font-size:0.85rem; color:var(--text-muted); margin-bottom:16px;">Consulta e imprime las listas de seguimiento (asistencias y evaluaciones) tal como las ve cada maestro.</p>
+         <div class="form-group">
+            <label class="form-label">Maestro Titular</label>
+            <select class="form-select" id="adminSelMaestro" onchange="window.cargarMateriasMaestroAdmin(this.value)">
+                <option value="">Cargando maestros...</option>
+            </select>
+         </div>
+         <div class="form-group">
+            <label class="form-label">Grupo y Materia</label>
+            <select class="form-select" id="listaMaestroGrupo" onchange="window.cargarAlumnosLista()">
+               <option value="">Seleccione un maestro primero...</option>
+            </select>
+         </div>
+         <div class="form-group">
+            <label class="form-label">Trimestre</label>
+            <div id="tabsTrimestresListas" style="display:flex; background:var(--page-bg); padding:4px; border-radius:10px; gap:4px; border:1px solid var(--border);">
+               <button class="btn btn-sm t-btn active" onclick="window.cambiarTrimestreLista(1, this)" style="padding:6px 12px; font-size:0.8rem; font-weight:bold; border-radius:6px; background:white; border:1px solid var(--border); cursor:pointer;">1° T</button>
+               <button class="btn btn-sm t-btn" onclick="window.cambiarTrimestreLista(2, this)" style="padding:6px 12px; font-size:0.8rem; font-weight:bold; border-radius:6px; background:transparent; border:none; cursor:pointer; color:var(--text-muted);">2° T</button>
+               <button class="btn btn-sm t-btn" onclick="window.cambiarTrimestreLista(3, this)" style="padding:6px 12px; font-size:0.8rem; font-weight:bold; border-radius:6px; background:transparent; border:none; cursor:pointer; color:var(--text-muted);">3° T</button>
+               <div style="width:1px; background:var(--border); margin:0 4px;"></div>
+               <button class="btn btn-sm t-btn" onclick="window.cambiarTrimestreLista('final', this)" style="padding:6px 12px; font-size:0.8rem; font-weight:bold; border-radius:6px; background:transparent; border:none; cursor:pointer; color:var(--text-muted);">FINAL</button>
+            </div>
+         </div>
+         <div class="form-group">
+            <label class="form-label">Tipo de Lista</label>
+            <select class="form-select" id="listaMaestroTipo" onchange="window.cargarAlumnosLista()">
+               <option value="evaluaciones">Lista de Evaluación</option>
+               <option value="asistencias">Lista de Asistencias (Porcentaje)</option>
+            </select>
+         </div>
+         <button class="btn btn-outline" style="width:100%; margin-top:10px; border-color:var(--primary); color:var(--primary)" onclick="window.imprimirLista(false)">
+            <i class="fa-solid fa-print"></i> Imprimir Reporte Generado
+         </button>
+      </div>
+      
+      <!-- Bloque: Revisión Detallada por Maestro -->
+      <div class="card" style="flex:3; min-width:400px; width: 100%;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; flex-wrap:wrap; gap:16px;">
+          <h3 style="margin:0;">Matriz de Seguimiento del Maestro</h3>
+        </div>
+        <div id="statsListaMaestro" style="margin-bottom:20px;"></div>
+        <div style="overflow-x:auto;">
+          <table class="risk-table" style="width:100%">
+            <thead id="listaMaestroCabecera">
+              <tr>
+                 <th style="padding:12px; text-align:left;">Alumno</th>
+                 <th style="padding:12px; text-align:center;">Actividades / Asistencias</th>
+                 <th style="padding:12px; text-align:center;">Estimación / Resumen</th>
+                 <th style="padding:12px; text-align:center;">Estatus</th>
+              </tr>
+            </thead>
+            <tbody id="listaMaestroAlumnos">
+               <tr><td colspan="4" style="text-align:center; padding: 20px; color:var(--text-muted)">Seleccione un maestro y grupo para cargar la lista...</td></tr>
+            </tbody>
+          </table>
         </div>
       </div>
     </div>
