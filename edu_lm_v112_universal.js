@@ -2094,11 +2094,9 @@ function renderAdminCalificaciones() {
                <button class="btn btn-sm t-btn" onclick="window.cambiarTrimestreLista('final', this)" style="padding:6px 12px; font-size:0.8rem; font-weight:bold; border-radius:6px; background:transparent; border:none; cursor:pointer; color:var(--text-muted);">FINAL</button>
             </div>
          </div>
-         <div class="form-group">
-            <label class="form-label">Tipo de Lista</label>
-            <select class="form-select" id="listaMaestroTipo" onchange="window.cargarAlumnosLista()">
-               <option value="evaluaciones">Lista de Evaluación</option>
-               <option value="asistencias">Lista de Asistencias (Porcentaje)</option>
+         <div class="form-group" style="display:none;">
+            <select class="form-select" id="listaMaestroTipo">
+               <option value="resumen_admin">Resumen (Calif. Final y Asistencias)</option>
             </select>
          </div>
          <button class="btn btn-outline" style="width:100%; margin-top:10px; border-color:var(--primary); color:var(--primary)" onclick="window.imprimirLista(false)">
@@ -11802,6 +11800,140 @@ window.cargarAlumnosLista = async () => {
                 </div>
             `;
             
+        } else if (tipo === 'resumen_admin') {
+            const currentTrim = state.selectedMaestroTrimestre || 1;
+            const isModoFinal = currentTrim === 'final';
+            const materiaLimpia = (materia || '').trim();
+
+            let actsQuery = supabaseClient.from('actividades_maestro').select('id, titulo, rubro_name, rubro_peso, trimestre, materia').eq('plantel_id', state.plantelId);
+            if(isTec) actsQuery = actsQuery.eq('target_grado', targetGrado);
+            else actsQuery = actsQuery.eq('grupo_id', gid);
+            if (!isModoFinal) actsQuery = actsQuery.eq('trimestre', currentTrim);
+            
+            const { data: rawActs } = await actsQuery;
+            const norm = (s) => (s||'').normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim().toLowerCase();
+            const acts = (rawActs || []).filter(a => norm(a.materia) === norm(materia));
+            const hasActs = acts && acts.length > 0;
+
+            let evals = [];
+            if(hasActs) {
+                const actIds = acts.map(a => a.id);
+                const { data: evalsData } = await supabaseClient.from('evaluaciones_actividades').select('alumno_id, actividad_id, calificacion').in('actividad_id', actIds);
+                if(evalsData) evals = evalsData;
+            }
+
+            const alumnoIds = alumnos.map(a => a.id);
+            let qAsist = supabaseClient.from('asistencias')
+                .select('alumno_id, estado, creado_en')
+                .in('alumno_id', alumnoIds)
+                .eq('materia', materiaLimpia)
+                .eq('plantel_id', state.plantelId);
+            if (!isModoFinal) qAsist = qAsist.eq('trimestre', currentTrim);
+            const { data: asistenciasRegistradas } = await qAsist;
+            
+            let qSes = supabaseClient.from('asistencia_sesiones')
+                .select('fecha')
+                .eq('grupo_id', String(rawVal))
+                .eq('materia', materiaLimpia)
+                .eq('plantel_id', state.plantelId);
+            if (!isModoFinal) qSes = qSes.eq('trimestre', currentTrim);
+            const { data: sesiones } = await qSes;
+            
+            let diasPaseLista = new Set();
+            if(sesiones) sesiones.forEach(s => diasPaseLista.add(s.fecha));
+            if(asistenciasRegistradas) {
+                asistenciasRegistradas.forEach(a => {
+                    let d = new Date(a.creado_en);
+                    diasPaseLista.add(d.getFullYear() + "-" + String(d.getMonth()+1).padStart(2,'0') + "-" + String(d.getDate()).padStart(2,'0'));
+                });
+            }
+            let totalDias = diasPaseLista.size;
+
+            cabecera.innerHTML = `<tr>
+                <th style="padding:12px; text-align:left; min-width:200px;">Alumno (Apellido)</th>
+                <th style="padding:12px; text-align:center;">Asistencias (%)</th>
+                <th style="padding:12px; text-align:center;">Promedio ${isModoFinal ? 'Final' : 'T' + currentTrim}</th>
+                <th style="padding:12px; text-align:center;">Estatus</th>
+             </tr>`;
+
+            for(let al of alumnos) {
+                const initials = al.nombre.substring(0,2).toUpperCase();
+                let promFinalNum = 0;
+
+                if (isModoFinal) {
+                    let promsTrim = { 1: 0, 2: 0, 3: 0 };
+                    [1, 2, 3].forEach(t => {
+                        const actsT = acts.filter(a => a.trimestre === t);
+                        if(actsT.length === 0) return;
+                        let rubroGroups = {}, hasRubros = false, sumSimple = 0, countSimple = 0;
+                        actsT.forEach(act => {
+                            const ev = evals.find(e => e.alumno_id === al.id && e.actividad_id === act.id);
+                            const val = ev ? parseFloat(ev.calificacion) || 0 : 0;
+                            if(act.rubro_name) {
+                                hasRubros = true;
+                                if(!rubroGroups[act.rubro_name]) rubroGroups[act.rubro_name] = { suma: 0, count: 0, peso: parseFloat(act.rubro_peso) || 0 };
+                                rubroGroups[act.rubro_name].count++;
+                                if(ev) rubroGroups[act.rubro_name].suma += val;
+                            } else if(ev) { sumSimple += val; countSimple++; }
+                        });
+                        if(hasRubros) {
+                            Object.values(rubroGroups).forEach(rg => { if(rg.count > 0) promsTrim[t] += (rg.suma / rg.count) * (rg.peso / 100); });
+                        } else { promsTrim[t] = countSimple > 0 ? (sumSimple / countSimple) : 0; }
+                    });
+                    promFinalNum = ((promsTrim[1] + promsTrim[2] + promsTrim[3]) / 3);
+                } else {
+                    let sumNotas = 0, countNotas = 0;
+                    let rubroGroups = {}, hasRubros = false;
+                    if(hasActs) {
+                        acts.forEach(act => {
+                            const ev = evals.find(e => e.alumno_id === al.id && e.actividad_id === act.id);
+                            let val = 0, isValida = false;
+                            if(ev && ev.calificacion !== undefined && ev.calificacion !== null) {
+                                val = parseFloat(ev.calificacion) || 0;
+                                sumNotas += val; countNotas++; isValida = true;
+                            }
+                            if(act.rubro_name) {
+                                hasRubros = true;
+                                if(!rubroGroups[act.rubro_name]) rubroGroups[act.rubro_name] = { suma: 0, count: 0, peso: parseFloat(act.rubro_peso) || 0 };
+                                rubroGroups[act.rubro_name].count++;
+                                if(isValida) rubroGroups[act.rubro_name].suma += val;
+                            }
+                        });
+                    }
+                    if (hasRubros) {
+                        Object.values(rubroGroups).forEach(rg => { if (rg.count > 0) promFinalNum += (rg.suma / rg.count) * (rg.peso / 100); });
+                    } else {
+                        promFinalNum = acts.length > 0 ? (sumNotas / acts.length) : 0;
+                    }
+                }
+
+                let asistenciasConteo = 0;
+                if (asistenciasRegistradas && totalDias > 0) {
+                    const asisAl = asistenciasRegistradas.filter(a => a.alumno_id === al.id);
+                    asisAl.forEach(a => {
+                        if (a.estado === 'Asistencia' || a.estado === 'Retardo' || a.estado === 'Justificada') {
+                            asistenciasConteo++;
+                        }
+                    });
+                }
+                let pctAsist = totalDias > 0 ? Math.round((asistenciasConteo / totalDias) * 100) : 100;
+                
+                let badge = promFinalNum < 6 ? '<span class="badge" style="background:#fee2e2; color:#991b1b">Reprobado</span>' : '<span class="badge" style="background:#d1fae5; color:#065f46">Aprobado</span>';
+                
+                htmlRows += `
+                <tr style="border-bottom:1px solid var(--border)">
+                    <td style="padding:12px; display:flex; gap:12px; align-items:center;">
+                       <div style="width:32px; height:32px; border-radius:50%; background:var(--primary); color:white; display:flex; justify-content:center; align-items:center; font-size:12px; font-weight:bold; flex-shrink:0;">${initials}</div>
+                       <div><span style="font-weight:600;">${al.nombre}</span> <br> <span style="font-size:0.75rem; color:var(--text-muted)">${al.matricula}</span></div>
+                    </td>
+                    <td style="text-align:center; padding:12px;"><b>${pctAsist}%</b></td>
+                    <td style="text-align:center; padding:12px; font-weight:bold; color:var(--primary); font-size:1.1rem;">${promFinalNum.toFixed(2)}</td>
+                    <td style="text-align:center; padding:12px;">${badge}</td>
+                </tr>`;
+            }
+            
+            if (statsCont) statsCont.innerHTML = '';
+
         } else {
             // MODO ASISTENCIAS - Simplificado para este contexto pero manteniendo el orden
             statsCont.innerHTML = '';
