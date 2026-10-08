@@ -8641,7 +8641,7 @@ window.cargarEncuadreActivo = async () => {
             .match(isTec ? { target_grado: targetGrado } : { grupo_id: gid })
             .maybeSingle();
 
-        if(encExistente && encExistente.notificacion_enviada) {
+        if(encExistente) {
             // El usuario modifica el encuadre: borramos la notificación anterior y las firmas para evitar duplicados
             const { data: coms } = await supabaseClient.from('comunicados')
                 .select('id')
@@ -8699,7 +8699,7 @@ window.cargarEncuadreActivo = async () => {
         const { data: perfil } = await supabaseClient.from('perfiles').select('nombre').eq('id', u.data.user.id).maybeSingle();
         const nombreMaestro = perfil?.nombre || u.data.user.email;
 
-        // 3. Enviar notificaciones a alumnos
+        // 3. Enviar notificaciones
         if(alumnos && alumnos.length > 0) {
             // Obtener el ID del encuadre para la referencia invisible
             let qEncId = supabaseClient.from('encuadres').select('id')
@@ -8710,17 +8710,29 @@ window.cargarEncuadreActivo = async () => {
             if(isTec) qEncId = qEncId.is('grupo_id', null).eq('target_grado', targetGrado);
             else qEncId = qEncId.eq('grupo_id', gid);
             
-            const { data: encObj } = await qEncId.maybeSingle();
+            const { data: _encObjArr } = await qEncId.order('fecha_creacion', { ascending: false }).limit(1);
+            const encObj = _encObjArr && _encObjArr.length > 0 ? _encObjArr[0] : null;
 
             const rubrosTexto = window.rubros.map(r => `• ${r.name}: ${r.val}%`).join('\n');
             const labelTri = (window.currentTrimestre || 1) + "° Trimestre";
 
-            const notificaciones = alumnos.map(alum => ({
-                autor_id: u.data.user.id,
-                titulo: `📋 Encuadre: ${mat} (${labelGrupo}) - ${labelTri}`,
-                mensaje: `El profesor/a ${nombreMaestro} ha publicado los criterios de evaluación para el ${labelTri} en la materia "${mat}".\n\n📊 Estructura de Calificación:\n${rubrosTexto}\n\n✍️ Por favor, FIRMA DE ENTERADO.\n\n[REF_ID: ${encObj?.id || 'none'}]`, // Etiqueta invisible
-                audiencia: `Alumno_${alum.id}`
-            }));
+            let notificaciones = [];
+            // Si es un grupo normal, enviamos UN SOLO comunicado a todo el grupo (evita spam y cubre nuevos ingresos)
+            if (!isTec && gid) {
+                notificaciones = [{
+                    autor_id: u.data.user.id,
+                    titulo: `📋 Encuadre: ${mat} (${labelGrupo}) - ${labelTri}`,
+                    mensaje: `El profesor/a ${nombreMaestro} ha publicado los criterios de evaluación para el ${labelTri} en la materia "${mat}".\n\n📊 Estructura de Calificación:\n${rubrosTexto}\n\n✍️ Por favor, FIRMA DE ENTERADO.\n\n[REF_ID: ${encObj?.id || 'none'}]`,
+                    audiencia: `Grupo_${gid}`
+                }];
+            } else {
+                notificaciones = alumnos.map(alum => ({
+                    autor_id: u.data.user.id,
+                    titulo: `📋 Encuadre: ${mat} (${labelGrupo}) - ${labelTri}`,
+                    mensaje: `El profesor/a ${nombreMaestro} ha publicado los criterios de evaluación para el ${labelTri} en la materia "${mat}".\n\n📊 Estructura de Calificación:\n${rubrosTexto}\n\n✍️ Por favor, FIRMA DE ENTERADO.\n\n[REF_ID: ${encObj?.id || 'none'}]`,
+                    audiencia: `Alumno_${alum.id}`
+                }));
+            }
             const { error: errIns } = await supabaseClient.from('comunicados').insert(notificaciones);
             if(errIns) throw errIns;
 
