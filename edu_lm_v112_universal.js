@@ -11418,7 +11418,14 @@ window.loadListaEvalManual = async () => {
         const evalMap = {};
         (evals || []).forEach(e => { evalMap[e.alumno_id] = e.calificacion; });
 
-        let html = '';
+        let html = `
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+                <span style="font-size:0.85rem; color:var(--text-muted);">Asigna calificación individual o general</span>
+                <button class="btn btn-outline" style="border-color:var(--primary); color:var(--primary); font-size:0.8rem; padding:6px 12px; font-weight:600;" onclick="window.llenarTodaEvaluacionManual()">
+                    <i class="fa-solid fa-bolt"></i> Misma calificación a todos
+                </button>
+            </div>
+        `;
         alumnos.forEach((al, index) => {
             const nota = evalMap[al.id] || '';
             const statusColor = nota ? 'var(--success)' : 'var(--border)';
@@ -11450,6 +11457,25 @@ window.loadListaEvalManual = async () => {
         console.error(err);
         contenedor.innerHTML = '<div style="color:var(--danger); padding:20px;">Error al cargar la lista.</div>';
     }
+};
+
+
+window.llenarTodaEvaluacionManual = () => {
+    let newVal = prompt('Ingrese la calificación (0-10) que desea asignar a TODOS los alumnos:\n\n(Nota: Aún podrá modificar calificaciones individuales antes de guardar)');
+    if(newVal === null) return;
+    newVal = newVal.trim();
+    if(newVal === "") return;
+    
+    const num = parseFloat(newVal);
+    if(isNaN(num) || num < 0 || num > 10) return alert('Ingrese una calificación válida entre 0 y 10.');
+
+    const inputs = document.querySelectorAll('.eval-manual-input');
+    inputs.forEach(input => {
+        input.value = num;
+        input.style.borderColor = 'var(--primary)';
+        const row = document.getElementById(`row_eval_${input.getAttribute('data-alumnoid')}`);
+        if(row) row.style.borderColor = 'var(--primary)';
+    });
 };
 
 window.guardarTodasEvaluacionesManual = async () => {
@@ -23346,7 +23372,14 @@ window.loadListaAsistenciaManual = async () => {
             asistMap[a.alumno_id] = a;
         });
 
-        let html = '';
+        let html = `
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+                <span style="font-size:0.85rem; color:var(--text-muted);">Asigna calificación individual o general</span>
+                <button class="btn btn-outline" style="border-color:var(--primary); color:var(--primary); font-size:0.8rem; padding:6px 12px; font-weight:600;" onclick="window.llenarTodaEvaluacionManual()">
+                    <i class="fa-solid fa-bolt"></i> Misma calificación a todos
+                </button>
+            </div>
+        `;
         alumnos.forEach((al, index) => {
             const reg = asistMap[al.id];
             let estadoActual = reg ? reg.estado : (estadoSesion === 'cerrado' ? 'Falta' : 'Pendiente');
