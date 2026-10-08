@@ -1845,7 +1845,7 @@ window.loadMaestrosAdminList = async () => {
             .from('perfiles')
             .select('id, nombre')
             .eq('plantel_id', state.plantelId)
-            .eq('rol', 'Maestro')
+            .eq('rol', 'maestro')
             .order('nombre');
             
         if(error) throw error;
