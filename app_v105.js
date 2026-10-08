@@ -6184,7 +6184,7 @@ window.cargarAlumnosLista = async () => {
         const alumnos = rawAlumnos.map(al => ({
             ...al,
             nombreOrdenado: formatName(al.nombre)
-        })).sort((a,b) => a.nombreOrdenado.localeCompare(b.nombreOrdenado));
+        })).sort((a,b) => a.nombreOrdenado.localeCompare(b.nombreOrdenado)); window._currentListaAlumnos = alumnos;
 
         let htmlRows = '';
         let stats = { sumPromedios: 0, aprobados: 0, reprobados: 0, total: alumnos.length };
@@ -6218,7 +6218,14 @@ window.cargarAlumnosLista = async () => {
                  </tr>`;
             } else {
                 let actHeaders = hasActs 
-                    ? acts.map(a => `<th style="padding:12px; text-align:center; max-width:80px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;" title="${a.titulo} - ${a.rubro_name ? a.rubro_name : 'Sin Rubro'}">${a.titulo}<br><span style="font-size:0.7rem; color:var(--text-muted); font-weight:normal">${a.rubro_name ? (a.rubro_peso+'%') : 'Extra'}</span></th>`).join('')
+                    ? acts.map(a => {
+                        const actTituloSafe = a.titulo.replace(/'/g, "\\'");
+                        return `<th style="padding:12px; text-align:center; max-width:80px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;" title="${a.titulo} - ${a.rubro_name ? a.rubro_name : 'Sin Rubro'}">
+                            ${a.titulo}
+                            <i class="fa-solid fa-bolt" style="cursor:pointer; color:var(--primary); font-size:0.85em; margin-left:4px;" title="Asignar misma calificación a todos" onclick="window.evaluarActividadMasiva('${a.id}', '${actTituloSafe}')"></i>
+                            <br><span style="font-size:0.7rem; color:var(--text-muted); font-weight:normal">${a.rubro_name ? (a.rubro_peso+'%') : 'Extra'}</span>
+                        </th>`;
+                    }).join('')
                     : `<th style="padding:12px; text-align:center;">Actividades</th>`;
 
                 cabecera.innerHTML = `<tr>
@@ -6661,6 +6668,64 @@ window.cargarAlumnosLista = async () => {
     }
 };
 
+
+window.evaluarActividadMasiva = async (actividadId, actTitulo) => {
+    if (!window._currentListaAlumnos || window._currentListaAlumnos.length === 0) return alert("No hay alumnos para calificar.");
+    
+    const rawVal = document.getElementById('listaMaestroGrupo')?.value;
+    if (!rawVal) return;
+    const [idPart, materia] = rawVal.split('|');
+    const currentTrim = state.selectedMaestroTrimestre || 1;
+
+    // Verificar si el periodo de evaluación está bloqueado
+    if (window.checkPaseListaBloqueado) {
+        const bMsg = await window.checkPaseListaBloqueado(materia, rawVal, currentTrim);
+        if (bMsg) {
+            return alert("No es posible editar: " + bMsg.replace(/Pase de lista/g, "Evaluación").replace(/pase de lista/g, "evaluación"));
+        }
+    }
+
+    let newVal = prompt(`Asignar la misma calificación a TODOS los alumnos para "\n${actTitulo}":\n(Ingrese un número entre 0 y 10. Deje vacío para cancelar)`);
+    if(newVal === null) return;
+    newVal = newVal.trim();
+    if(newVal === "") return;
+    
+    const num = parseFloat(newVal);
+    if(isNaN(num) || num < 0 || num > 10) return alert('Ingrese una calificación válida entre 0 y 10.');
+
+    if(!confirm(`¿Estás seguro de asignar un ${num} a todos los ${window._currentListaAlumnos.length} alumnos en esta actividad?`)) return;
+
+    // Prepare batch upsert payload
+    const payload = window._currentListaAlumnos.map(al => ({
+        alumno_id: al.id,
+        actividad_id: actividadId,
+        calificacion: num,
+        fecha_evaluacion: new Date().toISOString(),
+        plantel_id: state.plantelId
+    }));
+
+    try {
+        const u = await supabaseClient.auth.getUser();
+        if(!u.data.user) throw new Error("Sin sesión");
+
+        // Use upsert to update existing or insert new grades
+        const { error } = await supabaseClient.from('evaluaciones_actividades')
+            .upsert(payload, { onConflict: 'actividad_id,alumno_id' });
+            
+        if(error) throw error;
+        
+        // window.showToast might be available, else alert
+        if(window.showToast) window.showToast("Calificaciones masivas asignadas", "success");
+        else alert("Calificaciones asignadas correctamente.");
+        
+        // Refresh the table
+        if(window.cargarAlumnosLista) window.cargarAlumnosLista();
+    } catch(err) {
+        console.error(err);
+        alert("Error al guardar calificaciones masivas: " + err.message);
+    }
+};
+
 window.editarCalificacionLista = async (alumnoId, actividadId, currentCal, actTitulo) => {
     const rawVal = document.getElementById('listaMaestroGrupo')?.value;
     if (!rawVal) return;
@@ -6831,7 +6896,7 @@ window.cargarBoletasGrupo = async () => {
         const alumnos = rawAlumnos.map(al => ({
             ...al,
             nombreOrdenado: formatName(al.nombre)
-        })).sort((a,b) => a.nombreOrdenado.localeCompare(b.nombreOrdenado));
+        })).sort((a,b) => a.nombreOrdenado.localeCompare(b.nombreOrdenado)); window._currentListaAlumnos = alumnos;
 
         // 3. Fetch Calificaciones ya asentadas (Si es modo final, traer los 3 trimestres)
         // Usamos ilike con el nombre de la materia directamente para mayor compatibilidad
