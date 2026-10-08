@@ -1355,15 +1355,15 @@ window.loadMaestrosAdminList = async () => {
     sel.innerHTML = '<option value="">Cargando maestros...</option>';
     try {
         const { data, error } = await supabaseClient
-            .from('perfiles')
-            .select('id, nombre')
+            .from('perfiles_permitidos')
+            .select('email, nombre')
             .eq('plantel_id', state.plantelId)
             .eq('rol', 'maestro')
             .order('nombre');
             
         if(error) throw error;
         
-        sel.innerHTML = '<option value="">-- Seleccione un Maestro --</option>' + (data || []).map(m => `<option value="${m.id}">${m.nombre}</option>`).join('');
+        sel.innerHTML = '<option value="">-- Seleccione un Maestro --</option>' + (data || []).map(m => `<option value="${m.email}">${m.nombre || m.email}</option>`).join('');
         
     } catch(err) {
         console.error(err);
@@ -1371,11 +1371,11 @@ window.loadMaestrosAdminList = async () => {
     }
 };
 
-window.cargarMateriasMaestroAdmin = async (maestroId) => {
+window.cargarMateriasMaestroAdmin = async (docenteEmail) => {
     const selG = document.getElementById('listaMaestroGrupo');
     if(!selG) return;
     
-    if(!maestroId) {
+    if(!docenteEmail) {
         selG.innerHTML = '<option value="">Seleccione un maestro primero...</option>';
         return;
     }
@@ -1385,7 +1385,7 @@ window.cargarMateriasMaestroAdmin = async (maestroId) => {
         const { data: asignaciones, error } = await supabaseClient
             .from('asignaciones_maestros')
             .select('id, grupo_id, materia, target_grado, grupos(nombre)')
-            .eq('maestro_id', maestroId)
+            .eq('docente_email', docenteEmail)
             .order('id');
             
         if(error) throw error;
