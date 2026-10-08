@@ -6331,6 +6331,19 @@ window.cargarAlumnosLista = async () => {
 };
 
 window.editarCalificacionLista = async (alumnoId, actividadId, currentCal, actTitulo) => {
+    const rawVal = document.getElementById('listaMaestroGrupo')?.value;
+    if (!rawVal) return;
+    const [idPart, materia] = rawVal.split('|');
+    const currentTrim = state.selectedMaestroTrimestre || 1;
+
+    // Verificar si el periodo de evaluación está bloqueado
+    if (window.checkPaseListaBloqueado) {
+        const bMsg = await window.checkPaseListaBloqueado(materia, rawVal, currentTrim);
+        if (bMsg) {
+            return alert("No es posible editar: " + bMsg.replace(/Pase de lista/g, "Evaluación").replace(/pase de lista/g, "evaluación"));
+        }
+    }
+
     let promptMsg = currentCal ? `Editar calificación para "${actTitulo}" (Actual: ${currentCal}):` : `Asignar calificación para "${actTitulo}":`;
     let newVal = prompt(promptMsg, currentCal);
     if(newVal === null) return;
