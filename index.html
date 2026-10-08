@@ -23,7 +23,7 @@
     <!-- Flatpickr CSS -->
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
     <!-- CSS -->
-    <link rel="stylesheet" href="styles.css?v=12">
+    <link rel="stylesheet" href="styles.css">
 </head>
 <body>
     
@@ -53,13 +53,13 @@
     <script src="https://cdn.jsdelivr.net/npm/flatpickr/dist/l10n/es.js"></script>
 
     <!-- Lógica Principal Sincronizada (v114 + Watchdog v1) -->
-    <script src="edu_lm_v112_universal.js?v=823"></script>
+    <script src="edu_lm_v112_universal.js"></script>
 
     <!-- Service Worker Registration -->
     <script>
       if ('serviceWorker' in navigator) {
         window.addEventListener('load', () => {
-          navigator.serviceWorker.register('./sw.js?v=404')
+          navigator.serviceWorker.register('./sw.js')
             .then(reg => {
                 console.log('Edu-LM PWA: Service Worker registrado.', reg);
                 reg.onupdatefound = () => {
