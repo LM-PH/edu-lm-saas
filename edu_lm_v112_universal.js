@@ -879,7 +879,8 @@ function renderSidebar() {
       { name: 'Administración SaaS', path: '/master/saas', icon: 'fa-globe' },
       ...(state.plantelId ? [
           { type: 'divider', text: `Gestionando: ${CONFIG.schoolName}` },
-          { name: 'Directorio de Gestión', path: '/master/gestion-perfiles', icon: 'fa-address-book' }
+          { name: 'Directorio de Gestión', path: '/master/gestion-perfiles', icon: 'fa-address-book' },
+      { name: 'Auditoría de Actividad', path: '/master/auditoria', icon: 'fa-user-secret' }
       ] : [])
     ],
     admin: [
@@ -8235,6 +8236,7 @@ async function renderPage(path) {
                 </div>`;
     case '/master/saas': return (state.isMaster) ? await renderMasterSaaS() : '<h2>Acceso Denegado</h2>';
     case '/master/gestion-perfiles': return (state.isMaster) ? await renderMasterGestionPerfiles() : '<h2>Acceso Denegado</h2>';
+    case '/master/auditoria': return (state.isMaster) ? await renderMasterAuditoria() : '<h2>Acceso Denegado</h2>';
     case '/admin/inscripcion': return renderAdminInscripcion();
     case '/admin/expediente': return renderAdminExpediente();
     case '/admin/listas': return window.renderAdminListas();
@@ -22739,5 +22741,240 @@ window.eliminarPersona = async (idPermitido, email, nombre, rol = '') => {
         console.error(err);
         alert("Fallo al eliminar: " + err.message);
     }
+};
+
+
+
+// ==========================================
+// MÓDULO DE AUDITORÍA (SaaS Master)
+// ==========================================
+
+async function renderMasterAuditoria() {
+    setTimeout(() => { if(window.loadAuditoriaList) window.loadAuditoriaList(); }, 100);
+    return `
+        <div class="page-header" style="margin-bottom: 24px;">
+            <h2 class="page-title"><i class="fa-solid fa-user-secret" style="color:var(--primary)"></i> Auditoría de Actividad del Sistema</h2>
+            <p class="page-subtitle">Registro forense de modificaciones académicas. Solo lectura, infalsificable.</p>
+        </div>
+
+        <div class="card shadow-sm" style="margin-bottom: 24px;">
+            <div style="display:flex; flex-wrap:wrap; gap:16px; align-items:flex-end;">
+                <div style="flex:1; min-width:200px;">
+                    <label style="font-weight:600; font-size:0.85rem; margin-bottom:4px; display:block; color:var(--text-muted)">Buscar Usuario (Nombre o Email)</label>
+                    <input type="text" id="auditSearchInput" class="form-input" placeholder="Ej. Juan Pérez..." onkeyup="if(event.key==='Enter') window.loadAuditoriaList()">
+                </div>
+                <div style="flex:1; min-width:150px;">
+                    <label style="font-weight:600; font-size:0.85rem; margin-bottom:4px; display:block; color:var(--text-muted)">Operación</label>
+                    <select id="auditOpSelect" class="form-select" onchange="window.loadAuditoriaList()">
+                        <option value="">Todas</option>
+                        <option value="INSERT">Creaciones (INSERT)</option>
+                        <option value="UPDATE">Modificaciones (UPDATE)</option>
+                        <option value="DELETE">Eliminaciones (DELETE)</option>
+                    </select>
+                </div>
+                <div style="flex:1; min-width:150px;">
+                    <label style="font-weight:600; font-size:0.85rem; margin-bottom:4px; display:block; color:var(--text-muted)">Tabla / Módulo</label>
+                    <select id="auditTableSelect" class="form-select" onchange="window.loadAuditoriaList()">
+                        <option value="">Todas las tablas</option>
+                        <option value="asistencias">Asistencias / Faltas</option>
+                        <option value="calificaciones">Calificaciones</option>
+                        <option value="reportes_conducta">Incidencias / Reportes</option>
+                    </select>
+                </div>
+                <div style="flex:1; min-width:150px;">
+                    <label style="font-weight:600; font-size:0.85rem; margin-bottom:4px; display:block; color:var(--text-muted)">Fecha</label>
+                    <input type="date" id="auditDateInput" class="form-input" onchange="window.loadAuditoriaList()">
+                </div>
+                <div>
+                    <button class="btn btn-primary" onclick="window.loadAuditoriaList()"><i class="fa-solid fa-search"></i> Buscar</button>
+                    <button class="btn btn-outline" onclick="window.exportAuditoriaCSV()" style="margin-left:8px;"><i class="fa-solid fa-file-csv"></i> Exportar</button>
+                </div>
+            </div>
+        </div>
+
+        <div class="card shadow-sm" style="overflow-x:auto;">
+            <table style="width:100%; min-width:900px; border-collapse:collapse; font-size:0.85rem;">
+                <thead>
+                    <tr style="border-bottom:2px solid var(--border); color:var(--text-muted); text-align:left;">
+                        <th style="padding:12px;">Fecha y Hora</th>
+                        <th style="padding:12px;">Usuario Responsable</th>
+                        <th style="padding:12px;">Acción y Módulo</th>
+                        <th style="padding:12px;">Dispositivo / IP</th>
+                        <th style="padding:12px;">Detalle del Cambio</th>
+                    </tr>
+                </thead>
+                <tbody id="tbodyAuditoria">
+                    <tr><td colspan="5" style="text-align:center; padding:30px; color:var(--text-muted)"><i class="fa-solid fa-spinner fa-spin"></i> Cargando registros de auditoría...</td></tr>
+                </tbody>
+            </table>
+            <div style="padding: 15px; text-align:center; border-top:1px solid var(--border);">
+                <button class="btn btn-outline btn-sm" onclick="window.loadAuditoriaList(true)" id="btnCargarMasAudit">Cargar más resultados</button>
+            </div>
+        </div>
+    `;
+}
+
+window._auditPagination = 0;
+window._auditCurrentData = [];
+
+window.loadAuditoriaList = async (loadMore = false) => {
+    const tbody = document.getElementById('tbodyAuditoria');
+    if(!tbody) return;
+
+    if(!loadMore) {
+        window._auditPagination = 0;
+        window._auditCurrentData = [];
+        tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; padding:30px; color:var(--text-muted)"><i class="fa-solid fa-spinner fa-spin"></i> Buscando en el registro inmutable...</td></tr>';
+    }
+
+    try {
+        const search = document.getElementById('auditSearchInput')?.value.trim();
+        const op = document.getElementById('auditOpSelect')?.value;
+        const tbl = document.getElementById('auditTableSelect')?.value;
+        const dateStr = document.getElementById('auditDateInput')?.value;
+
+        // Primero, si hay búsqueda por usuario, necesitamos encontrar su user_id
+        let userIds = [];
+        if (search) {
+            const { data: usersFound } = await supabaseClient.from('perfiles').select('id').or(`nombre.ilike.%${search}%,email.ilike.%${search}%`);
+            if (usersFound && usersFound.length > 0) userIds = usersFound.map(u => u.id);
+            else {
+                tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; padding:30px; color:var(--text-muted)">No se encontró ningún usuario con ese nombre/correo.</td></tr>';
+                return;
+            }
+        }
+
+        let query = supabaseClient.from('audit_log').select('*, perfiles!usuario_id(nombre, email, rol)', { count: 'exact' });
+
+        if (op) query = query.eq('operacion', op);
+        if (tbl) query = query.eq('tabla_afectada', tbl);
+        if (userIds.length > 0) query = query.in('usuario_id', userIds);
+        
+        if (dateStr) {
+            const startDate = new Date(`${dateStr}T00:00:00Z`);
+            const endDate = new Date(`${dateStr}T23:59:59Z`);
+            query = query.gte('fecha', startDate.toISOString()).lte('fecha', endDate.toISOString());
+        }
+
+        const pageSize = 50;
+        query = query.order('fecha', { ascending: false })
+                     .range(window._auditPagination * pageSize, (window._auditPagination + 1) * pageSize - 1);
+
+        const { data, count, error } = await query;
+        if(error) throw error;
+
+        if (!loadMore) window._auditCurrentData = data || [];
+        else window._auditCurrentData = [...window._auditCurrentData, ...(data || [])];
+
+        const btnCargarMas = document.getElementById('btnCargarMasAudit');
+        if (btnCargarMas) btnCargarMas.style.display = (window._auditCurrentData.length < count) ? 'inline-block' : 'none';
+
+        if(window._auditCurrentData.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; padding:30px; color:var(--text-muted)">No se encontraron registros de auditoría que coincidan con los filtros.</td></tr>';
+            return;
+        }
+
+        let html = '';
+        window._auditCurrentData.forEach(row => {
+            const dt = new Date(row.fecha).toLocaleString('es-MX', { dateStyle: 'short', timeStyle: 'short' });
+            
+            let opColor = 'gray';
+            let opIcon = 'fa-circle';
+            if(row.operacion === 'INSERT') { opColor = 'var(--success)'; opIcon = 'fa-plus'; }
+            else if(row.operacion === 'UPDATE') { opColor = 'var(--warning)'; opIcon = 'fa-pen'; }
+            else if(row.operacion === 'DELETE') { opColor = 'var(--danger)'; opIcon = 'fa-trash'; }
+
+            // Generar un diff humano
+            let diffHtml = '<div style="font-family:monospace; font-size:0.75rem; background:#f8fafc; padding:8px; border-radius:6px; border:1px solid var(--border); overflow-x:auto; max-width:350px;">';
+            if (row.operacion === 'UPDATE' && row.valores_viejos && row.valores_nuevos) {
+                const changedKeys = Object.keys(row.valores_nuevos).filter(k => row.valores_viejos[k] !== row.valores_nuevos[k]);
+                if(changedKeys.length === 0) diffHtml += '<i>(Actualización sin cambios en valores rastreados)</i>';
+                changedKeys.forEach(k => {
+                    if (k === 'updated_at' || k === 'fecha' || k === 'creado_en') return;
+                    diffHtml += `<div style="margin-bottom:2px;"><strong>${k}:</strong> <span style="color:var(--danger); text-decoration:line-through;">${row.valores_viejos[k] ?? 'null'}</span> &rarr; <span style="color:var(--success); font-weight:bold;">${row.valores_nuevos[k] ?? 'null'}</span></div>`;
+                });
+            } else if (row.operacion === 'INSERT') {
+                const estado = row.valores_nuevos?.estado || row.valores_nuevos?.calificacion || 'Nuevo registro';
+                diffHtml += `<span style="color:var(--success)">${estado}</span> (ID: ${row.valores_nuevos?.id?.substring(0,8) || 'N/A'}) `;
+            } else if (row.operacion === 'DELETE') {
+                diffHtml += `<span style="color:var(--danger)">Registro eliminado</span> (ID: ${row.valores_viejos?.id?.substring(0,8) || 'N/A'})`;
+            }
+            diffHtml += '</div>';
+
+            const userText = row.perfiles ? `<div style="font-weight:bold; color:var(--primary)">${row.perfiles.nombre || 'Sin nombre'}</div><div style="font-size:0.75rem;">${row.perfiles.email}</div><div style="font-size:0.7rem; color:var(--text-muted)">Rol: ${row.perfiles.rol}</div>` : `<div style="color:var(--danger)">Usuario Eliminado/Desconocido</div><div style="font-size:0.7rem; color:var(--text-muted)">ID: ${row.usuario_id}</div>`;
+
+            // Detectar sistema desde User Agent
+            const ua = row.user_agent || '';
+            let osIcon = 'fa-desktop';
+            if(ua.includes('Android')) osIcon = 'fa-android';
+            else if(ua.includes('iPhone') || ua.includes('iPad')) osIcon = 'fa-apple';
+            else if(ua.includes('Windows')) osIcon = 'fa-windows';
+            else if(ua.includes('Mac OS')) osIcon = 'fa-apple';
+
+            html += `
+                <tr style="border-bottom:1px solid var(--border); vertical-align:top;">
+                    <td style="padding:12px; white-space:nowrap;">${dt}</td>
+                    <td style="padding:12px;">${userText}</td>
+                    <td style="padding:12px;">
+                        <div style="font-weight:bold; color:${opColor};"><i class="fa-solid ${opIcon}"></i> ${row.operacion}</div>
+                        <div style="font-size:0.75rem; font-family:monospace; margin-top:4px;">Tabla: ${row.tabla_afectada}</div>
+                    </td>
+                    <td style="padding:12px; font-size:0.75rem;">
+                        <div><i class="fa-solid ${osIcon}" style="color:var(--text-muted)"></i> ${row.ip_address || 'IP Desconocida'}</div>
+                        <div style="color:var(--text-muted); margin-top:4px; max-width:150px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;" title="${ua}">${ua || 'N/A'}</div>
+                    </td>
+                    <td style="padding:12px;">${diffHtml}</td>
+                </tr>
+            `;
+        });
+        tbody.innerHTML = html;
+        window._auditPagination++;
+
+    } catch(err) {
+        console.error(err);
+        tbody.innerHTML = `<tr><td colspan="5" style="text-align:center; padding:30px; color:var(--danger)"><i class="fa-solid fa-triangle-exclamation"></i> Error al cargar auditoría: ${err.message}</td></tr>`;
+        // Check if table exists
+        if(err.message.includes('relation "public.audit_log" does not exist')) {
+            tbody.innerHTML += '<tr><td colspan="5" style="text-align:center; color:var(--text-muted);">Debes ejecutar el script SQL "migration_auditoria.sql" en tu base de datos para habilitar este módulo.</td></tr>';
+        }
+    }
+};
+
+window.exportAuditoriaCSV = () => {
+    if(!window._auditCurrentData || window._auditCurrentData.length === 0) {
+        alert("No hay datos para exportar. Realiza una búsqueda primero.");
+        return;
+    }
+    
+    let csv = "Fecha,Usuario,Email,Operacion,Tabla,IP,Dispositivo,Cambios\n";
+    window._auditCurrentData.forEach(row => {
+        const dt = new Date(row.fecha).toLocaleString('es-MX');
+        const user = row.perfiles?.nombre || 'Desconocido';
+        const email = row.perfiles?.email || row.usuario_id || '';
+        const op = row.operacion;
+        const tabla = row.tabla_afectada;
+        const ip = row.ip_address || '';
+        const ua = (row.user_agent || '').replace(/,/g, ' '); // quitar comas
+        
+        let cambios = '';
+        if(op === 'UPDATE' && row.valores_viejos && row.valores_nuevos) {
+            const changedKeys = Object.keys(row.valores_nuevos).filter(k => row.valores_viejos[k] !== row.valores_nuevos[k]);
+            cambios = changedKeys.map(k => `${k}: ${row.valores_viejos[k]}->${row.valores_nuevos[k]}`).join(' | ');
+        } else if(op === 'INSERT') {
+            cambios = 'NUEVO_REGISTRO_ID:' + (row.valores_nuevos?.id || '');
+        } else if(op === 'DELETE') {
+            cambios = 'ELIMINADO_ID:' + (row.valores_viejos?.id || '');
+        }
+        
+        csv += `"${dt}","${user}","${email}","${op}","${tabla}","${ip}","${ua}","${cambios}"\n`;
+    });
+    
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `Auditoria_EduLM_${new Date().getTime()}.csv`;
+    a.click();
+    window.URL.revokeObjectURL(url);
 };
 
