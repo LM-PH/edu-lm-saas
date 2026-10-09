@@ -10752,7 +10752,7 @@ window.loadTimelinePersonal = async (selectedDate) => {
         // Filtrar avisos de horarios (solo deben verse en el perfil de estudiante)
         // Y ocultar comunicados de maestros de la bandeja oficial
         if (data && userRole !== 'alumno') {
-            data = data.filter(c => !c.titulo?.includes('HORARIO DE CLASE DISPONIBLE') && c.tipo !== 'AvisoMaestro');
+            data = data.filter(c => !c.titulo?.includes('HORARIO DE CLASE DISPONIBLE') && c.tipo !== 'AvisoMaestro' && !c.titulo?.includes('📋 Encuadre:'));
         }
 
         // Filtrar justificantes médicos para maestros de tecnología (solo ven de sus propios alumnos de taller)
@@ -15498,25 +15498,14 @@ window.cargarEncuadreActivo = async () => {
             const labelTri = (window.currentTrimestre || 1) + "° Trimestre";
 
             let notificaciones = [];
-            // Si es un grupo normal, enviamos UN SOLO comunicado a todo el grupo (evita spam y cubre nuevos ingresos)
-            if (!isTec && gid) {
-                notificaciones = [{
-                    autor_id: u.data.user.id,
-                    titulo: `📋 Encuadre: ${mat} (${labelGrupo}) - ${labelTri}`,
-                    mensaje: `El profesor/a ${nombreMaestro} ha publicado los criterios de evaluación para el ${labelTri} en la materia "${mat}".\n\n📊 Estructura de Calificación:\n${rubrosTexto}\n\n✍️ Por favor, FIRMA DE ENTERADO.\n\n[REF_ID: ${encObj?.id || 'none'}]`,
-                    audiencia: `Grupo_${gid}`,
-                    plantel_id: state.plantelId
-                }];
-            } else {
-                // Para talleres, enviamos a cada alumno individualmente ya que no comparten grupo
-                notificaciones = alumnos.map(alum => ({
-                    autor_id: u.data.user.id,
-                    titulo: `📋 Encuadre: ${mat} (${labelGrupo}) - ${labelTri}`,
-                    mensaje: `El profesor/a ${nombreMaestro} ha publicado los criterios de evaluación para el ${labelTri} en la materia "${mat}".\n\n📊 Estructura de Calificación:\n${rubrosTexto}\n\n✍️ Por favor, FIRMA DE ENTERADO.\n\n[REF_ID: ${encObj?.id || 'none'}]`,
-                    audiencia: `Alumno_${alum.id}`,
-                    plantel_id: state.plantelId
-                }));
-            }
+            // Enviamos a cada alumno individualmente para evitar que le llegue a otros maestros del mismo grupo
+            notificaciones = alumnos.map(alum => ({
+                autor_id: u.data.user.id,
+                titulo: `📋 Encuadre: ${mat} (${labelGrupo}) - ${labelTri}`,
+                mensaje: `El profesor/a ${nombreMaestro} ha publicado los criterios de evaluación para el ${labelTri} en la materia "${mat}".\n\n📊 Estructura de Calificación:\n${rubrosTexto}\n\n✍️ Por favor, FIRMA DE ENTERADO.\n\n[REF_ID: ${encObj?.id || 'none'}]`,
+                audiencia: `Alumno_${alum.id}`,
+                plantel_id: state.plantelId
+            }));
             const { error: errIns } = await supabaseClient.from('comunicados').insert(notificaciones);
             if(errIns) throw errIns;
 
