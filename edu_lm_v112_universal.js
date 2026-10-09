@@ -22441,3 +22441,272 @@ window.limpiarCitatoriosErroneos = async () => {
         console.error("Error en limpieza:", e);
     }
 };
+window.cambiarTabPersonal = (tab, btnEl) => {
+    window._activePersonalTab = tab;
+    document.querySelectorAll('#tabsPersonalAdmin .btn-tab-personal').forEach(b => {
+        b.style.background = 'transparent';
+        b.style.border = 'none';
+        b.style.color = 'var(--text-muted)';
+    });
+    btnEl.style.background = 'white';
+    btnEl.style.border = '1px solid var(--border)';
+    btnEl.style.color = 'var(--text-main)';
+    
+    // Mostrar/Ocultar Sub-tabs de Alumnos
+    const subTabs = document.getElementById('subTabsAlumnos');
+    if(subTabs) {
+        subTabs.style.display = (tab === 'alumno') ? 'flex' : 'none';
+    }
+
+    // Recuperar búsqueda actual
+    const searchInput = document.getElementById('busquedaPersonalAutorizado');
+    const searchValue = searchInput ? searchInput.value : '';
+    window.loadListasAdminPersonal(searchValue);
+};
+
+window.loadFiltrosAlumnosDinamicos = async () => {
+    const sGrado = document.getElementById('selGradoAlumnoTab');
+    const sGrupo = document.getElementById('selGrupoAlumnoTab');
+    if(!sGrado || !sGrupo) return;
+    
+    try {
+        const { data: grupos, error } = await supabaseClient.from('grupos')
+            .select('nombre')
+            .eq('plantel_id', state.plantelId);
+        
+        if(error) throw error;
+        
+        const gradosSet = new Set();
+        const gruposSet = new Set();
+        
+        grupos.forEach(g => {
+            const nom = g.nombre || ''; // Ej: "1°A"
+            const matchGrado = nom.match(/^\d+°?/);
+            if(matchGrado) gradosSet.add(matchGrado[0]);
+            
+            const soloGrupo = nom.replace(/^\d+°?/, '').trim();
+            if(soloGrupo) gruposSet.add(soloGrupo);
+        });
+        
+        const valGrado = sGrado.value;
+        const valGrupo = sGrupo.value;
+        
+        sGrado.innerHTML = '<option value="">Grados</option>' + [...gradosSet].sort().map(g => `<option value="${g}">${g}${g.includes('°') ? '' : '°'}</option>`).join('');
+        sGrupo.innerHTML = '<option value="">Grupos</option>' + [...gruposSet].sort().map(g => `<option value="${g}">${g}</option>`).join('');
+        
+        sGrado.value = valGrado;
+        sGrupo.value = valGrupo;
+    } catch(e) { console.error("Error cargando filtros dinámicos:", e); alert("Error filtros: " + (e.message || JSON.stringify(e))); }
+};
+
+window.loadListasAdminPersonal = async (searchTerm = '') => {
+    const tbody = document.getElementById('tbodyPersonalAdmin');
+    const totalCont = document.getElementById('totalPersonalCounter');
+    if(!tbody) return;
+
+    if (!window._activePersonalTab) window._activePersonalTab = 'directivo';
+
+    try {
+        const currentPlantelID = state.plantelId || 'general';
+        let itemsToRender = [];
+        
+        if (window._activePersonalTab === 'alumno') {
+            const grado = document.getElementById('selGradoAlumnoTab')?.value || '';
+            const grupo = document.getElementById('selGrupoAlumnoTab')?.value || '';
+            
+            if (!grado || !grupo) {
+                tbody.innerHTML = '<tr><td colspan="4" style="text-align:center; padding:40px; color:var(--text-muted)"><i class="fa-solid fa-filter" style="font-size:2rem; display:block; margin-bottom:10px; opacity:0.3;"></i> Por favor selecciona un Grado y Grupo para ver la lista de alumnos.</td></tr>';
+                totalCont.innerText = "0";
+                return;
+            }
+
+            let q = supabaseClient.from('alumnos')
+                .select('*, grupos(nombre)')
+                .eq('plantel_id', currentPlantelID);
+            
+            if (searchTerm) q = q.or(`nombre.ilike.%${searchTerm}%,contacto_email.ilike.%${searchTerm}%`);
+            
+            const { data: students, error: sErr } = await q.order('nombre');
+            if(sErr) throw sErr;
+            
+            // Recoger todos los correos para traer sus contraseñas temporales (v112)
+            const allEmails = students.map(s => s.contacto_email).filter(Boolean);
+            let passMap = {};
+            if (allEmails.length > 0) {
+                const { data: pData } = await supabaseClient.from('perfiles_permitidos').select('email, temp_pass').in('email', allEmails);
+                if (pData) {
+                    pData.forEach(pd => { if(pd.temp_pass) passMap[pd.email] = pd.temp_pass; });
+                }
+            }
+
+            // Filtro por grado/grupo
+            itemsToRender = students.filter(s => {
+                const gName = (s.grupos?.nombre || '').toUpperCase();
+                let ok = true;
+                if(grado && !gName.startsWith(grado.toUpperCase())) ok = false;
+                if(grupo && !gName.endsWith(grupo.toUpperCase())) ok = false;
+                return ok;
+            }).map(s => ({
+                id: s.id,
+                nombre: s.nombre,
+                email: s.contacto_email || 'Sin correo',
+                rol: 'alumno',
+                created_at: s.creado_en || s.created_at,
+                estado: 'activo', 
+                grupo_nom: s.grupos?.nombre,
+                temp_pass: passMap[s.contacto_email] || null
+            }));
+            
+        } else {
+            let query = supabaseClient.from('perfiles_permitidos')
+                .select('*')
+                .neq('rol', 'alumno')
+                .eq('plantel_id', currentPlantelID);
+            
+            if (searchTerm) query = query.or(`nombre.ilike.%${searchTerm}%,email.ilike.%${searchTerm}%`);
+            
+            const { data: allStaff, error } = await query.order('nombre');
+            if(error) throw error;
+            
+            let tabRoles = [];
+            if(window._activePersonalTab === 'admin') tabRoles = ['admin', 'secretaria_direccion', 'administrativo'];
+            else if(window._activePersonalTab === 'maestro') tabRoles = ['maestro'];
+            else if(window._activePersonalTab === 'apoyo') tabRoles = ['apoyo'];
+            else if(window._activePersonalTab === 'directivo') tabRoles = ['directivo'];
+            else if(window._activePersonalTab === 'biblioteca') tabRoles = ['biblioteca'];
+            
+            itemsToRender = allStaff.filter(p => tabRoles.includes(p.rol));
+        }
+
+        // Ordenar por nombre (asumiendo Apellido Paterno al inicio)
+        itemsToRender.sort((a, b) => (a.nombre || '').localeCompare((b.nombre || ''), 'es', { sensitivity: 'base' }));
+
+        totalCont.innerText = itemsToRender.length;
+
+        if(itemsToRender.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="4" style="text-align:center; padding:20px; color:var(--text-muted)">No se encontraron registros en esta categoría.</td></tr>';
+            return;
+        }
+
+        let html = '';
+        itemsToRender.forEach(p => {
+            const roleLabels = { 'admin': 'Administrador', 'secretaria_direccion': 'Secretaría de Dirección', 'maestro': 'Maestro', 'apoyo': 'Apoyo', 'directivo': 'Directivo', 'alumno': 'Alumno', 'biblioteca': 'Biblioteca' };
+            const roleClass = (p.rol === 'admin' || p.rol === 'directivo') ? 'badge-primary' : 
+                              (p.rol === 'maestro' ? 'badge-success' : 
+                              (p.rol === 'alumno' ? 'badge-warning' : 'badge-outline'));
+            const statusLabel = p.estado === 'activo' ? '<span style="color:var(--success)">● Activo</span>' : '<span style="color:var(--warning)">○ Pendiente</span>';
+            
+            html += `
+                <tr style="border-bottom:1px solid var(--border)">
+                    <td style="padding:12px;">
+                        <div style="font-weight:700; color:var(--primary); font-size:1rem;">${p.nombre || 'Sin nombre registrado'}</div>
+                        <div style="font-size:0.8rem; color:var(--text-muted); font-family:monospace;">${p.email}</div>
+                        ${p.temp_pass ? `
+                            <div style="margin-top:6px; display:flex; align-items:center; gap:8px;">
+                                <div id="pass-${p.id || p.email.replace(/@|\./g,'')}" style="display:none; font-size:0.8rem; background:var(--primary); color:#fff; padding:3px 10px; border-radius:8px; font-weight:700;">
+                                    <i class="fa-solid fa-key"></i> ${p.temp_pass}
+                                </div>
+                                <button class="btn btn-xs" style="padding:2px 8px; font-size:0.7rem; background:#f3f4f6; border:1px solid #d1d5db; height:22px;" onclick="const e=document.getElementById('pass-${p.id || p.email.replace(/@|\./g,'')}'); const isHid=e.style.display==='none'; e.style.display=isHid?'block':'none'; this.innerText=isHid?'Ocultar':'Ver Clave'">
+                                    Ver Clave
+                                </button>
+                            </div>
+                        ` : ''}
+                    </td>
+                    <td style="padding:12px; font-size:0.85rem; color:var(--text-muted)">
+                        ${statusLabel}
+                        <div style="font-size:0.7rem;">Desde: ${new Date(p.created_at).toLocaleDateString()}</div>
+                    </td>
+                    <td style="padding:12px; text-align:center;">
+                        <span class="badge ${roleClass}" style="display:block; margin-bottom:4px;">${p.grupo_nom ? `Grupo ${p.grupo_nom}` : (roleLabels[p.rol] || p.rol)}</span>
+                        ${p.taller ? `<span class="badge badge-outline" style="font-size:0.7rem;"><i class="fa-solid fa-microchip"></i> ${p.taller}</span>` : ''}
+                    </td>
+                    <td style="padding:12px; text-align:center;">
+                        ${p.rol === 'alumno' ? `
+                        <button class="btn btn-outline btn-xs" 
+                                style="color:var(--primary); border-color:var(--primary); margin-bottom:5px; width:100%;" 
+                                onclick="window.editarAlumnoModal('${p.id}')">
+                            <i class="fa-solid fa-pen-to-square"></i> Editar Datos
+                        </button><br>` : `
+                        <button class="btn btn-outline btn-xs" 
+                                style="color:var(--primary); border-color:var(--primary); margin-bottom:5px; width:100%;" 
+                                onclick="window.editarPersonalModal('${p.id}')">
+                            <i class="fa-solid fa-pen-to-square"></i> Editar Datos
+                        </button><br>`}
+                        <button class="btn btn-outline btn-xs" 
+                                style="color:var(--danger); border-color:var(--danger);" 
+                                onclick="window.eliminarPersona('${p.id}', '${p.email}', '${p.nombre}', '${p.rol}')">
+                            <i class="fa-solid fa-trash-can"></i> Quitar Permiso
+                        </button>
+                    </td>
+                </tr>
+            `;
+        });
+        tbody.innerHTML = html;
+
+    } catch(err) {
+        console.error(err);
+        tbody.innerHTML = `<tr><td colspan="4" style="text-align:center; color:var(--danger)">Error al cargar lista: ${err.message}</td></tr>`;
+    }
+};
+
+window.eliminarPersona = async (idPermitido, email, nombre, rol = '') => {
+    const isDirectivo = state.role === 'directivo' || state.role === 'secretaria_direccion';
+    const confirmMsg = isDirectivo 
+        ? `⚠️ ¿Deseas ELIMINAR AHORA a "${nombre}" (${email})? Esta acción es inmediata.`
+        : `⚠️ ¿Deseas SOLICITAR LA BAJA de "${nombre}" (${email})? El Directivo deberá autorizar este movimiento.`;
+
+    if(!confirm(confirmMsg)) return;
+
+    try {
+        if (isDirectivo) {
+            // Acción Directa para Directivos
+            if (rol === 'alumno') {
+                if (idPermitido && idPermitido !== 'undefined') {
+                    await supabaseClient.rpc('eliminar_alumno_seguro', { p_alumno_id: idPermitido, p_plantel_id: state.plantelId });
+                    await supabaseClient.from('perfiles_permitidos').delete().eq('email', email);
+                } else {
+                    // Alumno huérfano (sin registro en perfiles_permitidos)
+                    await supabaseClient.from('alumnos').delete().eq('contacto_email', email).eq('plantel_id', state.plantelId);
+                    await supabaseClient.rpc('eliminar_usuario_por_email', { p_email: email, p_plantel_id: state.plantelId });
+                }
+                window.showToast("Alumno eliminado correctamente.", "success");
+            } else {
+                await supabaseClient.from('asignaciones_maestros').delete().eq('docente_email', email).eq('plantel_id', state.plantelId).eq('plantel_id', state.plantelId);
+                if (idPermitido && idPermitido !== 'undefined') {
+                    const { error: errPerm } = await supabaseClient.from('perfiles_permitidos').delete().eq('id', idPermitido);
+                    if(errPerm) throw errPerm;
+                }
+                
+                await supabaseClient.rpc('eliminar_usuario_por_email', { p_email: email, p_plantel_id: state.plantelId });
+                window.showToast("Personal eliminado y acceso revocado.", "success");
+            }
+        } else {
+            // Solicitud para Admins
+            const datosSol = await window.obtenerDatosSolicitanteActual();
+            const actionType = (rol === 'alumno') ? 'delete_alumno' : 'delete_personal';
+            const reqType = (rol === 'alumno') ? 'BAJA DE ALUMNO' : 'BAJA DE PERSONAL';
+            const { error: errReq } = await supabaseClient.from('autorizaciones_movimientos').insert([{
+                plantel_id: state.plantelId,
+                tipo_accion: reqType,
+                detalles: `Solicitado por ${datosSol.solicitante_nombre}: Eliminar acceso a ${nombre} (${email})`,
+                estado: 'pendiente',
+                payload_json: {
+                    action: actionType,
+                    id_permitido: idPermitido,
+                    email: email,
+                    nombre: nombre,
+                    ...datosSol
+                }
+            }]);
+            if(errReq) throw errReq;
+            window.showToast("Solicitud de baja enviada al Directivo.", "info");
+        }
+        
+        if(window.loadListasAdminPersonal) window.loadListasAdminPersonal();
+        if(window.loadPersonalDirectivo) window.loadPersonalDirectivo();
+    } catch(err) {
+        console.error(err);
+        alert("Fallo al eliminar: " + err.message);
+    }
+};
+
