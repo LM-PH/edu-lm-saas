@@ -22836,7 +22836,7 @@ window.loadAuditoriaList = async (loadMore = false) => {
         // Primero, si hay búsqueda por usuario, necesitamos encontrar su user_id
         let userIds = [];
         if (search) {
-            const { data: usersFound } = await supabaseClient.from('perfiles').select('id').or(`nombre.ilike.%${search}%,email.ilike.%${search}%`);
+            const { data: usersFound } = await supabaseClient.from('perfiles').select('id').ilike(`nombre`, `%${search}%`);
             if (usersFound && usersFound.length > 0) userIds = usersFound.map(u => u.id);
             else {
                 tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; padding:30px; color:var(--text-muted)">No se encontró ningún usuario con ese nombre/correo.</td></tr>';
