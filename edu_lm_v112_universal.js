@@ -22765,9 +22765,8 @@ async function renderMasterAuditoria() {
                 <div style="flex:1; min-width:200px;">
                     <label style="font-weight:600; font-size:0.85rem; margin-bottom:4px; display:block; color:var(--text-muted)">Buscar Usuario (Nombre o Email)</label>
                     
-                    <select id="auditSearchInput" class="form-select" onchange="window.loadAuditoriaList()">
-                        <option value="">Todos los usuarios</option>
-                    </select>
+                    <input type="text" id="auditSearchInput" list="auditUsersDatalist" class="form-input" placeholder="Escribe o selecciona..." onchange="window.loadAuditoriaList()" onkeyup="if(event.key==='Enter') window.loadAuditoriaList()">
+                    <datalist id="auditUsersDatalist"></datalist>
 
                 </div>
                 <div style="flex:1; min-width:150px;">
@@ -22987,8 +22986,8 @@ window.exportAuditoriaCSV = () => {
 
 
 window.loadAuditoriaUsuariosPlantel = async () => {
-    const sel = document.getElementById('auditSearchInput');
-    if (!sel || !state.plantelId) return;
+    const dl = document.getElementById('auditUsersDatalist');
+    if (!dl || !state.plantelId) return;
     
     try {
         const { data: permitidos } = await window.supabaseClient.from('perfiles_permitidos')
@@ -22997,16 +22996,15 @@ window.loadAuditoriaUsuariosPlantel = async () => {
             .order('nombre');
             
         if (permitidos && permitidos.length > 0) {
-            let html = '<option value="">Todos los usuarios</option>';
-            // Evitar duplicados por nombre
+            let html = '';
             const namesAdded = new Set();
             permitidos.forEach(p => {
                 if(p.nombre && !namesAdded.has(p.nombre)) {
-                    html += `<option value="${p.nombre}">${p.nombre} (${p.rol})</option>`;
+                    html += `<option value="${p.nombre}">${p.rol}</option>`;
                     namesAdded.add(p.nombre);
                 }
             });
-            sel.innerHTML = html;
+            dl.innerHTML = html;
         }
     } catch(e) {
         console.error("Error cargando usuarios para auditoría:", e);
