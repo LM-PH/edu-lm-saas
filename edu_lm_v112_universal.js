@@ -3324,7 +3324,6 @@ function renderApoyoRiesgoAcademico() {
 
 function renderApoyoDashboard() {
   setTimeout(() => { 
-      if(window.aplicarProtocolosRetroactivosAuto) window.aplicarProtocolosRetroactivosAuto();
       if(window.loadFocosRojos) window.loadFocosRojos(); 
   }, 100);
   return `
