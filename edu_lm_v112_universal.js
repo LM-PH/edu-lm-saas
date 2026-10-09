@@ -22844,7 +22844,7 @@ window.loadAuditoriaList = async (loadMore = false) => {
             }
         }
 
-        let query = supabaseClient.from('audit_log').select('*, perfiles!usuario_id(nombre, email, rol)', { count: 'exact' });
+        let query = supabaseClient.from('audit_log').select('*, perfiles!usuario_id(nombre, rol)', { count: 'exact' });
 
         if (op) query = query.eq('operacion', op);
         if (tbl) query = query.eq('tabla_afectada', tbl);
