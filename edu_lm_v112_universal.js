@@ -3324,6 +3324,7 @@ function renderApoyoRiesgoAcademico() {
 
 function renderApoyoDashboard() {
   setTimeout(() => { 
+      if(window.limpiarCitatoriosErroneos) window.limpiarCitatoriosErroneos();
       if(window.loadFocosRojos) window.loadFocosRojos(); 
   }, 100);
   return `
@@ -22410,36 +22411,34 @@ window.aplicarProtocolosRetroactivos = async () => {
         btn.disabled = false;
     }
 };
-window.aplicarProtocolosRetroactivosAuto = async () => {
+window.limpiarCitatoriosErroneos = async () => {
     try {
         const u = await supabaseClient.auth.getUser();
         if(!u.data.user) return;
         
-        // 1. Obtener protocolos
-        const { data: protocolos } = await supabaseClient.from('protocolos_reportes')
-            .select('*').eq('plantel_id', state.plantelId);
-            
-        if (!protocolos || protocolos.length === 0) return;
-
-        // 2. Obtener IDs de alumnos con reportes no resueltos
-        const { data: reportes } = await supabaseClient.from('reportes_conducta')
-            .select('alumno_id')
+        // 1. Borrar citatorios de Atención Prioritaria erróneos (motivo: Validación Retroactiva Automática)
+        const { data: cits, error: errCits } = await supabaseClient.from('citatorios')
+            .delete()
             .eq('plantel_id', state.plantelId)
-            .eq('resuelto', false);
+            .ilike('motivo', '%Validación Retroactiva Automática%');
             
-        if (!reportes || reportes.length === 0) return;
-        
-        const alumnosIds = [...new Set(reportes.map(r => r.alumno_id))];
+        if(errCits) console.error(errCits);
 
-        // 3. Evaluar cada alumno contra todos los protocolos
-        for (const aid of alumnosIds) {
-            for (const prot of protocolos) {
-                // Ejecutamos la vigilancia que ya tiene toda la logica de conteo, validacion y escalamiento
-                await window.ejecutarVigilanciaAutomatica(aid, prot.clasificacion, prot.gravedad, "Validación Retroactiva Automática", false);
-            }
-        }
+        // 2. Obtener la fecha de hace 20 minutos para borrar comunicados masivos erróneos
+        const twentyMinsAgo = new Date(Date.now() - 20 * 60000).toISOString();
         
+        // 3. Borrar comunicados de Atención Prioritaria erróneos creados recientemente por este usuario
+        const { data: coms, error: errComs } = await supabaseClient.from('comunicados')
+            .delete()
+            .eq('plantel_id', state.plantelId)
+            .eq('autor_id', u.data.user.id)
+            .ilike('titulo', '%Atención Prioritaria%')
+            .gte('fecha_envio', twentyMinsAgo);
+
+        if(errComs) console.error(errComs);
+        
+        console.log("Limpieza completada.");
     } catch(e) {
-        console.error("Error en retroactivo automático:", e);
+        console.error("Error en limpieza:", e);
     }
 };
