@@ -22416,28 +22416,27 @@ window.limpiarCitatoriosErroneos = async () => {
         const u = await supabaseClient.auth.getUser();
         if(!u.data.user) return;
         
-        // 1. Borrar citatorios de Atención Prioritaria erróneos (motivo: Validación Retroactiva Automática)
-        const { data: cits, error: errCits } = await supabaseClient.from('citatorios')
-            .delete()
+        // 1. Ocultar citatorios de Atención Prioritaria erróneos (estado = atendido)
+        const { error: errCits } = await supabaseClient.from('citatorios')
+            .update({ estado: 'atendido', motivo: 'CANCELADO POR SISTEMA' })
             .eq('plantel_id', state.plantelId)
             .ilike('motivo', '%Validación Retroactiva Automática%');
             
-        if(errCits) console.error(errCits);
+        if(errCits) console.error("Error al ocultar citatorios:", errCits);
 
-        // 2. Obtener la fecha de hace 20 minutos para borrar comunicados masivos erróneos
-        const twentyMinsAgo = new Date(Date.now() - 20 * 60000).toISOString();
+        // 2. Ocultar comunicados erróneos (audiencia = CANCELADO para que desaparezca)
+        const twentyMinsAgo = new Date(Date.now() - 60 * 60000).toISOString(); // 1 hora
         
-        // 3. Borrar comunicados de Atención Prioritaria erróneos creados recientemente por este usuario
-        const { data: coms, error: errComs } = await supabaseClient.from('comunicados')
-            .delete()
+        const { error: errComs } = await supabaseClient.from('comunicados')
+            .update({ audiencia: 'CANCELADO', titulo: 'CANCELADO', mensaje: 'CANCELADO' })
             .eq('plantel_id', state.plantelId)
             .eq('autor_id', u.data.user.id)
             .ilike('titulo', '%Atención Prioritaria%')
             .gte('fecha_envio', twentyMinsAgo);
 
-        if(errComs) console.error(errComs);
+        if(errComs) console.error("Error al ocultar comunicados:", errComs);
         
-        console.log("Limpieza completada.");
+        console.log("Limpieza completada por UPDATE.");
     } catch(e) {
         console.error("Error en limpieza:", e);
     }
