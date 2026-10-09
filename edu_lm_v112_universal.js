@@ -22901,7 +22901,7 @@ window.loadAuditoriaList = async (loadMore = false) => {
             }
             diffHtml += '</div>';
 
-            const userText = row.perfiles ? `<div style="font-weight:bold; color:var(--primary)">${row.perfiles.nombre || 'Sin nombre'}</div><div style="font-size:0.75rem;">${row.perfiles.email}</div><div style="font-size:0.7rem; color:var(--text-muted)">Rol: ${row.perfiles.rol}</div>` : `<div style="color:var(--danger)">Usuario Eliminado/Desconocido</div><div style="font-size:0.7rem; color:var(--text-muted)">ID: ${row.usuario_id}</div>`;
+            const userText = row.perfiles ? `<div style="font-weight:bold; color:var(--primary)">${row.perfiles.nombre || 'Sin nombre'}</div><div style="font-size:0.75rem;"></div><div style="font-size:0.7rem; color:var(--text-muted)">Rol: ${row.perfiles.rol}</div>` : `<div style="color:var(--danger)">Usuario Eliminado/Desconocido</div><div style="font-size:0.7rem; color:var(--text-muted)">ID: ${row.usuario_id}</div>`;
 
             // Detectar sistema desde User Agent
             const ua = row.user_agent || '';
