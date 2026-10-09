@@ -31,7 +31,7 @@ let _state = {
   isMaster: false,
   plantelId: null,
   path: '/',
-  schoolConfigured: false,
+  schoolConfigured: null,
   cameraMode: 'environment'
 };
 
@@ -21960,3 +21960,9 @@ window.actRenderGruposParaMateria = () => {
     
     actG.innerHTML = options;
 };
+
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', renderApp);
+} else {
+    renderApp();
+}

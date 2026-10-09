@@ -1,9 +1,9 @@
-const CACHE_NAME = 'edulm-cache-v135';
+const CACHE_NAME = 'edulm-cache-v136';
 const ASSETS_TO_CACHE = [
   './',
-  './index.html?v=clear1',
-  './styles.css?v=clear1',
-  './edu_lm_v112_universal.js?v=clear1',
+  './index.html',
+  './styles.css',
+  './edu_lm_v112_universal.js',
   './manifest.json',
   './icon-192.png',
   './icon-512.png'
@@ -30,22 +30,32 @@ self.addEventListener('activate', (event) => {
 });
 
 self.addEventListener('fetch', (event) => {
+  if (event.request.method !== 'GET') return;
   const url = new URL(event.request.url);
+  
   if (url.hostname.includes('supabase.co')) {
     event.respondWith(
       fetch(event.request).catch(() => caches.match(event.request))
     );
     return;
   }
+  
+  if (url.protocol !== 'http:' && url.protocol !== 'https:') return;
+
   event.respondWith(
     caches.match(event.request).then((cachedResponse) => {
       const fetchPromise = fetch(event.request).then((networkResponse) => {
-        caches.open(CACHE_NAME).then((cache) => {
-          cache.put(event.request, networkResponse.clone());
-        });
+        if (networkResponse && networkResponse.status === 200 && networkResponse.type === 'basic') {
+          const responseToCache = networkResponse.clone();
+          caches.open(CACHE_NAME).then((cache) => {
+            cache.put(event.request, responseToCache);
+          });
+        }
         return networkResponse;
+      }).catch(err => {
+        if (!cachedResponse) throw err;
       });
-      return cachedResponse || fetchPromise;
+      return cachedResponse || fetchPromise.then(res => res || caches.match(event.request));
     })
   );
 });
