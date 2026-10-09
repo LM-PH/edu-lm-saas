@@ -22750,7 +22750,10 @@ window.eliminarPersona = async (idPermitido, email, nombre, rol = '') => {
 // ==========================================
 
 async function renderMasterAuditoria() {
-    setTimeout(() => { if(window.loadAuditoriaList) window.loadAuditoriaList(); }, 100);
+    setTimeout(() => { 
+        if(window.loadAuditoriaUsuariosPlantel) window.loadAuditoriaUsuariosPlantel();
+        if(window.loadAuditoriaList) window.loadAuditoriaList(); 
+    }, 100);
     return `
         <div class="page-header" style="margin-bottom: 24px;">
             <h2 class="page-title"><i class="fa-solid fa-user-secret" style="color:var(--primary)"></i> Auditoría de Actividad del Sistema</h2>
@@ -22761,7 +22764,11 @@ async function renderMasterAuditoria() {
             <div style="display:flex; flex-wrap:wrap; gap:16px; align-items:flex-end;">
                 <div style="flex:1; min-width:200px;">
                     <label style="font-weight:600; font-size:0.85rem; margin-bottom:4px; display:block; color:var(--text-muted)">Buscar Usuario (Nombre o Email)</label>
-                    <input type="text" id="auditSearchInput" class="form-input" placeholder="Ej. Juan Pérez..." onkeyup="if(event.key==='Enter') window.loadAuditoriaList()">
+                    
+                    <select id="auditSearchInput" class="form-select" onchange="window.loadAuditoriaList()">
+                        <option value="">Todos los usuarios</option>
+                    </select>
+
                 </div>
                 <div style="flex:1; min-width:150px;">
                     <label style="font-weight:600; font-size:0.85rem; margin-bottom:4px; display:block; color:var(--text-muted)">Operación</label>
@@ -22978,3 +22985,30 @@ window.exportAuditoriaCSV = () => {
     window.URL.revokeObjectURL(url);
 };
 
+
+window.loadAuditoriaUsuariosPlantel = async () => {
+    const sel = document.getElementById('auditSearchInput');
+    if (!sel || !state.plantelId) return;
+    
+    try {
+        const { data: permitidos } = await window.supabaseClient.from('perfiles_permitidos')
+            .select('nombre, rol')
+            .eq('plantel_id', state.plantelId)
+            .order('nombre');
+            
+        if (permitidos && permitidos.length > 0) {
+            let html = '<option value="">Todos los usuarios</option>';
+            // Evitar duplicados por nombre
+            const namesAdded = new Set();
+            permitidos.forEach(p => {
+                if(p.nombre && !namesAdded.has(p.nombre)) {
+                    html += `<option value="${p.nombre}">${p.nombre} (${p.rol})</option>`;
+                    namesAdded.add(p.nombre);
+                }
+            });
+            sel.innerHTML = html;
+        }
+    } catch(e) {
+        console.error("Error cargando usuarios para auditoría:", e);
+    }
+};
