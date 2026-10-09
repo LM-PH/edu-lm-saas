@@ -21968,123 +21968,288 @@ if (document.readyState === 'loading') {
 }
 
 
-window.loadHorariosTable = async (containerId) => {
-    const cont = document.getElementById(containerId);
-    if (!cont) return;
-    
-    cont.innerHTML = '<div style="padding:40px; text-align:center;"><i class="fa-solid fa-spinner fa-spin fa-2x"></i><p style="color:var(--text-muted); margin-top:10px;">Cargando horarios...</p></div>';
-    
-    try {
-        let query = supabaseClient.from('horarios_maestros').select('*').eq('plantel_id', state.plantelId);
-        
-        // Filtrar por rol
-        const role = state.role;
-        if (role === 'maestro' || role === 'docente') {
-            query = query.eq('maestro_email', state.user.email);
-        } else if (role === 'alumno' || role === 'estudiante') {
-            // Obtener el grupo del alumno
-            const { data: al } = await supabaseClient
-                .from('alumnos')
-                .select('grupo_id')
-                .or(`contacto_email.eq.${state.user.email},perfil_id.eq.${state.user.id}`)
-                .maybeSingle();
-            if (al && al.grupo_id) {
-                query = query.eq('grupo_id', al.grupo_id);
-            } else {
-                cont.innerHTML = '<div style="padding:20px; text-align:center; color:var(--danger);">No tienes un grupo asignado para ver horarios.</div>';
-                return;
-            }
-        }
-        
-        const { data, error } = await query;
-        if (error) throw error;
-        
-        if (!data || data.length === 0) {
-            cont.innerHTML = '<div style="padding:20px; text-align:center; color:var(--text-muted);"><i class="fa-regular fa-calendar-xmark fa-3x" style="opacity:0.3; margin-bottom:15px;"></i><br>No hay horarios registrados en la base de datos para esta vista.</div>';
-            return;
-        }
-        
-        const columns = Object.keys(data[0]).filter(k => k !== 'plantel_id' && k !== 'id' && k !== 'created_at');
-        // Poner maestro_email al principio si existe
-        if(columns.includes('maestro_email')) {
-            columns.splice(columns.indexOf('maestro_email'), 1);
-            columns.unshift('maestro_email');
-        }
-        
-        let html = `<div style="overflow-x:auto;"><table class="table table-bordered table-striped" style="width:100%; font-size:0.85rem; background:white; text-align:left;">`;
-        html += `<thead><tr style="background:var(--primary); color:white;">`;
-        columns.forEach(col => {
-            html += `<th style="padding:10px;">${col.toUpperCase().replace(/_/g, ' ')}</th>`;
-        });
-        html += `</tr></thead><tbody>`;
-        
-        data.forEach(row => {
-            html += `<tr>`;
-            columns.forEach(col => {
-                let val = row[col];
-                if (val === null || val === undefined || val === '') val = '<span style="color:#cbd5e1">-</span>';
-                if (typeof val === 'object') val = JSON.stringify(val);
-                html += `<td style="padding:10px; border-bottom:1px solid var(--border);">${val}</td>`;
-            });
-            html += `</tr>`;
-        });
-        
-        html += `</tbody></table></div>`;
-        cont.innerHTML = html;
-        
-    } catch (e) {
-        console.error(e);
-        cont.innerHTML = `<div style="color:var(--danger); padding:20px;">Error al cargar horarios: ${e.message}</div>`;
-    }
-};
-
-window.renderApoyoHorarios = function() {
-    setTimeout(() => { if (window.loadHorariosTable) window.loadHorariosTable('horariosContainer'); }, 100);
+window.renderApoyoHorarios = () => {
+    setTimeout(window.loadApoyoHorarios, 100);
     return `
-        <div class="main-content">
-            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
-                <h2 class="page-title" style="margin:0;"><i class="fa-solid fa-calendar-days"></i> Horarios de Profesores</h2>
-                <button class="btn btn-outline btn-sm" onclick="window.loadHorariosTable('horariosContainer')"><i class="fa-solid fa-rotate"></i> Refrescar</button>
+        <div class="page-container">
+            <div class="page-header">
+                <h2 class="page-title"><i class="fa-solid fa-calendar-days text-primary"></i> Consulta de Horarios de Profesores</h2>
+                <p class="page-subtitle">Busca un docente para ver en qué salón, grupo y horario se encuentra.</p>
             </div>
-            <div class="card" style="padding:20px; box-shadow:0 4px 6px -1px rgba(0,0,0,0.1);">
-                <div id="horariosContainer"></div>
+            
+            <div style="display:grid; grid-template-columns: 1fr 2fr; gap:24px; margin-top:20px;">
+                <!-- Lista/Buscador de Profesores -->
+                <div class="card" style="max-height: 600px; display:flex; flex-direction:column; gap:16px;">
+                    <h3 style="margin-top:0"><i class="fa-solid fa-users"></i> Docentes</h3>
+                    <div class="form-group" style="margin-bottom:0;">
+                        <input type="text" id="searchApoyoDocente" class="form-input" placeholder="Buscar por nombre..." oninput="window.filtrarApoyoDocentesList(this.value)">
+                    </div>
+                    <div id="listaApoyoDocentesContenedor" style="flex:1; overflow-y:auto; display:flex; flex-direction:column; gap:8px; padding-right:4px;">
+                        <p style="text-align:center; opacity:0.5; padding:20px;">Cargando lista...</p>
+                    </div>
+                </div>
+                
+                <!-- Detalle del Horario -->
+                <div class="card" style="min-height: 400px; overflow-y:auto;">
+                    <div id="detalleApoyoHorarioContenedor">
+                        <div style="text-align:center; padding:80px 20px; opacity:0.4;">
+                            <i class="fa-solid fa-calendar-check fa-4x" style="color:var(--primary); opacity:0.5; margin-bottom:12px;"></i>
+                            <p style="margin-top:15px; font-weight:600; font-size:1.1rem;">Selecciona un docente de la lista para ver su horario.</p>
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
     `;
 };
 
+window.loadApoyoHorarios = async () => {
+    try {
+        const { data: docentes, error } = await supabaseClient.from('perfiles_permitidos')
+            .select('email, nombre')
+            .eq('rol', 'maestro')
+            .eq('plantel_id', state.plantelId)
+            .order('nombre');
+            
+        if (error) throw error;
+        
+        window._apoyoDocentesList = docentes || [];
+        window.filtrarApoyoDocentesList('');
+    } catch(e) {
+        console.error(e);
+        const cont = document.getElementById('listaApoyoDocentesContenedor');
+        if(cont) cont.innerHTML = `<p style="color:var(--danger)">Error al cargar docentes.</p>`;
+    }
+};
+
+window.filtrarApoyoDocentesList = (query) => {
+    const cont = document.getElementById('listaApoyoDocentesContenedor');
+    if(!cont || !window._apoyoDocentesList) return;
+    
+    const term = query.toLowerCase().trim();
+    
+    // Si la búsqueda está vacía, no mostrar ningún nombre (ocultar por defecto)
+    if (term === '') {
+        cont.innerHTML = `
+            <div style="text-align:center; padding:40px 10px; opacity:0.5; color:var(--text-muted);">
+                <i class="fa-solid fa-magnifying-glass fa-2x" style="margin-bottom:8px;"></i>
+                <p style="font-size:0.85rem; margin:0;">Escribe el nombre del docente para buscar...</p>
+            </div>
+        `;
+        return;
+    }
+    
+    const filtered = window._apoyoDocentesList.filter(d => 
+        (d.nombre || '').toLowerCase().includes(term) || 
+        d.email.toLowerCase().includes(term)
+    );
+    
+    if(filtered.length === 0) {
+        cont.innerHTML = '<p style="text-align:center; opacity:0.5; padding:20px; font-size:0.85rem;">No se encontraron docentes.</p>';
+        return;
+    }
+    
+    cont.innerHTML = filtered.map(d => `
+        <div class="docente-item-apoyo" style="padding:12px; border:1px solid var(--border); border-radius:10px; cursor:pointer; transition:var(--transition); background:white;" onclick="window.seleccionarDocenteApoyo('${d.email}', '${d.nombre || d.email}')" id="docente-item-${d.email.replace(/@|\./g,'')}">
+            <div style="font-weight:700; color:var(--text-main); font-size:0.95rem;">${d.nombre || 'Sin nombre'}</div>
+            <div style="font-size:0.75rem; color:var(--text-muted); font-family:monospace; margin-top:2px;">${d.email}</div>
+        </div>
+    `).join('');
+};
+
+window.seleccionarDocenteApoyo = async (email, name) => {
+    // Deseleccionar anteriores
+    const items = document.querySelectorAll('.docente-item-apoyo');
+    items.forEach(el => {
+        el.style.borderColor = 'var(--border)';
+        el.style.background = 'white';
+        el.style.boxShadow = 'none';
+    });
+    
+    // Seleccionar actual
+    const item = document.getElementById(`docente-item-${email.replace(/@|\./g,'')}`);
+    if(item) {
+        item.style.borderColor = 'var(--primary-light)';
+        item.style.background = 'var(--primary)05';
+        item.style.boxShadow = 'var(--shadow-sm)';
+    }
+    
+    const cont = document.getElementById('detalleApoyoHorarioContenedor');
+    if(!cont) return;
+    
+    cont.innerHTML = `<p style="text-align:center; opacity:0.5; padding:40px;"><i class="fa-solid fa-spinner fa-spin"></i> Cargando horario de ${name}...</p>`;
+    
+    try {
+        const { data: slots, error } = await supabaseClient.from('horarios_maestros')
+            .select('*, grupos(nombre)')
+            .eq('maestro_email', email)
+            .eq('plantel_id', state.plantelId);
+            
+        if(error) throw error;
+        
+        if(!slots || slots.length === 0) {
+            cont.innerHTML = `
+                <div style="text-align:center; padding:60px 20px; opacity:0.4;">
+                    <i class="fa-solid fa-calendar-xmark fa-3x" style="color:var(--primary); opacity:0.5; margin-bottom:12px;"></i>
+                    <p style="margin-top:15px; font-weight:600; font-size:1.1rem;">${name} no tiene clases programadas en su horario aún.</p>
+                </div>
+            `;
+            return;
+        }
+        
+        // Ordenar slots
+        const dayOrder = { 'Lunes': 1, 'Martes': 2, 'Miércoles': 3, 'Jueves': 4, 'Viernes': 5 };
+        const hmToMin = (hm) => { if(!hm) return 0; const p = hm.split(':'); return parseInt(p[0]||0)*60 + parseInt(p[1]||0); };
+        slots.sort((a, b) => {
+            const valA = (dayOrder[a.dia] || 9) * 10000 + hmToMin(a.hora_inicio);
+            const valB = (dayOrder[b.dia] || 9) * 10000 + hmToMin(b.hora_inicio);
+            return valA - valB;
+        });
+        
+        // Agrupar por día
+        const grouped = { 'Lunes': [], 'Martes': [], 'Miércoles': [], 'Jueves': [], 'Viernes': [] };
+        slots.forEach(s => {
+            if(grouped[s.dia]) grouped[s.dia].push(s);
+        });
+        
+        let html = `
+            <div style="margin-bottom:20px; display:flex; justify-content:space-between; align-items:center; border-bottom: 2px solid var(--border); padding-bottom: 8px;">
+                <h3 style="margin:0; font-size:1.25rem;"><i class="fa-solid fa-user-tie"></i> Horario: <strong>${name}</strong></h3>
+                <span style="font-size:0.85rem; background:var(--primary); color:white; padding:4px 12px; border-radius:12px; font-weight:700;">${slots.length} clase(s)</span>
+            </div>
+            <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap:16px;">
+        `;
+        
+        Object.keys(grouped).forEach(day => {
+            const daySlots = grouped[day];
+            html += `
+                <div style="background:#f8fafc; border:1px solid var(--border); border-radius:12px; padding:12px; box-shadow:none;">
+                    <h4 style="margin-top:0; color:var(--primary); font-size:1rem; border-bottom:1px solid #e2e8f0; padding-bottom:6px; margin-bottom:10px; display:flex; justify-content:space-between;">
+                        <span>${day}</span>
+                        <span style="font-size:0.75rem; opacity:0.7;">(${daySlots.length})</span>
+                    </h4>
+            `;
+            
+            if(daySlots.length === 0) {
+                html += `<p style="font-size:0.8rem; color:var(--text-muted); opacity:0.5; padding:6px 0; font-style:italic; text-align:center;">Sin clases</p>`;
+            } else {
+                html += daySlots.map(s => {
+                    const grpLabel = s.grupos ? s.grupos.nombre : (s.target_grado ? `Grado ${s.target_grado}` : 'Sin Grupo');
+                    return `
+                        <div style="background:white; border:1px solid var(--border); padding:8px 10px; border-radius:8px; margin-bottom:6px; border-left:3px solid var(--primary-light);">
+                            <div style="font-weight:700; font-size:0.8rem; color:var(--text-main);"><i class="fa-regular fa-clock" style="font-size:0.75rem;"></i> ${s.hora_inicio} - ${s.hora_fin}</div>
+                            <div style="font-weight:600; font-size:0.85rem; margin-top:2px; color:var(--primary);">${s.materia}</div>
+                            <div style="font-size:0.75rem; color:var(--text-muted); margin-top:2px;">Grupo/Grado: <strong>${grpLabel}</strong></div>
+                        </div>
+                    `;
+                }).join('');
+            }
+            
+            html += `</div>`;
+        });
+        
+        html += '</div>';
+        
+        cont.innerHTML = html;
+        
+    } catch(e) {
+        console.error(e);
+        cont.innerHTML = `<p style="color:var(--danger)">Error al cargar horario del docente: ${e.message}</p>`;
+    }
+};
+
+
 window.renderMaestroHorario = function() {
-    setTimeout(() => { if (window.loadHorariosTable) window.loadHorariosTable('horariosContainerMaestro'); }, 100);
+    setTimeout(async () => {
+        const cont = document.getElementById('horariosContainerMaestro');
+        if (!cont) return;
+        const u = await supabaseClient.auth.getUser();
+        if (!u.data?.user) return;
+        window.seleccionarDocenteApoyo
+            ? null
+            : null;
+        cont.innerHTML = '<div style="padding:20px; text-align:center;"><i class="fa-solid fa-spinner fa-spin fa-2x"></i></div>';
+        try {
+            const { data: slots, error } = await supabaseClient.from('horarios_maestros')
+                .select('*, grupos(nombre)')
+                .eq('maestro_email', u.data.user.email)
+                .eq('plantel_id', state.plantelId);
+            if (error) throw error;
+            if (!slots || slots.length === 0) {
+                cont.innerHTML = '<div style="text-align:center; padding:40px; opacity:0.5;"><i class="fa-solid fa-calendar-xmark fa-3x"></i><p style="margin-top:15px;">No tienes clases programadas en el horario aún.</p></div>';
+                return;
+            }
+            const dayOrder = { 'Lunes': 1, 'Martes': 2, 'Miércoles': 3, 'Jueves': 4, 'Viernes': 5 };
+            const hmToMin = (hm) => { if(!hm) return 0; const p = hm.split(':'); return parseInt(p[0]||0)*60 + parseInt(p[1]||0); };
+            slots.sort((a, b) => (dayOrder[a.dia]||9)*10000+hmToMin(a.hora_inicio) - (dayOrder[b.dia]||9)*10000 - hmToMin(b.hora_inicio));
+            const grouped = { 'Lunes': [], 'Martes': [], 'Miércoles': [], 'Jueves': [], 'Viernes': [] };
+            slots.forEach(s => { if(grouped[s.dia]) grouped[s.dia].push(s); });
+            let html = `<div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap:16px;">`;
+            Object.keys(grouped).forEach(day => {
+                const ds = grouped[day];
+                html += `<div style="background:#f8fafc; border:1px solid var(--border); border-radius:12px; padding:12px;"><h4 style="margin-top:0; color:var(--primary); font-size:1rem; border-bottom:1px solid #e2e8f0; padding-bottom:6px; margin-bottom:10px; display:flex; justify-content:space-between;"><span>${day}</span><span style="font-size:0.75rem; opacity:0.7;">(${ds.length})</span></h4>`;
+                if (ds.length === 0) {
+                    html += `<p style="font-size:0.8rem; color:var(--text-muted); opacity:0.5; font-style:italic; text-align:center;">Sin clases</p>`;
+                } else {
+                    html += ds.map(s => {
+                        const grpLabel = s.grupos ? s.grupos.nombre : (s.target_grado ? `Grado ${s.target_grado}` : 'Sin Grupo');
+                        return `<div style="background:white; border:1px solid var(--border); padding:8px 10px; border-radius:8px; margin-bottom:6px; border-left:3px solid var(--primary-light);"><div style="font-weight:700; font-size:0.8rem;"><i class="fa-regular fa-clock" style="font-size:0.75rem;"></i> ${s.hora_inicio} - ${s.hora_fin}</div><div style="font-weight:600; font-size:0.85rem; margin-top:2px; color:var(--primary);">${s.materia}</div><div style="font-size:0.75rem; color:var(--text-muted); margin-top:2px;">Grupo: <strong>${grpLabel}</strong></div></div>`;
+                    }).join('');
+                }
+                html += `</div>`;
+            });
+            html += `</div>`;
+            cont.innerHTML = html;
+        } catch(e) {
+            cont.innerHTML = `<p style="color:var(--danger)">Error: ${e.message}</p>`;
+        }
+    }, 100);
     return `
         <div class="main-content">
-            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
-                <h2 class="page-title" style="margin:0;"><i class="fa-solid fa-calendar-days"></i> Mi Horario de Clases</h2>
-                <button class="btn btn-outline btn-sm" onclick="window.loadHorariosTable('horariosContainerMaestro')"><i class="fa-solid fa-rotate"></i> Refrescar</button>
-            </div>
-            <div class="card" style="padding:20px; box-shadow:0 4px 6px -1px rgba(0,0,0,0.1);">
+            <h2 class="page-title"><i class="fa-solid fa-calendar-days"></i> Mi Horario de Clases</h2>
+            <div class="card" style="padding:20px;">
                 <div id="horariosContainerMaestro"></div>
             </div>
         </div>
     `;
 };
 
-window.renderAdminHorarios = function() {
-    setTimeout(() => { if (window.loadHorariosTable) window.loadHorariosTable('horariosContainerAdmin'); }, 100);
-    return `
-        <div class="main-content">
-            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
-                <h2 class="page-title" style="margin:0;"><i class="fa-solid fa-calendar-days"></i> Horarios de Clase (Global)</h2>
-                <button class="btn btn-outline btn-sm" onclick="window.loadHorariosTable('horariosContainerAdmin')"><i class="fa-solid fa-rotate"></i> Refrescar</button>
-            </div>
-            <div class="card" style="padding:20px; box-shadow:0 4px 6px -1px rgba(0,0,0,0.1);">
-                <div id="horariosContainerAdmin"></div>
-            </div>
-        </div>
-    `;
-};
+function renderAdminHorarios() {
+    return window.renderApoyoHorarios();
+}
 
 window.renderAlumnoHorario = function() {
-    setTimeout(() => { if (window.loadHorariosTable) window.loadHorariosTable('horariosContainerAlumno'); }, 100);
+    setTimeout(async () => {
+        const cont = document.getElementById('horariosContainerAlumno');
+        if (!cont) return;
+        const u = await supabaseClient.auth.getUser();
+        if (!u.data?.user) return;
+        cont.innerHTML = '<div style="padding:20px; text-align:center;"><i class="fa-solid fa-spinner fa-spin fa-2x"></i></div>';
+        try {
+            const { data: al } = await supabaseClient.from('alumnos').select('grupo_id').or(`contacto_email.eq.${u.data.user.email},perfil_id.eq.${u.data.user.id}`).maybeSingle();
+            if (!al || !al.grupo_id) { cont.innerHTML = '<p style="padding:20px; text-align:center; color:var(--text-muted);">No tienes un grupo asignado.</p>'; return; }
+            const { data: slots, error } = await supabaseClient.from('horarios_maestros').select('*').eq('grupo_id', al.grupo_id).eq('plantel_id', state.plantelId);
+            if (error) throw error;
+            if (!slots || slots.length === 0) { cont.innerHTML = '<div style="text-align:center; padding:40px; opacity:0.5;"><i class="fa-solid fa-calendar-xmark fa-3x"></i><p style="margin-top:15px;">No hay horario publicado aún para tu grupo.</p></div>'; return; }
+            const dayOrder = { 'Lunes': 1, 'Martes': 2, 'Miércoles': 3, 'Jueves': 4, 'Viernes': 5 };
+            const hmToMin = (hm) => { if(!hm) return 0; const p = hm.split(':'); return parseInt(p[0]||0)*60 + parseInt(p[1]||0); };
+            slots.sort((a, b) => (dayOrder[a.dia]||9)*10000+hmToMin(a.hora_inicio) - (dayOrder[b.dia]||9)*10000 - hmToMin(b.hora_inicio));
+            const grouped = { 'Lunes': [], 'Martes': [], 'Miércoles': [], 'Jueves': [], 'Viernes': [] };
+            slots.forEach(s => { if(grouped[s.dia]) grouped[s.dia].push(s); });
+            let html = `<div style="display:flex; flex-direction:column; gap:12px;">`;
+            Object.keys(grouped).forEach(day => {
+                const ds = grouped[day];
+                if (ds.length === 0) return;
+                html += `<div style="border:1px solid var(--border); border-radius:12px; overflow:hidden;"><div style="background:var(--primary); color:white; padding:8px 14px; font-weight:700; font-size:0.9rem;">${day}</div>`;
+                html += ds.map(s => `<div style="padding:10px 14px; border-bottom:1px solid var(--border); background:white;"><div style="font-weight:700; font-size:0.85rem; color:var(--primary);">${s.materia}</div><div style="font-size:0.8rem; color:var(--text-muted); margin-top:2px;"><i class="fa-regular fa-clock"></i> ${s.hora_inicio} - ${s.hora_fin} | ${s.maestro_email || ''}</div></div>`).join('');
+                html += `</div>`;
+            });
+            html += `</div>`;
+            cont.innerHTML = html;
+        } catch(e) {
+            cont.innerHTML = `<p style="color:var(--danger)">Error: ${e.message}</p>`;
+        }
+    }, 100);
     return `
         <div class="mobile-app" style="background:var(--page-bg)">
             <div class="mobile-header" style="background:var(--primary); color:white; padding:20px;">
@@ -22094,9 +22259,7 @@ window.renderAlumnoHorario = function() {
                 </button>
             </div>
             <div class="mobile-content" style="padding:16px;">
-                <div class="card" style="padding:15px; border-radius:12px; box-shadow:0 4px 6px -1px rgba(0,0,0,0.1);">
-                    <div id="horariosContainerAlumno"></div>
-                </div>
+                <div id="horariosContainerAlumno"></div>
             </div>
         </div>
     `;
