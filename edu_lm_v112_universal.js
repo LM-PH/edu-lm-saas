@@ -22529,13 +22529,17 @@ window.loadListasAdminPersonal = async (searchTerm = '') => {
             const { data: students, error: sErr } = await q.order('nombre');
             if(sErr) throw sErr;
             
-            // Recoger todos los correos para traer sus contraseñas temporales (v112)
+            // Recoger todos los correos para traer sus contraseñas temporales y estados
             const allEmails = students.map(s => s.contacto_email).filter(Boolean);
             let passMap = {};
+            let estadoMap = {};
             if (allEmails.length > 0) {
-                const { data: pData } = await supabaseClient.from('perfiles_permitidos').select('email, temp_pass').in('email', allEmails);
+                const { data: pData } = await supabaseClient.from('perfiles_permitidos').select('email, temp_pass, estado').in('email', allEmails);
                 if (pData) {
-                    pData.forEach(pd => { if(pd.temp_pass) passMap[pd.email] = pd.temp_pass; });
+                    pData.forEach(pd => { 
+                        if(pd.temp_pass) passMap[pd.email] = pd.temp_pass; 
+                        estadoMap[pd.email] = pd.estado || 'pendiente';
+                    });
                 }
             }
 
@@ -22552,7 +22556,7 @@ window.loadListasAdminPersonal = async (searchTerm = '') => {
                 email: s.contacto_email || 'Sin correo',
                 rol: 'alumno',
                 created_at: s.creado_en || s.created_at,
-                estado: 'activo', 
+                estado: estadoMap[s.contacto_email] || 'pendiente', 
                 grupo_nom: s.grupos?.nombre,
                 temp_pass: passMap[s.contacto_email] || null
             }));
