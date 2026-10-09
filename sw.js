@@ -1,4 +1,4 @@
-const CACHE_NAME = 'edulm-cache-v136';
+const CACHE_NAME = 'edulm-cache-v137';
 const ASSETS_TO_CACHE = [
   './',
   './index.html',
@@ -10,15 +10,19 @@ const ASSETS_TO_CACHE = [
 ];
 
 self.addEventListener('install', (event) => {
+  self.skipWaiting();
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => {
-      return cache.addAll(ASSETS_TO_CACHE);
+      // Intentar cachear uno por uno para que si uno falla, no aborte la instalación
+      return Promise.allSettled(
+        ASSETS_TO_CACHE.map(url => cache.add(url).catch(err => console.warn('SW Install: Fallo al cachear', url, err)))
+      );
     })
   );
-  self.skipWaiting();
 });
 
 self.addEventListener('activate', (event) => {
+  self.clients.claim();
   event.waitUntil(
     caches.keys().then((keys) => {
       return Promise.all(
@@ -26,7 +30,6 @@ self.addEventListener('activate', (event) => {
       );
     })
   );
-  self.clients.claim();
 });
 
 self.addEventListener('fetch', (event) => {
