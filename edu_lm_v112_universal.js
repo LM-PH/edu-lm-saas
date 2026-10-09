@@ -22422,119 +22422,22 @@ window.aplicarProtocolosRetroactivosAuto = async () => {
             
         if (!protocolos || protocolos.length === 0) return;
 
-        // 2. Obtener todos los reportes no resueltos
+        // 2. Obtener IDs de alumnos con reportes no resueltos
         const { data: reportes } = await supabaseClient.from('reportes_conducta')
-            .select('id, alumno_id, descripcion, gravedad, creado_en')
+            .select('alumno_id')
             .eq('plantel_id', state.plantelId)
             .eq('resuelto', false);
             
         if (!reportes || reportes.length === 0) return;
-
-        // 3. Obtener citatorios existentes para no duplicar
-        const { data: citatorios } = await supabaseClient.from('citatorios')
-            .select('alumno_id, motivo, tipo')
-            .eq('plantel_id', state.plantelId);
-
-        // Agrupar reportes por alumno -> categoria -> gravedad
-        const alumnosData = {};
         
-        reportes.forEach(r => {
-            if (!alumnosData[r.alumno_id]) alumnosData[r.alumno_id] = { Académico: {}, Convivencia: {}, 'Atención Prioritaria': {} };
-            
-            let cat = 'Desconocida';
-            if (r.descripcion.toUpperCase().includes('[ACADÉMICO]')) cat = 'Académico';
-            else if (r.descripcion.toUpperCase().includes('[CONVIVENCIA]') || r.descripcion.toUpperCase().includes('[CONDUCTA]') || r.descripcion.toUpperCase().includes('[CONDUCTUAL]')) cat = 'Convivencia';
-            else if (r.descripcion.toUpperCase().includes('[ATENCIÓN PRIORITARIA]')) cat = 'Atención Prioritaria';
-            
-            if (cat !== 'Desconocida') {
-                const grav = (cat === 'Atención Prioritaria') ? 'N/A' : r.gravedad;
-                if (!alumnosData[r.alumno_id][cat][grav]) alumnosData[r.alumno_id][cat][grav] = { total: 0, escalamientos: 0 };
-                
-                if (r.descripcion.includes('[AUTOMÁTICO] Escalamiento')) {
-                    alumnosData[r.alumno_id][cat][grav].escalamientos++;
-                } else {
-                    alumnosData[r.alumno_id][cat][grav].total++;
-                }
-            }
-        });
+        const alumnosIds = [...new Set(reportes.map(r => r.alumno_id))];
 
-        let accionesGeneradas = 0;
-
-        // Analizar cada alumno contra los protocolos
-        for (const aid of Object.keys(alumnosData)) {
-            const dataAlum = alumnosData[aid];
-            
+        // 3. Evaluar cada alumno contra todos los protocolos
+        for (const aid of alumnosIds) {
             for (const prot of protocolos) {
-                const cat = prot.clasificacion;
-                const grav = prot.gravedad;
-                const record = dataAlum[cat]?.[grav];
-                
-                if (record && record.total >= prot.cantidad_reportes) {
-                    let accionPrincipal = prot.accion_a_tomar;
-                    let nuevaGravedad = null;
-                    if (prot.accion_a_tomar.includes('| ESCALA:')) {
-                        const parts = prot.accion_a_tomar.split('| ESCALA:');
-                        accionPrincipal = parts[0].trim();
-                        nuevaGravedad = parts[1].trim();
-                    }
-
-                    const expectedTriggers = Math.floor(record.total / prot.cantidad_reportes);
-                    let actualTriggers = 0;
-
-                    if (nuevaGravedad) {
-                        actualTriggers = dataAlum[cat]?.[nuevaGravedad]?.escalamientos || 0;
-                    } else if (accionPrincipal.includes('citar') || accionPrincipal.includes('Citatorio')) {
-                        // Buscar citatorios
-                        const citsAlumno = (citatorios || []).filter(c => c.alumno_id === aid);
-                        actualTriggers = citsAlumno.filter(c => c.motivo && c.motivo.includes(`Protocolo: ${accionPrincipal}`) && (cat==='Convivencia' ? ['Convivencia','Conductual','Conducta'].includes(c.tipo) : c.tipo === cat)).length;
-                    }
-
-                    if (actualTriggers < expectedTriggers) {
-                        const triggersNeeded = expectedTriggers - actualTriggers;
-                        
-                        for(let i=0; i<triggersNeeded; i++) {
-                            accionesGeneradas++;
-                            
-                            let titulo = 'Aviso de Incidencia Automático';
-                            let msj = `Se ha alcanzado el límite de reportes de tipo ${cat} (${grav}). Acción requerida: ${accionPrincipal}.`;
-
-                            if (nuevaGravedad) {
-                                await supabaseClient.from('reportes_conducta').insert([{
-                                    id: crypto.randomUUID(),
-                                    alumno_id: aid, autor_id: u.data.user.id,
-                                    descripcion: `[${cat.toUpperCase()}] [AUTOMÁTICO] Escalamiento por acumulación de reportes ${grav}. Acción: ${accionPrincipal}. (APLICADO RETROACTIVAMENTE)`,
-                                    gravedad: nuevaGravedad,
-                                    plantel_id: state.plantelId, resuelto: false
-                                }]);
-                                msj += `\n\n⚠️ Por protocolo, este caso se ha escalado a un NUEVO REPORTE ${nuevaGravedad.toUpperCase()}.`;
-                            }
-
-                            if (accionPrincipal.includes('citar') || accionPrincipal.includes('Citatorio')) {
-                                titulo = '🚨 CITATORIO URGENTE: ' + accionPrincipal;
-                                msj = `Estimado alumno y padre de familia/tutor:\n\nSe ha detectado una acumulación de reportes de clasificación ${cat}. ES REQUISITO INDISPENSABLE presentarse en el área de Trabajo Social para una junta de seguimiento.` + (nuevaGravedad ? `\n\n⚠️ Este caso ha sido escalado a Nivel ${nuevaGravedad.toUpperCase()}.` : '');
-                                
-                                await supabaseClient.from('citatorios').insert([{
-                                    alumno_id: aid, emisor_id: u.data.user.id,
-                                    motivo: `Acumulación de reportes de tipo ${cat} (${grav}). Protocolo: ${accionPrincipal} (RETROACTIVO)`,
-                                    tipo: cat, plantel_id: state.plantelId
-                                }]);
-                            }
-
-                            if (accionPrincipal !== 'Solo registro') {
-                                await supabaseClient.from('comunicados').insert([{
-                                    autor_id: u.data.user.id, titulo: titulo, mensaje: msj,
-                                    audiencia: `Alumno_${aid}`, tipo: 'General', plantel_id: state.plantelId
-                                }]);
-                            }
-                        }
-                    }
-                }
+                // Ejecutamos la vigilancia que ya tiene toda la logica de conteo, validacion y escalamiento
+                await window.ejecutarVigilanciaAutomatica(aid, prot.clasificacion, prot.gravedad, "Validación Retroactiva Automática", false);
             }
-        }
-        
-        if (accionesGeneradas > 0) {
-            window.showToast(`Se aplicaron ${accionesGeneradas} protocolos retroactivos de forma automática.`, "info");
-            if(window.loadFocosRojos) window.loadFocosRojos();
         }
         
     } catch(e) {
