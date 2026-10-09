@@ -4918,7 +4918,7 @@ window.guardarAtencionFoco = async () => {
         const { error: errCom } = await supabaseClient.from('comunicados').insert([{
             autor_id: u.data.user.id,
             titulo: `✅ SITUACIÓN ATENDIDA Y RESUELTA`,
-            mensaje: `Se ha concluido la junta de seguimiento en Trabajo Social.\n\nPROCEDIMIENTO:\n${proc}\n\nCOMPROMISOS:\n${comp}\n\nTu expediente ha sido actualizado. ¡Gracias por tu compromiso!`,
+            mensaje: `Se ha concluido la junta de seguimiento en el área de Trabajo Social.\n\nTu expediente ha sido actualizado correspondientemente de acuerdo a lo tratado en la cita. ¡Gracias por tu compromiso!`,
             audiencia: `Alumno_${aid}`,
             fecha_envio: new Date().toISOString(),
             plantel_id: state.plantelId
