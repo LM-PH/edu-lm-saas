@@ -22052,7 +22052,6 @@ window.filtrarApoyoDocentesList = (query) => {
     cont.innerHTML = filtered.map(d => `
         <div class="docente-item-apoyo" style="padding:12px; border:1px solid var(--border); border-radius:10px; cursor:pointer; transition:var(--transition); background:white;" onclick="window.seleccionarDocenteApoyo('${d.email}', '${d.nombre || d.email}')" id="docente-item-${d.email.replace(/@|\./g,'')}">
             <div style="font-weight:700; color:var(--text-main); font-size:0.95rem;">${d.nombre || 'Sin nombre'}</div>
-            <div style="font-size:0.75rem; color:var(--text-muted); font-family:monospace; margin-top:2px;">${d.email}</div>
         </div>
     `).join('');
 };
