@@ -5655,26 +5655,14 @@ window.emitirJustificanteSalud = async (alumnoId, nombre) => {
     if(!motivo) return;
 
     try {
-        const uRes = await supabaseClient.auth.getUser();
+        const uRes = await window.supabaseClient.auth.getUser();
         if(!uRes.data.user) throw new Error("No hay sesión");
 
-        // Obtenemos el grupo del alumno
-        const { data: alu } = await supabaseClient.from('alumnos').select('grupo_id').eq('id', alumnoId).single();
-        if(!alu || !alu.grupo_id) {
-            alert("El alumno no tiene un grupo asignado. No se puede enviar a los maestros.");
-            return;
-        }
-
-        const { error } = await supabaseClient.from('comunicados').insert([{
-            autor_id: uRes.data.user.id,
-            titulo: `JUSTIFICANTE: ${nombre}`,
-            mensaje: `Se informa que el alumno(a) ${nombre} cuenta con justificante oficial por el siguiente motivo: ${motivo}. Favor de brindar las facilidades académicas correspondientes.`,
-            audiencia: `Grupo_${alu.grupo_id}`,
-            plantel_id: state.plantelId
-        }]);
-
-        if(error) throw error;
-        alert("Justificante enviado exitosamente a todos los maestros del grupo.");
+        const d = new Date().toISOString().split('T')[0];
+        window.showToast("Generando notificaciones individuales...", "info");
+        await window.notificarMaestrosJustificante(alumnoId, motivo, d, d);
+        
+        window.showToast("Justificante enviado exitosamente a los maestros del alumno.", "success");
     } catch(e) { 
         console.error(e);
         alert("Error al enviar el justificante: " + e.message);
@@ -9487,8 +9475,7 @@ window.registrarJustificanteMedico = async () => {
 
 window.notificarMaestrosJustificante = async (alumnoId, motivo, inicio, fin) => {
     try {
-        // Obtener grupo, nombre y taller del alumno
-        const { data: al, error: alErr } = await supabaseClient.from('alumnos').select('nombre, grupo_id, taller').eq('id', alumnoId).single();
+        const { data: al, error: alErr } = await window.supabaseClient.from('alumnos').select('id, nombre, grupo_id, grado, taller').eq('id', alumnoId).single();
         if(alErr || !al || !al.grupo_id) {
             console.warn("No se pudo obtener el grupo del alumno para notificar.");
             return;
@@ -9498,25 +9485,65 @@ window.notificarMaestrosJustificante = async (alumnoId, motivo, inicio, fin) => 
         const fFin = new Date(fin + 'T12:00:00').toLocaleDateString();
         const mensaje = `Se informa que el alumno(a) **${al.nombre}** cuenta con justificante médico del **${fInicio}** al **${fFin}** por motivo de: ${motivo}. Favor de brindar las facilidades académicas necesarias.`;
 
-        // Añadir el taller al título si existe para filtrar correctamente a los maestros de tecnología
-        const tallerTag = al.taller ? ` [TALLER:${al.taller}]` : '';
+        // Buscar a los maestros que realmente le dan clases
+        const { data: asig } = await window.supabaseClient.from('asignaciones_maestros').select('docente_email, grupo_id, target_grado, materia').eq('plantel_id', state.plantelId);
+        
+        let validEmails = new Set();
+        if (asig) {
+            asig.forEach(a => {
+                let teaches = false;
+                if (a.grupo_id === al.grupo_id) teaches = true;
+                else if (a.target_grado && al.grado && al.grado.startsWith(a.target_grado)) teaches = true;
 
-        // Insertar comunicado para el grupo específico
-        const { error: comErr } = await supabaseClient.from('comunicados').insert([{
+                if (teaches) {
+                    const m = (a.materia || '').toLowerCase().trim();
+                    const isTaller = m.includes('tecnolog') || m.includes('taller');
+                    if (isTaller && al.taller) {
+                        const reqT = al.taller.toLowerCase().trim();
+                        if (m.includes(reqT) || reqT.includes(m) || m === reqT) validEmails.add(a.docente_email);
+                    } else if (!isTaller) {
+                        validEmails.add(a.docente_email);
+                    }
+                }
+            });
+        }
+
+        let teacherIds = [];
+        if (validEmails.size > 0) {
+            const { data: perfs } = await window.supabaseClient.from('perfiles').select('id, email').in('email', Array.from(validEmails));
+            if (perfs) teacherIds = perfs.map(p => p.id);
+        }
+
+        const newComs = [];
+        // Insertar para cada maestro (INDIVIDUALMENTE)
+        teacherIds.forEach(tid => {
+            newComs.push({
+                autor_id: state.user.id,
+                titulo: 'JUSTIFICANTE MÉDICO: ' + al.nombre,
+                audiencia: 'Maestro_' + tid,
+                mensaje: mensaje,
+                plantel_id: state.plantelId
+            });
+        });
+
+        // Insertar también para el alumno
+        newComs.push({
             autor_id: state.user.id,
-            titulo: 'JUSTIFICANTE MÉDICO: ' + al.nombre + tallerTag,
-            audiencia: 'Maestros_Grupo_' + al.grupo_id,
+            titulo: 'JUSTIFICANTE MÉDICO: ' + al.nombre,
+            audiencia: 'Alumno_' + al.id,
             mensaje: mensaje,
             plantel_id: state.plantelId
-        }]);
+        });
 
-        if(comErr) {
-            console.error("Error al insertar comunicado:", comErr);
-            throw new Error("Justificante guardado, pero los maestros no pudieron ser notificados. Detalles: " + comErr.message + " " + JSON.stringify(comErr));
+        if (newComs.length > 0) {
+            const { error: comErr } = await window.supabaseClient.from('comunicados').insert(newComs);
+            if(comErr) throw new Error("Fallo al guardar justificantes en BD: " + comErr.message);
+        } else {
+            console.warn("No se encontraron maestros para notificar.");
         }
     } catch(e) { 
         console.error("Error al notificar maestros:", e);
-        throw e; // Relanzar para que el proceso principal lo capture
+        throw e; 
     }
 };
 
