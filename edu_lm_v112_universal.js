@@ -21967,10 +21967,9 @@ if (document.readyState === 'loading') {
     renderApp();
 }
 
+
 function renderMaestroHorario() {
-    const app = document.getElementById('app');
-    app.innerHTML = `
-        ${renderSidebar()}
+    return `
         <div class="main-content">
             <h2 class="page-title"><i class="fa-solid fa-calendar-days"></i> Horario de Clases</h2>
             <div class="card" style="text-align:center; padding:50px 20px;">
@@ -21983,9 +21982,7 @@ function renderMaestroHorario() {
 }
 
 function renderApoyoHorarios() {
-    const app = document.getElementById('app');
-    app.innerHTML = `
-        ${renderSidebar()}
+    return `
         <div class="main-content">
             <h2 class="page-title"><i class="fa-solid fa-calendar-days"></i> Horarios de Profesores</h2>
             <div class="card" style="text-align:center; padding:50px 20px;">
@@ -21998,9 +21995,7 @@ function renderApoyoHorarios() {
 }
 
 function renderAdminHorarios() {
-    const app = document.getElementById('app');
-    app.innerHTML = `
-        ${renderSidebar()}
+    return `
         <div class="main-content">
             <h2 class="page-title"><i class="fa-solid fa-calendar-days"></i> Gestión de Horarios</h2>
             <div class="card" style="text-align:center; padding:50px 20px;">
@@ -22013,8 +22008,7 @@ function renderAdminHorarios() {
 }
 
 function renderAlumnoHorario() {
-    const app = document.getElementById('app');
-    app.innerHTML = `
+    return `
         <div class="mobile-app" style="background:var(--page-bg)">
             <div class="mobile-header" style="background:var(--primary); color:white; padding:20px;">
                 <h2 style="margin:0"><i class="fa-solid fa-calendar-days"></i> Mi Horario</h2>
