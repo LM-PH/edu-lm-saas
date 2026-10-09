@@ -21966,3 +21966,69 @@ if (document.readyState === 'loading') {
 } else {
     renderApp();
 }
+
+function renderMaestroHorario() {
+    const app = document.getElementById('app');
+    app.innerHTML = `
+        ${renderSidebar()}
+        <div class="main-content">
+            <h2 class="page-title"><i class="fa-solid fa-calendar-days"></i> Horario de Clases</h2>
+            <div class="card" style="text-align:center; padding:50px 20px;">
+                <i class="fa-solid fa-person-digging fa-4x" style="color:var(--warning); margin-bottom:20px;"></i>
+                <h3>Módulo en Mantenimiento / Desarrollo</h3>
+                <p style="color:var(--text-muted); margin-top:10px;">Esta sección está siendo construida. Vuelve pronto para ver tus horarios de clase.</p>
+            </div>
+        </div>
+    `;
+}
+
+function renderApoyoHorarios() {
+    const app = document.getElementById('app');
+    app.innerHTML = `
+        ${renderSidebar()}
+        <div class="main-content">
+            <h2 class="page-title"><i class="fa-solid fa-calendar-days"></i> Horarios de Profesores</h2>
+            <div class="card" style="text-align:center; padding:50px 20px;">
+                <i class="fa-solid fa-person-digging fa-4x" style="color:var(--warning); margin-bottom:20px;"></i>
+                <h3>Módulo en Mantenimiento / Desarrollo</h3>
+                <p style="color:var(--text-muted); margin-top:10px;">Esta herramienta para consultar los horarios del personal aún no ha sido implementada en esta versión de la plataforma.</p>
+            </div>
+        </div>
+    `;
+}
+
+function renderAdminHorarios() {
+    const app = document.getElementById('app');
+    app.innerHTML = `
+        ${renderSidebar()}
+        <div class="main-content">
+            <h2 class="page-title"><i class="fa-solid fa-calendar-days"></i> Gestión de Horarios</h2>
+            <div class="card" style="text-align:center; padding:50px 20px;">
+                <i class="fa-solid fa-person-digging fa-4x" style="color:var(--warning); margin-bottom:20px;"></i>
+                <h3>Módulo en Mantenimiento / Desarrollo</h3>
+                <p style="color:var(--text-muted); margin-top:10px;">El sistema de horarios se encuentra en etapa de programación.</p>
+            </div>
+        </div>
+    `;
+}
+
+function renderAlumnoHorario() {
+    const app = document.getElementById('app');
+    app.innerHTML = `
+        <div class="mobile-app" style="background:var(--page-bg)">
+            <div class="mobile-header" style="background:var(--primary); color:white; padding:20px;">
+                <h2 style="margin:0"><i class="fa-solid fa-calendar-days"></i> Mi Horario</h2>
+                <button class="btn btn-sm btn-outline" style="position:absolute; right:20px; top:20px; color:white; border-color:rgba(255,255,255,0.5)" onclick="window.navigate('/alumno/credencial')">
+                    <i class="fa-solid fa-arrow-left"></i> Volver
+                </button>
+            </div>
+            <div class="mobile-content" style="padding:16px;">
+                <div class="card" style="text-align:center; padding:50px 20px; border-radius:16px;">
+                    <i class="fa-solid fa-person-digging fa-4x" style="color:var(--warning); margin-bottom:20px;"></i>
+                    <h3 style="margin-bottom:10px;">Próximamente</h3>
+                    <p style="color:var(--text-muted); font-size:0.9rem;">Pronto podrás visualizar tu horario de clases directamente aquí.</p>
+                </div>
+            </div>
+        </div>
+    `;
+}
