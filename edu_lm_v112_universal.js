@@ -21968,61 +21968,136 @@ if (document.readyState === 'loading') {
 }
 
 
-function renderMaestroHorario() {
+window.loadHorariosTable = async (containerId) => {
+    const cont = document.getElementById(containerId);
+    if (!cont) return;
+    
+    cont.innerHTML = '<div style="padding:40px; text-align:center;"><i class="fa-solid fa-spinner fa-spin fa-2x"></i><p style="color:var(--text-muted); margin-top:10px;">Cargando horarios...</p></div>';
+    
+    try {
+        let query = supabaseClient.from('horarios_maestros').select('*').eq('plantel_id', state.plantelId);
+        
+        // Filtrar por rol
+        const role = state.role;
+        if (role === 'maestro' || role === 'docente') {
+            query = query.eq('maestro_email', state.user.email);
+        } else if (role === 'alumno' || role === 'estudiante') {
+            // Obtener el grupo del alumno
+            const { data: al } = await supabaseClient
+                .from('alumnos')
+                .select('grupo_id')
+                .or(`contacto_email.eq.${state.user.email},perfil_id.eq.${state.user.id}`)
+                .maybeSingle();
+            if (al && al.grupo_id) {
+                query = query.eq('grupo_id', al.grupo_id);
+            } else {
+                cont.innerHTML = '<div style="padding:20px; text-align:center; color:var(--danger);">No tienes un grupo asignado para ver horarios.</div>';
+                return;
+            }
+        }
+        
+        const { data, error } = await query;
+        if (error) throw error;
+        
+        if (!data || data.length === 0) {
+            cont.innerHTML = '<div style="padding:20px; text-align:center; color:var(--text-muted);"><i class="fa-regular fa-calendar-xmark fa-3x" style="opacity:0.3; margin-bottom:15px;"></i><br>No hay horarios registrados en la base de datos para esta vista.</div>';
+            return;
+        }
+        
+        const columns = Object.keys(data[0]).filter(k => k !== 'plantel_id' && k !== 'id' && k !== 'created_at');
+        // Poner maestro_email al principio si existe
+        if(columns.includes('maestro_email')) {
+            columns.splice(columns.indexOf('maestro_email'), 1);
+            columns.unshift('maestro_email');
+        }
+        
+        let html = `<div style="overflow-x:auto;"><table class="table table-bordered table-striped" style="width:100%; font-size:0.85rem; background:white; text-align:left;">`;
+        html += `<thead><tr style="background:var(--primary); color:white;">`;
+        columns.forEach(col => {
+            html += `<th style="padding:10px;">${col.toUpperCase().replace(/_/g, ' ')}</th>`;
+        });
+        html += `</tr></thead><tbody>`;
+        
+        data.forEach(row => {
+            html += `<tr>`;
+            columns.forEach(col => {
+                let val = row[col];
+                if (val === null || val === undefined || val === '') val = '<span style="color:#cbd5e1">-</span>';
+                if (typeof val === 'object') val = JSON.stringify(val);
+                html += `<td style="padding:10px; border-bottom:1px solid var(--border);">${val}</td>`;
+            });
+            html += `</tr>`;
+        });
+        
+        html += `</tbody></table></div>`;
+        cont.innerHTML = html;
+        
+    } catch (e) {
+        console.error(e);
+        cont.innerHTML = `<div style="color:var(--danger); padding:20px;">Error al cargar horarios: ${e.message}</div>`;
+    }
+};
+
+window.renderApoyoHorarios = function() {
+    setTimeout(() => { if (window.loadHorariosTable) window.loadHorariosTable('horariosContainer'); }, 100);
     return `
         <div class="main-content">
-            <h2 class="page-title"><i class="fa-solid fa-calendar-days"></i> Horario de Clases</h2>
-            <div class="card" style="text-align:center; padding:50px 20px;">
-                <i class="fa-solid fa-person-digging fa-4x" style="color:var(--warning); margin-bottom:20px;"></i>
-                <h3>Módulo en Mantenimiento / Desarrollo</h3>
-                <p style="color:var(--text-muted); margin-top:10px;">Esta sección está siendo construida. Vuelve pronto para ver tus horarios de clase.</p>
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
+                <h2 class="page-title" style="margin:0;"><i class="fa-solid fa-calendar-days"></i> Horarios de Profesores</h2>
+                <button class="btn btn-outline btn-sm" onclick="window.loadHorariosTable('horariosContainer')"><i class="fa-solid fa-rotate"></i> Refrescar</button>
+            </div>
+            <div class="card" style="padding:20px; box-shadow:0 4px 6px -1px rgba(0,0,0,0.1);">
+                <div id="horariosContainer"></div>
             </div>
         </div>
     `;
-}
+};
 
-function renderApoyoHorarios() {
+window.renderMaestroHorario = function() {
+    setTimeout(() => { if (window.loadHorariosTable) window.loadHorariosTable('horariosContainerMaestro'); }, 100);
     return `
         <div class="main-content">
-            <h2 class="page-title"><i class="fa-solid fa-calendar-days"></i> Horarios de Profesores</h2>
-            <div class="card" style="text-align:center; padding:50px 20px;">
-                <i class="fa-solid fa-person-digging fa-4x" style="color:var(--warning); margin-bottom:20px;"></i>
-                <h3>Módulo en Mantenimiento / Desarrollo</h3>
-                <p style="color:var(--text-muted); margin-top:10px;">Esta herramienta para consultar los horarios del personal aún no ha sido implementada en esta versión de la plataforma.</p>
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
+                <h2 class="page-title" style="margin:0;"><i class="fa-solid fa-calendar-days"></i> Mi Horario de Clases</h2>
+                <button class="btn btn-outline btn-sm" onclick="window.loadHorariosTable('horariosContainerMaestro')"><i class="fa-solid fa-rotate"></i> Refrescar</button>
+            </div>
+            <div class="card" style="padding:20px; box-shadow:0 4px 6px -1px rgba(0,0,0,0.1);">
+                <div id="horariosContainerMaestro"></div>
             </div>
         </div>
     `;
-}
+};
 
-function renderAdminHorarios() {
+window.renderAdminHorarios = function() {
+    setTimeout(() => { if (window.loadHorariosTable) window.loadHorariosTable('horariosContainerAdmin'); }, 100);
     return `
         <div class="main-content">
-            <h2 class="page-title"><i class="fa-solid fa-calendar-days"></i> Gestión de Horarios</h2>
-            <div class="card" style="text-align:center; padding:50px 20px;">
-                <i class="fa-solid fa-person-digging fa-4x" style="color:var(--warning); margin-bottom:20px;"></i>
-                <h3>Módulo en Mantenimiento / Desarrollo</h3>
-                <p style="color:var(--text-muted); margin-top:10px;">El sistema de horarios se encuentra en etapa de programación.</p>
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
+                <h2 class="page-title" style="margin:0;"><i class="fa-solid fa-calendar-days"></i> Horarios de Clase (Global)</h2>
+                <button class="btn btn-outline btn-sm" onclick="window.loadHorariosTable('horariosContainerAdmin')"><i class="fa-solid fa-rotate"></i> Refrescar</button>
+            </div>
+            <div class="card" style="padding:20px; box-shadow:0 4px 6px -1px rgba(0,0,0,0.1);">
+                <div id="horariosContainerAdmin"></div>
             </div>
         </div>
     `;
-}
+};
 
-function renderAlumnoHorario() {
+window.renderAlumnoHorario = function() {
+    setTimeout(() => { if (window.loadHorariosTable) window.loadHorariosTable('horariosContainerAlumno'); }, 100);
     return `
         <div class="mobile-app" style="background:var(--page-bg)">
             <div class="mobile-header" style="background:var(--primary); color:white; padding:20px;">
-                <h2 style="margin:0"><i class="fa-solid fa-calendar-days"></i> Mi Horario</h2>
+                <h2 style="margin:0; font-size:1.4rem;"><i class="fa-solid fa-calendar-days"></i> Mi Horario</h2>
                 <button class="btn btn-sm btn-outline" style="position:absolute; right:20px; top:20px; color:white; border-color:rgba(255,255,255,0.5)" onclick="window.navigate('/alumno/credencial')">
                     <i class="fa-solid fa-arrow-left"></i> Volver
                 </button>
             </div>
             <div class="mobile-content" style="padding:16px;">
-                <div class="card" style="text-align:center; padding:50px 20px; border-radius:16px;">
-                    <i class="fa-solid fa-person-digging fa-4x" style="color:var(--warning); margin-bottom:20px;"></i>
-                    <h3 style="margin-bottom:10px;">Próximamente</h3>
-                    <p style="color:var(--text-muted); font-size:0.9rem;">Pronto podrás visualizar tu horario de clases directamente aquí.</p>
+                <div class="card" style="padding:15px; border-radius:12px; box-shadow:0 4px 6px -1px rgba(0,0,0,0.1);">
+                    <div id="horariosContainerAlumno"></div>
                 </div>
             </div>
         </div>
     `;
-}
+};
