@@ -8,7 +8,7 @@ CREATE TABLE IF NOT EXISTS public.audit_log (
     id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
     tabla_afectada TEXT NOT NULL,
     operacion TEXT NOT NULL CHECK (operacion IN ('INSERT', 'UPDATE', 'DELETE')),
-    usuario_id UUID REFERENCES auth.users(id) ON DELETE SET NULL,
+    usuario_id UUID REFERENCES public.perfiles(id) ON DELETE SET NULL,
     valores_viejos JSONB,
     valores_nuevos JSONB,
     ip_address TEXT,
