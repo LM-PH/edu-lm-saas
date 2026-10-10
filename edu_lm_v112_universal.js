@@ -22790,7 +22790,9 @@ async function renderMasterAuditoria() {
                 </div>
                 <div style="flex:1; min-width:150px;">
                     <label style="font-weight:600; font-size:0.85rem; margin-bottom:4px; display:block; color:var(--text-muted)">Fecha</label>
-                    <input type="date" id="auditDateInput" class="form-input" onchange="window.loadAuditoriaList()">
+                    
+                    <input type="date" id="auditDateInput" class="form-input" value="${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}-${String(new Date().getDate()).padStart(2, '0')}" onchange="window.loadAuditoriaList()"><div style="font-size:0.7rem; color:var(--text-muted); margin-top:4px;">(Por defecto: Solo hoy)</div>
+
                 </div>
                 <div>
                     <button class="btn btn-primary" onclick="window.loadAuditoriaList()"><i class="fa-solid fa-search"></i> Buscar</button>
