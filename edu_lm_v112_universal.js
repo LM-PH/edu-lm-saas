@@ -22853,6 +22853,11 @@ window.loadAuditoriaList = async (loadMore = false) => {
 
         let query = supabaseClient.from('audit_log').select('*, perfiles!usuario_id(nombre, rol)', { count: 'exact' });
 
+        // Filtrar estrictamente por la escuela seleccionada usando los valores JSON registrados
+        if (state.plantelId) {
+            query = query.or(`valores_nuevos->>plantel_id.eq.${state.plantelId},valores_viejos->>plantel_id.eq.${state.plantelId}`);
+        }
+
         if (op) query = query.eq('operacion', op);
         if (tbl) query = query.eq('tabla_afectada', tbl);
         if (userIds.length > 0) query = query.in('usuario_id', userIds);
