@@ -22987,20 +22987,26 @@ window.exportAuditoriaCSV = () => {
 
 window.loadAuditoriaUsuariosPlantel = async () => {
     const dl = document.getElementById('auditUsersDatalist');
-    if (!dl || !state.plantelId) return;
+    if (!dl) return;
     
     try {
-        const { data: permitidos } = await window.supabaseClient.from('perfiles_permitidos')
+        let query = window.supabaseClient.from('perfiles_permitidos')
             .select('nombre, rol')
-            .eq('plantel_id', state.plantelId)
             .order('nombre');
+            
+        // Si el master ha seleccionado un plantel en su sesión, filtramos, si no, traemos todos.
+        if (state.plantelId) {
+            query = query.eq('plantel_id', state.plantelId);
+        }
+        
+        const { data: permitidos } = await query;
             
         if (permitidos && permitidos.length > 0) {
             let html = '';
             const namesAdded = new Set();
             permitidos.forEach(p => {
                 if(p.nombre && !namesAdded.has(p.nombre)) {
-                    html += `<option value="${p.nombre}">${p.rol}</option>`;
+                    html += `<option value="${p.nombre}">${p.rol || ''}</option>`;
                     namesAdded.add(p.nombre);
                 }
             });
