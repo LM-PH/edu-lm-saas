@@ -7317,7 +7317,7 @@ window.obtenerDatosSolicitanteActual = async () => {
             // 1. Buscar en perfiles por ID
             const { data: prof } = await supabaseClient
                 .from('perfiles')
-                .select('nombre, rol')
+                .select('nombre, rol').neq('rol', 'alumno')
                 .eq('id', u.data.user.id)
                 .maybeSingle();
 
@@ -7328,7 +7328,7 @@ window.obtenerDatosSolicitanteActual = async () => {
             if ((!nombre || nombre === 'Usuario') && u.data.user.email) {
                 const { data: perm } = await supabaseClient
                     .from('perfiles_permitidos')
-                    .select('nombre, rol')
+                    .select('nombre, rol').neq('rol', 'alumno')
                     .eq('email', u.data.user.email)
                     .maybeSingle();
 
@@ -16991,7 +16991,7 @@ window.loadPersonalBibliotecaSelect = async () => {
     if(!sel) return;
     try {
         const { data, error } = await supabaseClient.from('perfiles_permitidos')
-            .select('nombre, rol')
+            .select('nombre, rol').neq('rol', 'alumno')
             .neq('rol', 'alumno')
             .eq('plantel_id', state.plantelId)
             .order('nombre');
@@ -22992,7 +22992,7 @@ window.loadAuditoriaUsuariosPlantel = async () => {
     
     try {
         let query = supabaseClient.from('perfiles_permitidos')
-            .select('nombre, rol')
+            .select('nombre, rol').neq('rol', 'alumno')
             .order('nombre');
             
         // Si el master ha seleccionado un plantel en su sesión, filtramos, si no, traemos todos.
