@@ -9477,7 +9477,7 @@ window.registrarJustificanteMedico = async () => {
 
 window.notificarMaestrosJustificante = async (alumnoId, motivo, inicio, fin) => {
     try {
-        const { data: al, error: alErr } = await window.supabaseClient.from('alumnos').select('id, nombre, grupo_id, grado, taller').eq('id', alumnoId).single();
+        const { data: al, error: alErr } = await supabaseClient.from('alumnos').select('id, nombre, grupo_id, grado, taller').eq('id', alumnoId).single();
         if(alErr || !al || !al.grupo_id) {
             console.warn("No se pudo obtener el grupo del alumno para notificar.");
             return;
@@ -9488,7 +9488,7 @@ window.notificarMaestrosJustificante = async (alumnoId, motivo, inicio, fin) => 
         const mensaje = `Se informa que el alumno(a) **${al.nombre}** cuenta con justificante médico del **${fInicio}** al **${fFin}** por motivo de: ${motivo}. Favor de brindar las facilidades académicas necesarias.`;
 
         // Buscar a los maestros que realmente le dan clases
-        const { data: asig } = await window.supabaseClient.from('asignaciones_maestros').select('docente_email, grupo_id, target_grado, materia').eq('plantel_id', state.plantelId);
+        const { data: asig } = await supabaseClient.from('asignaciones_maestros').select('docente_email, grupo_id, target_grado, materia').eq('plantel_id', state.plantelId);
         
         let validEmails = new Set();
         if (asig) {
@@ -9512,7 +9512,7 @@ window.notificarMaestrosJustificante = async (alumnoId, motivo, inicio, fin) => 
 
         let teacherIds = [];
         if (validEmails.size > 0) {
-            const { data: perfs } = await window.supabaseClient.from('perfiles').select('id, email').in('email', Array.from(validEmails));
+            const { data: perfs } = await supabaseClient.from('perfiles').select('id, email').in('email', Array.from(validEmails));
             if (perfs) teacherIds = perfs.map(p => p.id);
         }
 
@@ -9538,7 +9538,7 @@ window.notificarMaestrosJustificante = async (alumnoId, motivo, inicio, fin) => 
         });
 
         if (newComs.length > 0) {
-            const { error: comErr } = await window.supabaseClient.from('comunicados').insert(newComs);
+            const { error: comErr } = await supabaseClient.from('comunicados').insert(newComs);
             if(comErr) throw new Error("Fallo al guardar justificantes en BD: " + comErr.message);
         } else {
             console.warn("No se encontraron maestros para notificar.");
@@ -22991,7 +22991,7 @@ window.loadAuditoriaUsuariosPlantel = async () => {
     if (!dl) return;
     
     try {
-        let query = window.supabaseClient.from('perfiles_permitidos')
+        let query = supabaseClient.from('perfiles_permitidos')
             .select('nombre, rol')
             .order('nombre');
             
