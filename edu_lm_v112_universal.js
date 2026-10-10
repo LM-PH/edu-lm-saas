@@ -22767,6 +22767,7 @@ async function renderMasterAuditoria() {
                     
                     <input type="text" id="auditSearchInput" list="auditUsersDatalist" class="form-input" placeholder="Escribe o selecciona..." onchange="window.loadAuditoriaList()" onkeyup="if(event.key==='Enter') window.loadAuditoriaList()">
                     <datalist id="auditUsersDatalist"></datalist>
+<div id="auditUsersCount" style="font-size:0.7rem; color:var(--text-muted); margin-top:2px;">Cargando lista predictiva...</div>
 
                 </div>
                 <div style="flex:1; min-width:150px;">
@@ -23011,6 +23012,11 @@ window.loadAuditoriaUsuariosPlantel = async () => {
                 }
             });
             dl.innerHTML = html;
+            const cnt = document.getElementById('auditUsersCount');
+            if(cnt) cnt.innerText = namesAdded.size + ' usuarios listos para buscar.';
+        } else {
+            const cnt = document.getElementById('auditUsersCount');
+            if(cnt) cnt.innerText = 'No se encontraron usuarios.';
         }
     } catch(e) {
         console.error("Error cargando usuarios para auditoría:", e);
