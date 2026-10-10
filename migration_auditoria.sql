@@ -62,12 +62,12 @@ BEGIN
     ELSIF (TG_OP = 'DELETE') THEN
         v_old_data := to_jsonb(OLD);
         INSERT INTO public.audit_log (tabla_afectada, operacion, usuario_id, valores_viejos, ip_address, user_agent)
-        VALUES (TG_TABLE_NAME::TEXT, TG_OP, auth.uid(), v_old_data, null, v_ip, v_ua);
+        VALUES (TG_TABLE_NAME::TEXT, TG_OP, auth.uid(), v_old_data, v_ip, v_ua);
         RETURN OLD;
     ELSIF (TG_OP = 'INSERT') THEN
         v_new_data := to_jsonb(NEW);
         INSERT INTO public.audit_log (tabla_afectada, operacion, usuario_id, valores_nuevos, ip_address, user_agent)
-        VALUES (TG_TABLE_NAME::TEXT, TG_OP, auth.uid(), null, v_new_data, v_ip, v_ua);
+        VALUES (TG_TABLE_NAME::TEXT, TG_OP, auth.uid(), v_new_data, v_ip, v_ua);
         RETURN NEW;
     END IF;
     RETURN NULL;
