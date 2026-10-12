@@ -125,7 +125,8 @@ window.showToast = (msg, type = 'success') => {
 // Standardized Login Function
 window.login = (rawRole) => {
     let role = rawRole;
-    if (role === 'admin') role = 'admin';
+    if (['admin', 'administrativo'].includes(role)) role = 'admin';
+    if (['director', 'directivo', 'subdirector'].includes(role)) role = 'directivo';
 
     state.role = role;
     state.schoolConfigured = true;
@@ -282,7 +283,10 @@ window.handleLogin = async (e) => {
     // 4. Sincronizar Estado Global
     state.user = authData.user;
     state.isMaster = isMasterUser;
-    state.role = isMasterUser ? 'master' : profile?.rol;
+    let finalRole = isMasterUser ? 'master' : profile?.rol;
+    if (['admin', 'administrativo'].includes(finalRole)) finalRole = 'admin';
+    if (['director', 'directivo', 'subdirector'].includes(finalRole)) finalRole = 'directivo';
+    state.role = finalRole;
     state.userName = profile?.nombre || authData.user.email;
     state.plantelId = profile?.plantel_id || state.plantelId;
     
@@ -701,6 +705,7 @@ window.checkSchoolSetup = async () => {
             // NORMALIZACIÓN DE ROL
             let normRole = isActuallyMaster ? 'master' : profile.rol;
             if (['admin', 'administrativo'].includes(normRole)) normRole = 'admin';
+            if (['director', 'directivo', 'subdirector'].includes(normRole)) normRole = 'directivo';
 
             state.role = normRole; 
             state.plantelId = profile.plantel_id;
@@ -872,6 +877,7 @@ function renderSidebar() {
   // Mapeo seguro de roles (Sinonimia Total: admin/admin/administrativo -> admin)
   let userRole = state.role || 'alumno';
   if (['admin', 'administrativo'].includes(userRole)) userRole = 'admin';
+  if (['director', 'directivo', 'subdirector'].includes(userRole)) userRole = 'directivo';
   if (userRole === 'maestro') userRole = 'maestro';
 
   const menus = {
@@ -887,6 +893,7 @@ function renderSidebar() {
       { name: 'Inscripción', path: '/admin/inscripcion', icon: 'fa-user-plus' },
       { name: 'Expediente Digital', path: '/admin/expediente', icon: 'fa-folder-open' },
       { name: 'Listas de Grupos', path: '/admin/listas', icon: 'fa-list-check' },
+      { name: 'Horarios de Clase', path: '/directivo/horarios', icon: 'fa-calendar-days' },
       { name: 'Calendario de Evaluación', path: '/admin/calendario', icon: 'fa-calendar-check' },
       { name: 'Boletas y Calificaciones', path: '/admin/calificaciones', icon: 'fa-star-half-stroke' },
       { name: 'Trámites y Constancias', path: '/admin/tramites', icon: 'fa-file-signature' },
@@ -6668,6 +6675,11 @@ function renderAlumnoCredencial() {
              <h3 id="credGrupo" style="font-weight: 800; font-size: 1.8rem; color: var(--primary); margin-top:20px;">...</h3>
              <p id="credPlantel" style="text-transform: uppercase; font-size: 0.7rem; color: var(--secondary); margin-top:8px;">...</p>
         </div>
+        <div style="margin-top: 16px;">
+            <button class="btn btn-primary btn-block" style="border-radius:12px; padding:14px; font-weight:700; font-size:1rem; display:flex; align-items:center; justify-content:center; gap:10px; box-shadow:0 4px 12px rgba(37,99,235,0.2);" onclick="window.navigate('/alumno/horario')">
+                <i class="fa-solid fa-calendar-days"></i> Ver Mi Horario de Clases
+            </button>
+        </div>
       </div>
     </div>
   `;
@@ -8245,7 +8257,8 @@ async function renderPage(path) {
     case '/directivo/expedientes': return renderSecretariaExpedientes();
     case '/admin/calificaciones': return renderAdminCalificaciones();
     case '/admin/tramites': return renderAdminTramites();
-    case '/directivo/horarios': return renderAdminHorarios();
+    case '/admin/horarios':
+    case '/directivo/horarios': return (typeof window.renderAdminHorarios === 'function' ? window.renderAdminHorarios() : (typeof renderAdminHorarios === 'function' ? renderAdminHorarios() : '<h2>Cargando horarios...</h2>'));
     case '/admin/calendario': return renderAdminCalendario();
     case '/admin/comunicados': return renderAdminComunicados();
     case '/maestro/aula': return renderMaestroAula();
@@ -8282,7 +8295,7 @@ async function renderPage(path) {
     case '/alumno/psicosocial': return renderAlumnoPsicosocial();
     case '/alumno/timeline': return renderAlumnoTimeline();
     case '/alumno/boletas': return renderAlumnoBoletas();
-    case '/alumno/horario': return renderAlumnoHorario();
+    case '/alumno/horario': return (typeof window.renderAlumnoHorario === 'function' ? window.renderAlumnoHorario() : (typeof renderAlumnoHorario === 'function' ? renderAlumnoHorario() : '<h2>Cargando horario...</h2>'));
     case '/alumno/tramites': return renderAlumnoTramites();
     case '/directivo/autorizaciones': return renderDirectivoAutorizaciones();
     case '/directivo/gestion-personal': return renderDirectivoPersonal();
@@ -14028,36 +14041,36 @@ window.finalizarSesionAsistencia = async () => {
         else queryAl = queryAl.eq('grupo_id', grupoId);
         
         const { data: todos } = await queryAl;
-        let queryReg = supabaseClient.from('asistencias')
-            .select('alumno_id, estado, materia')
-            .gte('creado_en', new Date(`${hoy}T00:00:00`).toISOString())
-            .lte('creado_en', new Date(`${hoy}T23:59:59.999`).toISOString())
-            .eq('plantel_id', state.plantelId);
-            
-        if(grupoId.startsWith('grado:')) {
-            queryReg = queryReg.is('grupo_id', null);
-        } else {
-            queryReg = queryReg.eq('grupo_id', grupoId);
+        const studentIds = (todos || []).map(al => al.id);
+
+        let reg = [];
+        if (studentIds.length > 0) {
+            const { data: rawReg } = await supabaseClient.from('asistencias')
+                .select('alumno_id, estado, materia')
+                .in('alumno_id', studentIds)
+                .or(`fecha.eq.${hoy},and(creado_en.gte.${hoy}T00:00:00Z,creado_en.lte.${hoy}T23:59:59.999Z)`)
+                .eq('plantel_id', state.plantelId);
+
+            // Filtrar por materia en JS para ser más permisivos con espacios o nulos si es necesario
+            reg = (rawReg || []).filter(r => {
+                const mRecord = (r.materia || '').trim().toLowerCase();
+                const mTarget = materia.toLowerCase();
+                return mRecord === mTarget || mRecord === ''; // Permitir vacíos para justificaciones generales
+            });
         }
-        
-        const { data: rawReg } = await queryReg;
-        // Filtrar por materia en JS para ser más permisivos con espacios o nulos si es necesario
-        const reg = (rawReg || []).filter(r => {
-            const mRecord = (r.materia || '').trim();
-            return mRecord === materia || mRecord === ''; // Permitir nulos/vaciós para justificaciones generales
-        });
         
         const yaIds = (reg || []).map(r => r.alumno_id);
         const faltantes = (todos || []).filter(al => !yaIds.includes(al.id));
         
         if(faltantes.length > 0) {
-            // 1. Registrar las faltas en la tabla de asistencias
+            // 1. Registrar las faltas en la tabla de asistencias con fecha exacta
             await supabaseClient.from('asistencias').insert(faltantes.map(al => ({
                 alumno_id: al.id, 
                 registrador_id: u.data.user.id, 
                 estado: 'Falta', 
                 materia: materia, // Importante registrar la materia
                 grupo_id: grupoId.startsWith('grado:') ? null : grupoId,
+                fecha: hoy,
                 plantel_id: state.plantelId,
                 trimestre: window._trimestreActivoParaPase || state.selectedMaestroTrimestre || 1
             })));
@@ -14066,7 +14079,9 @@ window.finalizarSesionAsistencia = async () => {
         // 2. Enviar comunicados diferidos (Retardos y Faltas)
         const retardos = reg.filter(r => r.estado === 'Retardo').map(r => r.alumno_id);
         const faltasExplicit = reg.filter(r => r.estado === 'Falta').map(r => r.alumno_id);
-        const todasFaltas = [...faltasExplicit, ...faltantes.map(a => a.id)];
+        // Garantizar que los alumnos con Asistencia o Justificada NUNCA reciban aviso de falta
+        const presentesIds = new Set(reg.filter(r => r.estado === 'Asistencia' || r.estado === 'Justificada').map(r => r.alumno_id));
+        const todasFaltas = [...faltasExplicit, ...faltantes.map(a => a.id)].filter(id => !presentesIds.has(id));
 
         // --- ALERTA EVASIÓN DE CLASE Y ACUMULACIÓN ---
         try {
@@ -14156,6 +14171,31 @@ window.finalizarSesionAsistencia = async () => {
 
         if (comunicadosAInsertar.length > 0) {
             await supabaseClient.from('comunicados').insert(comunicadosAInsertar);
+        }
+
+        // Purgar inmediatamente cualquier aviso erróneo previo para alumnos que sí tienen Asistencia o Justificada
+        if (presentesIds.size > 0) {
+            try {
+                const arrPresentes = Array.from(presentesIds);
+                const audsPresentes = arrPresentes.map(id => 'Alumno_' + id);
+                const { data: comsErroneos } = await supabaseClient.from('comunicados')
+                    .select('id, titulo, mensaje')
+                    .or(`audiencia.in.(${audsPresentes.join(',')}),receptor_id.in.(${arrPresentes.join(',')})`)
+                    .gte('fecha_envio', `${hoy}T00:00:00Z`)
+                    .eq('plantel_id', state.plantelId);
+
+                const idsEliminar = (comsErroneos || []).filter(c => {
+                    const esInasistencia = (c.titulo || '').includes('INASISTENCIA') || (c.titulo || '').includes('Evasión de Clase');
+                    const coincideMateria = !materia || materia === 'N/A' || (c.mensaje || '').toLowerCase().includes(materia.toLowerCase());
+                    return esInasistencia && coincideMateria;
+                }).map(c => c.id);
+
+                if (idsEliminar.length > 0) {
+                    await supabaseClient.from('comunicados').delete().in('id', idsEliminar);
+                }
+            } catch(eClean) {
+                console.error("Error al purgar comunicados de alumnos presentes:", eClean);
+            }
         }
         if(window._mScanner) { await window._mScanner.stop().catch(()=>{}); window._mScanner = null; document.getElementById('reader-maestro').style.display='none'; }
         window._currentAsistenciaModo = null;
@@ -21057,8 +21097,7 @@ window.loadListaAsistenciaManual = async () => {
         // Obtener asistencias de hoy
         let queryReg = supabaseClient.from('asistencias')
             .select('alumno_id, estado, id')
-            .gte('creado_en', new Date(`${hoy}T00:00:00`).toISOString())
-            .lte('creado_en', new Date(`${hoy}T23:59:59.999`).toISOString())
+            .or(`fecha.eq.${hoy},and(creado_en.gte.${hoy}T00:00:00Z,creado_en.lte.${hoy}T23:59:59.999Z)`)
             .eq('materia', materia)
             .eq('plantel_id', state.plantelId);
             
@@ -21073,6 +21112,8 @@ window.loadListaAsistenciaManual = async () => {
         (asistencias || []).forEach(a => {
             asistMap[a.alumno_id] = a;
         });
+
+        const disabledState = (estadoSesion === 'cerrado' || estadoSesion === 'pendiente') ? 'disabled' : '';
 
         let html = `
             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
@@ -21093,7 +21134,6 @@ window.loadListaAsistenciaManual = async () => {
             if (estadoActual === 'Falta') { colorBorder = 'var(--danger)'; bgColor = '#fee2e2'; }
             
             // Si la sesión no ha iniciado, bloquear
-            const disabledState = (estadoSesion === 'cerrado' || estadoSesion === 'pendiente') ? 'disabled' : '';
             const opacityState = disabledState ? 'opacity:0.6;' : '';
 
             html += `
@@ -21118,6 +21158,7 @@ window.loadListaAsistenciaManual = async () => {
     }
 };
 
+
 window.marcarAsistenciaManual = async (alumnoId, estado) => {
     try {
         const u = await supabaseClient.auth.getUser();
@@ -21127,8 +21168,6 @@ window.marcarAsistenciaManual = async (alumnoId, estado) => {
         const materiaGuardar = (window.currentAulaMateria || 'N/A').trim();
         const grupoId = String(window.currentAulaGrupoId);
         const trim = window._trimestreActivoParaPase || state.selectedMaestroTrimestre || 1;
-        
-        // Mostrar feedback inmediato visualmente (optimistic UI) podría hacerse, pero recargar la lista es más seguro
         
         // Actualización Visual Inmediata (Optimistic UI)
         const row = document.getElementById(`row_al_${alumnoId}`);
@@ -21150,13 +21189,12 @@ window.marcarAsistenciaManual = async (alumnoId, estado) => {
             .select('id, estado')
             .eq('alumno_id', alumnoId)
             .eq('materia', materiaGuardar)
-            .gte('creado_en', `${hoy}T00:00:00Z`)
-            .lte('creado_en', `${hoy}T23:59:59Z`)
+            .or(`fecha.eq.${hoy},and(creado_en.gte.${hoy}T00:00:00Z,creado_en.lte.${hoy}T23:59:59.999Z)`)
             .eq('plantel_id', state.plantelId)
             .maybeSingle();
             
         if (existente) {
-            await supabaseClient.from('asistencias').update({ estado: estado }).eq('id', existente.id);
+            await supabaseClient.from('asistencias').update({ estado: estado, fecha: hoy }).eq('id', existente.id);
         } else {
             await supabaseClient.from('asistencias').insert([{
                 alumno_id: alumnoId, 
@@ -21168,6 +21206,30 @@ window.marcarAsistenciaManual = async (alumnoId, estado) => {
                 plantel_id: state.plantelId,
                 trimestre: trim
             }]);
+        }
+
+        // Si se cambia a Asistencia o Justificada, o Retardo: purgar avisos falsos de inasistencia/evasión
+        if (estado === 'Asistencia' || estado === 'Justificada' || estado === 'Retardo') {
+            try {
+                const aud = 'Alumno_' + alumnoId;
+                const { data: comsBorrar } = await supabaseClient.from('comunicados')
+                    .select('id, titulo, mensaje')
+                    .or(`audiencia.eq.${aud},receptor_id.eq.${alumnoId}`)
+                    .gte('fecha_envio', `${hoy}T00:00:00Z`)
+                    .eq('plantel_id', state.plantelId);
+
+                const idsABorrar = (comsBorrar || []).filter(c => {
+                    const esInasistencia = (c.titulo || '').includes('INASISTENCIA') || (c.titulo || '').includes('Evasión de Clase');
+                    const coincideMateria = !materiaGuardar || materiaGuardar === 'N/A' || (c.mensaje || '').toLowerCase().includes(materiaGuardar.toLowerCase());
+                    return esInasistencia && coincideMateria;
+                }).map(c => c.id);
+
+                if (idsABorrar.length > 0) {
+                    await supabaseClient.from('comunicados').delete().in('id', idsABorrar);
+                }
+            } catch(eClean) {
+                console.error("Error al purgar comunicados de inasistencia:", eClean);
+            }
         }
 
     } catch(err) {
@@ -22246,44 +22308,536 @@ window.renderMaestroHorario = function() {
 };
 
 function renderAdminHorarios() {
-    return window.renderApoyoHorarios();
-}
+    setTimeout(() => {
+        if (window.switchTabHorariosAdmin) window.switchTabHorariosAdmin('alumnos');
+    }, 100);
+    return `
+        <div class="page-container">
+            <div class="page-header">
+                <h2 class="page-title"><i class="fa-solid fa-calendar-days text-primary"></i> Gestión de Horarios</h2>
+                <p class="page-subtitle">Sube y administra los horarios en PDF para los alumnos o consulta los horarios de los profesores.</p>
+            </div>
 
-window.renderAlumnoHorario = function() {
+            <!-- Selector de Pestañas (Tabs) -->
+            <div style="display:flex; gap:10px; margin-top:20px; border-bottom:2px solid var(--border); padding-bottom:10px; margin-bottom:20px;">
+                <button id="tabHorariosAlumnos" class="btn btn-trimestre active" onclick="window.switchTabHorariosAdmin('alumnos')">
+                    <i class="fa-solid fa-graduation-cap"></i> Horarios de Alumnos (PDF)
+                </button>
+                <button id="tabHorariosDocentes" class="btn btn-trimestre" onclick="window.switchTabHorariosAdmin('docentes')">
+                    <i class="fa-solid fa-chalkboard-user"></i> Horarios de Docentes
+                </button>
+            </div>
+
+            <!-- Tab 1: Alumnos (PDF) -->
+            <div id="seccionHorariosAlumnos" style="display:block;">
+                <div style="display:grid; grid-template-columns: 1fr 1.3fr; gap:24px;">
+                    <!-- Formulario de Subida -->
+                    <div class="card">
+                        <h3 style="margin-top:0"><i class="fa-solid fa-cloud-arrow-up text-primary"></i> Subir Horario (PDF)</h3>
+                        <div class="form-group">
+                            <label class="form-label">Nombre del Horario</label>
+                            <input type="text" id="horarioNombre" class="form-input" placeholder="Ej. 1°A Matutino">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Asignar a Grupo (Opcional)</label>
+                            <select id="horarioGrupoId" class="form-select">
+                                <option value="">-- Todos los Grupos --</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Grado (Opcional)</label>
+                            <select id="horarioGrado" class="form-select">
+                                <option value="">-- Todos los Grados --</option>
+                                <option value="1">1° Grado</option>
+                                <option value="2">2° Grado</option>
+                                <option value="3">3° Grado</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Archivo PDF</label>
+                            <input type="file" id="horarioFile" class="form-input" accept=".pdf,application/pdf">
+                        </div>
+                        <button class="btn btn-primary btn-block" onclick="window.guardarHorarioPDF()">
+                            <i class="fa-solid fa-save"></i> Guardar y Subir PDF
+                        </button>
+                    </div>
+
+                    <!-- Lista de Horarios PDF -->
+                    <div class="card">
+                        <h3 style="margin-top:0"><i class="fa-solid fa-table-list text-primary"></i> Horarios PDF Registrados</h3>
+                        <div id="listaHorariosContenedor" style="display:flex; flex-direction:column; gap:12px; max-height:600px; overflow-y:auto;">
+                            <p style="text-align:center; opacity:0.5; padding:20px;"><i class="fa-solid fa-spinner fa-spin"></i> Cargando horarios...</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Tab 2: Docentes -->
+            <div id="seccionHorariosDocentes" style="display:none;">
+                <div style="grid-template-columns: 1fr 2fr; gap:24px; display:grid;">
+                    <div class="card" style="max-height: 600px; display:flex; flex-direction:column; gap:16px;">
+                        <h3 style="margin-top:0"><i class="fa-solid fa-users text-primary"></i> Docentes</h3>
+                        <div class="form-group" style="margin-bottom:0;">
+                            <input type="text" id="searchApoyoDocenteAdmin" class="form-input" placeholder="Buscar por nombre..." oninput="window.filtrarApoyoDocentesListAdmin(this.value)">
+                        </div>
+                        <div id="listaApoyoDocentesContenedorAdmin" style="flex:1; overflow-y:auto; display:flex; flex-direction:column; gap:8px; padding-right:4px;">
+                            <p style="text-align:center; opacity:0.5; padding:20px;">Cargando lista...</p>
+                        </div>
+                    </div>
+                    <div class="card" style="min-height: 400px; overflow-y:auto;">
+                        <div id="detalleApoyoHorarioContenedorAdmin">
+                            <div style="text-align:center; padding:80px 20px; opacity:0.4;">
+                                <i class="fa-solid fa-calendar-check fa-4x" style="color:var(--primary); opacity:0.5; margin-bottom:12px;"></i>
+                                <p style="margin-top:15px; font-weight:600; font-size:1.1rem;">Selecciona un docente de la lista para ver su horario.</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+}
+window.renderAdminHorarios = renderAdminHorarios;
+
+window.switchTabHorariosAdmin = (tab) => {
+    const secAlu = document.getElementById('seccionHorariosAlumnos');
+    const secDoc = document.getElementById('seccionHorariosDocentes');
+    const btnAlu = document.getElementById('tabHorariosAlumnos');
+    const btnDoc = document.getElementById('tabHorariosDocentes');
+
+    if (tab === 'alumnos') {
+        if(secAlu) secAlu.style.display = 'block';
+        if(secDoc) secDoc.style.display = 'none';
+        if(btnAlu) btnAlu.classList.add('active');
+        if(btnDoc) btnDoc.classList.remove('active');
+        if(window.loadHorariosAdmin) window.loadHorariosAdmin();
+    } else {
+        if(secAlu) secAlu.style.display = 'none';
+        if(secDoc) secDoc.style.display = 'block';
+        if(btnAlu) btnAlu.classList.remove('active');
+        if(btnDoc) btnDoc.classList.add('active');
+        if(window.loadApoyoHorariosAdmin) window.loadApoyoHorariosAdmin();
+    }
+};
+
+window.loadHorariosAdmin = async () => {
+    try {
+        let pid = state.plantelId || window.currentUserProfile?.plantel_id;
+        if (!pid) {
+            const u = await supabaseClient.auth.getUser();
+            if (u.data?.user) {
+                const { data: prof } = await supabaseClient.from('perfiles').select('plantel_id').eq('id', u.data.user.id).maybeSingle();
+                if (prof?.plantel_id) pid = prof.plantel_id;
+            }
+        }
+        if (pid) state.plantelId = pid;
+
+        let grupos = [];
+        try {
+            const { data } = await supabaseClient.from('grupos').select('id, nombre, turno').eq('plantel_id', pid).order('nombre');
+            if (data) grupos = data;
+        } catch(e) {}
+
+        const sel = document.getElementById('horarioGrupoId');
+        if(sel && grupos.length > 0) {
+            sel.innerHTML = '<option value="">-- Todos los Grupos --</option>' + 
+                grupos.map(g => `<option value="${g.id}">${g.nombre} - ${g.turno || ''}</option>`).join('');
+        }
+
+        let horariosList = [];
+        const { data: dataJoin, error: errJoin } = await supabaseClient.from('horarios').select('*, grupos(nombre, turno)').eq('plantel_id', pid).order('creado_en', { ascending: false });
+        if (!errJoin && dataJoin) {
+            horariosList = dataJoin;
+        } else {
+            const { data: dataPlain, error: errPlain } = await supabaseClient.from('horarios').select('*').eq('plantel_id', pid).order('creado_en', { ascending: false });
+            if (errPlain) throw errPlain;
+            horariosList = dataPlain || [];
+        }
+        
+        const cont = document.getElementById('listaHorariosContenedor');
+        if(!cont) return;
+
+        if(!horariosList || horariosList.length === 0) {
+            cont.innerHTML = '<div style="text-align:center; padding:40px 20px; opacity:0.5;"><i class="fa-solid fa-calendar-xmark fa-3x" style="margin-bottom:12px;"></i><p>No hay horarios PDF registrados en este plantel.</p></div>';
+            return;
+        }
+
+        cont.innerHTML = horariosList.map(h => `
+            <div style="padding:16px; border:1px solid var(--border); border-radius:12px; display:flex; justify-content:space-between; align-items:center; background:white; gap:12px;">
+                <div style="flex:1;">
+                    <div style="font-weight:700; color:var(--primary); font-size:1rem;">${h.nombre}</div>
+                    <div style="font-size:0.8rem; color:var(--text-muted); margin-top:2px;">
+                        <i class="fa-solid fa-users"></i> ${h.grupos ? `Grupo: ${h.grupos.nombre}` : (h.grado ? `Grado: ${h.grado}°` : 'General')}
+                        ${h.creado_en ? ` • ${new Date(h.creado_en).toLocaleDateString()}` : ''}
+                    </div>
+                </div>
+                <div style="display:flex; gap:8px;">
+                    <a href="${h.archivo_url}" target="_blank" class="btn btn-sm btn-outline" title="Ver Horario PDF" style="padding:6px 12px;">
+                        <i class="fa-solid fa-eye"></i> Ver PDF
+                    </a>
+                    <button class="btn btn-sm btn-primary" onclick="window.notificarEstudiantesHorario('${h.id}')" title="Notificar a Estudiantes" style="padding:6px 12px;">
+                        <i class="fa-solid fa-paper-plane"></i>
+                    </button>
+                    <button class="btn btn-sm btn-outline" style="color:var(--danger); border-color:#fee2e2; padding:6px 12px;" onclick="window.eliminarHorarioPDF('${h.id}')" title="Eliminar">
+                        <i class="fa-solid fa-trash"></i>
+                    </button>
+                </div>
+            </div>
+        `).join('');
+
+    } catch(e) {
+        console.error("Error al cargar horarios:", e);
+        const cont = document.getElementById('listaHorariosContenedor');
+        if(cont) cont.innerHTML = `<p style="color:var(--danger)">Error: ${e.message}</p>`;
+    }
+};
+
+window.guardarHorarioPDF = async () => {
+    const nombre = document.getElementById('horarioNombre')?.value.trim();
+    const gid = document.getElementById('horarioGrupoId')?.value;
+    const grado = document.getElementById('horarioGrado')?.value;
+    const fileInput = document.getElementById('horarioFile');
+    const file = fileInput?.files[0];
+
+    if(!nombre || !file) return alert("Por favor ingresa un nombre y selecciona un archivo PDF.");
+
+    window.showToast("Subiendo horario PDF...", "info");
+
+    try {
+        const fileExt = file.name.split('.').pop();
+        const fileName = `horarios/horario_${Date.now()}.${fileExt}`;
+
+        const { error: uploadError } = await supabaseClient.storage
+            .from('horarios')
+            .upload(fileName, file);
+
+        if (uploadError) throw uploadError;
+
+        const { data: { publicUrl } } = supabaseClient.storage
+            .from('horarios')
+            .getPublicUrl(fileName);
+
+        const { error: insertError } = await supabaseClient.from('horarios').insert([{
+            nombre: nombre,
+            archivo_url: publicUrl,
+            grado: grado || null,
+            grupo_id: gid || null,
+            plantel_id: state.plantelId
+        }]);
+
+        if (insertError) throw insertError;
+
+        window.showToast("✅ Horario PDF guardado correctamente.", "success");
+        if(document.getElementById('horarioNombre')) document.getElementById('horarioNombre').value = '';
+        if(fileInput) fileInput.value = '';
+        window.loadHorariosAdmin();
+
+    } catch(e) {
+        console.error(e);
+        alert("Error al subir horario: " + e.message);
+    }
+};
+
+window.eliminarHorarioPDF = async (id) => {
+    if(!confirm("¿Estás seguro de eliminar este horario?")) return;
+    try {
+        const { error } = await supabaseClient.from('horarios').delete().eq('id', id);
+        if(error) throw error;
+        window.showToast("Horario eliminado.", "info");
+        window.loadHorariosAdmin();
+    } catch(e) {
+        console.error(e);
+        alert("Error al eliminar: " + e.message);
+    }
+};
+
+window.notificarEstudiantesHorario = async (id) => {
+    try {
+        const { data: h } = await supabaseClient.from('horarios').select('*').eq('id', id).single();
+        if(!h) return;
+
+        let aud = 'Publico';
+        if(h.grupo_id) aud = `Grupo_${h.grupo_id}`;
+        else if(h.grado) aud = `Grado_${h.grado}`;
+
+        const u = await supabaseClient.auth.getUser();
+
+        await supabaseClient.from('comunicados').insert([{
+            autor_id: u.data.user?.id || state.user?.id,
+            titulo: '📅 NUEVO HORARIO DE CLASE DISPONIBLE',
+            mensaje: `Se ha publicado un nuevo horario: ${h.nombre}. Ya puedes consultarlo en tu sección de "Mi Horario".`,
+            audiencia: aud,
+            plantel_id: state.plantelId
+        }]);
+
+        window.showToast("Notificación enviada a los estudiantes.", "success");
+    } catch(e) {
+        console.error(e);
+        alert("Error al enviar notificación: " + e.message);
+    }
+};
+
+window.loadApoyoHorariosAdmin = async () => {
+    try {
+        const { data: docentes, error } = await supabaseClient.from('perfiles_permitidos')
+            .select('email, nombre')
+            .eq('rol', 'maestro')
+            .eq('plantel_id', state.plantelId)
+            .order('nombre');
+            
+        if (error) throw error;
+        
+        window._apoyoDocentesListAdmin = docentes || [];
+        window.filtrarApoyoDocentesListAdmin('');
+    } catch(e) {
+        console.error(e);
+        const cont = document.getElementById('listaApoyoDocentesContenedorAdmin');
+        if(cont) cont.innerHTML = `<p style="color:var(--danger)">Error al cargar docentes.</p>`;
+    }
+};
+
+window.filtrarApoyoDocentesListAdmin = (query) => {
+    const cont = document.getElementById('listaApoyoDocentesContenedorAdmin');
+    if(!cont || !window._apoyoDocentesListAdmin) return;
+    
+    const term = (query || '').toLowerCase().trim();
+    const list = term === '' 
+        ? window._apoyoDocentesListAdmin 
+        : window._apoyoDocentesListAdmin.filter(d => (d.nombre || '').toLowerCase().includes(term) || (d.email || '').toLowerCase().includes(term));
+    
+    if(list.length === 0) {
+        cont.innerHTML = '<p style="text-align:center; opacity:0.5; padding:20px;">No se encontraron docentes.</p>';
+        return;
+    }
+    
+    cont.innerHTML = list.map(d => `
+        <div style="padding:10px 12px; border:1px solid var(--border); border-radius:8px; cursor:pointer; background:white; transition:all 0.2s;" 
+             onclick="window.seleccionarDocenteHorarioAdmin('${d.email}', '${(d.nombre || d.email).replace(/'/g, "\\'")}')"
+             onmouseover="this.style.borderColor='var(--primary)'" onmouseout="this.style.borderColor='var(--border)'">
+            <div style="font-weight:600; font-size:0.9rem;">${d.nombre || d.email}</div>
+            <div style="font-size:0.75rem; color:var(--text-muted);">${d.email}</div>
+        </div>
+    `).join('');
+};
+
+window.seleccionarDocenteHorarioAdmin = async (email, name) => {
+    const cont = document.getElementById('detalleApoyoHorarioContenedorAdmin');
+    if(!cont) return;
+    cont.innerHTML = `<p style="text-align:center; opacity:0.5; padding:40px;"><i class="fa-solid fa-spinner fa-spin"></i> Cargando horario de ${name}...</p>`;
+    
+    try {
+        const { data: slots, error } = await supabaseClient.from('horarios_maestros')
+            .select('*, grupos(nombre)')
+            .eq('maestro_email', email)
+            .eq('plantel_id', state.plantelId);
+            
+        if (error) throw error;
+        
+        if (!slots || slots.length === 0) {
+            cont.innerHTML = `
+                <div style="text-align:center; padding:60px 20px; opacity:0.5;">
+                    <i class="fa-solid fa-calendar-xmark fa-3x" style="margin-bottom:12px;"></i>
+                    <p style="margin-top:15px; font-weight:600; font-size:1.1rem;">${name} no tiene clases programadas en su horario aún.</p>
+                </div>
+            `;
+            return;
+        }
+        
+        const dayOrder = { 'Lunes': 1, 'Martes': 2, 'Miércoles': 3, 'Jueves': 4, 'Viernes': 5 };
+        const hmToMin = (hm) => { if(!hm) return 0; const p = hm.split(/[:.]/); return parseInt(p[0]||0)*60 + parseInt(p[1]||0); };
+        slots.sort((a, b) => (dayOrder[a.dia] || 9) * 10000 + hmToMin(a.hora_inicio) - ((dayOrder[b.dia] || 9) * 10000 + hmToMin(b.hora_inicio)));
+        
+        const grouped = { 'Lunes': [], 'Martes': [], 'Miércoles': [], 'Jueves': [], 'Viernes': [] };
+        slots.forEach(s => { if(grouped[s.dia]) grouped[s.dia].push(s); });
+        
+        let html = `
+            <div style="border-bottom:1px solid var(--border); padding-bottom:12px; margin-bottom:16px;">
+                <h3 style="margin:0; font-size:1.2rem;"><i class="fa-solid fa-user-tie text-primary"></i> Horario: <strong>${name}</strong></h3>
+                <span style="font-size:0.8rem; color:var(--text-muted);">${email}</span>
+            </div>
+            <div style="display:flex; flex-direction:column; gap:12px;">
+        `;
+        
+        Object.keys(grouped).forEach(day => {
+            const daySlots = grouped[day];
+            if (daySlots.length === 0) return;
+            html += `
+                <div style="border:1px solid var(--border); border-radius:10px; overflow:hidden;">
+                    <div style="background:var(--primary); color:white; padding:8px 14px; font-weight:700; font-size:0.85rem; display:flex; justify-content:space-between;">
+                        <span>${day}</span>
+                        <span>${daySlots.length} clase(s)</span>
+                    </div>
+                    <div style="background:white;">
+            `;
+            html += daySlots.map(s => `
+                <div style="padding:10px 14px; border-bottom:1px solid var(--border); display:flex; justify-content:space-between; align-items:center;">
+                    <div>
+                        <div style="font-weight:700; font-size:0.9rem; color:var(--primary);">${s.materia}</div>
+                        <div style="font-size:0.8rem; color:var(--text-muted); margin-top:2px;">
+                            ${s.grupos ? `Grupo: <strong>${s.grupos.nombre}</strong>` : (s.target_grado ? `Grado: ${s.target_grado}°` : '')}
+                        </div>
+                    </div>
+                    <div style="font-weight:600; font-size:0.85rem; color:var(--text-main); background:#f1f5f9; padding:4px 8px; border-radius:6px;">
+                        <i class="fa-regular fa-clock"></i> ${s.hora_inicio} - ${s.hora_fin}
+                    </div>
+                </div>
+            `).join('');
+            html += `</div></div>`;
+        });
+        html += `</div>`;
+        cont.innerHTML = html;
+        
+    } catch(e) {
+        console.error(e);
+        cont.innerHTML = `<p style="color:var(--danger)">Error al cargar horario: ${e.message}</p>`;
+    }
+};
+
+function renderAlumnoHorario() {
     setTimeout(async () => {
         const cont = document.getElementById('horariosContainerAlumno');
         if (!cont) return;
         const u = await supabaseClient.auth.getUser();
         if (!u.data?.user) return;
-        cont.innerHTML = '<div style="padding:20px; text-align:center;"><i class="fa-solid fa-spinner fa-spin fa-2x"></i></div>';
+        cont.innerHTML = '<div style="padding:40px; text-align:center;"><i class="fa-solid fa-spinner fa-spin fa-2x" style="color:var(--primary)"></i><p style="margin-top:12px; color:var(--text-muted); font-size:0.9rem;">Cargando tu horario...</p></div>';
         try {
-            const { data: al } = await supabaseClient.from('alumnos').select('grupo_id').or(`contacto_email.eq.${u.data.user.email},perfil_id.eq.${u.data.user.id}`).maybeSingle();
-            if (!al || !al.grupo_id) { cont.innerHTML = '<p style="padding:20px; text-align:center; color:var(--text-muted);">No tienes un grupo asignado.</p>'; return; }
-            const { data: slots, error } = await supabaseClient.from('horarios_maestros').select('*').eq('grupo_id', al.grupo_id).eq('plantel_id', state.plantelId);
-            if (error) throw error;
-            if (!slots || slots.length === 0) { cont.innerHTML = '<div style="text-align:center; padding:40px; opacity:0.5;"><i class="fa-solid fa-calendar-xmark fa-3x"></i><p style="margin-top:15px;">No hay horario publicado aún para tu grupo.</p></div>'; return; }
-            const dayOrder = { 'Lunes': 1, 'Martes': 2, 'Miércoles': 3, 'Jueves': 4, 'Viernes': 5 };
-            const hmToMin = (hm) => { if(!hm) return 0; const p = hm.split(':'); return parseInt(p[0]||0)*60 + parseInt(p[1]||0); };
-            slots.sort((a, b) => (dayOrder[a.dia]||9)*10000+hmToMin(a.hora_inicio) - (dayOrder[b.dia]||9)*10000 - hmToMin(b.hora_inicio));
-            const grouped = { 'Lunes': [], 'Martes': [], 'Miércoles': [], 'Jueves': [], 'Viernes': [] };
-            slots.forEach(s => { if(grouped[s.dia]) grouped[s.dia].push(s); });
-            let html = `<div style="display:flex; flex-direction:column; gap:12px;">`;
-            Object.keys(grouped).forEach(day => {
-                const ds = grouped[day];
-                if (ds.length === 0) return;
-                html += `<div style="border:1px solid var(--border); border-radius:12px; overflow:hidden;"><div style="background:var(--primary); color:white; padding:8px 14px; font-weight:700; font-size:0.9rem;">${day}</div>`;
-                html += ds.map(s => `<div style="padding:10px 14px; border-bottom:1px solid var(--border); background:white;"><div style="font-weight:700; font-size:0.85rem; color:var(--primary);">${s.materia}</div><div style="font-size:0.8rem; color:var(--text-muted); margin-top:2px;"><i class="fa-regular fa-clock"></i> ${s.hora_inicio} - ${s.hora_fin} | ${s.maestro_email || ''}</div></div>`).join('');
+            const userEmail = (u.data.user.email || state.user?.email || '').toLowerCase().trim();
+            const userId = u.data.user.id || state.user?.id;
+
+            let al = null;
+            if (userEmail) {
+                const { data } = await supabaseClient.from('alumnos')
+                    .select('id, nombre, grupo_id, grado, plantel_id')
+                    .ilike('contacto_email', userEmail)
+                    .maybeSingle();
+                if (data) al = data;
+            }
+            if (!al && userId) {
+                const { data } = await supabaseClient.from('alumnos')
+                    .select('id, nombre, grupo_id, grado, plantel_id')
+                    .eq('perfil_id', userId)
+                    .maybeSingle();
+                if (data) al = data;
+            }
+
+            const cleanGrado = al?.grado ? (al.grado || '').toString().replace(/[^0-9]/g, '') : '';
+            const targetPlantel = al?.plantel_id || state.plantelId || window.currentUserProfile?.plantel_id;
+
+            // 1. Consultar Horarios PDF en la tabla `horarios`
+            let pdfHorarios = [];
+            let q = supabaseClient.from('horarios').select('*, grupos(nombre, turno)');
+            if (targetPlantel) q = q.eq('plantel_id', targetPlantel);
+            const { data: pdfs, error: errPdf } = await q.order('creado_en', { ascending: false });
+            if (!errPdf && pdfs) {
+                pdfHorarios = pdfs;
+            } else {
+                let q2 = supabaseClient.from('horarios').select('*');
+                if (targetPlantel) q2 = q2.eq('plantel_id', targetPlantel);
+                const { data: pdfs2 } = await q2.order('creado_en', { ascending: false });
+                pdfHorarios = pdfs2 || [];
+            }
+
+            let misPdfs = [];
+            if (al) {
+                misPdfs = (pdfHorarios || []).filter(h => {
+                    const hGradoClean = (h.grado || '').toString().replace(/[^0-9]/g, '');
+                    if (h.grupo_id && al.grupo_id && String(h.grupo_id) === String(al.grupo_id)) return true;
+                    if (hGradoClean && cleanGrado && hGradoClean === cleanGrado) return true;
+                    if (!h.grupo_id && !h.grado) return true;
+                    return false;
+                });
+            }
+
+            // Si el filtro específico no arrojó resultados pero hay PDFs en la escuela, mostrarlos todos como respaldo
+            if (misPdfs.length === 0 && pdfHorarios.length > 0) {
+                misPdfs = pdfHorarios;
+            }
+
+            // 2. Consultar Horarios Estructurados en `horarios_maestros` si tiene grupo
+            let slots = [];
+            if (al?.grupo_id) {
+                let qSlots = supabaseClient.from('horarios_maestros').select('*').eq('grupo_id', al.grupo_id);
+                if (targetPlantel) qSlots = qSlots.eq('plantel_id', targetPlantel);
+                const { data: rawSlots } = await qSlots;
+                slots = rawSlots || [];
+            }
+
+            if (misPdfs.length === 0 && slots.length === 0) {
+                cont.innerHTML = `
+                    <div style="text-align:center; padding:50px 20px; opacity:0.5;">
+                        <i class="fa-solid fa-calendar-xmark fa-3x" style="margin-bottom:12px;"></i>
+                        <h4 style="margin:8px 0 4px 0;">No hay horario disponible</h4>
+                        <p style="font-size:0.85rem; color:var(--text-muted); margin:0;">Aún no se ha publicado un horario para tu grupo.</p>
+                    </div>
+                `;
+                return;
+            }
+
+            let html = '';
+
+            // Renderizar Horarios PDF
+            if (misPdfs.length > 0) {
+                html += misPdfs.map(h => `
+                    <div class="card" style="padding:20px; border-radius:16px; margin-bottom:16px; background:white; border:1px solid var(--border); box-shadow:0 4px 12px rgba(0,0,0,0.03);">
+                        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+                            <span style="font-size:0.75rem; font-weight:800; color:var(--primary); text-transform:uppercase; background:rgba(37,99,235,0.1); padding:4px 10px; border-radius:8px;">
+                                <i class="fa-solid fa-file-pdf"></i> Horario Escolar
+                            </span>
+                            <span style="font-size:0.75rem; color:var(--text-muted);">${h.creado_en ? new Date(h.creado_en).toLocaleDateString() : ''}</span>
+                        </div>
+                        <h3 style="margin:0 0 6px 0; font-size:1.2rem; font-weight:800; color:var(--text-main);">${h.nombre}</h3>
+                        <p style="margin:0 0 16px 0; font-size:0.85rem; color:var(--text-muted);">
+                            ${h.grupos?.nombre ? `Grupo: <strong>${h.grupos.nombre}</strong>` : (h.grado ? `Grado: ${h.grado}°` : 'Horario General')}
+                        </p>
+                        <a href="${h.archivo_url}" target="_blank" class="btn btn-primary btn-block" style="border-radius:12px; padding:12px; font-weight:700; display:flex; align-items:center; justify-content:center; gap:8px;">
+                            <i class="fa-solid fa-file-pdf"></i> Ver Horario Completo (PDF)
+                        </a>
+                    </div>
+                `).join('');
+            }
+
+            // Renderizar slots estructurados si existen
+            if (slots.length > 0) {
+                const dayOrder = { 'Lunes': 1, 'Martes': 2, 'Miércoles': 3, 'Jueves': 4, 'Viernes': 5 };
+                const hmToMin = (hm) => { if(!hm) return 0; const p = hm.split(/[:.]/); return parseInt(p[0]||0)*60 + parseInt(p[1]||0); };
+                slots.sort((a, b) => (dayOrder[a.dia]||9)*10000+hmToMin(a.hora_inicio) - (dayOrder[b.dia]||9)*10000 - hmToMin(b.hora_inicio));
+                const grouped = { 'Lunes': [], 'Martes': [], 'Miércoles': [], 'Jueves': [], 'Viernes': [] };
+                slots.forEach(s => { if(grouped[s.dia]) grouped[s.dia].push(s); });
+
+                html += `<div style="margin-top:20px; font-weight:700; margin-bottom:10px; font-size:0.95rem; color:var(--text-main);"><i class="fa-solid fa-calendar-week text-primary"></i> Clases Semanales</div>`;
+                html += `<div style="display:flex; flex-direction:column; gap:12px;">`;
+                Object.keys(grouped).forEach(day => {
+                    const ds = grouped[day];
+                    if (ds.length === 0) return;
+                    html += `
+                        <div style="border:1px solid var(--border); border-radius:12px; overflow:hidden;">
+                            <div style="background:var(--primary); color:white; padding:8px 14px; font-weight:700; font-size:0.85rem;">${day}</div>
+                            <div style="background:white;">
+                    `;
+                    html += ds.map(s => `
+                        <div style="padding:10px 14px; border-bottom:1px solid var(--border);">
+                            <div style="font-weight:700; font-size:0.85rem; color:var(--primary);">${s.materia}</div>
+                            <div style="font-size:0.8rem; color:var(--text-muted); margin-top:2px;">
+                                <i class="fa-regular fa-clock"></i> ${s.hora_inicio} - ${s.hora_fin} ${s.maestro_email ? '| ' + s.maestro_email : ''}
+                            </div>
+                        </div>
+                    `).join('');
+                    html += `</div></div>`;
+                });
                 html += `</div>`;
-            });
-            html += `</div>`;
+            }
+
             cont.innerHTML = html;
+
         } catch(e) {
-            cont.innerHTML = `<p style="color:var(--danger)">Error: ${e.message}</p>`;
+            console.error("Error al cargar horario del alumno:", e);
+            cont.innerHTML = `<p style="color:var(--danger)">Error al cargar horario: ${e.message}</p>`;
         }
     }, 100);
+
     return `
         <div class="mobile-app" style="background:var(--page-bg)">
-            <div class="mobile-header" style="background:var(--primary); color:white; padding:20px;">
+            <div class="mobile-header" style="background:var(--primary); color:white; padding:20px; position:relative;">
                 <h2 style="margin:0; font-size:1.4rem;"><i class="fa-solid fa-calendar-days"></i> Mi Horario</h2>
                 <button class="btn btn-sm btn-outline" style="position:absolute; right:20px; top:20px; color:white; border-color:rgba(255,255,255,0.5)" onclick="window.navigate('/alumno/credencial')">
                     <i class="fa-solid fa-arrow-left"></i> Volver
@@ -22294,7 +22848,9 @@ window.renderAlumnoHorario = function() {
             </div>
         </div>
     `;
-};
+}
+window.renderAlumnoHorario = renderAlumnoHorario;
+
 window.aplicarProtocolosRetroactivos = async () => {
     if(!confirm("⚠️ ¿Estás seguro de que deseas revisar TODO el historial de reportes y generar citatorios o escalamientos automáticos faltantes basados en los protocolos actuales?")) return;
     
