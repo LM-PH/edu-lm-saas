@@ -12346,26 +12346,63 @@ window.justificarFaltaManual = async (alumnoId, fecha, rawVal) => {
         const [idPart, materia] = rawVal.split('|');
         const isTec = rawVal.startsWith('grado:');
         const gid = isTec ? null : idPart;
+        const matClean = (materia || '').trim();
         
         const { data: userData } = await supabaseClient.auth.getUser();
         if(!userData.user) return alert("Sesión expirada.");
 
-        // Forzamos la creación del registro como Justificada
-        const { error } = await supabaseClient.from('asistencias').insert([{
-            id: crypto.randomUUID(),
-            alumno_id: alumnoId,
-            registrador_id: userData.user.id,
-            grupo_id: gid,
-            estado: 'Justificada',
-            materia: (materia || '').trim(),
-            creado_en: `${fecha}T23:59:59Z`, 
-            fecha: fecha,
-            tipo: 'Maestro (Manual)',
-            plantel_id: state.plantelId,
-            trimestre: state.selectedMaestroTrimestre || 1
-        }]);
+        // Buscar si ya existe el registro de falta para actualizarlo
+        const { data: existente } = await supabaseClient.from('asistencias')
+            .select('id')
+            .eq('alumno_id', alumnoId)
+            .eq('materia', matClean)
+            .or(`fecha.eq.${fecha},and(creado_en.gte.${fecha}T00:00:00Z,creado_en.lte.${fecha}T23:59:59.999Z)`)
+            .eq('plantel_id', state.plantelId)
+            .maybeSingle();
 
-        if(error) throw error;
+        if (existente) {
+            const { error: updErr } = await supabaseClient.from('asistencias')
+                .update({ estado: 'Justificada', fecha: fecha })
+                .eq('id', existente.id);
+            if (updErr) throw updErr;
+        } else {
+            const { error: insErr } = await supabaseClient.from('asistencias').insert([{
+                id: crypto.randomUUID(),
+                alumno_id: alumnoId,
+                registrador_id: userData.user.id,
+                grupo_id: gid,
+                estado: 'Justificada',
+                materia: matClean,
+                creado_en: `${fecha}T23:59:59Z`, 
+                fecha: fecha,
+                tipo: 'Maestro (Manual)',
+                plantel_id: state.plantelId,
+                trimestre: state.selectedMaestroTrimestre || 1
+            }]);
+            if (insErr) throw insErr;
+        }
+
+        // Purgar aviso de inasistencia previo para esa fecha y materia
+        try {
+            const aud = 'Alumno_' + alumnoId;
+            const { data: coms } = await supabaseClient.from('comunicados')
+                .select('id, titulo, mensaje')
+                .or(`audiencia.eq.${aud},receptor_id.eq.${alumnoId}`)
+                .gte('fecha_envio', `${fecha}T00:00:00Z`)
+                .eq('plantel_id', state.plantelId);
+
+            const idsBorrar = (coms || []).filter(c => {
+                const esFalta = (c.titulo || '').includes('INASISTENCIA') || (c.titulo || '').includes('Evasión de Clase');
+                const coincideMat = !matClean || (c.mensaje || '').toLowerCase().includes(matClean.toLowerCase());
+                return esFalta && coincideMat;
+            }).map(c => c.id);
+
+            if (idsBorrar.length > 0) {
+                await supabaseClient.from('comunicados').delete().in('id', idsBorrar);
+            }
+        } catch(eClean) {
+            console.error("Error al purgar comunicados:", eClean);
+        }
         
         window.showToast("Falta justificada correctamente", "success");
         window.cargarAlumnosLista(); // Refrescar la tabla actual
@@ -21132,20 +21169,36 @@ window.loadListaAsistenciaManual = async () => {
             if (estadoActual === 'Asistencia') { colorBorder = 'var(--primary)'; bgColor = '#e0e7ff'; }
             if (estadoActual === 'Retardo') { colorBorder = 'var(--warning)'; bgColor = '#fef3c7'; }
             if (estadoActual === 'Falta') { colorBorder = 'var(--danger)'; bgColor = '#fee2e2'; }
+            if (estadoActual === 'Justificada') { colorBorder = '#2563eb'; bgColor = '#eff6ff'; }
             
             // Si la sesión no ha iniciado, bloquear
-            const opacityState = disabledState ? 'opacity:0.6;' : '';
+            const opacityState = (estadoSesion === 'pendiente') ? 'opacity:0.6;' : '';
+
+            // REGLA: Si la sesión ya cerró o el alumno tiene Falta, el maestro NO puede cambiar a Asistencia ni a Retardo.
+            // Lo que sí puede hacer es Justificar la falta.
+            const esFaltaOCerrado = (estadoSesion === 'cerrado' || estadoActual === 'Falta' || estadoActual === 'Justificada');
+            const disA = (disabledState || esFaltaOCerrado) ? 'disabled title="Una inasistencia no se puede cambiar a Asistencia tras el cierre o registro."' : '';
+            const disR = (disabledState || esFaltaOCerrado) ? 'disabled title="Una inasistencia no se puede cambiar a Retardo tras el cierre o registro."' : '';
+            const disF = (disabledState || estadoSesion === 'cerrado') ? 'disabled' : '';
 
             html += `
             <div id="row_al_${al.id}" style="display:flex; justify-content:space-between; align-items:center; padding:12px; border:1px solid ${colorBorder}; background:${bgColor}; border-radius:8px; ${opacityState}">
                 <div style="flex:1;">
-                    <div style="font-weight:600; font-size:0.95rem;">${index+1}. ${al.nombre}</div>
+                    <div style="font-weight:600; font-size:0.95rem;">
+                        ${index+1}. ${al.nombre}
+                        ${estadoActual === 'Justificada' ? '<span class="badge" style="background:#2563eb; color:white; font-size:0.7rem; margin-left:6px;"><i class="fa-solid fa-file-shield"></i> Justificada</span>' : ''}
+                    </div>
                     <div style="font-size:0.75rem; color:var(--text-muted);">${al.matricula || 'Sin matrícula'}</div>
                 </div>
-                <div style="display:flex; gap:5px;">
-                    <button id="btn_A_${al.id}" class="btn btn-sm ${estadoActual==='Asistencia'?'btn-primary':'btn-outline'}" onclick="window.marcarAsistenciaManual('${al.id}', 'Asistencia')" ${disabledState} style="padding:6px 10px;">A</button>
-                    <button id="btn_R_${al.id}" class="btn btn-sm ${estadoActual==='Retardo'?'btn-warning':'btn-outline'}" onclick="window.marcarAsistenciaManual('${al.id}', 'Retardo')" ${disabledState} style="padding:6px 10px;">R</button>
-                    <button id="btn_F_${al.id}" class="btn btn-sm ${estadoActual==='Falta'?'btn-danger':'btn-outline'}" onclick="window.marcarAsistenciaManual('${al.id}', 'Falta')" ${disabledState} style="padding:6px 10px;">F</button>
+                <div style="display:flex; gap:6px; align-items:center;">
+                    <button id="btn_A_${al.id}" class="btn btn-sm ${estadoActual==='Asistencia'?'btn-primary':'btn-outline'}" onclick="window.marcarAsistenciaManual('${al.id}', 'Asistencia')" ${disA} style="padding:6px 10px;">A</button>
+                    <button id="btn_R_${al.id}" class="btn btn-sm ${estadoActual==='Retardo'?'btn-warning':'btn-outline'}" onclick="window.marcarAsistenciaManual('${al.id}', 'Retardo')" ${disR} style="padding:6px 10px;">R</button>
+                    <button id="btn_F_${al.id}" class="btn btn-sm ${estadoActual==='Falta'?'btn-danger':'btn-outline'}" onclick="window.marcarAsistenciaManual('${al.id}', 'Falta')" ${disF} style="padding:6px 10px;">F</button>
+                    ${(estadoSesion === 'cerrado' || estadoActual === 'Falta' || estadoActual === 'Justificada') ? `
+                    <button id="btn_J_${al.id}" class="btn btn-sm ${estadoActual==='Justificada'?'btn-primary':'btn-outline'}" onclick="window.justificarFaltaDesdeAula('${al.id}')" style="padding:6px 10px; ${estadoActual==='Justificada'?'background:#2563eb; color:white; border-color:#2563eb;':'color:#2563eb; border-color:#2563eb;'}" title="${estadoActual==='Justificada'?'Inasistencia ya justificada':'Justificar Inasistencia'}">
+                        <i class="fa-solid fa-file-shield"></i> ${estadoActual==='Justificada'?'Justificada':'Justificar'}
+                    </button>
+                    ` : ''}
                 </div>
             </div>`;
         });
@@ -21168,6 +21221,24 @@ window.marcarAsistenciaManual = async (alumnoId, estado) => {
         const materiaGuardar = (window.currentAulaMateria || 'N/A').trim();
         const grupoId = String(window.currentAulaGrupoId);
         const trim = window._trimestreActivoParaPase || state.selectedMaestroTrimestre || 1;
+
+        // 1. REGLA ESTRICTA: Si la sesión ya cerró, el maestro NO puede asignar Asistencia ni Retardo
+        if (window.currentAulaEstadoSesion === 'cerrado' && (estado === 'Asistencia' || estado === 'Retardo')) {
+            return alert("⚠️ El pase de lista ya fue cerrado y las inasistencias fueron notificadas.\n\nNo es posible cambiar a Asistencia. Si el alumno presenta justificante médico o institucional, utiliza el botón 'Justificar'.");
+        }
+
+        const { data: existente } = await supabaseClient.from('asistencias')
+            .select('id, estado')
+            .eq('alumno_id', alumnoId)
+            .eq('materia', materiaGuardar)
+            .or(`fecha.eq.${hoy},and(creado_en.gte.${hoy}T00:00:00Z,creado_en.lte.${hoy}T23:59:59.999Z)`)
+            .eq('plantel_id', state.plantelId)
+            .maybeSingle();
+
+        // 2. REGLA ESTRICTA: Si ya tiene registrada Falta o Justificada, NO se puede cambiar a Asistencia
+        if (existente && (existente.estado === 'Falta' || existente.estado === 'Justificada') && estado === 'Asistencia') {
+            return alert("⚠️ Este alumno ya tiene registrada una inasistencia.\n\nEl maestro no puede cambiar una inasistencia a Asistencia una vez procesada. Lo que sí puedes hacer es presionar 'Justificar' si presentó comprobante.");
+        }
         
         // Actualización Visual Inmediata (Optimistic UI)
         const row = document.getElementById(`row_al_${alumnoId}`);
@@ -21185,14 +21256,6 @@ window.marcarAsistenciaManual = async (alumnoId, estado) => {
             if (estado === 'Falta') { btnF.className = 'btn btn-sm btn-danger'; row.style.borderColor = 'var(--danger)'; row.style.background = '#fee2e2'; }
         }
 
-        const { data: existente } = await supabaseClient.from('asistencias')
-            .select('id, estado')
-            .eq('alumno_id', alumnoId)
-            .eq('materia', materiaGuardar)
-            .or(`fecha.eq.${hoy},and(creado_en.gte.${hoy}T00:00:00Z,creado_en.lte.${hoy}T23:59:59.999Z)`)
-            .eq('plantel_id', state.plantelId)
-            .maybeSingle();
-            
         if (existente) {
             await supabaseClient.from('asistencias').update({ estado: estado, fecha: hoy }).eq('id', existente.id);
         } else {
@@ -21208,8 +21271,8 @@ window.marcarAsistenciaManual = async (alumnoId, estado) => {
             }]);
         }
 
-        // Si se cambia a Asistencia o Justificada, o Retardo: purgar avisos falsos de inasistencia/evasión
-        if (estado === 'Asistencia' || estado === 'Justificada' || estado === 'Retardo') {
+        // Si se cambia a Justificada o Retardo: purgar avisos falsos de inasistencia/evasión
+        if (estado === 'Justificada' || estado === 'Retardo') {
             try {
                 const aud = 'Alumno_' + alumnoId;
                 const { data: comsBorrar } = await supabaseClient.from('comunicados')
@@ -21234,8 +21297,71 @@ window.marcarAsistenciaManual = async (alumnoId, estado) => {
 
     } catch(err) {
         window.showToast("Error: " + err.message, "error");
-        // Si hay error, recargamos la lista para restaurar el estado real
         if(window.loadListaAsistenciaManual) window.loadListaAsistenciaManual();
+    }
+};
+
+window.justificarFaltaDesdeAula = async (alumnoId) => {
+    if(!confirm("¿Deseas justificar la inasistencia de este alumno?")) return;
+    try {
+        const u = await supabaseClient.auth.getUser();
+        if(!u.data.user) throw new Error("Sesión expirada");
+        
+        const hoy = new Date().toLocaleDateString('en-CA');
+        const materiaGuardar = (window.currentAulaMateria || 'N/A').trim();
+        const grupoId = String(window.currentAulaGrupoId);
+        const trim = window._trimestreActivoParaPase || state.selectedMaestroTrimestre || 1;
+
+        const { data: existente } = await supabaseClient.from('asistencias')
+            .select('id')
+            .eq('alumno_id', alumnoId)
+            .eq('materia', materiaGuardar)
+            .or(`fecha.eq.${hoy},and(creado_en.gte.${hoy}T00:00:00Z,creado_en.lte.${hoy}T23:59:59.999Z)`)
+            .eq('plantel_id', state.plantelId)
+            .maybeSingle();
+
+        if (existente) {
+            await supabaseClient.from('asistencias').update({ estado: 'Justificada', fecha: hoy }).eq('id', existente.id);
+        } else {
+            await supabaseClient.from('asistencias').insert([{
+                alumno_id: alumnoId,
+                registrador_id: u.data.user.id,
+                estado: 'Justificada',
+                materia: materiaGuardar,
+                grupo_id: grupoId.startsWith('grado:') ? null : grupoId,
+                fecha: hoy,
+                plantel_id: state.plantelId,
+                trimestre: trim
+            }]);
+        }
+
+        // Purgar aviso de inasistencia / evasión de clase para este alumno y materia
+        try {
+            const aud = 'Alumno_' + alumnoId;
+            const { data: comsBorrar } = await supabaseClient.from('comunicados')
+                .select('id, titulo, mensaje')
+                .or(`audiencia.eq.${aud},receptor_id.eq.${alumnoId}`)
+                .gte('fecha_envio', `${hoy}T00:00:00Z`)
+                .eq('plantel_id', state.plantelId);
+
+            const idsABorrar = (comsBorrar || []).filter(c => {
+                const esInasistencia = (c.titulo || '').includes('INASISTENCIA') || (c.titulo || '').includes('Evasión de Clase');
+                const coincideMateria = !materiaGuardar || materiaGuardar === 'N/A' || (c.mensaje || '').toLowerCase().includes(materiaGuardar.toLowerCase());
+                return esInasistencia && coincideMateria;
+            }).map(c => c.id);
+
+            if (idsABorrar.length > 0) {
+                await supabaseClient.from('comunicados').delete().in('id', idsABorrar);
+            }
+        } catch(eClean) {
+            console.error("Error al purgar comunicados:", eClean);
+        }
+
+        window.showToast("Inasistencia justificada correctamente.", "success");
+        if(window.loadListaAsistenciaManual) window.loadListaAsistenciaManual();
+    } catch(e) {
+        console.error(e);
+        alert("Error al justificar inasistencia: " + e.message);
     }
 };
 
