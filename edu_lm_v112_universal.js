@@ -896,6 +896,7 @@ function renderSidebar() {
       { name: 'Horarios de Clase', path: '/directivo/horarios', icon: 'fa-calendar-days' },
       { name: 'Calendario de Evaluación', path: '/admin/calendario', icon: 'fa-calendar-check' },
       { name: 'Boletas y Calificaciones', path: '/admin/calificaciones', icon: 'fa-star-half-stroke' },
+      { name: 'Reportes Escolares', path: '/directivo/reportes', icon: 'fa-file-signature' },
       { name: 'Trámites y Constancias', path: '/admin/tramites', icon: 'fa-file-signature' },
       { name: 'Comunicados Oficiales', path: '/admin/comunicados', icon: 'fa-bullhorn' },
     ],
@@ -931,6 +932,7 @@ function renderSidebar() {
       { name: 'Maestros y Materias', path: '/directivo/maestros', icon: 'fa-chalkboard-user' },
       { name: 'Grupos y Asignación', path: '/directivo/grupos', icon: 'fa-users-gear' },
       { name: 'Horarios de Clase', path: '/directivo/horarios', icon: 'fa-calendar-days' },
+      { name: 'Reportes Escolares', path: '/directivo/reportes', icon: 'fa-file-signature' },
       { name: 'Expedientes Docentes', path: '/directivo/expedientes', icon: 'fa-address-book' },
       { name: 'Comunicados Oficiales', path: '/directivo/comunicados', icon: 'fa-bullhorn' }
     ],
@@ -3455,22 +3457,23 @@ window.abrirExpedienteDirecto = (id) => {
 function renderApoyoReportes() {
   const isMaestro = state.role === 'maestro' || state.role === 'docente';
   const isBiblioteca = state.role === 'biblioteca';
+  const isDirectivo = ['directivo', 'director', 'admin'].includes(state.role);
   const today = new Date().toLocaleDateString('en-CA');
   setTimeout(() => { 
-      if(!isMaestro && !isBiblioteca && window.loadCitatoriosApoyo) window.loadCitatoriosApoyo();
-      if(!isMaestro && !isBiblioteca && window.cargarProtocolosEscuela) window.cargarProtocolosEscuela();
-      if((isMaestro || isBiblioteca) && window.buscarMisReportes) window.buscarMisReportes('');
+      if(!isMaestro && !isBiblioteca && !isDirectivo && window.loadCitatoriosApoyo) window.loadCitatoriosApoyo();
+      if(!isMaestro && !isBiblioteca && !isDirectivo && window.cargarProtocolosEscuela) window.cargarProtocolosEscuela();
+      if((isMaestro || isBiblioteca || isDirectivo) && window.buscarMisReportes) window.buscarMisReportes('');
   }, 150);
   
-  const subtitle = isMaestro ? 'Reportes de Incidencias Disciplinarias' : (isBiblioteca ? 'Biblioteca y Aula de Medios | Registro y Levante de Reportes' : 'Personal de Apoyo | Triage y Mediación Escolar');
+  const subtitle = isMaestro ? 'Reportes de Incidencias Disciplinarias' : (isBiblioteca ? 'Biblioteca y Aula de Medios | Registro y Levante de Reportes' : (isDirectivo ? 'Dirección Escolar | Registro de Incidencias Disciplinarias' : 'Personal de Apoyo | Triage y Mediación Escolar'));
   
-  const citatoriosBtn = (isMaestro || isBiblioteca) ? '' : `
+  const citatoriosBtn = (isMaestro || isBiblioteca || isDirectivo) ? '' : `
         <button class="btn btn-outline" onclick="window.abrirModalCitatorio()" style="padding:10px 20px; border-radius:12px; font-weight:600; display:flex; align-items:center; gap:8px; border:1.5px solid var(--primary); color:var(--primary);">
             <i class="fa-solid fa-envelope-open-text"></i> Crear Citatorio
         </button>
   `;
 
-  const citatoriosSection = (isMaestro || isBiblioteca) ? '' : `
+  const citatoriosSection = (isMaestro || isBiblioteca || isDirectivo) ? '' : `
         <!-- SECCIÓN 1: CITATORIOS VIGENTES -->
         <div class="card" style="width:100%; border-top:4px solid var(--warning);">
             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px; flex-wrap:wrap; gap:10px;">
@@ -3495,8 +3498,8 @@ function renderApoyoReportes() {
         </div>
   `;
 
-  const misReportesSection = (isMaestro || isBiblioteca) ? `
-        <!-- SECCIÓN 2: MIS REPORTES (MAESTRO) -->
+  const misReportesSection = (isMaestro || isBiblioteca || isDirectivo) ? `
+        <!-- SECCIÓN 2: MIS REPORTES (MAESTRO / DIRECTIVO) -->
         <div class="card" style="width:100%; border-top:4px solid var(--primary);">
             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px; flex-wrap:wrap; gap:10px;">
                 <div>
@@ -4648,8 +4651,8 @@ window.guardarReporteApoyo = async () => {
             }
         } else if (state.role === 'apoyo') {
             metaStr = 'Personal de Apoyo';
-        } else if (state.role === 'directivo') {
-            metaStr = 'Directivo';
+        } else if (['directivo', 'director', 'admin'].includes(state.role)) {
+            metaStr = 'Dirección Escolar';
         } else if (state.role === 'biblioteca') {
             metaStr = 'Biblioteca / Aula de Medios';
         } else {
@@ -8300,6 +8303,7 @@ async function renderPage(path) {
     case '/directivo/autorizaciones': return renderDirectivoAutorizaciones();
     case '/directivo/gestion-personal': return renderDirectivoPersonal();
     case '/directivo/comunicados': return renderDirectivoComunicados();
+    case '/directivo/reportes': return renderApoyoReportes();
     case '/maestro/evaluacion': return renderMaestroListas(); // Alias para evaluación rápida
     default: return '<h2>Pantalla en construcción</h2>';
   }
