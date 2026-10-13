@@ -2934,6 +2934,9 @@ function renderMaestroAula() {
                     <button id="btnCerrarManual" class="btn btn-danger" style="padding:10px 5px; font-weight:bold; border-radius:10px; display:none;" onclick="window.confirmarCierreSesion()">
                        <i class="fa-solid fa-lock"></i> Cerrar Pase de Lista
                     </button>
+                    <button id="btnAsistenciaTodosPanel" class="btn btn-success" style="padding:10px 5px; font-weight:bold; border-radius:10px; display:none; grid-column: span 2;" onclick="window.marcarTodosAsistenciaManual()">
+                       <i class="fa-solid fa-check-double"></i> Asistencia a todos
+                    </button>
                  </div>
               </div>
               <div id="listaAlumnosManual" style="display:flex; flex-direction:column; gap:8px; max-height:400px; overflow-y:auto; padding-right:5px;">
@@ -21404,6 +21407,10 @@ window.loadListaAsistenciaManual = async () => {
         if(btnCerrar) {
             btnCerrar.style.display = (estadoSesion !== 'cerrado' && estadoSesion !== 'pendiente') ? 'inline-flex' : 'none';
         }
+        const btnTodosPanel = document.getElementById('btnAsistenciaTodosPanel');
+        if(btnTodosPanel) {
+            btnTodosPanel.style.display = (estadoSesion !== 'cerrado' && estadoSesion !== 'pendiente') ? 'inline-flex' : 'none';
+        }
 
         // Obtener alumnos
         const isTec = rawVal.startsWith('grado:');
@@ -21468,7 +21475,7 @@ window.loadListaAsistenciaManual = async () => {
                     <i class="fa-solid fa-users"></i> ${alumnos.length} Alumnos en lista
                 </span>
                 <button id="btnMarcarTodosAsistencia" class="btn btn-success btn-sm" style="font-size:0.85rem; padding:7px 14px; font-weight:bold; border-radius:8px; display:inline-flex; align-items:center; gap:6px;" onclick="window.marcarTodosAsistenciaManual()" ${disTodos} title="Asignar asistencia a todos los alumnos">
-                    <i class="fa-solid fa-check-double"></i> Poner Asistencia a Todos
+                    <i class="fa-solid fa-check-double"></i> Asistencia a todos
                 </button>
             </div>
         `;

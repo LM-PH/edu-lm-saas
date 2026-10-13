@@ -1,10 +1,10 @@
-const CACHE_NAME = 'edulm-cache-v149';
+const CACHE_NAME = 'edulm-cache-v150';
 const ASSETS_TO_CACHE = [
   './',
   './index.html',
   './styles.css',
   './edu_lm_v112_universal.js',
-  './edu_lm_v112_universal.js?v=149',
+  './edu_lm_v112_universal.js?v=150',
   './manifest.json',
   './icon-192.png',
   './icon-512.png'
@@ -14,7 +14,6 @@ self.addEventListener('install', (event) => {
   self.skipWaiting();
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => {
-      // Intentar cachear uno por uno para que si uno falla, no aborte la instalación
       return Promise.allSettled(
         ASSETS_TO_CACHE.map(url => cache.add(url).catch(err => console.warn('SW Install: Fallo al cachear', url, err)))
       );
@@ -46,6 +45,28 @@ self.addEventListener('fetch', (event) => {
   
   if (url.protocol !== 'http:' && url.protocol !== 'https:') return;
 
+  // Network First para la aplicación principal (HTML y script universal) para evitar caché obsoleta
+  const isAppCore = event.request.mode === 'navigate' || 
+                    url.pathname.endsWith('index.html') || 
+                    url.pathname.endsWith('/') || 
+                    url.pathname.includes('edu_lm_v112_universal.js');
+
+  if (isAppCore) {
+    event.respondWith(
+      fetch(event.request).then((networkResponse) => {
+        if (networkResponse && networkResponse.status === 200) {
+          const responseToCache = networkResponse.clone();
+          caches.open(CACHE_NAME).then((cache) => {
+            cache.put(event.request, responseToCache);
+          });
+        }
+        return networkResponse;
+      }).catch(() => caches.match(event.request))
+    );
+    return;
+  }
+
+  // Cache First para recursos estáticos secundarios (iconos, css, etc.)
   event.respondWith(
     caches.match(event.request).then((cachedResponse) => {
       const fetchPromise = fetch(event.request).then((networkResponse) => {
