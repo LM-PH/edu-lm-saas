@@ -79,6 +79,40 @@ window.autoHumanize = () => {
 setInterval(window.autoHumanize, 3000); // Revisión constante cada 3 segundos (menos agresivo)
 
 // Utils & Globals
+// Helpers para normalización de Grado y Taller (Tecnologías / Secundarias Técnicas)
+window._normalizarGradoParaPase = (g) => {
+    if (!g) return '';
+    const str = String(g).trim().toLowerCase();
+    const numMatch = str.match(/\d+/);
+    if (numMatch) return numMatch[0];
+    if (str.includes('primer')) return '1';
+    if (str.includes('segund')) return '2';
+    if (str.includes('tercer')) return '3';
+    return str.replace(/[°\s]/g, '');
+};
+
+window._normalizarTextoTaller = (txt) => {
+    return String(txt || '')
+        .normalize("NFD").replace(/[\u0300-\u036f]/g, "") // Eliminar acentos
+        .toLowerCase()
+        .replace(/tecnologia|tecnología|taller|grado|enfasis|de|la|el|los|las|y|[\d°\(\)\:\-\–\_]/gi, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+};
+
+window._filtrarAlumnosPorTallerYGrado = (listaAlumnos, targetGrado, materia) => {
+    const targetGradoNorm = window._normalizarGradoParaPase ? window._normalizarGradoParaPase(targetGrado) : String(targetGrado || '').replace(/[°\s]/g, '');
+    const cleanTallerBuscado = window._normalizarTextoTaller ? window._normalizarTextoTaller(materia) : '';
+    return (listaAlumnos || []).filter(al => {
+        const gNorm = window._normalizarGradoParaPase ? window._normalizarGradoParaPase(al.grado) : String(al.grado || '').replace(/[°\s]/g, '');
+        if (targetGradoNorm && gNorm && targetGradoNorm !== gNorm) return false;
+        if (!cleanTallerBuscado) return true;
+        const cleanAlT = window._normalizarTextoTaller ? window._normalizarTextoTaller(al.taller) : '';
+        if (!cleanAlT) return true;
+        return cleanAlT.includes(cleanTallerBuscado) || cleanTallerBuscado.includes(cleanAlT);
+    });
+};
+
 window._stopFirmaQRScanner = () => {
     if(window.__firmaQrState && window.__firmaQrState.scanner) {
         try { 
@@ -6495,6 +6529,7 @@ function renderApoyoTSEscaner() {
             </div>
 
             <input type="hidden" id="inSalidaAntMatricula">
+            <input type="hidden" id="inSalidaAntAlumnoId">
             
             <div class="form-group" style="margin-bottom:12px; text-align:left;">
                 <label class="form-label">Motivo de Salida</label>
@@ -6738,7 +6773,7 @@ window.loadCredencialAlumno = async () => {
         qrCont.innerHTML = '';
         if(window.qrcode) {
             let qr = qrcode(0, 'M');
-            qr.addData(data.matricula);
+            qr.addData(data.matricula || data.id);
             qr.make();
             qrCont.innerHTML = qr.createImgTag(6, 12); // Aumentado tamaño de celda y margen
             qrCont.querySelector('img').style.width = '100%';
@@ -6746,7 +6781,7 @@ window.loadCredencialAlumno = async () => {
             qrCont.querySelector('img').style.borderRadius = '10px';
             qrCont.querySelector('img').style.padding = '10px'; // Un poco de espacio interno
         } else {
-            qrCont.innerHTML = `<img src="https://api.qrserver.com/v1/create-qr-code/?size=240x240&data=${data.matricula}" style="width:100%; border-radius:10px; padding:10px;">`;
+            qrCont.innerHTML = `<img src="https://api.qrserver.com/v1/create-qr-code/?size=240x240&data=${data.matricula || data.id}" style="width:100%; border-radius:10px; padding:10px;">`;
         }
 
     } catch(err) {
@@ -9053,8 +9088,41 @@ window.updateNotificationBadge = async (clearAll = false) => {
             query = query.gte('fecha_envio', cicloInicio);
         }
 
-        const { data: coms, error } = await query;
+        let { data: coms, error } = await query;
         if(error || !coms) return;
+
+        // Filtrar justificantes médicos para maestros de tecnología (no contar en el badge los de otros talleres)
+        if (coms && (userRole === 'maestro' || userRole === 'docente')) {
+            const { data: asigDoc } = await supabaseClient.from('asignaciones_maestros').select('materia, grupo_id').eq('docente_email', state.user.email).eq('plantel_id', state.plantelId);
+            if (asigDoc && asigDoc.length > 0) {
+                const misTalleres = asigDoc
+                    .filter(a => (a.materia || '').toLowerCase().includes('tecnolog') || (a.materia || '').toLowerCase().includes('taller') || !a.grupo_id)
+                    .map(a => window._normalizarTextoTaller ? window._normalizarTextoTaller(a.materia) : '')
+                    .filter(Boolean);
+
+                const tieneMateriasRegulares = asigDoc.some(a => {
+                    const m = (a.materia || '').toLowerCase();
+                    return !m.includes('tecnolog') && !m.includes('taller') && !!a.grupo_id;
+                });
+
+                coms = coms.filter(c => {
+                    if (c.titulo?.startsWith('JUSTIFICANTE MÉDICO:')) {
+                        if (c.titulo.includes('[TALLER:')) {
+                            const match = c.titulo.match(/\[TALLER:(.+?)\]/);
+                            if (match) {
+                                const reqTallerNorm = window._normalizarTextoTaller ? window._normalizarTextoTaller(match[1]) : match[1].toLowerCase().trim();
+                                const tallerCoincide = misTalleres.some(t => t.includes(reqTallerNorm) || reqTallerNorm.includes(t) || t === reqTallerNorm);
+                                if (!tieneMateriasRegulares) return tallerCoincide;
+                                if (misTalleres.length > 0 && !tallerCoincide) return false;
+                            }
+                        } else {
+                            if (!tieneMateriasRegulares) return false;
+                        }
+                    }
+                    return true;
+                });
+            }
+        }
 
         const comIds = coms.map(c => c.id);
         const comsReqFirma = coms.filter(c => c.tipo === 'aviso_firma_boleta' || (c.titulo && c.titulo.toLowerCase().includes('encuadre')));
@@ -9495,8 +9563,8 @@ window.registrarJustificanteMedico = async () => {
 window.notificarMaestrosJustificante = async (alumnoId, motivo, inicio, fin) => {
     try {
         const { data: al, error: alErr } = await supabaseClient.from('alumnos').select('id, nombre, grupo_id, grado, taller').eq('id', alumnoId).single();
-        if(alErr || !al || !al.grupo_id) {
-            console.warn("No se pudo obtener el grupo del alumno para notificar.");
+        if(alErr || !al) {
+            console.warn("No se pudo obtener el alumno para notificar justificante.");
             return;
         }
 
@@ -9509,18 +9577,31 @@ window.notificarMaestrosJustificante = async (alumnoId, motivo, inicio, fin) => 
         
         let validEmails = new Set();
         if (asig) {
-            asig.forEach(a => {
-                let teaches = false;
-                if (a.grupo_id === al.grupo_id) teaches = true;
-                else if (a.target_grado && al.grado && al.grado.startsWith(a.target_grado)) teaches = true;
+            const alGNorm = window._normalizarGradoParaPase ? window._normalizarGradoParaPase(al.grado) : String(al.grado || '').replace(/[°\s]/g, '');
+            const cleanAluTaller = window._normalizarTextoTaller ? window._normalizarTextoTaller(al.taller) : '';
 
-                if (teaches) {
-                    const m = (a.materia || '').toLowerCase().trim();
-                    const isTaller = m.includes('tecnolog') || m.includes('taller');
-                    if (isTaller && al.taller) {
-                        const reqT = al.taller.toLowerCase().trim();
-                        if (m.includes(reqT) || reqT.includes(m) || m === reqT) validEmails.add(a.docente_email);
-                    } else if (!isTaller) {
+            asig.forEach(a => {
+                const aGNorm = window._normalizarGradoParaPase ? window._normalizarGradoParaPase(a.target_grado) : String(a.target_grado || '').replace(/[°\s]/g, '');
+                const m = (a.materia || '').toLowerCase().trim();
+                const isTaller = m.includes('tecnolog') || m.includes('taller') || !a.grupo_id;
+
+                if (isTaller) {
+                    // Es profesor de taller / tecnología: debe coincidir el grado (o grupo) y la especialidad
+                    const gradoCoincide = (aGNorm && alGNorm && aGNorm === alGNorm) || (a.grupo_id && al.grupo_id && a.grupo_id === al.grupo_id);
+                    if (gradoCoincide) {
+                        const cleanAsigTaller = window._normalizarTextoTaller ? window._normalizarTextoTaller(a.materia) : '';
+                        if (cleanAluTaller && cleanAsigTaller) {
+                            if (cleanAluTaller.includes(cleanAsigTaller) || cleanAsigTaller.includes(cleanAluTaller) || cleanAluTaller === cleanAsigTaller) {
+                                validEmails.add(a.docente_email);
+                            }
+                        } else if (!cleanAsigTaller) {
+                            // Taller general del grado
+                            validEmails.add(a.docente_email);
+                        }
+                    }
+                } else {
+                    // Materia regular: debe coincidir el grupo_id del alumno
+                    if (a.grupo_id && al.grupo_id && a.grupo_id === al.grupo_id) {
                         validEmails.add(a.docente_email);
                     }
                 }
@@ -9529,16 +9610,39 @@ window.notificarMaestrosJustificante = async (alumnoId, motivo, inicio, fin) => 
 
         let teacherIds = [];
         if (validEmails.size > 0) {
-            const { data: perfs } = await supabaseClient.from('perfiles').select('id, email').in('email', Array.from(validEmails));
-            if (perfs) teacherIds = perfs.map(p => p.id);
+            const emailList = Array.from(validEmails).filter(Boolean);
+            if (emailList.length > 0) {
+                // En Supabase, la tabla 'perfiles' no contiene 'email'.
+                // Consultamos 'perfiles_permitidos' para obtener sus nombres oficiales:
+                const { data: perfsPerm } = await supabaseClient
+                    .from('perfiles_permitidos')
+                    .select('nombre, email')
+                    .in('email', emailList)
+                    .eq('plantel_id', state.plantelId);
+                    
+                const teacherNames = (perfsPerm || []).map(p => p.nombre).filter(Boolean);
+                if (teacherNames.length > 0) {
+                    const { data: perfs } = await supabaseClient
+                        .from('perfiles')
+                        .select('id, nombre')
+                        .in('nombre', teacherNames)
+                        .eq('plantel_id', state.plantelId);
+                    if (perfs && perfs.length > 0) {
+                        teacherIds = perfs.map(p => p.id);
+                    }
+                }
+            }
         }
 
+        const tagTaller = al.taller ? ` [TALLER: ${al.taller}]` : '';
+        const tituloCom = `JUSTIFICANTE MÉDICO: ${al.nombre}${tagTaller}`;
         const newComs = [];
+
         // Insertar para cada maestro (INDIVIDUALMENTE)
         teacherIds.forEach(tid => {
             newComs.push({
                 autor_id: state.user.id,
-                titulo: 'JUSTIFICANTE MÉDICO: ' + al.nombre,
+                titulo: tituloCom,
                 audiencia: 'Maestro_' + tid,
                 mensaje: mensaje,
                 plantel_id: state.plantelId
@@ -9548,7 +9652,7 @@ window.notificarMaestrosJustificante = async (alumnoId, motivo, inicio, fin) => 
         // Insertar también para el alumno
         newComs.push({
             autor_id: state.user.id,
-            titulo: 'JUSTIFICANTE MÉDICO: ' + al.nombre,
+            titulo: tituloCom,
             audiencia: 'Alumno_' + al.id,
             mensaje: mensaje,
             plantel_id: state.plantelId
@@ -9558,7 +9662,7 @@ window.notificarMaestrosJustificante = async (alumnoId, motivo, inicio, fin) => 
             const { error: comErr } = await supabaseClient.from('comunicados').insert(newComs);
             if(comErr) throw new Error("Fallo al guardar justificantes en BD: " + comErr.message);
         } else {
-            console.warn("No se encontraron maestros para notificar.");
+            console.warn("No se encontraron maestros para notificar justificante.");
         }
     } catch(e) { 
         console.error("Error al notificar maestros:", e);
@@ -10593,17 +10697,14 @@ window.loadFirmantesEncuadre = async () => {
         }
 
         // 2. Obtener lista de alumnos
-        let qAl = supabaseClient.from('alumnos').select('id, nombre, matricula').eq('plantel_id', state.plantelId).order('nombre');
+        let alumnos = [];
         if(isTec) {
-            const gNorm = targetGrado.includes('°') ? targetGrado : targetGrado + '°';
-            // v116: Robust matching for technologies (ignores accent in word Tecnología)
-            const cleanMat = mat.replace(/tecnología|tecnologia/gi, '').trim();
-            qAl = qAl.eq('grado', gNorm).ilike('taller', `%${cleanMat || mat}%`);
-
+            const { data: rawAlumnos } = await supabaseClient.from('alumnos').select('id, nombre, matricula, grado, taller').eq('plantel_id', state.plantelId).order('nombre');
+            alumnos = window._filtrarAlumnosPorTallerYGrado ? window._filtrarAlumnosPorTallerYGrado(rawAlumnos, targetGrado, mat) : (rawAlumnos || []);
         } else {
-            qAl = qAl.eq('grupo_id', gid);
+            const { data: rawAlumnos } = await supabaseClient.from('alumnos').select('id, nombre, matricula').eq('plantel_id', state.plantelId).eq('grupo_id', gid).order('nombre');
+            alumnos = rawAlumnos || [];
         }
-        const { data: alumnos } = await qAl;
 
         // 3. Obtener TODAS las firmas relacionadas a esos IDs
         const { data: firmasRaw } = await supabaseClient.from('firmas_encuadre')
@@ -10806,23 +10907,40 @@ window.loadTimelinePersonal = async (selectedDate) => {
 
         // Filtrar justificantes médicos para maestros de tecnología (solo ven de sus propios alumnos de taller)
         if (data && (userRole === 'maestro' || userRole === 'docente') && uRes.data?.user) {
-            const { data: asig } = await supabaseClient.from('asignaciones_maestros').select('materia').eq('docente_email', uRes.data.user.email).eq('plantel_id', state.plantelId);
+            const { data: asig } = await supabaseClient.from('asignaciones_maestros').select('materia, grupo_id, target_grado').eq('docente_email', uRes.data.user.email).eq('plantel_id', state.plantelId);
             if (asig && asig.length > 0) {
+                const misTalleres = asig
+                    .filter(a => (a.materia || '').toLowerCase().includes('tecnolog') || (a.materia || '').toLowerCase().includes('taller') || !a.grupo_id)
+                    .map(a => window._normalizarTextoTaller ? window._normalizarTextoTaller(a.materia) : '')
+                    .filter(Boolean);
+
+                const tieneMateriasRegulares = asig.some(a => {
+                    const m = (a.materia || '').toLowerCase();
+                    return !m.includes('tecnolog') && !m.includes('taller') && !!a.grupo_id;
+                });
+
                 data = data.filter(c => {
-                    if (c.titulo?.startsWith('JUSTIFICANTE MÉDICO:') && c.titulo.includes('[TALLER:')) {
-                        const match = c.titulo.match(/\[TALLER:(.+?)\]/);
-                        if (match) {
-                            const reqTaller = match[1].toLowerCase().trim();
-                            
-                            // Si el maestro imparte AL MENOS una materia regular (no taller/tecnología), puede verlo todo.
-                            // Si solo imparte talleres/tecnologías, la materia debe coincidir con reqTaller.
-                            const canView = asig.some(a => {
-                                const m = (a.materia || '').toLowerCase().trim();
-                                if (!m.includes('tecnología') && !m.includes('taller')) return true; // Materia regular
-                                return m.includes(reqTaller) || reqTaller.includes(m) || m === reqTaller;
-                            });
-                            
-                            return canView;
+                    if (c.titulo?.startsWith('JUSTIFICANTE MÉDICO:')) {
+                        if (c.titulo.includes('[TALLER:')) {
+                            const match = c.titulo.match(/\[TALLER:(.+?)\]/);
+                            if (match) {
+                                const reqTallerNorm = window._normalizarTextoTaller ? window._normalizarTextoTaller(match[1]) : match[1].toLowerCase().trim();
+                                const tallerCoincide = misTalleres.some(t => t.includes(reqTallerNorm) || reqTallerNorm.includes(t) || t === reqTallerNorm);
+
+                                // Si es maestro exclusivo de tecnologías, solo ve de su propio taller
+                                if (!tieneMateriasRegulares) {
+                                    return tallerCoincide;
+                                }
+                                // Si imparte materias regulares pero también tecnologías, no debe ver justificantes de otro taller ajeno
+                                if (misTalleres.length > 0 && !tallerCoincide) {
+                                    return false;
+                                }
+                            }
+                        } else {
+                            // Justificante general sin taller especificado: si el maestro es exclusivo de tecnología, no le corresponde
+                            if (!tieneMateriasRegulares) {
+                                return false;
+                            }
                         }
                     }
                     return true;
@@ -11094,16 +11212,14 @@ window.finalizarActividad = async (id) => {
 
         if (act) {
             // 2. Obtener lista de alumnos (mismo grupo o tecnología)
-            let qAlu = supabaseClient.from('alumnos').select('id, nombre').eq('plantel_id', act.plantel_id).order('nombre');
+            let todosAlumnos = [];
             if(act.grupo_id) {
-                qAlu = qAlu.eq('grupo_id', act.grupo_id);
+                const { data } = await supabaseClient.from('alumnos').select('id, nombre').eq('plantel_id', act.plantel_id).eq('grupo_id', act.grupo_id).order('nombre');
+                todosAlumnos = data || [];
             } else if(act.target_grado) {
-                const gNorm = act.target_grado.includes('°') ? act.target_grado : act.target_grado + '°';
-                // Usamos la misma lógica robusta de búsqueda de tecnologías que implementamos antes
-                const cleanMat = act.materia.replace(/tecnología|tecnologia/gi, '').trim();
-                qAlu = qAlu.eq('grado', gNorm).ilike('taller', `%${cleanMat || act.materia}%`);
+                const { data: rawAlu } = await supabaseClient.from('alumnos').select('id, nombre, grado, taller').eq('plantel_id', act.plantel_id).order('nombre');
+                todosAlumnos = window._filtrarAlumnosPorTallerYGrado ? window._filtrarAlumnosPorTallerYGrado(rawAlu, act.target_grado, act.materia) : (rawAlu || []);
             }
-            const { data: todosAlumnos } = await qAlu;
 
             // 3. Obtener quienes ya tienen calificación
             const { data: evaluados } = await supabaseClient.from('evaluaciones_actividades')
@@ -11385,8 +11501,18 @@ window.startEvalScanner = () => {
            if(alumno) {
                if(isTec) {
                    // Para tecnologías: validar que el alumno tenga el mismo grado y taller
-                   const gradoOk = String(alumno.grado || '').trim().toLowerCase() === actTargetGrado.toLowerCase();
-                   const tallerOk = !actMateria || String(alumno.taller || '').trim().toLowerCase() === actMateria.toLowerCase();
+                   const gAlu = window._normalizarGradoParaPase ? window._normalizarGradoParaPase(alumno.grado) : String(alumno.grado || '').trim();
+                   const gAct = window._normalizarGradoParaPase ? window._normalizarGradoParaPase(actTargetGrado) : String(actTargetGrado || '').trim();
+                   const gradoOk = !gAct || !gAlu || gAlu === gAct;
+
+                   const cleanAluTaller = window._normalizarTextoTaller ? window._normalizarTextoTaller(alumno.taller) : '';
+                   const cleanActMat = window._normalizarTextoTaller ? window._normalizarTextoTaller(actMateria) : '';
+                   
+                   const tallerOk = !cleanActMat || !cleanAluTaller ||
+                                    cleanAluTaller.includes(cleanActMat) ||
+                                    cleanActMat.includes(cleanAluTaller) ||
+                                    cleanAluTaller === cleanActMat;
+
                    if(!gradoOk || !tallerOk) {
                        alert(`\u26a0\uFE0F ¡Alto! El alumno ${alumno.nombre} fue detectado, pero NO está inscrito en la Tecnología de esta actividad (${actMateria} - Grado ${actTargetGrado}).`);
                        window.cerrarQREvaluacion();
@@ -11487,16 +11613,14 @@ window.loadListaEvalManual = async () => {
         const [actId, actTitulo, actGrupoId, actTargetGrado, actMateria] = window._lastEvalParams;
         const isTec = !actGrupoId && !!actTargetGrado;
         
-        let alumnosQuery = supabaseClient.from('alumnos').select('id, nombre, matricula, grado, taller').eq('plantel_id', state.plantelId).order('nombre');
+        let alumnos = [];
         if(isTec) {
-            const gNorm = actTargetGrado.includes('°') ? actTargetGrado : actTargetGrado + '°';
-            const cleanMat = actMateria.replace(/tecnología|tecnologia/gi, '').trim();
-            alumnosQuery = alumnosQuery.eq('grado', gNorm.trim()).ilike('taller', `%${cleanMat || actMateria}%`);
+            const { data: rawAlumnos } = await supabaseClient.from('alumnos').select('id, nombre, matricula, grado, taller').eq('plantel_id', state.plantelId).order('nombre');
+            alumnos = window._filtrarAlumnosPorTallerYGrado ? window._filtrarAlumnosPorTallerYGrado(rawAlumnos, actTargetGrado, actMateria) : (rawAlumnos || []);
         } else {
-            alumnosQuery = alumnosQuery.eq('grupo_id', actGrupoId);
+            const { data: rawAlumnos } = await supabaseClient.from('alumnos').select('id, nombre, matricula, grado, taller').eq('plantel_id', state.plantelId).eq('grupo_id', actGrupoId).order('nombre');
+            alumnos = rawAlumnos || [];
         }
-        
-        const { data: alumnos } = await alumnosQuery;
         
         if (!alumnos || alumnos.length === 0) {
             contenedor.innerHTML = '<div style="text-align:center; padding: 20px; color:var(--text-muted)">No hay alumnos registrados en este grupo.</div>';
@@ -11721,17 +11845,14 @@ window.cargarAlumnosLista = async () => {
     const targetGrado = isTec ? idPart.replace('grado:', '').trim() : null;
 
     try {
-        let alumnosQuery = supabaseClient.from('alumnos').select('id, nombre, matricula, contacto_email').eq('plantel_id', state.plantelId).order('nombre');
+        let rawAlumnos = [];
         if(isTec) {
-            const gNorm = targetGrado.includes('°') ? targetGrado : targetGrado + '°';
-            // v116: Robust matching for technologies
-            const cleanMat = materia.replace(/tecnología|tecnologia/gi, '').trim();
-            alumnosQuery = alumnosQuery.eq('grado', gNorm.trim()).ilike('taller', `%${cleanMat || materia}%`);
-
+            const { data: todos } = await supabaseClient.from('alumnos').select('id, nombre, matricula, contacto_email, grado, taller').eq('plantel_id', state.plantelId).order('nombre');
+            rawAlumnos = window._filtrarAlumnosPorTallerYGrado ? window._filtrarAlumnosPorTallerYGrado(todos, targetGrado, materia) : (todos || []);
         } else {
-            alumnosQuery = alumnosQuery.eq('grupo_id', gid);
+            const { data: todos } = await supabaseClient.from('alumnos').select('id, nombre, matricula, contacto_email').eq('plantel_id', state.plantelId).eq('grupo_id', gid).order('nombre');
+            rawAlumnos = todos || [];
         }
-        const { data: rawAlumnos } = await alumnosQuery;
         
         if(!rawAlumnos || rawAlumnos.length === 0) {
              cabecera.innerHTML = `<tr><th style="padding:12px;">Sin Alumnos</th></tr>`;
@@ -12474,17 +12595,14 @@ window.cargarBoletasGrupo = async () => {
         const matId = tmateria?.id;
 
         // 2. Fetch Alumnos
-        let alumnosQuery = supabaseClient.from('alumnos').select('id, nombre, matricula').eq('plantel_id', state.plantelId).order('nombre');
+        let rawAlumnos = [];
         if(isTec) {
-            const gNorm = targetGrado.includes('°') ? targetGrado : targetGrado + '°';
-            // v116: Robust matching for technologies
-            const cleanMat = materiaText.replace(/tecnología|tecnologia/gi, '').trim();
-            alumnosQuery = alumnosQuery.eq('grado', gNorm).ilike('taller', `%${cleanMat || materiaText}%`);
-
+            const { data: todos } = await supabaseClient.from('alumnos').select('id, nombre, matricula, grado, taller').eq('plantel_id', state.plantelId).order('nombre');
+            rawAlumnos = window._filtrarAlumnosPorTallerYGrado ? window._filtrarAlumnosPorTallerYGrado(todos, targetGrado, materiaText) : (todos || []);
         } else {
-            alumnosQuery = alumnosQuery.eq('grupo_id', gid);
+            const { data: todos } = await supabaseClient.from('alumnos').select('id, nombre, matricula').eq('plantel_id', state.plantelId).eq('grupo_id', gid).order('nombre');
+            rawAlumnos = todos || [];
         }
-        const { data: rawAlumnos } = await alumnosQuery;
         
         if(!rawAlumnos || rawAlumnos.length === 0) {
             tbody.innerHTML = `<tr><td colspan="${isModoFinal ? 7 : 5}" style="text-align:center; padding: 20px; color:var(--text-muted)">No hay alumnos vinculados.</td></tr>`;
@@ -13626,13 +13744,17 @@ function attachDOMEvents() {
           
           try {
               tlInput.innerHTML = '<option value="">Consultando tecnologías para ' + selectedGrado + '...</option>';
-              // Buscamos materias que sean Tecnologías o Talleres en la CARGA MAESTRO
-              const { data: talData, error: talError } = await supabaseClient.from('asignaciones_maestros')
-                  .select('materia')
-                  .eq('target_grado', selectedGrado)
+              const gNorm = window._normalizarGradoParaPase ? window._normalizarGradoParaPase(selectedGrado) : selectedGrado.replace(/[°\s]/g, '');
+              const { data: allTalData, error: talError } = await supabaseClient.from('asignaciones_maestros')
+                  .select('materia, target_grado')
                   .eq('plantel_id', state.plantelId);
               
               if(talError) throw talError;
+
+              const talData = (allTalData || []).filter(t => {
+                  const tG = window._normalizarGradoParaPase ? window._normalizarGradoParaPase(t.target_grado) : (t.target_grado || '').replace(/[°\s]/g, '');
+                  return tG === gNorm;
+              });
 
               if(talData && talData.length > 0) {
                   // Filtrar únicos
@@ -13758,7 +13880,7 @@ function attachDOMEvents() {
                      stQR.innerHTML = '';
                      if(window.qrcode) {
                          let qr = qrcode(0, 'M');
-                         qr.addData(alumno.matricula); qr.make();
+                         qr.addData(alumno.matricula || alumno.id); qr.make();
                          stQR.innerHTML = qr.createImgTag(5, 10);
                      }
                  }
@@ -13885,7 +14007,8 @@ window.toggleAsistenciaModo = async (modo) => {
             .select('*').eq('grupo_id', String(window.currentAulaGrupoId)).eq('materia', materia).eq('fecha', hoy).eq('plantel_id', state.plantelId).maybeSingle();
 
         if(sesion && sesion.estado === 'cerrado') {
-            // Permitimos reabrirla para corregir errores.
+            window.showToast("⚠️ La sesión ya fue cerrada. Solo se pueden justificar inasistencias.", "warning");
+            return;
         }
 
         if(window._currentAsistenciaModo === modo) {
@@ -13913,6 +14036,27 @@ window.toggleAsistenciaModo = async (modo) => {
     } catch(err) { window.showToast("Error: " + err.message, "error"); }
 };
 
+// Helpers para normalización de Grado y Taller (Tecnologías / Secundarias Técnicas)
+window._normalizarGradoParaPase = (g) => {
+    if (!g) return '';
+    const str = String(g).trim().toLowerCase();
+    const numMatch = str.match(/\d+/);
+    if (numMatch) return numMatch[0];
+    if (str.includes('primer')) return '1';
+    if (str.includes('segund')) return '2';
+    if (str.includes('tercer')) return '3';
+    return str.replace(/[°\s]/g, '');
+};
+
+window._normalizarTextoTaller = (txt) => {
+    return String(txt || '')
+        .normalize("NFD").replace(/[\u0300-\u036f]/g, "") // Eliminar acentos
+        .toLowerCase()
+        .replace(/tecnologia|tecnología|taller|grado|enfasis|de|la|el|los|las|y|[\d°\(\)\:\-\–\_]/gi, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+};
+
 window.startMaestroQR = async () => {
     const materia = (window.currentAulaMateria || 'N/A').trim();
     if (!window._trimestreActivoParaPase) {
@@ -13934,14 +14078,20 @@ window.startMaestroQR = async () => {
             const hoy = new Date().toLocaleDateString('en-CA');
             const materia = (window.currentAulaMateria || 'N/A').trim();
             const trim = window._trimestreActivoParaPase || 1;
-            const { count } = await supabaseClient.from('asistencias')
+            let countQuery = supabaseClient.from('asistencias')
                 .select('*', { count: 'exact', head: true })
                 .gte('creado_en', `${hoy}T00:00:00Z`)
                 .lte('creado_en', `${hoy}T23:59:59Z`)
                 .eq('materia', materia)
                 .eq('trimestre', trim)
-                .eq('plantel_id', state.plantelId)
-                .eq('grupo_id', String(window.currentAulaGrupoId).startsWith('grado:') ? null : String(window.currentAulaGrupoId));
+                .eq('plantel_id', state.plantelId);
+                
+            if (String(window.currentAulaGrupoId).startsWith('grado:')) {
+                countQuery = countQuery.is('grupo_id', null);
+            } else {
+                countQuery = countQuery.eq('grupo_id', String(window.currentAulaGrupoId));
+            }
+            const { count } = await countQuery;
             window._qrScanCount = count || 0;
             lblCount.innerText = window._qrScanCount;
         } catch(e) { console.error(e); window._qrScanCount = 0; lblCount.innerText = '0'; }
@@ -13971,39 +14121,87 @@ window.guardarAsistenciaQR = async (matricula, grupoId) => {
         if(!u.data.user) throw new Error("Sesión expirada");
         const hoy = new Date().toLocaleDateString('en-CA');
         const materia = (window.currentAulaMateria || 'N/A').trim();
+        const cleanMatricula = String(matricula || '').trim();
+        
         const [sessionRes, studentRes] = await Promise.all([
             supabaseClient.from('asistencia_sesiones').select('estado').eq('grupo_id', String(grupoId)).eq('materia', materia).eq('fecha', hoy).eq('plantel_id', state.plantelId).maybeSingle(),
             (async () => {
-                const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(matricula);
+                const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(cleanMatricula);
                 if (isUUID) {
-                    const res = await supabaseClient.from('alumnos').select('id, nombre, grupo_id, grado, taller').eq('id', matricula).maybeSingle();
+                    const res = await supabaseClient.from('alumnos').select('id, nombre, grupo_id, grado, taller').eq('id', cleanMatricula).maybeSingle();
                     if (res.data) return res;
                 }
-                return await supabaseClient.from('alumnos').select('id, nombre, grupo_id, grado, taller').eq('matricula', matricula).eq('plantel_id', state.plantelId).maybeSingle();
+                return await supabaseClient.from('alumnos').select('id, nombre, grupo_id, grado, taller').eq('matricula', cleanMatricula).eq('plantel_id', state.plantelId).maybeSingle();
             })()
         ]);
-        const sesion = sessionRes.data;
+        let sesion = sessionRes.data;
         const alumno = studentRes.data;
-        if(!sesion) { window.showToast("⚠️ Pase de lista no encontrado.", "error"); return; }
+        
+        // Auto-abrir sesión si el maestro empezó a escanear directamente
+        if(!sesion) {
+            const trimActivo = window._trimestreActivoParaPase || state.selectedMaestroTrimestre || 1;
+            const { data: newSesion } = await supabaseClient.from('asistencia_sesiones').upsert({
+                grupo_id: String(grupoId),
+                materia: materia,
+                fecha: hoy,
+                maestro_id: u.data.user.id,
+                estado: 'abierto',
+                plantel_id: state.plantelId,
+                trimestre: trimActivo
+            }, { onConflict: 'plantel_id, grupo_id, materia, fecha' }).select('estado').maybeSingle();
+            
+            sesion = newSesion || { estado: 'abierto' };
+            if(window.updateSessionUI) window.updateSessionUI();
+        }
+
+        if(sesion && sesion.estado === 'cerrado') {
+            window.showToast("⚠️ El pase de lista ya fue cerrado. No se admiten registros por QR.", "error");
+            return;
+        }
+
         if(!alumno) { window.showToast("Alumno no encontrado", "error"); return; }
 
         // VALIDACIÓN DE PERTENENCIA
         const sessionGid = String(grupoId);
         if(sessionGid.startsWith('grado:')) {
-            // Caso Taller: Comparamos Grado y Nombre del Taller
-            const targetGrado = sessionGid.replace('grado:', '').split('|')[0].trim();
-            const targetTaller = sessionGid.split('|')[1].trim();
-            const cleanMat = targetTaller.replace(/tecnología|tecnologia/gi, '').trim() || targetTaller;
-            const alTaller = (alumno.taller || '').trim().toLowerCase();
-            if(alumno.grado !== targetGrado || !alTaller.includes(cleanMat.toLowerCase())) {
-                window.showToast(`❌ El alumno NO pertenece a este taller (${targetTaller} ${targetGrado})`, "error");
+            // Caso Taller: Comparamos Grado y Nombre del Taller con normalización flexible
+            const parts = sessionGid.replace('grado:', '').split('|');
+            const targetGrado = (parts[0] || '').trim();
+            const targetTaller = (parts[1] || materia || '').trim();
+            
+            const gAl = window._normalizarGradoParaPase(alumno.grado);
+            const gTar = window._normalizarGradoParaPase(targetGrado);
+            
+            if (gTar && gAl && gAl !== gTar) {
+                window.showToast(`❌ El alumno es de ${alumno.grado || 'otro'} grado, no de ${targetGrado}`, "error");
                 return;
             }
+
+            const cleanTarget = window._normalizarTextoTaller(targetTaller);
+            const cleanAlumno = window._normalizarTextoTaller(alumno.taller);
+
+            // Si el taller objetivo tiene una especialidad específica y el alumno también la tiene registrada
+            if (cleanTarget && cleanAlumno) {
+                const match = cleanAlumno.includes(cleanTarget) || cleanTarget.includes(cleanAlumno);
+                if (!match) {
+                    window.showToast(`❌ El alumno pertenece a ${alumno.taller}, no a ${targetTaller}`, "error");
+                    return;
+                }
+            }
         } else {
-            // Caso Grupo Específico: Comparamos grupo_id
-            if(alumno.grupo_id !== sessionGid) {
+            // Caso Grupo Específico
+            const isTec = materia.toLowerCase().includes('tecnolog') || materia.toLowerCase().includes('taller');
+            if (!isTec && alumno.grupo_id !== sessionGid) {
                 window.showToast("❌ El alumno NO pertenece a este grupo.", "error");
                 return;
+            } else if (isTec && alumno.grupo_id !== sessionGid) {
+                // Para talleres asignados por grupo directo, permitir si coincide la especialidad o no tiene grupo asignado
+                const cleanTarget = window._normalizarTextoTaller(materia);
+                const cleanAlumno = window._normalizarTextoTaller(alumno.taller);
+                if (cleanTarget && cleanAlumno && !cleanAlumno.includes(cleanTarget) && !cleanTarget.includes(cleanAlumno)) {
+                    window.showToast(`❌ El alumno NO pertenece a este taller ni grupo.`, "error");
+                    return;
+                }
             }
         }
 
@@ -14039,8 +14237,6 @@ window.guardarAsistenciaQR = async (matricula, grupoId) => {
         }]);
         if(error) throw error;
 
-
-
         // Incrementar contador localmente
         if (typeof window._qrScanCount === 'number') {
             window._qrScanCount++;
@@ -14068,20 +14264,36 @@ window.finalizarSesionAsistencia = async () => {
         const materia = (window.currentAulaMateria || 'N/A').trim();
         
         await supabaseClient.from('asistencia_sesiones').update({ estado: 'cerrado' }).eq('grupo_id', grupoId).eq('materia', materia).eq('fecha', hoy).eq('plantel_id', state.plantelId);
+        window.currentAulaEstadoSesion = 'cerrado';
         
-        let queryAl = supabaseClient.from('alumnos').select('id').eq('plantel_id', state.plantelId);
+        let todos = [];
         if(grupoId.startsWith('grado:')) {
-            const targetGrado = grupoId.replace('grado:', '').split('|')[0].trim();
-            const targetTaller = grupoId.split('|')[1]?.trim();
-            queryAl = queryAl.eq('grado', targetGrado);
-            if (targetTaller) {
-                const cleanMat = targetTaller.replace(/tecnología|tecnologia/gi, '').trim();
-                queryAl = queryAl.ilike('taller', `%${cleanMat || targetTaller}%`);
-            }
+            const rawG = grupoId.replace('grado:', '').split('|')[0].trim();
+            const targetGrado = window._normalizarGradoParaPase ? window._normalizarGradoParaPase(rawG) : rawG.replace(/[°\s]/g, '');
+            const targetTaller = grupoId.split('|')[1]?.trim() || materia;
+            
+            // Buscar alumnos del plantel en este grado
+            const gSin = rawG.replace(/[°\s]/g, '');
+            const { data: rawAlumnos } = await supabaseClient.from('alumnos')
+                .select('id, nombre, grado, taller')
+                .eq('plantel_id', state.plantelId)
+                .or(`grado.eq.${gSin},grado.eq.${gSin}°,grado.ilike.%${gSin}%`);
+                
+            const cleanTargetT = window._normalizarTextoTaller ? window._normalizarTextoTaller(targetTaller) : '';
+            todos = (rawAlumnos || []).filter(al => {
+                const alG = window._normalizarGradoParaPase ? window._normalizarGradoParaPase(al.grado) : (al.grado || '').replace(/[°\s]/g, '');
+                if (alG !== targetGrado) return false;
+                if (!cleanTargetT) return true; // Taller general para todo el grado
+                const cleanAlT = window._normalizarTextoTaller ? window._normalizarTextoTaller(al.taller) : '';
+                if (!cleanAlT) return true;
+                return cleanAlT.includes(cleanTargetT) || cleanTargetT.includes(cleanAlT);
+            });
         }
-        else queryAl = queryAl.eq('grupo_id', grupoId);
+        else {
+            const { data: rawAlumnos } = await supabaseClient.from('alumnos').select('id').eq('plantel_id', state.plantelId).eq('grupo_id', grupoId);
+            todos = rawAlumnos || [];
+        }
         
-        const { data: todos } = await queryAl;
         const studentIds = (todos || []).map(al => al.id);
 
         let reg = [];
@@ -14363,21 +14575,32 @@ window.registrarAsistenciaPrefectura = async (uid) => {
 
 window.registrarAsistenciaEntrada = async (qrText) => {
     try {
+        const cleanQR = (qrText || '').trim();
+        if(!cleanQR) return;
         const estadoPortal = window._estadoPaseLista === 'retardo' ? 'Retardo' : 'Asistencia';
         
+        let pId = state.plantelId || state.user?.user_metadata?.plantel_id;
+        if(!pId && state.user?.id) {
+            const { data: prof } = await supabaseClient.from('perfiles').select('plantel_id').eq('id', state.user.id).maybeSingle();
+            pId = prof?.plantel_id;
+            if(pId) state.plantelId = pId;
+        }
+
         // 1. Buscar al alumno (Primero por matrícula que es lo más común)
-        let { data: alu, error: searchErr } = await supabaseClient.from('alumnos')
-            .select('id, nombre')
-            .eq('matricula', qrText)
-            .eq('plantel_id', state.plantelId)
+        let query = supabaseClient.from('alumnos')
+            .select('id, nombre, matricula');
+        if(pId) query = query.eq('plantel_id', pId);
+        let { data: alu, error: searchErr } = await query
+            .ilike('matricula', cleanQR)
             .maybeSingle();
 
         // Si no se encontró por matrícula, intentar por ID (solo si tiene formato UUID)
-        if(!alu && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(qrText)) {
-            const { data: aluId } = await supabaseClient.from('alumnos')
-                .select('id, nombre')
-                .eq('id', qrText)
-                .eq('plantel_id', state.plantelId)
+        if(!alu && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(cleanQR)) {
+            let qId = supabaseClient.from('alumnos')
+                .select('id, nombre, matricula');
+            if(pId) qId = qId.eq('plantel_id', pId);
+            const { data: aluId } = await qId
+                .eq('id', cleanQR)
                 .maybeSingle();
             alu = aluId;
         }
@@ -14391,7 +14614,7 @@ window.registrarAsistenciaEntrada = async (qrText) => {
                         <div style="text-align:left;">
                             <div style="font-size:0.7rem; opacity:0.8; font-weight:bold;">ERROR DE ESCANEO</div>
                             <div style="font-size:1.1rem; font-weight:700;">QR NO RECONOCIDO</div>
-                            <div style="font-size:0.75rem;">El código "${qrText}" no está registrado.</div>
+                            <div style="font-size:0.75rem;">El código "${cleanQR}" no está registrado.</div>
                         </div>
                     </div>
                 `;
@@ -14580,7 +14803,11 @@ window.startTSScanner = async (mode = 'metralleta') => {
             },
             (errorMessage) => { /* ignore */ }
         );
-    } catch(e) { console.error("Error al iniciar cámara TS:", e); }
+    } catch(e) {
+        console.error("Error al iniciar cámara TS:", e);
+        window.showToast("Error de cámara: Asegúrese de otorgar permisos.", "error");
+        window.stopTSScanner();
+    }
 };
 
 window.registroManualSalida = () => {
@@ -14644,19 +14871,30 @@ window.seleccionarAlumnoManual = (idOrMatricula, mode) => {
 
 window.registrarAsistenciaTS = async (qrText) => {
     try {
+        const cleanQR = (qrText || '').trim();
+        if(!cleanQR) return;
         const estadoRegistro = 'Salida';
         
-        let { data: alu, error: searchErr } = await supabaseClient.from('alumnos')
-            .select('id, nombre')
-            .eq('matricula', qrText)
-            .eq('plantel_id', state.plantelId)
+        let pId = state.plantelId || state.user?.user_metadata?.plantel_id;
+        if(!pId && state.user?.id) {
+            const { data: prof } = await supabaseClient.from('perfiles').select('plantel_id').eq('id', state.user.id).maybeSingle();
+            pId = prof?.plantel_id;
+            if(pId) state.plantelId = pId;
+        }
+
+        let query = supabaseClient.from('alumnos')
+            .select('id, nombre, matricula');
+        if(pId) query = query.eq('plantel_id', pId);
+        let { data: alu, error: searchErr } = await query
+            .ilike('matricula', cleanQR)
             .maybeSingle();
 
-        if(!alu && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(qrText)) {
-            const { data: aluId } = await supabaseClient.from('alumnos')
-                .select('id, nombre')
-                .eq('id', qrText)
-                .eq('plantel_id', state.plantelId)
+        if(!alu && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(cleanQR)) {
+            let qId = supabaseClient.from('alumnos')
+                .select('id, nombre, matricula');
+            if(pId) qId = qId.eq('plantel_id', pId);
+            const { data: aluId } = await qId
+                .eq('id', cleanQR)
                 .maybeSingle();
             alu = aluId;
         }
@@ -14670,7 +14908,7 @@ window.registrarAsistenciaTS = async (qrText) => {
                         <div style="text-align:left;">
                             <div style="font-size:0.7rem; opacity:0.8; font-weight:bold;">ERROR DE ESCANEO</div>
                             <div style="font-size:1.1rem; font-weight:700;">QR NO RECONOCIDO</div>
-                            <div style="font-size:0.75rem;">El código "${qrText}" no está registrado.</div>
+                            <div style="font-size:0.75rem;">El código "${cleanQR}" no está registrado.</div>
                         </div>
                     </div>
                 `;
@@ -14713,11 +14951,12 @@ window.registrarAsistenciaTS = async (qrText) => {
             registrador_id: uRes.data.user?.id,
             fecha: fechaHoy,
             hora: horaActual,
-            plantel_id: state.plantelId
+            plantel_id: pId || state.plantelId
         }]);
 
         if(error) {
             console.error(">>> ERROR REGISTRO QR:", error);
+            window._scannedSalida.delete(alu.id);
             window.showToast("Error BD: " + error.message, "error");
             return;
         }
@@ -14727,7 +14966,7 @@ window.registrarAsistenciaTS = async (qrText) => {
             titulo: "Registro de Salida del Plantel",
             mensaje: `Estimado padre de familia/tutor: \nTu hijo(a) ${alu.nombre} ha registrado su salida del plantel el día de hoy a las ${horaActual}.`,
             audiencia: `Alumno_${alu.id}`,
-            plantel_id: state.plantelId
+            plantel_id: pId || state.plantelId
         }]);
         if(comErr) console.error("Error al notificar salida:", comErr);
 
@@ -14783,33 +15022,43 @@ window.activarModoAnticipada = () => {
 };
 
 window.prepararSalidaAnticipada = async (qrText) => {
-    document.getElementById('inSalidaAntMatricula').value = qrText;
+    const cleanQR = (qrText || '').trim();
+    const matInput = document.getElementById('inSalidaAntMatricula');
+    const idInput = document.getElementById('inSalidaAntAlumnoId');
+    if(matInput) matInput.value = cleanQR;
+    if(idInput) idInput.value = '';
+    
     document.getElementById('txtNombreAnticipada').innerText = "Buscando alumno...";
     document.getElementById('modalSalidaAnticipada').style.display = 'block';
     
     try {
-        let { data: alu } = await supabaseClient.from('alumnos')
-            .select('nombre')
-            .eq('matricula', qrText)
-            .eq('plantel_id', state.plantelId)
-            .maybeSingle();
+        let pId = state.plantelId || state.user?.user_metadata?.plantel_id;
+        if(!pId && state.user?.id) {
+            const { data: prof } = await supabaseClient.from('perfiles').select('plantel_id').eq('id', state.user.id).maybeSingle();
+            pId = prof?.plantel_id;
+            if(pId) state.plantelId = pId;
+        }
 
-        if(!alu && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(qrText)) {
-            const { data: aluId } = await supabaseClient.from('alumnos')
-                .select('nombre')
-                .eq('id', qrText)
-                .eq('plantel_id', state.plantelId)
-                .maybeSingle();
+        let query = supabaseClient.from('alumnos').select('id, nombre, matricula');
+        if(pId) query = query.eq('plantel_id', pId);
+        let { data: alu } = await query.ilike('matricula', cleanQR).maybeSingle();
+
+        if(!alu && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(cleanQR)) {
+            let qId = supabaseClient.from('alumnos').select('id, nombre, matricula');
+            if(pId) qId = qId.eq('plantel_id', pId);
+            const { data: aluId } = await qId.eq('id', cleanQR).maybeSingle();
             alu = aluId;
         }
 
         if(alu) {
             document.getElementById('txtNombreAnticipada').innerText = alu.nombre;
+            if(idInput) idInput.value = alu.id;
+            if(alu.matricula && matInput) matInput.value = alu.matricula;
         } else {
-            document.getElementById('txtNombreAnticipada').innerText = "Matrícula: " + qrText;
+            document.getElementById('txtNombreAnticipada').innerText = "Código: " + cleanQR;
         }
     } catch(e) {
-        document.getElementById('txtNombreAnticipada').innerText = "Matrícula: " + qrText;
+        document.getElementById('txtNombreAnticipada').innerText = "Código: " + cleanQR;
     }
     
     // Regresar a modo normal para el siguiente escaneo (opcional, pero evita que queden trabados en modo anticipada por error)
@@ -14817,11 +15066,14 @@ window.prepararSalidaAnticipada = async (qrText) => {
 };
 
 window.registrarSalidaAnticipada = async () => {
-    const matricula = document.getElementById('inSalidaAntMatricula').value.trim();
+    const matInput = document.getElementById('inSalidaAntMatricula');
+    const idInput = document.getElementById('inSalidaAntAlumnoId');
+    const matricula = matInput ? matInput.value.trim() : '';
+    const alumnoId = idInput ? idInput.value.trim() : '';
     const motivo = document.getElementById('selSalidaAntMotivo').value;
     const recoge = document.getElementById('inSalidaAntRecoge').value.trim();
     
-    if(!matricula) return window.showToast("Ingresa la matrícula del alumno", "warning");
+    if(!matricula && !alumnoId) return window.showToast("No se ha seleccionado al alumno.", "warning");
     if(!recoge) return window.showToast("Ingresa el nombre de la persona que recoge al alumno", "warning");
 
     const btn = document.getElementById('btnGuardarSalidaAnt');
@@ -14830,14 +15082,35 @@ window.registrarSalidaAnticipada = async () => {
     btn.disabled = true;
 
     try {
-        let { data: alu } = await supabaseClient.from('alumnos')
-            .select('id, nombre')
-            .eq('matricula', matricula)
-            .eq('plantel_id', state.plantelId)
-            .maybeSingle();
+        let pId = state.plantelId || state.user?.user_metadata?.plantel_id;
+        if(!pId && state.user?.id) {
+            const { data: prof } = await supabaseClient.from('perfiles').select('plantel_id').eq('id', state.user.id).maybeSingle();
+            pId = prof?.plantel_id;
+            if(pId) state.plantelId = pId;
+        }
+
+        let alu = null;
+        if(alumnoId) {
+            let q = supabaseClient.from('alumnos').select('id, nombre');
+            if(pId) q = q.eq('plantel_id', pId);
+            const { data: aluById } = await q.eq('id', alumnoId).maybeSingle();
+            alu = aluById;
+        }
+        if(!alu && matricula) {
+            let q = supabaseClient.from('alumnos').select('id, nombre');
+            if(pId) q = q.eq('plantel_id', pId);
+            const { data: aluByMat } = await q.ilike('matricula', matricula).maybeSingle();
+            alu = aluByMat;
+            if(!alu && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(matricula)) {
+                let q2 = supabaseClient.from('alumnos').select('id, nombre');
+                if(pId) q2 = q2.eq('plantel_id', pId);
+                const { data: aluByUid } = await q2.eq('id', matricula).maybeSingle();
+                alu = aluByUid;
+            }
+        }
 
         if(!alu) {
-            window.showToast("Alumno no encontrado con esa matrícula.", "warning");
+            window.showToast("Alumno no encontrado con esa matrícula o código.", "warning");
             btn.innerHTML = oldHtml;
             btn.disabled = false;
             return;
@@ -14867,7 +15140,7 @@ window.registrarSalidaAnticipada = async () => {
             registrador_id: uRes.data.user?.id,
             fecha: fechaHoy,
             hora: horaActual,
-            plantel_id: state.plantelId
+            plantel_id: pId || state.plantelId
         }]);
         if(error) throw error;
 
@@ -14876,7 +15149,7 @@ window.registrarSalidaAnticipada = async () => {
             titulo: "Aviso de Salida Anticipada",
             mensaje: `Estimado padre de familia/tutor:\nTu hijo(a) ${alu.nombre} ha registrado una salida anticipada del plantel hoy a las ${horaActual}.\n\nMotivo: ${motivo}\nRecogido por: ${recoge}`,
             audiencia: `Alumno_${alu.id}`,
-            plantel_id: state.plantelId
+            plantel_id: pId || state.plantelId
         }]);
         if(comErr) console.error("Error al notificar salida anticipada:", comErr);
 
@@ -14884,6 +15157,8 @@ window.registrarSalidaAnticipada = async () => {
         document.getElementById('modalSalidaAnticipada').style.display = 'none';
         
         document.getElementById('inSalidaAntMatricula').value = '';
+        const idInp = document.getElementById('inSalidaAntAlumnoId');
+        if(idInp) idInp.value = '';
         document.getElementById('inSalidaAntRecoge').value = '';
         
         if(state.path === '/apoyo/ts_escaner') {
@@ -14920,8 +15195,10 @@ window.checkPaseListaBloqueado = async (materia, grupoId, trimestre) => {
         }
 
         // 2. Validar si ya enviaron calificaciones (Historial)
-        const materiaClean = (materia || '').replace(/tecnología|tecnologia/gi, '').trim().toLowerCase();
+        const rawMat = (materia || '').trim().toLowerCase();
+        const matNorm = window._normalizarTextoTaller ? window._normalizarTextoTaller(materia) : rawMat;
         const gid = String(grupoId).startsWith('grado:') ? null : String(grupoId);
+        const targetGrado = String(grupoId).startsWith('grado:') ? (window._normalizarGradoParaPase ? window._normalizarGradoParaPase(String(grupoId).replace('grado:', '').split('|')[0]) : null) : null;
         
         const { data: rawHistorial } = await supabaseClient.from('calificaciones_historial')
             .select('id, materia_nombre, payload_json')
@@ -14931,8 +15208,21 @@ window.checkPaseListaBloqueado = async (materia, grupoId, trimestre) => {
         const historial = (rawHistorial || []).filter(h => {
             const mNombre = (h.materia_nombre || '').trim().toLowerCase();
             const payload = h.payload_json || {};
-            const matchMateria = !materiaClean || mNombre === materiaClean || mNombre.includes(materiaClean) || (payload.materia || '').toLowerCase().includes(materiaClean);
-            const matchGrupo = gid ? (payload.grupo_id === gid) : true;
+            const pMateria = (payload.materia || '').trim().toLowerCase();
+            
+            // Coincidencia precisa de materia: no bloquear indiscriminadamente si no hay término
+            const matchMateria = (matNorm && (mNombre.includes(matNorm) || matNorm.includes(mNombre) || pMateria.includes(matNorm) || matNorm.includes(pMateria))) ||
+                                 (rawMat && (mNombre.includes(rawMat) || rawMat.includes(mNombre) || pMateria.includes(rawMat)));
+            
+            let matchGrupo = false;
+            if (gid) {
+                matchGrupo = (payload.grupo_id === gid);
+            } else if (targetGrado) {
+                const payloadGrado = window._normalizarGradoParaPase ? window._normalizarGradoParaPase(payload.grado || payload.target_grado) : '';
+                matchGrupo = !payloadGrado || payloadGrado === targetGrado;
+            } else {
+                matchGrupo = true;
+            }
             return matchMateria && matchGrupo;
         });
 
@@ -15017,23 +15307,24 @@ window.updateSessionUI = async () => {
             .maybeSingle();
 
         const estado = sesion?.estado || 'pendiente';
+        window.currentAulaEstadoSesion = estado;
         
         // Reset botones
         if(btnPuntual) { 
-            btnPuntual.disabled = false;
+            btnPuntual.disabled = (estado === 'cerrado');
             btnPuntual.className = 'btn btn-outline'; 
             btnPuntual.style.borderColor = 'var(--primary)'; 
             btnPuntual.style.color = 'var(--primary)'; 
         }
         if(btnRetardo) { 
-            btnRetardo.disabled = false;
+            btnRetardo.disabled = (estado === 'cerrado');
             btnRetardo.className = 'btn btn-outline'; 
             btnRetardo.style.borderColor = 'var(--warning)'; 
             btnRetardo.style.color = 'var(--warning)'; 
         }
         if(lblPuntual) lblPuntual.innerText = '[Activar Cámara]';
         if(lblRetardo) lblRetardo.innerText = '[Activar Cámara]';
-        if(btnCerrar) btnCerrar.style.display = (estado !== 'cerrado') ? 'inline-flex' : 'none';
+        if(btnCerrar) btnCerrar.style.display = (estado !== 'cerrado' && estado !== 'pendiente') ? 'inline-flex' : 'none';
 
         let label = '⚪ Esperando Inicio';
         let color = 'var(--text-muted)';
@@ -15056,6 +15347,8 @@ window.updateSessionUI = async () => {
             label = '🔴 SESIÓN FINALIZADA (Faltas Aplicadas)';
             color = 'var(--danger)';
             if(btnCerrar) btnCerrar.style.display = 'none';
+            if(btnPuntual) btnPuntual.disabled = true;
+            if(btnRetardo) btnRetardo.disabled = true;
         }
 
         statusEl.innerHTML = `<i class="fa-solid fa-circle-dot" style="color:${color}"></i> ${label}`;
@@ -15109,24 +15402,18 @@ window.openReporteModal = async () => {
     document.getElementById('app').insertAdjacentHTML('beforeend', modalHTML);
     
     try {
-        let query = supabaseClient.from('alumnos').select('id, nombre').eq('plantel_id', state.plantelId).order('nombre');
-        
+        let alumnos = [];
         if (window.currentAulaGrupoId && window.currentAulaGrupoId.startsWith('grado:')) {
             // Formato: "grado:1°|Computación"
             const parts = window.currentAulaGrupoId.split(':')[1].split('|');
             const targetGrado = parts[0];
             const materia = parts[1] || window.currentAulaMateria;
-            const gNorm = targetGrado.includes('°') ? targetGrado : targetGrado + '°';
-            // v116: Robust matching for technologies
-            const cleanMat = materia.replace(/tecnología|tecnologia/gi, '').trim();
-            query = query.eq('grado', gNorm).ilike('taller', `%${cleanMat || materia}%`);
-
+            const { data: todos } = await supabaseClient.from('alumnos').select('id, nombre, grado, taller').eq('plantel_id', state.plantelId).order('nombre');
+            alumnos = window._filtrarAlumnosPorTallerYGrado ? window._filtrarAlumnosPorTallerYGrado(todos, targetGrado, materia) : (todos || []);
         } else {
-            query = query.eq('grupo_id', window.currentAulaGrupoId);
+            const { data } = await supabaseClient.from('alumnos').select('id, nombre').eq('plantel_id', state.plantelId).eq('grupo_id', window.currentAulaGrupoId).order('nombre');
+            alumnos = data || [];
         }
-
-        const { data: alumnos, error } = await query.order('nombre');
-        if(error) throw error;
         
         const sel = document.getElementById('repAlumnoList');
         if(!alumnos || alumnos.length === 0) {
@@ -15574,17 +15861,14 @@ window.cargarEncuadreActivo = async () => {
         }
 
         // 2. Obtener los alumnos del grupo/grado para notificarles
-        let alumnosQuery = supabaseClient.from('alumnos').select('id, nombre').eq('plantel_id', state.plantelId).order('nombre');
+        let alumnos = [];
         if(isTec) {
-            const gNorm = targetGrado.includes('°') ? targetGrado : targetGrado + '°';
-            // v116: Robust matching for technologies
-            const cleanMat = mat.replace(/tecnología|tecnologia/gi, '').trim();
-            alumnosQuery = alumnosQuery.eq('grado', gNorm).ilike('taller', `%${cleanMat || mat}%`);
-
+            const { data: rawAlumnos } = await supabaseClient.from('alumnos').select('id, nombre, grado, taller').eq('plantel_id', state.plantelId).order('nombre');
+            alumnos = window._filtrarAlumnosPorTallerYGrado ? window._filtrarAlumnosPorTallerYGrado(rawAlumnos, targetGrado, mat) : (rawAlumnos || []);
         } else {
-            alumnosQuery = alumnosQuery.eq('grupo_id', gid);
+            const { data: rawAlumnos } = await supabaseClient.from('alumnos').select('id, nombre').eq('plantel_id', state.plantelId).eq('grupo_id', gid).order('nombre');
+            alumnos = rawAlumnos || [];
         }
-        const { data: alumnos, error: errAl } = await alumnosQuery;
         console.log(">>> [ENCUADRE] Alumnos encontrados para notificar:", alumnos?.length, "Error:", errAl);
         if(alumnos) console.log(">>> [ENCUADRE] Muestra de IDs de alumnos:", alumnos.slice(0,3).map(a => a.id));
 
@@ -20066,8 +20350,13 @@ window.renderMasivaPreview = async () => {
             if(data) {
                 const grados = ['1°', '2°', '3°', '4°', '5°', '6°'];
                 grados.forEach(g => {
-                    const mats = [...new Set(data.filter(d => d.target_grado === g).map(d => d.materia))];
+                    const gNorm = window._normalizarGradoParaPase ? window._normalizarGradoParaPase(g) : g.replace(/[°\s]/g, '');
+                    const mats = [...new Set(data.filter(d => {
+                        const dG = window._normalizarGradoParaPase ? window._normalizarGradoParaPase(d.target_grado) : (d.target_grado || '').replace(/[°\s]/g, '');
+                        return dG === gNorm;
+                    }).map(d => d.materia))];
                     window._tecnologiasCache[g] = mats;
+                    window._tecnologiasCache[gNorm] = mats;
                 });
             }
         } catch(e) { console.error('Error cargando tecnologías', e); }
@@ -20121,9 +20410,10 @@ window.renderMasivaPreview = async () => {
 window.masivaCambiarGrado = (idx, newGrado) => {
     window._masivaData[idx].grado = newGrado;
     const selectTec = document.getElementById(`masivaTec_${idx}`);
-    if(selectTec && window._tecnologiasCache[newGrado]) {
+    const tecs = window._tecnologiasCache[newGrado] || (window._normalizarGradoParaPase ? window._tecnologiasCache[window._normalizarGradoParaPase(newGrado)] : null);
+    if(selectTec && tecs) {
         let tecsHtml = '<option value="">Sin Asignar / Seleccionar...</option>';
-        tecsHtml += window._tecnologiasCache[newGrado].map(t => `<option value="${t}">${t}</option>`).join('');
+        tecsHtml += tecs.map(t => `<option value="${t}">${t}</option>`).join('');
         selectTec.innerHTML = tecsHtml;
         window._masivaData[idx].tecnologia = '';
     }
@@ -21071,7 +21361,8 @@ window.abrirSesionManual = async (modo) => {
             trimestre: trimActivo
         }, { onConflict: 'plantel_id, grupo_id, materia, fecha' });
 
-        window.showToast(`Sesión en modo ${modo.toUpperCase()} activada.`, "success");
+        window.currentAulaEstadoSesion = modo;
+        window.showToast(`Pase de lista ABIERTO. Ya puedes registrar asistencias.`, "success");
         window.updateSessionUI(); // Esto actualiza también los botones de QR por si acaso
         window.loadListaAsistenciaManual();
     } catch(err) {
@@ -21102,6 +21393,7 @@ window.loadListaAsistenciaManual = async () => {
             .maybeSingle();
             
         let estadoSesion = sesion?.estado || 'pendiente';
+        window.currentAulaEstadoSesion = estadoSesion;
         
         if (statusMsg) {
             if (estadoSesion === 'abierto' || estadoSesion === 'asistencia' || estadoSesion === 'retardo') statusMsg.innerHTML = '<i class="fa-solid fa-clock" style="color:var(--primary)"></i> PASE DE LISTA ABIERTO';
@@ -21119,16 +21411,29 @@ window.loadListaAsistenciaManual = async () => {
         let targetGrado = isTec ? rawVal.replace('grado:', '').split('|')[0].trim() : null;
         let taller = isTec ? rawVal.split('|')[1]?.trim() : null;
 
-        let alumnosQuery = supabaseClient.from('alumnos').select('id, nombre, matricula').eq('plantel_id', state.plantelId).order('nombre');
+        let alumnos = [];
         if(isTec) {
-            const gNorm = targetGrado.includes('°') ? targetGrado : targetGrado + '°';
-            const cleanMat = taller.replace(/tecnología|tecnologia/gi, '').trim();
-            alumnosQuery = alumnosQuery.eq('grado', gNorm.trim()).ilike('taller', `%${cleanMat || taller}%`);
+            const gNorm = window._normalizarGradoParaPase ? window._normalizarGradoParaPase(targetGrado) : targetGrado.replace(/[°\s]/g, '');
+            const gSin = targetGrado.replace(/[°\s]/g, '');
+            const { data: rawAlumnos } = await supabaseClient.from('alumnos')
+                .select('id, nombre, matricula, grado, taller')
+                .eq('plantel_id', state.plantelId)
+                .or(`grado.eq.${gSin},grado.eq.${gSin}°,grado.ilike.%${gSin}%`)
+                .order('nombre');
+                
+            const cleanTargetT = window._normalizarTextoTaller ? window._normalizarTextoTaller(taller) : '';
+            alumnos = (rawAlumnos || []).filter(al => {
+                const alG = window._normalizarGradoParaPase ? window._normalizarGradoParaPase(al.grado) : (al.grado || '').replace(/[°\s]/g, '');
+                if (alG !== gNorm) return false;
+                if (!cleanTargetT) return true;
+                const cleanAlT = window._normalizarTextoTaller ? window._normalizarTextoTaller(al.taller) : '';
+                if (!cleanAlT) return true;
+                return cleanAlT.includes(cleanTargetT) || cleanTargetT.includes(cleanAlT);
+            });
         } else {
-            alumnosQuery = alumnosQuery.eq('grupo_id', gid);
+            const { data: alData } = await supabaseClient.from('alumnos').select('id, nombre, matricula').eq('plantel_id', state.plantelId).eq('grupo_id', gid).order('nombre');
+            alumnos = alData || [];
         }
-        
-        const { data: alumnos } = await alumnosQuery;
         
         if (!alumnos || alumnos.length === 0) {
             contenedor.innerHTML = '<div style="text-align:center; padding: 20px; color:var(--text-muted)">No hay alumnos registrados en este grupo.</div>';
@@ -21155,12 +21460,15 @@ window.loadListaAsistenciaManual = async () => {
         });
 
         const disabledState = (estadoSesion === 'cerrado' || estadoSesion === 'pendiente') ? 'disabled' : '';
+        const disTodos = (estadoSesion === 'cerrado') ? 'disabled' : '';
 
         let html = `
-            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
-                <span style="font-size:0.85rem; color:var(--text-muted);">Asigna calificación individual o general</span>
-                <button class="btn btn-outline" style="border-color:var(--primary); color:var(--primary); font-size:0.8rem; padding:6px 12px; font-weight:600;" onclick="window.llenarTodaEvaluacionManual()">
-                    <i class="fa-solid fa-bolt"></i> Misma calificación a todos
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; flex-wrap:wrap; gap:8px;">
+                <span style="font-size:0.85rem; color:var(--text-muted); font-weight:600;">
+                    <i class="fa-solid fa-users"></i> ${alumnos.length} Alumnos en lista
+                </span>
+                <button id="btnMarcarTodosAsistencia" class="btn btn-success btn-sm" style="font-size:0.85rem; padding:7px 14px; font-weight:bold; border-radius:8px; display:inline-flex; align-items:center; gap:6px;" onclick="window.marcarTodosAsistenciaManual()" ${disTodos} title="Asignar asistencia a todos los alumnos">
+                    <i class="fa-solid fa-check-double"></i> Poner Asistencia a Todos
                 </button>
             </div>
         `;
@@ -21178,12 +21486,17 @@ window.loadListaAsistenciaManual = async () => {
             // Si la sesión no ha iniciado, bloquear
             const opacityState = (estadoSesion === 'pendiente') ? 'opacity:0.6;' : '';
 
-            // REGLA: Si la sesión ya cerró o el alumno tiene Falta, el maestro NO puede cambiar a Asistencia ni a Retardo.
-            // Lo que sí puede hacer es Justificar la falta.
-            const esFaltaOCerrado = (estadoSesion === 'cerrado' || estadoActual === 'Falta' || estadoActual === 'Justificada');
-            const disA = (disabledState || esFaltaOCerrado) ? 'disabled title="Una inasistencia no se puede cambiar a Asistencia tras el cierre o registro."' : '';
-            const disR = (disabledState || esFaltaOCerrado) ? 'disabled title="Una inasistencia no se puede cambiar a Retardo tras el cierre o registro."' : '';
-            const disF = (disabledState || estadoSesion === 'cerrado') ? 'disabled' : '';
+            // REGLAS DE ASISTENCIA:
+            // 1. Si la sesión está CERRADA: los botones A, R, F están bloqueados. SOLAMENTE se puede justificar.
+            // 2. Si la sesión está PENDIENTE: los botones están deshabilitados hasta abrir la sesión.
+            // 3. Si la sesión está ABIERTA: el maestro puede registrar y corregir libremente Asistencia, Retardo o Falta.
+            const esCerrado = (estadoSesion === 'cerrado');
+            const esPendiente = (estadoSesion === 'pendiente');
+            const esJustificada = (estadoActual === 'Justificada');
+
+            const disA = (esCerrado || esPendiente || esJustificada) ? 'disabled' : '';
+            const disR = (esCerrado || esPendiente || esJustificada) ? 'disabled' : '';
+            const disF = (esCerrado || esPendiente || esJustificada) ? 'disabled' : '';
 
             html += `
             <div id="row_al_${al.id}" style="display:flex; justify-content:space-between; align-items:center; padding:12px; border:1px solid ${colorBorder}; background:${bgColor}; border-radius:8px; ${opacityState}">
@@ -21195,10 +21508,10 @@ window.loadListaAsistenciaManual = async () => {
                     <div style="font-size:0.75rem; color:var(--text-muted);">${al.matricula || 'Sin matrícula'}</div>
                 </div>
                 <div style="display:flex; gap:6px; align-items:center;">
-                    <button id="btn_A_${al.id}" class="btn btn-sm ${estadoActual==='Asistencia'?'btn-primary':'btn-outline'}" onclick="window.marcarAsistenciaManual('${al.id}', 'Asistencia')" ${disA} style="padding:6px 10px;">A</button>
-                    <button id="btn_R_${al.id}" class="btn btn-sm ${estadoActual==='Retardo'?'btn-warning':'btn-outline'}" onclick="window.marcarAsistenciaManual('${al.id}', 'Retardo')" ${disR} style="padding:6px 10px;">R</button>
-                    <button id="btn_F_${al.id}" class="btn btn-sm ${estadoActual==='Falta'?'btn-danger':'btn-outline'}" onclick="window.marcarAsistenciaManual('${al.id}', 'Falta')" ${disF} style="padding:6px 10px;">F</button>
-                    ${(estadoSesion === 'cerrado' || estadoActual === 'Falta' || estadoActual === 'Justificada') ? `
+                    <button id="btn_A_${al.id}" class="btn btn-sm ${estadoActual==='Asistencia'?'btn-primary':'btn-outline'}" onclick="window.marcarAsistenciaManual('${al.id}', 'Asistencia')" ${disA} style="padding:6px 10px;" title="Asistencia">A</button>
+                    <button id="btn_R_${al.id}" class="btn btn-sm ${estadoActual==='Retardo'?'btn-warning':'btn-outline'}" onclick="window.marcarAsistenciaManual('${al.id}', 'Retardo')" ${disR} style="padding:6px 10px;" title="Retardo">R</button>
+                    <button id="btn_F_${al.id}" class="btn btn-sm ${estadoActual==='Falta'?'btn-danger':'btn-outline'}" onclick="window.marcarAsistenciaManual('${al.id}', 'Falta')" ${disF} style="padding:6px 10px;" title="Falta">F</button>
+                    ${(esCerrado || estadoActual === 'Falta' || esJustificada) ? `
                     <button id="btn_J_${al.id}" class="btn btn-sm ${estadoActual==='Justificada'?'btn-primary':'btn-outline'}" onclick="window.justificarFaltaDesdeAula('${al.id}')" style="padding:6px 10px; ${estadoActual==='Justificada'?'background:#2563eb; color:white; border-color:#2563eb;':'color:#2563eb; border-color:#2563eb;'}" title="${estadoActual==='Justificada'?'Inasistencia ya justificada':'Justificar Inasistencia'}">
                         <i class="fa-solid fa-file-shield"></i> ${estadoActual==='Justificada'?'Justificada':'Justificar'}
                     </button>
@@ -21226,9 +21539,23 @@ window.marcarAsistenciaManual = async (alumnoId, estado) => {
         const grupoId = String(window.currentAulaGrupoId);
         const trim = window._trimestreActivoParaPase || state.selectedMaestroTrimestre || 1;
 
-        // 1. REGLA ESTRICTA: Si la sesión ya cerró, el maestro NO puede asignar Asistencia ni Retardo
-        if (window.currentAulaEstadoSesion === 'cerrado' && (estado === 'Asistencia' || estado === 'Retardo')) {
-            return alert("⚠️ El pase de lista ya fue cerrado y las inasistencias fueron notificadas.\n\nNo es posible cambiar a Asistencia. Si el alumno presenta justificante médico o institucional, utiliza el botón 'Justificar'.");
+        // 1. REGLA ESTRICTA: Si la sesión ya cerró, el maestro NO puede modificar asistencias directamente.
+        // SOLAMENTE se puede justificar inasistencias mediante el botón 'Justificar'.
+        let estadoSesion = window.currentAulaEstadoSesion;
+        if (!estadoSesion || estadoSesion === 'pendiente') {
+            const { data: sData } = await supabaseClient.from('asistencia_sesiones')
+                .select('estado')
+                .eq('grupo_id', grupoId)
+                .eq('materia', materiaGuardar)
+                .eq('fecha', hoy)
+                .eq('plantel_id', state.plantelId)
+                .maybeSingle();
+            estadoSesion = sData?.estado || 'pendiente';
+            window.currentAulaEstadoSesion = estadoSesion;
+        }
+
+        if (estadoSesion === 'cerrado') {
+            return alert("⚠️ El pase de lista ya fue CERRADO y finalizado.\n\nNo es posible modificar las asistencias directamente. Si el alumno presenta justificante médico o institucional, utiliza el botón 'Justificar'.");
         }
 
         const { data: existente } = await supabaseClient.from('asistencias')
@@ -21239,9 +21566,11 @@ window.marcarAsistenciaManual = async (alumnoId, estado) => {
             .eq('plantel_id', state.plantelId)
             .maybeSingle();
 
-        // 2. REGLA ESTRICTA: Si ya tiene registrada Falta o Justificada, NO se puede cambiar a Asistencia
-        if (existente && (existente.estado === 'Falta' || existente.estado === 'Justificada') && estado === 'Asistencia') {
-            return alert("⚠️ Este alumno ya tiene registrada una inasistencia.\n\nEl maestro no puede cambiar una inasistencia a Asistencia una vez procesada. Lo que sí puedes hacer es presionar 'Justificar' si presentó comprobante.");
+        // Si ya está justificada institucionalmente y se intenta cambiar, confirmar con el usuario
+        if (existente && existente.estado === 'Justificada' && estado !== 'Justificada') {
+            if (!confirm("Este alumno ya tiene una inasistencia JUSTIFICADA institucionalmente. ¿Deseas modificarla a " + estado + "?")) {
+                return;
+            }
         }
         
         // Actualización Visual Inmediata (Optimistic UI)
@@ -21275,8 +21604,8 @@ window.marcarAsistenciaManual = async (alumnoId, estado) => {
             }]);
         }
 
-        // Si se cambia a Justificada o Retardo: purgar avisos falsos de inasistencia/evasión
-        if (estado === 'Justificada' || estado === 'Retardo') {
+        // Si se cambia a Asistencia, Retardo o Justificada: purgar avisos falsos de inasistencia/evasión
+        if (estado === 'Asistencia' || estado === 'Retardo' || estado === 'Justificada') {
             try {
                 const aud = 'Alumno_' + alumnoId;
                 const { data: comsBorrar } = await supabaseClient.from('comunicados')
@@ -21302,6 +21631,172 @@ window.marcarAsistenciaManual = async (alumnoId, estado) => {
     } catch(err) {
         window.showToast("Error: " + err.message, "error");
         if(window.loadListaAsistenciaManual) window.loadListaAsistenciaManual();
+    }
+};
+
+window.marcarTodosAsistenciaManual = async () => {
+    try {
+        const u = await supabaseClient.auth.getUser();
+        if(!u.data.user) throw new Error("Sesión expirada");
+
+        const hoy = new Date().toLocaleDateString('en-CA');
+        const materia = (window.currentAulaMateria || 'N/A').trim();
+        const rawVal = String(window.currentAulaGrupoId);
+        const trimActivo = window._trimestreActivoParaPase || state.selectedMaestroTrimestre || 1;
+
+        // 1. Consultar estado actual de la sesión
+        const { data: sesionData } = await supabaseClient.from('asistencia_sesiones')
+            .select('estado')
+            .eq('grupo_id', rawVal)
+            .eq('materia', materia)
+            .eq('fecha', hoy)
+            .eq('plantel_id', state.plantelId)
+            .maybeSingle();
+
+        let estadoSesion = sesionData?.estado || 'pendiente';
+
+        if (estadoSesion === 'cerrado') {
+            return alert("⚠️ El pase de lista ya fue CERRADO y finalizado.\n\nNo es posible modificar las asistencias masivamente. Si algún alumno cuenta con comprobante médico o institucional, utiliza el botón 'Justificar'.");
+        }
+
+        // Si la sesión está pendiente, preguntar para abrir y marcar asistencia
+        if (estadoSesion === 'pendiente') {
+            if (!confirm("¿Deseas abrir el pase de lista y poner ASISTENCIA a todos los alumnos del grupo?\n\n(Posteriormente podrás marcar Falta o Retardo solo a los alumnos que lo requieran).")) {
+                return;
+            }
+            // Abrir sesión automáticamente
+            await supabaseClient.from('asistencia_sesiones').upsert({
+                grupo_id: rawVal,
+                materia: materia,
+                fecha: hoy,
+                maestro_id: u.data.user.id,
+                estado: 'abierto',
+                plantel_id: state.plantelId,
+                trimestre: trimActivo
+            }, { onConflict: 'plantel_id, grupo_id, materia, fecha' });
+            estadoSesion = 'abierto';
+            window.currentAulaEstadoSesion = 'abierto';
+        } else {
+            if (!confirm("¿Deseas poner ASISTENCIA a todos los alumnos del grupo?\n\n(Podrás cambiar a Falta o Retardo individualmente antes de cerrar el pase).")) {
+                return;
+            }
+        }
+
+        // 2. Obtener los alumnos del grupo o taller
+        const isTec = rawVal.startsWith('grado:');
+        let gid = isTec ? null : rawVal;
+        let targetGrado = isTec ? rawVal.replace('grado:', '').split('|')[0].trim() : null;
+        let taller = isTec ? rawVal.split('|')[1]?.trim() : null;
+
+        let alumnos = [];
+        if (isTec) {
+            const gNorm = window._normalizarGradoParaPase ? window._normalizarGradoParaPase(targetGrado) : targetGrado.replace(/[°\s]/g, '');
+            const gSin = targetGrado.replace(/[°\s]/g, '');
+            const { data: rawAlumnos } = await supabaseClient.from('alumnos')
+                .select('id, nombre, grado, taller')
+                .eq('plantel_id', state.plantelId)
+                .or(`grado.eq.${gSin},grado.eq.${gSin}°,grado.ilike.%${gSin}%`)
+                .order('nombre');
+
+            const cleanTargetT = window._normalizarTextoTaller ? window._normalizarTextoTaller(taller) : '';
+            alumnos = (rawAlumnos || []).filter(al => {
+                const alG = window._normalizarGradoParaPase ? window._normalizarGradoParaPase(al.grado) : (al.grado || '').replace(/[°\s]/g, '');
+                if (alG !== gNorm) return false;
+                if (!cleanTargetT) return true;
+                const cleanAlT = window._normalizarTextoTaller ? window._normalizarTextoTaller(al.taller) : '';
+                if (!cleanAlT) return true;
+                return cleanAlT.includes(cleanTargetT) || cleanTargetT.includes(cleanAlT);
+            });
+        } else {
+            const { data: alData } = await supabaseClient.from('alumnos')
+                .select('id, nombre')
+                .eq('plantel_id', state.plantelId)
+                .eq('grupo_id', gid)
+                .order('nombre');
+            alumnos = alData || [];
+        }
+
+        if (alumnos.length === 0) {
+            return alert("No hay alumnos registrados en este grupo.");
+        }
+
+        // 3. Obtener asistencias ya registradas de hoy para respetar 'Justificada'
+        let queryReg = supabaseClient.from('asistencias')
+            .select('id, alumno_id, estado')
+            .or(`fecha.eq.${hoy},and(creado_en.gte.${hoy}T00:00:00Z,creado_en.lte.${hoy}T23:59:59.999Z)`)
+            .eq('materia', materia)
+            .eq('plantel_id', state.plantelId);
+
+        if (isTec) {
+            queryReg = queryReg.is('grupo_id', null);
+        } else {
+            queryReg = queryReg.eq('grupo_id', rawVal);
+        }
+
+        const { data: existentes } = await queryReg;
+        const asistMap = {};
+        (existentes || []).forEach(a => {
+            asistMap[a.alumno_id] = a;
+        });
+
+        // 4. Actualización Visual Inmediata (Optimistic UI)
+        alumnos.forEach(al => {
+            const reg = asistMap[al.id];
+            if (reg && reg.estado === 'Justificada') return; // Respetar Justificadas
+
+            const row = document.getElementById(`row_al_${al.id}`);
+            const btnA = document.getElementById(`btn_A_${al.id}`);
+            const btnR = document.getElementById(`btn_R_${al.id}`);
+            const btnF = document.getElementById(`btn_F_${al.id}`);
+            if (row && btnA && btnR && btnF) {
+                btnA.className = 'btn btn-sm btn-primary';
+                btnR.className = 'btn btn-sm btn-outline';
+                btnF.className = 'btn btn-sm btn-outline';
+                row.style.borderColor = 'var(--primary)';
+                row.style.background = '#e0e7ff';
+            }
+        });
+
+        // 5. Preparar altas y actualizaciones
+        const toInsert = [];
+        const idsToUpdate = [];
+
+        alumnos.forEach(al => {
+            const reg = asistMap[al.id];
+            if (reg && reg.estado === 'Justificada') return; // No sobreescribir Justificadas
+
+            if (reg) {
+                if (reg.estado !== 'Asistencia') {
+                    idsToUpdate.push(reg.id);
+                }
+            } else {
+                toInsert.push({
+                    alumno_id: al.id,
+                    registrador_id: u.data.user.id,
+                    estado: 'Asistencia',
+                    materia: materia,
+                    grupo_id: isTec ? null : rawVal,
+                    fecha: hoy,
+                    plantel_id: state.plantelId,
+                    trimestre: trimActivo
+                });
+            }
+        });
+
+        if (idsToUpdate.length > 0) {
+            await supabaseClient.from('asistencias').update({ estado: 'Asistencia', fecha: hoy }).in('id', idsToUpdate);
+        }
+        if (toInsert.length > 0) {
+            await supabaseClient.from('asistencias').insert(toInsert);
+        }
+
+        window.showToast(`✅ Asistencia asignada a ${alumnos.length} alumnos. Ahora puedes marcar faltas o retardos individuales.`, "success");
+        if (window.updateSessionUI) window.updateSessionUI();
+        if (window.loadListaAsistenciaManual) window.loadListaAsistenciaManual();
+    } catch(err) {
+        console.error("Error al marcar asistencia a todos:", err);
+        window.showToast("Error: " + err.message, "error");
+        if (window.loadListaAsistenciaManual) window.loadListaAsistenciaManual();
     }
 };
 
@@ -21381,10 +21876,15 @@ window.editarAlumnoModal = async (alumnoId) => {
         let customTecInput = `<input type="text" id="editAlTaller" class="form-input" style="margin-top:8px; display:none;" placeholder="Escribe la tecnología manualmente..." value="${alumno.taller || ''}">`;
         
         if (alumno.grado) {
-            const { data: asig } = await supabaseClient.from('asignaciones_maestros')
-                .select('materia')
-                .eq('target_grado', alumno.grado)
+            const gNorm = window._normalizarGradoParaPase ? window._normalizarGradoParaPase(alumno.grado) : alumno.grado;
+            const { data: allAsig } = await supabaseClient.from('asignaciones_maestros')
+                .select('materia, target_grado')
                 .eq('plantel_id', state.plantelId || window.state?.plantelId);
+            
+            const asig = (allAsig || []).filter(d => {
+                const aG = window._normalizarGradoParaPase ? window._normalizarGradoParaPase(d.target_grado) : d.target_grado;
+                return aG === gNorm;
+            });
             
             if (asig && asig.length > 0) {
                 const mats = [...new Set(asig.map(d => d.materia))];
