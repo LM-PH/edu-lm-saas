@@ -4826,7 +4826,7 @@ window.loadCitatoriosApoyo = async () => {
     try {
         let query = supabaseClient
             .from('citatorios')
-            .select('*, alumnos(nombre, matricula)')
+            .select('*, alumnos(id, nombre, matricula, grupos(nombre)), emisor:perfiles!emisor_id(id, nombre, rol)')
             .eq('plantel_id', state.plantelId)
             .neq('estado', 'atendido')
             .order('creado_en', { ascending: false });
@@ -4848,37 +4848,219 @@ window.loadCitatoriosApoyo = async () => {
             return;
         }
 
+        // 1. Obtener IDs únicos de alumnos para consulta en bloque de sus reportes
+        const studentIds = [...new Set(data.map(c => c.alumno_id).filter(Boolean))];
+        const reportesPorAlumno = {};
+
+        if (studentIds.length > 0) {
+            try {
+                const { data: repData, error: repErr } = await supabaseClient
+                    .from('reportes_conducta')
+                    .select('*, autor:perfiles!autor_id(id, nombre, rol)')
+                    .in('alumno_id', studentIds)
+                    .eq('plantel_id', state.plantelId)
+                    .order('fecha', { ascending: false });
+
+                if (!repErr && repData) {
+                    repData.forEach(r => {
+                        if (!reportesPorAlumno[r.alumno_id]) reportesPorAlumno[r.alumno_id] = [];
+                        reportesPorAlumno[r.alumno_id].push(r);
+                    });
+                }
+            } catch (errRep) {
+                console.warn("Aviso al consultar reportes_conducta vinculados:", errRep);
+            }
+        }
+
+        window._citatoriosDetallesCache = {};
+
         cont.innerHTML = data.map(c => {
             const isEnterado = c.estado === 'enterado';
             const dateCita = c.fecha_cita ? new Date(c.fecha_cita).toLocaleString('es-MX', { dateStyle: 'medium', timeStyle: 'short' }) : 'Pendiente acordar';
-            return `
-                <div class="card" style="padding:15px; border:1px solid ${isEnterado ? '#bbf7d0' : '#fed7aa'}; background:white; position:relative; box-shadow:var(--shadow-sm);">
-                    <div style="display:flex; justify-content:space-between; margin-bottom:10px;">
-                        <span class="badge" style="background:${isEnterado ? '#22c55e' : (c.visto_por_alumno ? '#3b82f6' : '#f97316')}; color:white; font-size:0.75rem; padding:4px 10px; border-radius:8px;">
-                            ${isEnterado ? '<i class="fa-solid fa-file-signature"></i> FIRMADO POR PADRE' : (c.visto_por_alumno ? '<i class="fa-solid fa-eye"></i> VISTO POR ALUMNO' : '<i class="fa-solid fa-clock"></i> PENDIENTE DE VISTA')}
-                        </span>
-                        <small style="color:var(--text-muted); font-size:0.75rem;">${new Date(c.creado_en).toLocaleDateString()}</small>
-                    </div>
-                    <h4 style="margin:0 0 5px 0; font-size:1rem; color:var(--primary);">${c.alumnos?.nombre || '---'}</h4>
-                    <p style="font-size:0.8rem; color:var(--text-muted); margin-bottom:10px;"><b>Matrícula:</b> ${c.alumnos?.matricula || '---'}</p>
-                    
-                    <div style="background:var(--page-bg); padding:10px; border-radius:8px; margin-bottom:12px; font-size:0.85rem;">
-                        <div style="margin-bottom:5px;"><b>Motivo:</b> ${c.motivo}</div>
-                        <div><b>Cita sugerida:</b> ${dateCita}</div>
-                    </div>
+            const motivoLower = (c.motivo || '').toLowerCase();
+            const tipoLower = (c.tipo || '').toLowerCase();
+            
+            const repsAlumno = reportesPorAlumno[c.alumno_id] || [];
+            
+            // Detección de origen del citatorio
+            const esGrave = motivoLower.includes('(grave)') || motivoLower.includes('grave') || tipoLower === 'grave';
+            const esPrioritaria = tipoLower.includes('prioritaria') || motivoLower.includes('prioritaria');
+            const esAcumulativo = motivoLower.includes('acumulaci') || motivoLower.includes('acumulación') || motivoLower.includes('acumulacion');
 
-                    ${c.firma_enterado ? `
-                        <div style="font-size:0.8rem; padding:8px; background:#f0fdf4; border-radius:8px; margin-bottom:12px; color:#166534; border:1px solid #bbf7d0;">
-                            <i class="fa-solid fa-signature"></i> Firmado por: <b>${c.firma_enterado}</b><br>
-                            <small>${new Date(c.fecha_enterado).toLocaleString()}</small>
+            let htmlDetalleOrigen = '';
+            let resumenParaModal = '';
+
+            if (esGrave) {
+                // Caso 1: Provocado por Reporte Grave
+                const repGrave = repsAlumno.find(r => r.gravedad === 'Grave') || repsAlumno[0];
+                const docenteNombre = repGrave?.autor?.nombre || repGrave?.autor_metadata || c.emisor?.nombre || 'Personal Docente';
+                const materiaORol = repGrave?.autor_metadata || (repGrave?.autor?.rol ? repGrave.autor.rol.toUpperCase() : '');
+                const descIncidencia = repGrave ? (repGrave.descripcion || '').replace(/^\[.*?\]\s*/, '') : c.motivo;
+                const fechaRep = repGrave?.fecha || repGrave?.creado_en || c.creado_en;
+                const fechaRepStr = fechaRep ? new Date(fechaRep).toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '';
+
+                resumenParaModal = `REPORTE GRAVE emitido por ${docenteNombre} (${materiaORol || 'Docente'}): "${descIncidencia}"`;
+
+                htmlDetalleOrigen = `
+                    <div style="background:#fef2f2; border:1px solid #fecaca; border-left:4px solid var(--danger); border-radius:8px; padding:10px; margin-bottom:12px; font-size:0.83rem;">
+                        <div style="color:var(--danger); font-weight:700; margin-bottom:5px; display:flex; align-items:center; gap:6px;">
+                            <i class="fa-solid fa-triangle-exclamation"></i> REPORTE GRAVE QUE PROVOCÓ EL CITATORIO
                         </div>
-                    ` : ''}
+                        <div style="margin-bottom:4px; color:#1f2937;">
+                            <b>Emitido por:</b> <span style="color:#b91c1c; font-weight:600;">${docenteNombre}</span> ${materiaORol ? `<span style="color:var(--text-muted); font-size:0.75rem;">(${materiaORol})</span>` : ''}
+                        </div>
+                        <div style="color:#374151; font-style:italic; background:white; padding:6px 8px; border-radius:6px; border:1px dashed #fca5a5; margin-bottom:4px; font-size:0.8rem;">
+                            "${descIncidencia}"
+                        </div>
+                        ${fechaRepStr ? `
+                        <div style="font-size:0.75rem; color:var(--text-muted);">
+                            <i class="fa-regular fa-clock"></i> ${fechaRepStr}
+                        </div>` : ''}
+                    </div>
+                `;
+            } else if (esAcumulativo) {
+                // Caso 2: Provocado por Acumulación de Reportes
+                let catFiltro = '';
+                if (tipoLower.includes('acad') || motivoLower.includes('acad')) catFiltro = 'ACAD';
+                else if (tipoLower.includes('conviv') || motivoLower.includes('conviv') || motivoLower.includes('conduct')) catFiltro = 'CONVIV';
 
-                    <button class="btn btn-primary btn-sm" style="width:100%; height:36px; ${!isEnterado ? 'opacity:0.6;' : ''}" 
-                            onclick="window.abrirModalAtencionFoco('${c.alumno_id}', '${c.alumnos?.nombre}', '${c.id}')">
-                        <i class="fa-solid fa-handshake"></i> Atender y Archivar
-                    </button>
-                    ${!isEnterado ? `<p style="margin:5px 0 0 0; font-size:0.65rem; text-align:center; color:var(--danger)">* Recomienda al alumno firmar en su portal</p>` : ''}
+                let acumulados = repsAlumno.filter(r => {
+                    if (!catFiltro) return true;
+                    const d = (r.descripcion || '').toUpperCase();
+                    if (catFiltro === 'ACAD') return d.includes('[ACADÉMICO]') || d.includes('[ACADEMICO]');
+                    if (catFiltro === 'CONVIV') return d.includes('[CONVIVENCIA]') || d.includes('[CONDUCTA]') || d.includes('[CONDUCTUAL]');
+                    return true;
+                });
+
+                if (acumulados.length === 0) acumulados = repsAlumno.slice(0, 5);
+
+                const countAcum = acumulados.length;
+                resumenParaModal = `ACUMULACIÓN DE ${countAcum} REPORTES: ` + acumulados.map(r => `${r.autor?.nombre || r.autor_metadata || 'Docente'} (${r.gravedad || 'Leve'})`).join(', ');
+
+                htmlDetalleOrigen = `
+                    <div style="background:#fffbeb; border:1px solid #fde68a; border-left:4px solid var(--warning); border-radius:8px; padding:10px; margin-bottom:12px; font-size:0.83rem;">
+                        <div style="color:#92400e; font-weight:700; margin-bottom:6px; display:flex; align-items:center; justify-content:space-between;">
+                            <span><i class="fa-solid fa-layer-group"></i> REPORTES ACUMULADOS (${countAcum > 0 ? countAcum : 'Protocolo'})</span>
+                        </div>
+                        <div style="font-size:0.75rem; color:#78350f; margin-bottom:6px; font-weight:500;">
+                            Docentes que generaron los reportes que llevaron al citatorio:
+                        </div>
+                        ${acumulados.length > 0 ? `
+                        <div style="display:flex; flex-direction:column; gap:6px; max-height:160px; overflow-y:auto; padding-right:2px;">
+                            ${acumulados.map((r) => {
+                                const doc = r.autor?.nombre || r.autor_metadata || 'Docente';
+                                const mat = r.autor_metadata || (r.autor?.rol ? r.autor.rol.toUpperCase() : '');
+                                const cleanDesc = (r.descripcion || '').replace(/^\[.*?\]\s*/, '');
+                                const rFecha = r.fecha || r.creado_en;
+                                const fStr = rFecha ? new Date(rFecha).toLocaleDateString('es-MX', { day: '2-digit', month: 'short' }) : '';
+                                const gravColor = (r.gravedad === 'Moderado') ? 'var(--warning)' : (r.gravedad === 'Grave' ? 'var(--danger)' : '#64748b');
+                                return `
+                                <div style="background:white; border:1px solid #fef3c7; border-radius:6px; padding:6px 8px; font-size:0.78rem;">
+                                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:2px;">
+                                        <span style="font-weight:600; color:#1e293b;">
+                                            <i class="fa-solid fa-user-tie" style="color:var(--primary); font-size:0.7rem;"></i> ${doc}
+                                            ${mat ? `<span style="color:var(--text-muted); font-size:0.7rem; font-weight:normal;">(${mat})</span>` : ''}
+                                        </span>
+                                        <span class="badge" style="font-size:0.6rem; padding:2px 6px; background:${gravColor}; color:white;">${r.gravedad || 'Leve'}</span>
+                                    </div>
+                                    <div style="color:#475569; font-style:italic; font-size:0.75rem; margin-bottom:2px;">
+                                        "${cleanDesc}"
+                                    </div>
+                                    ${fStr ? `<div style="font-size:0.68rem; color:var(--text-muted); text-align:right;"><i class="fa-regular fa-calendar"></i> ${fStr}</div>` : ''}
+                                </div>
+                                `;
+                            }).join('')}
+                        </div>
+                        ` : `
+                        <div style="background:white; padding:6px 8px; border-radius:6px; font-size:0.75rem; color:var(--text-muted);">
+                            <i class="fa-solid fa-info-circle"></i> Generado por protocolo acumulativo. Emisor de activación: <b>${c.emisor?.nombre || 'Docente'}</b>
+                        </div>
+                        `}
+                    </div>
+                `;
+            } else if (esPrioritaria) {
+                // Caso 3: Atención Prioritaria
+                const repPrio = repsAlumno.find(r => (r.descripcion || '').toUpperCase().includes('PRIORITARIA')) || repsAlumno[0];
+                const autorPrio = repPrio?.autor?.nombre || repPrio?.autor_metadata || c.emisor?.nombre || 'Personal escolar';
+                const descPrio = repPrio ? (repPrio.descripcion || '').replace(/^\[.*?\]\s*/, '') : c.motivo;
+                
+                resumenParaModal = `ATENCIÓN PRIORITARIA: ${autorPrio} - "${descPrio}"`;
+
+                htmlDetalleOrigen = `
+                    <div style="background:#f5f3ff; border:1px solid #ddd6fe; border-left:4px solid #7c3aed; border-radius:8px; padding:10px; margin-bottom:12px; font-size:0.83rem;">
+                        <div style="color:#6d28d9; font-weight:700; margin-bottom:4px; display:flex; align-items:center; gap:6px;">
+                            <i class="fa-solid fa-shield-halved"></i> REPORTE DE ATENCIÓN PRIORITARIA (PROTECCIÓN)
+                        </div>
+                        <div style="margin-bottom:4px;">
+                            <b>Reportado por:</b> <span style="font-weight:600; color:#5b21b6;">${autorPrio}</span>
+                        </div>
+                        <div style="color:#374151; font-style:italic; background:white; padding:6px 8px; border-radius:6px; border:1px dashed #c4b5fd; font-size:0.8rem;">
+                            "${descPrio}"
+                        </div>
+                    </div>
+                `;
+            } else {
+                // Caso 4: Citatorio Directo / Manual de Trabajo Social
+                const emisorDirecto = c.emisor?.nombre || 'Personal de Trabajo Social';
+                resumenParaModal = `CITATORIO DIRECTO de Trabajo Social por: ${emisorDirecto}`;
+
+                htmlDetalleOrigen = `
+                    <div style="background:#f0f9ff; border:1px solid #bae6fd; border-left:4px solid #0284c7; border-radius:8px; padding:8px 10px; margin-bottom:12px; font-size:0.82rem;">
+                        <div style="color:#0369a1; font-weight:700; margin-bottom:2px; display:flex; align-items:center; gap:6px;">
+                            <i class="fa-solid fa-user-pen"></i> CITATORIO DIRECTO
+                        </div>
+                        <div style="color:#0c4a6e;">
+                            <b>Creado por:</b> <span style="font-weight:600;">${emisorDirecto}</span>
+                        </div>
+                    </div>
+                `;
+            }
+
+            window._citatoriosDetallesCache[c.id] = {
+                alumnoNombre: c.alumnos?.nombre || 'Alumno',
+                grupo: c.alumnos?.grupos?.nombre || '',
+                motivo: c.motivo,
+                resumenOrigen: resumenParaModal,
+                htmlOrigen: htmlDetalleOrigen
+            };
+
+            const grupoStr = c.alumnos?.grupos?.nombre ? ` • Grupo: <b>${c.alumnos.grupos.nombre}</b>` : '';
+
+            return `
+                <div class="card" style="padding:16px; border:1px solid ${isEnterado ? '#bbf7d0' : '#fed7aa'}; background:white; position:relative; box-shadow:var(--shadow-sm); display:flex; flex-direction:column; justify-content:space-between;">
+                    <div>
+                        <div style="display:flex; justify-content:space-between; margin-bottom:10px; align-items:center;">
+                            <span class="badge" style="background:${isEnterado ? '#22c55e' : (c.visto_por_alumno ? '#3b82f6' : '#f97316')}; color:white; font-size:0.72rem; padding:4px 10px; border-radius:8px; font-weight:600;">
+                                ${isEnterado ? '<i class="fa-solid fa-file-signature"></i> FIRMADO POR PADRE' : (c.visto_por_alumno ? '<i class="fa-solid fa-eye"></i> VISTO POR ALUMNO' : '<i class="fa-solid fa-clock"></i> PENDIENTE DE VISTA')}
+                            </span>
+                            <small style="color:var(--text-muted); font-size:0.75rem;"><i class="fa-regular fa-calendar"></i> ${new Date(c.creado_en).toLocaleDateString('es-MX')}</small>
+                        </div>
+                        <h4 style="margin:0 0 4px 0; font-size:1.05rem; color:var(--primary); font-weight:700;">${c.alumnos?.nombre || '---'}</h4>
+                        <p style="font-size:0.8rem; color:var(--text-muted); margin-bottom:12px;"><b>Matrícula:</b> ${c.alumnos?.matricula || '---'}${grupoStr}</p>
+                        
+                        <!-- BLOQUE DE ORIGEN Y EMISORES -->
+                        ${htmlDetalleOrigen}
+
+                        <div style="background:var(--page-bg); padding:10px; border-radius:8px; margin-bottom:12px; font-size:0.83rem; border:1px solid var(--border);">
+                            <div style="margin-bottom:5px;"><b>Motivo registrado:</b> ${c.motivo}</div>
+                            <div><b>Cita programada:</b> <span style="color:var(--primary); font-weight:600;">${dateCita}</span></div>
+                        </div>
+
+                        ${c.firma_enterado ? `
+                            <div style="font-size:0.8rem; padding:8px 10px; background:#f0fdf4; border-radius:8px; margin-bottom:12px; color:#166534; border:1px solid #bbf7d0;">
+                                <i class="fa-solid fa-signature"></i> Acuse de recibo firmado por: <b>${c.firma_enterado}</b><br>
+                                <small style="color:#15803d;"><i class="fa-regular fa-clock"></i> ${new Date(c.fecha_enterado).toLocaleString('es-MX')}</small>
+                            </div>
+                        ` : ''}
+                    </div>
+
+                    <div style="margin-top:8px;">
+                        <button class="btn btn-primary btn-sm" style="width:100%; height:38px; font-weight:600; border-radius:8px; ${!isEnterado ? 'opacity:0.75;' : ''}" 
+                                onclick="window.abrirModalAtencionFoco('${c.alumno_id}', '${(c.alumnos?.nombre || '').replace(/'/g, "\\'")}', '${c.id}')">
+                            <i class="fa-solid fa-handshake"></i> Atender y Archivar
+                        </button>
+                        ${!isEnterado ? `<p style="margin:5px 0 0 0; font-size:0.68rem; text-align:center; color:var(--danger)">* Recomienda al alumno y padre firmar en su portal</p>` : ''}
+                    </div>
                 </div>
             `;
         }).join('');
@@ -4887,11 +5069,26 @@ window.loadCitatoriosApoyo = async () => {
 
 window.abrirModalAtencionFoco = (id, nombre, citatorioId = null) => {
     const modals = document.querySelectorAll('#modalAtencionFoco');
+    const infoCache = citatorioId && window._citatoriosDetallesCache ? window._citatoriosDetallesCache[citatorioId] : null;
+
     modals.forEach(m => {
         // En un SPA pueden quedar modales fantasma. Actualizamos todos pero solo mostramos el último/activo.
         const inAid = m.querySelector('#atencionAlumnoId'); if(inAid) inAid.value = id;
         const inCid = m.querySelector('#atencionCitatorioId'); if(inCid) inCid.value = citatorioId || '';
-        const inNom = m.querySelector('#atencionAlumnoNombre'); if(inNom) inNom.innerHTML = `<i class="fa-solid fa-user"></i> Resolviendo para: <b>${nombre}</b>`;
+        const inNom = m.querySelector('#atencionAlumnoNombre'); 
+        if(inNom) {
+            let extraInfo = '';
+            if (infoCache && infoCache.htmlOrigen) {
+                extraInfo = `<div style="margin-top:10px; font-size:0.82rem; font-weight:normal;">${infoCache.htmlOrigen}</div>`;
+            }
+            inNom.innerHTML = `
+                <div style="display:flex; justify-content:space-between; align-items:center;">
+                    <span><i class="fa-solid fa-user"></i> Resolviendo para: <b>${nombre}</b></span>
+                    ${infoCache?.grupo ? `<span class="badge" style="background:var(--primary); color:white; font-size:0.7rem;">Grupo: ${infoCache.grupo}</span>` : ''}
+                </div>
+                ${extraInfo}
+            `;
+        }
         const inProc = m.querySelector('#atencionProcedimiento'); if(inProc) inProc.value = '';
         const inComp = m.querySelector('#atencionCompromisos'); if(inComp) inComp.value = '';
         m.style.display = 'block';
@@ -15474,6 +15671,7 @@ window.enviarReporteRapido = async () => {
         if(!u.data.user) throw new Error("Not logged in");
         const autor_id = u.data.user.id;
         
+        const metaMateria = window.currentAulaMateria ? `Docente de ${window.currentAulaMateria.trim()}` : 'Docente';
         const { error } = await supabaseClient.from('reportes_conducta').insert([{
            id: crypto.randomUUID(),
            alumno_id: alumno_id,
@@ -15481,7 +15679,8 @@ window.enviarReporteRapido = async () => {
            descripcion: finalDesc,
            gravedad: sev,
            resuelto: false,
-           plantel_id: state.plantelId
+           plantel_id: state.plantelId,
+           autor_metadata: metaMateria
         }]);
         if(error) {
             console.error("Supabase insert error:", error);
