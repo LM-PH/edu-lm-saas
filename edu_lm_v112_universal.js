@@ -14010,7 +14010,7 @@ window.toggleAsistenciaModo = async (modo) => {
             .select('*').eq('grupo_id', String(window.currentAulaGrupoId)).eq('materia', materia).eq('fecha', hoy).eq('plantel_id', state.plantelId).maybeSingle();
 
         if(sesion && sesion.estado === 'cerrado') {
-            window.showToast("⚠️ La sesión ya fue cerrada. Solo se pueden justificar inasistencias.", "warning");
+            alert("⚠️ El pase de lista del día de hoy ya fue CERRADO y finalizado.\n\nNo es posible volver a abrirlo hasta el próximo día de pase de lista. Si algún alumno presenta comprobante médico o institucional, utiliza el botón 'Justificar'.");
             return;
         }
 
@@ -14140,6 +14140,13 @@ window.guardarAsistenciaQR = async (matricula, grupoId) => {
         let sesion = sessionRes.data;
         const alumno = studentRes.data;
         
+        if(sesion && sesion.estado === 'cerrado') {
+            window.showToast("⚠️ El pase de lista de hoy ya fue CERRADO. No se admiten registros por QR hasta el próximo día.", "error");
+            if(window._mScanner) { await window._mScanner.stop().catch(()=>{}); window._mScanner = null; const r = document.getElementById('reader-maestro'); if(r) r.style.display = 'none'; }
+            if(window.updateSessionUI) window.updateSessionUI();
+            return;
+        }
+
         // Auto-abrir sesión si el maestro empezó a escanear directamente
         if(!sesion) {
             const trimActivo = window._trimestreActivoParaPase || state.selectedMaestroTrimestre || 1;
@@ -14155,11 +14162,6 @@ window.guardarAsistenciaQR = async (matricula, grupoId) => {
             
             sesion = newSesion || { estado: 'abierto' };
             if(window.updateSessionUI) window.updateSessionUI();
-        }
-
-        if(sesion && sesion.estado === 'cerrado') {
-            window.showToast("⚠️ El pase de lista ya fue cerrado. No se admiten registros por QR.", "error");
-            return;
         }
 
         if(!alumno) { window.showToast("Alumno no encontrado", "error"); return; }
@@ -14252,7 +14254,7 @@ window.guardarAsistenciaQR = async (matricula, grupoId) => {
 };
 
 window.confirmarCierreSesion = () => {
-    if(confirm("¿Seguro de CERRAR el pase de lista?\n\nMarcará FALTAS a los ausentes y enviará AVISOS de retardo.")) {
+    if(confirm("¿Seguro de CERRAR el pase de lista?\n\nMarcará FALTAS a los ausentes y enviará AVISOS de retardo.\n\n⚠️ IMPORTANTE: Una vez cerrado, NO se podrá volver a abrir hasta el próximo día de pase de lista. Solo se podrán justificar inasistencias.")) {
         window.finalizarSesionAsistencia().then(() => {
             if(window.loadListaAsistenciaManual) window.loadListaAsistenciaManual();
         });
@@ -15318,12 +15320,30 @@ window.updateSessionUI = async () => {
             btnPuntual.className = 'btn btn-outline'; 
             btnPuntual.style.borderColor = 'var(--primary)'; 
             btnPuntual.style.color = 'var(--primary)'; 
+            if(estado === 'cerrado') {
+                btnPuntual.style.opacity = '0.5';
+                btnPuntual.style.cursor = 'not-allowed';
+                btnPuntual.title = 'Sesión cerrada por hoy. Disponible nuevamente el próximo día.';
+            } else {
+                btnPuntual.style.opacity = '1';
+                btnPuntual.style.cursor = 'pointer';
+                btnPuntual.title = 'Activar cámara para asistencia puntual';
+            }
         }
         if(btnRetardo) { 
             btnRetardo.disabled = (estado === 'cerrado');
             btnRetardo.className = 'btn btn-outline'; 
             btnRetardo.style.borderColor = 'var(--warning)'; 
             btnRetardo.style.color = 'var(--warning)'; 
+            if(estado === 'cerrado') {
+                btnRetardo.style.opacity = '0.5';
+                btnRetardo.style.cursor = 'not-allowed';
+                btnRetardo.title = 'Sesión cerrada por hoy. Disponible nuevamente el próximo día.';
+            } else {
+                btnRetardo.style.opacity = '1';
+                btnRetardo.style.cursor = 'pointer';
+                btnRetardo.title = 'Activar cámara para retardos';
+            }
         }
         if(lblPuntual) lblPuntual.innerText = '[Activar Cámara]';
         if(lblRetardo) lblRetardo.innerText = '[Activar Cámara]';
@@ -15347,11 +15367,11 @@ window.updateSessionUI = async () => {
                 if(lblRetardo) lblRetardo.innerText = '● CAMARA ENCENDIDA (Clic para apagar)';
             }
         } else if(estado === 'cerrado') {
-            label = '🔴 SESIÓN FINALIZADA (Faltas Aplicadas)';
+            label = '🔴 SESIÓN FINALIZADA POR HOY (Disponible el próximo día)';
             color = 'var(--danger)';
             if(btnCerrar) btnCerrar.style.display = 'none';
-            if(btnPuntual) btnPuntual.disabled = true;
-            if(btnRetardo) btnRetardo.disabled = true;
+            if(btnPuntual) { btnPuntual.disabled = true; btnPuntual.style.opacity = '0.5'; btnPuntual.style.cursor = 'not-allowed'; }
+            if(btnRetardo) { btnRetardo.disabled = true; btnRetardo.style.opacity = '0.5'; btnRetardo.style.cursor = 'not-allowed'; }
         }
 
         statusEl.innerHTML = `<i class="fa-solid fa-circle-dot" style="color:${color}"></i> ${label}`;
@@ -21348,6 +21368,21 @@ window.abrirSesionManual = async (modo) => {
 
         const hoy = new Date().toLocaleDateString('en-CA');
         const materia = (window.currentAulaMateria || 'N/A').trim();
+        const grupoId = String(window.currentAulaGrupoId);
+
+        // REGLA ESTRICTA: Si la sesión de hoy ya fue CERRADA, NO se puede volver a abrir hasta el próximo día.
+        const { data: sesionExistente } = await supabaseClient.from('asistencia_sesiones')
+            .select('estado')
+            .eq('grupo_id', grupoId)
+            .eq('materia', materia)
+            .eq('fecha', hoy)
+            .eq('plantel_id', state.plantelId)
+            .maybeSingle();
+
+        if (sesionExistente && sesionExistente.estado === 'cerrado') {
+            return alert("⚠️ El pase de lista del día de hoy ya fue CERRADO y finalizado.\n\nNo es posible volver a abrirlo hasta el próximo día de pase de lista. Si algún alumno presenta comprobante médico o institucional, utiliza el botón 'Justificar'.");
+        }
+
         const trimActivo = window._trimestreActivoParaPase || await window.getTrimestreActivoPaseLista(materia, window.currentAulaGrupoId);
         if(!trimActivo) {
             window.showToast("Todos los trimestres están cerrados.", "error");
@@ -21355,7 +21390,7 @@ window.abrirSesionManual = async (modo) => {
         }
 
         await supabaseClient.from('asistencia_sesiones').upsert({
-            grupo_id: String(window.currentAulaGrupoId), 
+            grupo_id: grupoId, 
             materia: materia, 
             fecha: hoy, 
             maestro_id: u.data.user.id, 
@@ -21398,9 +21433,32 @@ window.loadListaAsistenciaManual = async () => {
         let estadoSesion = sesion?.estado || 'pendiente';
         window.currentAulaEstadoSesion = estadoSesion;
         
+        const btnAbrir = document.getElementById('btnAbrirManual');
+        if (btnAbrir) {
+            if (estadoSesion === 'cerrado') {
+                btnAbrir.disabled = true;
+                btnAbrir.style.opacity = '0.5';
+                btnAbrir.style.cursor = 'not-allowed';
+                btnAbrir.title = 'El pase de lista fue cerrado por hoy. Disponible nuevamente el próximo día.';
+                btnAbrir.innerHTML = '<i class="fa-solid fa-lock"></i> Pase Cerrado Hoy';
+            } else if (estadoSesion === 'abierto' || estadoSesion === 'asistencia' || estadoSesion === 'retardo') {
+                btnAbrir.disabled = false;
+                btnAbrir.style.opacity = '1';
+                btnAbrir.style.cursor = 'pointer';
+                btnAbrir.title = 'Pase de lista abierto';
+                btnAbrir.innerHTML = '<i class="fa-solid fa-clock"></i> Pase Abierto';
+            } else {
+                btnAbrir.disabled = false;
+                btnAbrir.style.opacity = '1';
+                btnAbrir.style.cursor = 'pointer';
+                btnAbrir.title = 'Abrir pase de lista';
+                btnAbrir.innerHTML = '<i class="fa-solid fa-clock"></i> Abrir Pase de Lista';
+            }
+        }
+
         if (statusMsg) {
             if (estadoSesion === 'abierto' || estadoSesion === 'asistencia' || estadoSesion === 'retardo') statusMsg.innerHTML = '<i class="fa-solid fa-clock" style="color:var(--primary)"></i> PASE DE LISTA ABIERTO';
-            else if (estadoSesion === 'cerrado') statusMsg.innerHTML = '<i class="fa-solid fa-lock" style="color:var(--danger)"></i> SESIÓN CERRADA';
+            else if (estadoSesion === 'cerrado') statusMsg.innerHTML = '<i class="fa-solid fa-lock" style="color:var(--danger)"></i> SESIÓN CERRADA POR HOY (Disponible el próximo día)';
             else statusMsg.innerHTML = '<i class="fa-solid fa-circle-dot"></i> ESPERANDO INICIO';
         }
 
@@ -21562,7 +21620,7 @@ window.marcarAsistenciaManual = async (alumnoId, estado) => {
         }
 
         if (estadoSesion === 'cerrado') {
-            return alert("⚠️ El pase de lista ya fue CERRADO y finalizado.\n\nNo es posible modificar las asistencias directamente. Si el alumno presenta justificante médico o institucional, utiliza el botón 'Justificar'.");
+            return alert("⚠️ El pase de lista de hoy ya fue CERRADO y finalizado.\n\nNo es posible modificar las asistencias directamente hasta el próximo día de pase de lista. Si el alumno presenta justificante médico o institucional, utiliza el botón 'Justificar'.");
         }
 
         const { data: existente } = await supabaseClient.from('asistencias')
@@ -21663,7 +21721,7 @@ window.marcarTodosAsistenciaManual = async () => {
         let estadoSesion = sesionData?.estado || 'pendiente';
 
         if (estadoSesion === 'cerrado') {
-            return alert("⚠️ El pase de lista ya fue CERRADO y finalizado.\n\nNo es posible modificar las asistencias masivamente. Si algún alumno cuenta con comprobante médico o institucional, utiliza el botón 'Justificar'.");
+            return alert("⚠️ El pase de lista de hoy ya fue CERRADO y finalizado.\n\nNo es posible volver a abrirlo ni modificar asistencias masivamente hasta el próximo día de pase de lista. Si algún alumno cuenta con comprobante médico o institucional, utiliza el botón 'Justificar'.");
         }
 
         // Si la sesión está pendiente, preguntar para abrir y marcar asistencia
