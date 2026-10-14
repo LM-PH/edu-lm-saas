@@ -10058,12 +10058,13 @@ window.registrarJustificanteMedico = async () => {
             throw error;
         }
 
-        // 2. Notificar a Maestros
+        // 2. Justificación automática retroactiva de inasistencias en aula y accesos
+        await window.aplicarJustificacionAutomatica(aid, inicio, fin, state.plantelId);
+
+        // 3. Notificar a Maestros y a Alumno/Papás
         await window.notificarMaestrosJustificante(aid, motivo, inicio, fin);
 
-        // Se removió la notificación al alumno según solicitud del cliente. Solo se notifica a maestros.
-
-        window.showToast('Justificante generado y enviado a todos.', 'success');
+        window.showToast('Justificante generado, inasistencias justificadas y avisos enviados.', 'success');
         
         // Refrescar vistas
         if(window.loadHistorialSalud) window.loadHistorialSalud();
@@ -10077,6 +10078,90 @@ window.registrarJustificanteMedico = async () => {
     } catch(e) { 
         console.error("Justificante Error:", e); 
         window.showToast('Error: ' + e.message, 'error'); 
+    }
+};
+
+window.aplicarJustificacionAutomatica = async (alumnoId, inicio, fin, plantelId) => {
+    try {
+        console.log(">>> [JUSTIFICACIÓN AUTOMÁTICA] Procesando alumno:", alumnoId, "Rango:", inicio, "a", fin);
+        const pId = plantelId || state.plantelId;
+        
+        const fInicioStr = (inicio || '').split('T')[0];
+        const fFinStr = (fin || '').split('T')[0];
+        if (!fInicioStr || !fFinStr || !alumnoId) return;
+
+        // 1. Justificar faltas en aula (tabla 'asistencias')
+        const { data: faltasAula, error: errAula } = await supabaseClient
+            .from('asistencias')
+            .select('id, fecha, creado_en')
+            .eq('alumno_id', alumnoId)
+            .eq('plantel_id', pId)
+            .eq('estado', 'Falta');
+
+        if (!errAula && faltasAula && faltasAula.length > 0) {
+            const idsAulaJustificar = faltasAula.filter(a => {
+                const f = a.fecha || (a.creado_en ? a.creado_en.split('T')[0] : '');
+                return f && f >= fInicioStr && f <= fFinStr;
+            }).map(a => a.id);
+
+            if (idsAulaJustificar.length > 0) {
+                const { error: updErr } = await supabaseClient
+                    .from('asistencias')
+                    .update({ estado: 'Justificada' })
+                    .in('id', idsAulaJustificar);
+                if (updErr) console.error("Error al actualizar asistencias a Justificada:", updErr);
+                else console.log(`>>> [JUSTIFICACIÓN AUTOMÁTICA] ${idsAulaJustificar.length} faltas en aula actualizadas a Justificada.`);
+            }
+        }
+
+        // 2. Justificar inasistencias en puerta / torniquete (tabla 'accesos_plantel')
+        const { data: inasistenciasPuerta, error: errPuerta } = await supabaseClient
+            .from('accesos_plantel')
+            .select('id, fecha')
+            .eq('alumno_id', alumnoId)
+            .eq('plantel_id', pId)
+            .eq('estado', 'Inasistencia');
+
+        if (!errPuerta && inasistenciasPuerta && inasistenciasPuerta.length > 0) {
+            const idsPuertaJustificar = inasistenciasPuerta.filter(p => {
+                const f = p.fecha;
+                return f && f >= fInicioStr && f <= fFinStr;
+            }).map(p => p.id);
+
+            if (idsPuertaJustificar.length > 0) {
+                const { error: updPErr } = await supabaseClient
+                    .from('accesos_plantel')
+                    .update({ estado: 'Justificada' })
+                    .in('id', idsPuertaJustificar);
+                if (updPErr) console.error("Error al actualizar accesos_plantel a Justificada:", updPErr);
+                else console.log(`>>> [JUSTIFICACIÓN AUTOMÁTICA] ${idsPuertaJustificar.length} inasistencias de acceso escolar actualizadas a Justificada.`);
+            }
+        }
+
+        // 3. Purgar avisos de inasistencia / evasión previos en comunicados para el alumno
+        const aud = 'Alumno_' + alumnoId;
+        const { data: comsBorrar } = await supabaseClient
+            .from('comunicados')
+            .select('id, titulo, mensaje, fecha_envio')
+            .or(`audiencia.eq.${aud},receptor_id.eq.${alumnoId}`)
+            .eq('plantel_id', pId)
+            .gte('fecha_envio', `${fInicioStr}T00:00:00Z`)
+            .lte('fecha_envio', `${fFinStr}T23:59:59.999Z`);
+
+        if (comsBorrar && comsBorrar.length > 0) {
+            const idsBorrar = comsBorrar.filter(c => {
+                const t = (c.titulo || '').toLowerCase();
+                const m = (c.mensaje || '').toLowerCase();
+                return t.includes('inasistencia') || t.includes('evasión') || t.includes('evasion') || m.includes('inasistencia');
+            }).map(c => c.id);
+
+            if (idsBorrar.length > 0) {
+                await supabaseClient.from('comunicados').delete().in('id', idsBorrar);
+                console.log(`>>> [JUSTIFICACIÓN AUTOMÁTICA] ${idsBorrar.length} avisos de inasistencia purgados del buzón.`);
+            }
+        }
+    } catch(eAuto) {
+        console.error("Error en aplicarJustificacionAutomatica:", eAuto);
     }
 };
 
@@ -14047,6 +14132,301 @@ window.toggleModoTecnologiaManual = (isActive) => {
     }
 };
 
+window.togglePaso1Maestros = (header) => {
+    const wrapper = document.getElementById('wrapperListaMaestros');
+    if(!wrapper) return;
+    
+    header.classList.toggle('active');
+    wrapper.classList.toggle('show');
+};
+
+window.seleccionarMaestroDirecto = (email, nombre, element) => {
+    if (typeof nombre === 'object' && !element) {
+        element = nombre;
+        nombre = '';
+    }
+    const inputId = document.getElementById('selMaestroMateriasV110');
+    if(inputId) {
+        inputId.value = email;
+        if(window.loadMateriasDeMaestro) window.loadMateriasDeMaestro(email);
+        if(window.loadGruposDeMaestro) window.loadGruposDeMaestro(email);
+        
+        document.querySelectorAll('.maestro-item-directo').forEach(el => el.classList.remove('active'));
+        if(element) element.classList.add('active');
+        
+        const header = document.querySelector('.collapsible-header h4');
+        if(header) header.innerHTML = `<i class="fa-solid fa-user-check"></i> MAESTRO: ${nombre || email}`;
+        
+        const wrapper = document.getElementById('wrapperListaMaestros');
+        const headerEl = document.querySelector('.collapsible-header');
+        if(wrapper) {
+            wrapper.classList.remove('show');
+            if(headerEl) headerEl.classList.remove('active');
+        }
+        
+        window.showToast(`Maestro ${nombre || email} seleccionado`, 'success');
+    }
+};
+
+window.crearMateriaMaestro = async () => {
+    const selector = document.getElementById('selMaestroMateriasV110');
+    if(!selector) return;
+    
+    const email = selector.value;
+    const teacherMatch = window.__teachersData?.find(t => t.email === email);
+    const profName = teacherMatch ? (teacherMatch.nombre || teacherMatch.display) : "Maestro";
+    
+    const matInput = document.getElementById('nuevaMateriaDoc');
+    const materia = matInput ? matInput.value.trim() : '';
+    const currentPlantel = state.plantelId;
+
+    if(!email || !materia) return showToast("Selecciona un maestro y escribe una materia.", "error");
+
+    try {
+        const { error } = await supabaseClient.from('asignaciones_maestros').insert([{ 
+            docente_email: email, 
+            docente_nombre: profName,
+            materia: materia, 
+            grupo_id: null,
+            plantel_id: currentPlantel
+        }]);
+
+        if(error) throw error;
+
+        showToast("¡Materia registrada exitosamente!", "success");
+        if(matInput) matInput.value = '';
+        if(window.loadMateriasDeMaestro) window.loadMateriasDeMaestro(email); 
+    } catch(err) { 
+        console.error("Error en asignación:", err);
+        showToast("Error al guardar: " + err.message, "error"); 
+    }
+};
+
+window.loadSelectsMaestros = async () => {
+    try {
+        let currentP = state.plantelId || state.user?.user_metadata?.plantel_id;
+        if(!currentP && state.user?.id) {
+            const { data: pData } = await supabaseClient.from('perfiles').select('plantel_id').eq('id', state.user.id).single();
+            currentP = pData?.plantel_id;
+        }
+
+        if(!currentP) return;
+
+        let { data: staff, error: errProf } = await supabaseClient.from('perfiles_permitidos')
+            .select('email, nombre, rol')
+            .eq('rol', 'maestro')
+            .eq('plantel_id', currentP)
+            .order('nombre');
+
+        if (errProf) throw errProf;
+        
+        const teachers = (staff || []).map(p => ({
+            email: p.email,
+            nombre: p.nombre || '',
+            display: (p.nombre && p.nombre !== 'Nuevo Usuario') ? `${p.nombre.toUpperCase()}` : p.email
+        }));
+        window.__teachersData = teachers;
+
+        const optionsHtml = '<option value="">Elige Maestro...</option>' + teachers.map(t => `<option value="${t.email}">${t.display} (${t.email})</option>`).join('');
+        
+        ['selMaestroMateriasV110', 'selAsigMaestroBase'].forEach(id => {
+            const el = document.getElementById(id);
+            if(el) {
+                if(el.tagName === 'SELECT') el.innerHTML = optionsHtml;
+                else el.value = ''; 
+            }
+        });
+
+        const listDirecta = document.getElementById('listaSeleccionMaestrosDirecta');
+        if(listDirecta) {
+            if(teachers.length === 0) {
+                listDirecta.innerHTML = '<p style="text-align:center; padding:10px;">No hay maestros registrados.</p>';
+            } else {
+                listDirecta.innerHTML = teachers.map(t => `
+                    <div class="maestro-item-directo" onclick="window.seleccionarMaestroDirecto('${t.email}', '${(t.nombre || '').replace(/'/g, "\\'")}', this)">
+                        <span>${t.display}</span>
+                        <i class="fa-solid fa-circle-check"></i>
+                    </div>
+                `).join('');
+            }
+        }
+
+        const { data: grupos } = await supabaseClient.from('grupos').select('id, nombre').eq('plantel_id', currentP).order('nombre');
+        
+        const uniqueGroupsMap = new Map();
+        (grupos || []).forEach(g => {
+            if(!uniqueGroupsMap.has(g.nombre)) uniqueGroupsMap.set(g.nombre, g);
+        });
+        const uniqueGroups = Array.from(uniqueGroupsMap.values());
+
+        const sGr = document.getElementById('selAsigGrupoBase');
+        if(sGr) sGr.innerHTML = '<option value="">Elige Grupo...</option>' + uniqueGroups.map(g => `<option value="${g.id}">${g.nombre}</option>`).join('');
+
+        const divGrupos = document.getElementById('gruposCreados');
+        if(divGrupos) {
+            if(uniqueGroups.length === 0) {
+                divGrupos.innerHTML = '<p style="color:var(--text-muted); font-size:0.85rem; text-align:center;">No hay grupos generados aún.</p>';
+            } else {
+                divGrupos.innerHTML = uniqueGroups.map(g => {
+                    return `<div class="materia-drag" style="border-left:4px solid var(--primary); padding:8px; margin-bottom:6px; background:white; border-radius:4px; box-shadow:0 1px 3px rgba(0,0,0,0.1);"><i class="fa-solid fa-layer-group text-muted"></i> Grupo ${g.nombre}</div>`;
+                }).join('');
+            }
+        }
+
+    } catch(e) { 
+        console.error(">>> Error de carga en loadSelectsMaestros:", e);
+    }
+};
+
+window.loadMateriasDeMaestro = async (email) => {
+    const sb = document.getElementById('selAsigMateriaBase');
+    const list = document.getElementById('listaMateriasMaestro');
+    
+    if(!email) {
+        if(sb) sb.innerHTML = '<option value="">Elige...</option>';
+        if(list) list.innerHTML = '<li>Selecciona un maestro.</li>';
+        return;
+    }
+
+    try {
+        const currentPlantelID = state.plantelId || 'general';
+        const { data: profData } = await supabaseClient.from('perfiles_permitidos')
+            .select('nombre')
+            .eq('email', email)
+            .eq('plantel_id', currentPlantelID)
+            .maybeSingle();
+
+        const displayLabel = profData?.nombre ? profData.nombre : email;
+
+        const { data, error } = await supabaseClient.from('asignaciones_maestros')
+            .select('materia')
+            .eq('docente_email', email)
+            .eq('plantel_id', currentPlantelID);
+            
+        if(error) throw error;
+        
+        const unq = [...new Set((data || []).map(d=>d.materia))];
+
+        if(sb) {
+            if(unq.length === 0) {
+                sb.innerHTML = '<option value="">Este maestro no tiene materias base</option>';
+            } else {
+                sb.innerHTML = `<option value="">Elige Materia de ${profData?.nombre || 'Maestro'}</option>` + unq.map(m => `<option value="${m}">${m}</option>`).join('');
+            }
+        }
+
+        if(list) {
+            if(unq.length === 0) {
+                list.innerHTML = `<li style="font-weight:bold; color:var(--primary)">${displayLabel}</li><li>El maestro no tiene materias registradas.</li>`;
+            } else {
+                list.innerHTML = `<li style="font-weight:bold; color:var(--primary); margin-bottom:8px; border-bottom:1px solid var(--border); padding-bottom:4px;"><i class="fa-solid fa-user-tie"></i> ${displayLabel}</li>` + 
+                                unq.map(m => `<li><i class="fa-solid fa-book-open text-primary"></i> ${m}</li>`).join('');
+            }
+        }
+
+    } catch(e) { 
+        console.error("Error en loadMateriasDeMaestro:", e);
+        if(list) list.innerHTML = '<li>Error al cargar materias.</li>';
+    }
+};
+
+window.loadGruposDeMaestro = async (email) => {
+    const list = document.getElementById('listaGruposMaestro');
+    if(!list) return;
+    if(!email) { list.innerHTML = '<li>Sin selección</li>'; return; }
+    try {
+        const currentPlantelID = state.plantelId || 'general';
+        const { data } = await supabaseClient.from('asignaciones_maestros')
+            .select('id, materia, target_grado, grupo_id, grupos(nombre)')
+            .eq('docente_email', email)
+            .eq('plantel_id', currentPlantelID);
+        
+        const asignacionesReales = (data || []).filter(d => d.grupo_id !== null || d.target_grado !== null);
+
+        list.innerHTML = asignacionesReales.map(d => {
+            const grpName = d.grupos ? d.grupos.nombre : (d.target_grado ? `Grado ${d.target_grado}` : 'Sin Grupo');
+            return `<li style="display:flex; justify-content:space-between; align-items:center; padding: 4px 0; border-bottom: 1px dashed var(--border);">
+                <span><i class="fa-solid fa-check text-success" style="margin-right: 8px;"></i> ${d.materia} - <strong>${grpName}</strong></span>
+                <button class="btn btn-ghost btn-xs" style="color:var(--danger); padding:0px 4px; border:1px solid #fee2e2;" onclick="window.eliminarAsignacionMaestro('${d.id}', '${email}')" title="Eliminar asignación">
+                    <i class="fa-solid fa-trash"></i>
+                </button>
+            </li>`;
+        }).join('') || '<li>Sin asignaciones.</li>';
+    } catch(e) { list.innerHTML = '<li>Error al cargar grupos</li>'; }
+};
+
+window.eliminarAsignacionMaestro = async (idAsignacion, email) => {
+    if(!confirm('¿Estás seguro de que deseas eliminar esta materia/grupo asignado a este maestro?')) return;
+    try {
+        const { error } = await supabaseClient.from('asignaciones_maestros').delete().eq('id', idAsignacion);
+        if(error) throw error;
+        window.showToast("Asignación eliminada correctamente.", "success");
+        if(window.loadGruposDeMaestro) window.loadGruposDeMaestro(email);
+        if(window.loadMateriasDeMaestro) window.loadMateriasDeMaestro(email);
+    } catch(err) {
+        alert("Error al eliminar la asignación: " + err.message);
+    }
+};
+
+window.crearAsignacionGrupoMaestro = async () => {
+    const btn = document.getElementById('btnCrearAsignacionGrupoMaestro');
+    if(!btn || btn.disabled) return; 
+
+    const email = document.getElementById('selAsigMaestroBase')?.value;
+    const mat = document.getElementById('selAsigMateriaBase')?.value;
+    const grSelect = document.getElementById('selAsigGrupoBase');
+    const grp = grSelect?.value;
+    const chkForce = document.getElementById('chkForzarTecnologia');
+    const isTec = (chkForce && chkForce.checked) || mat?.toLowerCase().includes('tecnología') || mat?.toLowerCase().includes('taller');
+    let targetGrado = null;
+    let finalGrupoId = grp;
+
+    if(isTec) {
+        targetGrado = document.getElementById('selAsigGradoBase')?.value;
+        if(!targetGrado) return alert("Por favor elige el grado para esta tecnología.");
+        finalGrupoId = null; 
+    } else {
+        if(!grp) return alert("Por favor selecciona un grupo.");
+    }
+
+    if(!email || !mat) return alert("Por favor selecciona maestro y materia.");
+
+    const orig = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Vinculando...';
+    try {
+        let checkExist = supabaseClient.from('asignaciones_maestros').select('id')
+            .eq('docente_email', email).eq('plantel_id', state.plantelId).eq('materia', mat);
+        
+        if(finalGrupoId) checkExist = checkExist.eq('grupo_id', finalGrupoId);
+        else checkExist = checkExist.eq('target_grado', targetGrado);
+
+        const { data: exist } = await checkExist;
+        if(exist && exist.length > 0) throw new Error("Ya existe esta vinculación.");
+
+        const { error: insErr } = await supabaseClient.from('asignaciones_maestros').insert([{ 
+            docente_email: email, 
+            docente_nombre: document.getElementById('selAsigMaestroBase').options[document.getElementById('selAsigMaestroBase').selectedIndex]?.text.split(' (')[0],
+            materia: mat, 
+            grupo_id: finalGrupoId,
+            target_grado: targetGrado,
+            plantel_id: state.plantelId
+        }]);
+        
+        if(insErr) throw insErr;
+
+        window.showToast("¡Éxito! Asignación consolidada" + (isTec ? " para todo el grado " + targetGrado : ""), "success");
+        if(window.loadGruposDeMaestro) window.loadGruposDeMaestro(email);
+
+    } catch(e) { 
+        console.error("Error en vinculación:", e);
+        window.showToast("Error: " + e.message, "error"); 
+    } finally { 
+        btn.disabled = false; 
+        btn.innerHTML = orig; 
+    }
+};
+
 window.initEventosAdminGrupos = () => {
     console.log(">>> Inicializando Eventos de Grupos...");
     try {
@@ -14848,26 +15228,63 @@ window.finalizarSesionAsistencia = async () => {
         const yaIds = (reg || []).map(r => r.alumno_id);
         const faltantes = (todos || []).filter(al => !yaIds.includes(al.id));
         
-        if(faltantes.length > 0) {
-            // 1. Registrar las faltas en la tabla de asistencias con fecha exacta
-            await supabaseClient.from('asistencias').insert(faltantes.map(al => ({
+        // Consultar justificantes médicos activos para la fecha de hoy
+        const { data: justMedHoyCierre } = await supabaseClient.from('justificantes_medicos')
+            .select('alumno_id')
+            .eq('plantel_id', state.plantelId)
+            .lte('fecha_inicio', `${hoy}T23:59:59Z`)
+            .gte('fecha_fin', `${hoy}T00:00:00Z`);
+
+        const setJustificadosCierre = new Set((justMedHoyCierre || []).map(j => j.alumno_id));
+
+        const faltantesReales = [];
+        const justificadosAuto = [];
+
+        faltantes.forEach(al => {
+            if (setJustificadosCierre.has(al.id)) {
+                justificadosAuto.push(al);
+            } else {
+                faltantesReales.push(al);
+            }
+        });
+
+        const insertsCierre = [
+            ...faltantesReales.map(al => ({
                 alumno_id: al.id, 
                 registrador_id: u.data.user.id, 
                 estado: 'Falta', 
-                materia: materia, // Importante registrar la materia
+                materia: materia,
                 grupo_id: grupoId.startsWith('grado:') ? null : grupoId,
                 fecha: hoy,
                 plantel_id: state.plantelId,
                 trimestre: window._trimestreActivoParaPase || state.selectedMaestroTrimestre || 1
-            })));
+            })),
+            ...justificadosAuto.map(al => ({
+                alumno_id: al.id, 
+                registrador_id: u.data.user.id, 
+                estado: 'Justificada', 
+                materia: materia,
+                grupo_id: grupoId.startsWith('grado:') ? null : grupoId,
+                fecha: hoy,
+                plantel_id: state.plantelId,
+                trimestre: window._trimestreActivoParaPase || state.selectedMaestroTrimestre || 1
+            }))
+        ];
+
+        if (insertsCierre.length > 0) {
+            await supabaseClient.from('asistencias').insert(insertsCierre);
         }
 
         // 2. Enviar comunicados diferidos (Retardos y Faltas)
         const retardos = reg.filter(r => r.estado === 'Retardo').map(r => r.alumno_id);
-        const faltasExplicit = reg.filter(r => r.estado === 'Falta').map(r => r.alumno_id);
+        const faltasExplicit = reg.filter(r => r.estado === 'Falta' && !setJustificadosCierre.has(r.alumno_id)).map(r => r.alumno_id);
         // Garantizar que los alumnos con Asistencia o Justificada NUNCA reciban aviso de falta
-        const presentesIds = new Set(reg.filter(r => r.estado === 'Asistencia' || r.estado === 'Justificada').map(r => r.alumno_id));
-        const todasFaltas = [...faltasExplicit, ...faltantes.map(a => a.id)].filter(id => !presentesIds.has(id));
+        const presentesIds = new Set([
+            ...reg.filter(r => r.estado === 'Asistencia' || r.estado === 'Justificada').map(r => r.alumno_id),
+            ...justificadosAuto.map(a => a.id),
+            ...Array.from(setJustificadosCierre)
+        ]);
+        const todasFaltas = [...faltasExplicit, ...faltantesReales.map(a => a.id)].filter(id => !presentesIds.has(id));
 
         // --- ALERTA EVASIÓN DE CLASE Y ACUMULACIÓN ---
         try {
@@ -22054,6 +22471,15 @@ window.loadListaAsistenciaManual = async () => {
             asistMap[a.alumno_id] = a;
         });
 
+        // Consultar justificantes médicos activos para la fecha de hoy
+        const { data: justMedHoyManual } = await supabaseClient.from('justificantes_medicos')
+            .select('alumno_id')
+            .eq('plantel_id', state.plantelId)
+            .lte('fecha_inicio', `${hoy}T23:59:59Z`)
+            .gte('fecha_fin', `${hoy}T00:00:00Z`);
+
+        const alumnosConJustificante = new Set((justMedHoyManual || []).map(j => j.alumno_id));
+
         const disabledState = (estadoSesion === 'cerrado' || estadoSesion === 'pendiente') ? 'disabled' : '';
         const disTodos = (estadoSesion === 'cerrado') ? 'disabled' : '';
 
@@ -22069,7 +22495,13 @@ window.loadListaAsistenciaManual = async () => {
         `;
         alumnos.forEach((al, index) => {
             const reg = asistMap[al.id];
+            const tieneJustificanteActivo = alumnosConJustificante.has(al.id);
             let estadoActual = reg ? reg.estado : (estadoSesion === 'cerrado' ? 'Falta' : 'Pendiente');
+            
+            // Si el alumno tiene justificante médico vigente para hoy y no está explícitamente marcado como Asistencia o Retardo:
+            if (tieneJustificanteActivo && (!reg || reg.estado === 'Falta' || reg.estado === 'Pendiente')) {
+                estadoActual = 'Justificada';
+            }
             
             let colorBorder = 'var(--border)';
             let bgColor = 'white';
@@ -22085,11 +22517,12 @@ window.loadListaAsistenciaManual = async () => {
             // 1. Si la sesión está CERRADA: los botones A, R, F están bloqueados. SOLAMENTE se puede justificar.
             // 2. Si la sesión está PENDIENTE: los botones están deshabilitados hasta abrir la sesión.
             // 3. Si la sesión está ABIERTA: el maestro puede registrar y corregir libremente Asistencia, Retardo o Falta.
+            // 4. Si el alumno está JUSTIFICADO institucionalmente: se deshabilitan Falta y Retardo, pero el maestro puede marcar Asistencia si se presenta.
             const esCerrado = (estadoSesion === 'cerrado');
             const esPendiente = (estadoSesion === 'pendiente');
             const esJustificada = (estadoActual === 'Justificada');
 
-            const disA = (esCerrado || esPendiente || esJustificada) ? 'disabled' : '';
+            const disA = (esCerrado || esPendiente) ? 'disabled' : '';
             const disR = (esCerrado || esPendiente || esJustificada) ? 'disabled' : '';
             const disF = (esCerrado || esPendiente || esJustificada) ? 'disabled' : '';
 
@@ -22334,10 +22767,18 @@ window.marcarTodosAsistenciaManual = async () => {
             asistMap[a.alumno_id] = a;
         });
 
+        // Consultar justificantes médicos activos para hoy
+        const { data: justMedHoyTodos } = await supabaseClient.from('justificantes_medicos')
+            .select('alumno_id')
+            .eq('plantel_id', state.plantelId)
+            .lte('fecha_inicio', `${hoy}T23:59:59Z`)
+            .gte('fecha_fin', `${hoy}T00:00:00Z`);
+        const setJustificadosTodos = new Set((justMedHoyTodos || []).map(j => j.alumno_id));
+
         // 4. Actualización Visual Inmediata (Optimistic UI)
         alumnos.forEach(al => {
             const reg = asistMap[al.id];
-            if (reg && reg.estado === 'Justificada') return; // Respetar Justificadas
+            if ((reg && reg.estado === 'Justificada') || setJustificadosTodos.has(al.id)) return; // Respetar Justificadas
 
             const row = document.getElementById(`row_al_${al.id}`);
             const btnA = document.getElementById(`btn_A_${al.id}`);
@@ -22358,7 +22799,7 @@ window.marcarTodosAsistenciaManual = async () => {
 
         alumnos.forEach(al => {
             const reg = asistMap[al.id];
-            if (reg && reg.estado === 'Justificada') return; // No sobreescribir Justificadas
+            if ((reg && reg.estado === 'Justificada') || setJustificadosTodos.has(al.id)) return; // No sobreescribir Justificadas
 
             if (reg) {
                 if (reg.estado !== 'Asistencia') {
