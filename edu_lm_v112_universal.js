@@ -3190,7 +3190,7 @@ function renderMaestroEncuadre() {
     </div>
 
     <!-- Panel de Firmantes -->
-    <div class="card" style="max-width:800px; margin-top:24px;" id="panelFirmantes" style="display:none;">
+    <div class="card" style="max-width:800px; margin-top:24px; display:none;" id="panelFirmantes">
       <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
         <h4 style="margin:0;"><i class="fa-solid fa-signature text-success"></i> Alumnos que han firmado de Enterados</h4>
         <button class="btn btn-outline btn-xs" onclick="window.loadFirmantesEncuadre()" style="border-color:var(--primary); color:var(--primary);"><i class="fa-solid fa-rotate"></i> Refrescar</button>
@@ -16976,14 +16976,20 @@ window.actualizarTotalEncuadreUI = () => {
     
     if(suma === 100) {
        totalEl.style.color = 'var(--success)';
-       btn.disabled = false;
-       btn.style.opacity = '1';
-       btn.innerText = 'Establecer y Enviar a Padres para Firma';
+       const btnReset = document.getElementById('btnResetEncuadre');
+       const isEnviado = btnReset && btnReset.style.display !== 'none';
+       if(!isEnviado && btn) {
+           btn.disabled = false;
+           btn.style.opacity = '1';
+           btn.innerHTML = '<i class="fa-regular fa-paper-plane"></i> Guardar y Enviar a Alumnos para Firma';
+       }
     } else {
        totalEl.style.color = 'var(--danger)';
-       btn.disabled = true;
-       btn.style.opacity = '0.5';
-       btn.innerText = '⚠️ La suma debe ser exactamente 100%';
+       if(btn) {
+           btn.disabled = true;
+           btn.style.opacity = '0.5';
+           btn.innerHTML = '⚠️ La suma debe ser exactamente 100%';
+       }
     }
 };
 
@@ -17175,6 +17181,129 @@ window.cargarEncuadreActivo = async () => {
         // Recargar el encuadre para el nuevo trimestre si ya hay grupo seleccionado
         const sel = document.getElementById('encuadreGrupoMateria');
         if(sel && sel.value) window.cargarEncuadreActivo();
+    };
+
+    window.resetEstadoEncuadre = async () => {
+        const sel = document.getElementById('encuadreGrupoMateria');
+        if(!sel || !sel.value) return alert("Selecciona un grupo/materia primero.");
+
+        const labelGrupo = sel.options[sel.selectedIndex]?.text || '';
+        const labelTri = (window.currentTrimestre || 1) + "° Trimestre";
+
+        if(!confirm(`🚨 ATENCIÓN: Reinicio Total de Encuadre\n\n¿Estás seguro de que deseas limpiar el registro de envío y avisos para:\n"${labelGrupo}" (${labelTri})?\n\nEsta acción:\n1. Eliminará los avisos del encuadre enviados a los alumnos.\n2. Borrará todas las firmas de enterado registradas de este encuadre.\n3. Habilitará de nuevo la edición y el botón para volver a enviar.\n\n¿Deseas continuar?`)) {
+            return;
+        }
+
+        const btnReset = document.getElementById('btnResetEncuadre');
+        const btnEnviar = document.getElementById('btnEnviarEncuadre');
+        const origResetHtml = btnReset ? btnReset.innerHTML : '';
+        if(btnReset) {
+            btnReset.disabled = true;
+            btnReset.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Limpiando registros...';
+        }
+
+        const [idPart, mat] = sel.value.split('|');
+        const isTec = idPart.startsWith('grado:');
+        const gid = isTec ? null : idPart;
+        const targetGrado = isTec ? idPart.replace('grado:', '') : null;
+
+        try {
+            const u = await supabaseClient.auth.getUser();
+            const maestroId = u?.data?.user?.id || state.user?.id;
+            const pId = state.plantelId;
+
+            // 1. Obtener los IDs de encuadre existentes para este grupo/materia/trimestre
+            let qEnc = supabaseClient.from('encuadres')
+                .select('id, maestro_id')
+                .eq('plantel_id', pId)
+                .eq('maestro_id', maestroId)
+                .eq('materia', mat)
+                .eq('trimestre', window.currentTrimestre || 1);
+
+            if(isTec) qEnc = qEnc.is('grupo_id', null).eq('target_grado', targetGrado);
+            else qEnc = qEnc.eq('grupo_id', gid);
+
+            const { data: encList, error: errEnc } = await qEnc;
+            if(errEnc) throw errEnc;
+
+            const encIds = (encList || []).map(e => e.id).filter(Boolean);
+
+            // 2. Borrar firmas de enterado
+            if(encIds.length > 0) {
+                const { error: errFirmas } = await supabaseClient
+                    .from('firmas_encuadre')
+                    .delete()
+                    .in('encuadre_id', encIds);
+                if(errFirmas) console.warn("Aviso al borrar firmas_encuadre:", errFirmas);
+            }
+
+            // 3. Borrar comunicados y vistas asociadas
+            const comIdsSet = new Set();
+
+            // 3.1 Por REF_ID en mensaje
+            for(const eid of encIds) {
+                const { data: comsRef } = await supabaseClient
+                    .from('comunicados')
+                    .select('id')
+                    .eq('plantel_id', pId)
+                    .eq('autor_id', maestroId)
+                    .ilike('mensaje', `%[REF_ID: ${eid}]%`);
+                if(comsRef) comsRef.forEach(c => comIdsSet.add(c.id));
+            }
+
+            // 3.2 Por título
+            const { data: comsTit } = await supabaseClient
+                .from('comunicados')
+                .select('id')
+                .eq('plantel_id', pId)
+                .eq('autor_id', maestroId)
+                .ilike('titulo', '%Encuadre%')
+                .ilike('titulo', `%${mat}%`)
+                .ilike('titulo', `%${labelTri}%`);
+            if(comsTit) comsTit.forEach(c => comIdsSet.add(c.id));
+
+            const arrComIds = Array.from(comIdsSet);
+            if(arrComIds.length > 0) {
+                await supabaseClient.from('comunicados_vistos').delete().in('comunicado_id', arrComIds);
+                await supabaseClient.from('comunicados').delete().in('id', arrComIds);
+            }
+
+            // 4. Resetear estado en la tabla encuadres
+            if(encIds.length > 0) {
+                const { error: errUpd } = await supabaseClient
+                    .from('encuadres')
+                    .update({
+                        notificacion_enviada: false,
+                        fecha_envio_notif: null
+                    })
+                    .in('id', encIds);
+                if(errUpd) throw errUpd;
+            }
+
+            // 5. Inmediatamente restaurar el botón de envío y ocultar el botón de reset
+            if(btnEnviar) {
+                btnEnviar.disabled = false;
+                btnEnviar.innerHTML = '<i class="fa-regular fa-paper-plane"></i> Guardar y Enviar a Alumnos para Firma';
+                btnEnviar.style.background = '';
+                btnEnviar.style.opacity = '1';
+            }
+            if(btnReset) {
+                btnReset.style.display = 'none';
+            }
+            const panelF = document.getElementById('panelFirmantes');
+            if(panelF) panelF.style.display = 'none';
+
+            alert("✅ Reinicio completado con éxito.\nSe limpiaron los avisos y firmas. Ya puedes ajustar los rubros y volver a enviar el encuadre.");
+            if(window.cargarEncuadreActivo) window.cargarEncuadreActivo();
+        } catch (e) {
+            console.error("Error en resetEstadoEncuadre:", e);
+            alert("Error al limpiar el encuadre: " + (e.message || e));
+        } finally {
+            if(btnReset) {
+                btnReset.disabled = false;
+                btnReset.innerHTML = origResetHtml;
+            }
+        }
     };
 
     window.guardarYEnviarEncuadre = async () => {
