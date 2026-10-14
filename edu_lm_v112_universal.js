@@ -17155,25 +17155,34 @@ window.cargarEncuadreActivo = async () => {
             plantel_id: state.plantelId
         };
 
+        let encId = encExistente ? encExistente.id : null;
         if(encExistente) {
             const { error } = await supabaseClient.from('encuadres').update(payloadEnc).eq('id', encExistente.id);
             if(error) throw error;
         } else {
-            const { error } = await supabaseClient.from('encuadres').insert([payloadEnc]);
+            const { data: newEnc, error } = await supabaseClient.from('encuadres').insert([payloadEnc]).select('id').maybeSingle();
             if(error) throw error;
+            if(newEnc && newEnc.id) encId = newEnc.id;
         }
 
         // 2. Obtener los alumnos del grupo/grado para notificarles
         let alumnos = [];
+        let errAl = null;
         if(isTec) {
-            const { data: rawAlumnos } = await supabaseClient.from('alumnos').select('id, nombre, grado, taller').eq('plantel_id', state.plantelId).order('nombre');
+            const { data: rawAlumnos, error: eAl } = await supabaseClient.from('alumnos').select('id, nombre, grado, taller').eq('plantel_id', state.plantelId).order('nombre');
+            errAl = eAl;
             alumnos = window._filtrarAlumnosPorTallerYGrado ? window._filtrarAlumnosPorTallerYGrado(rawAlumnos, targetGrado, mat) : (rawAlumnos || []);
         } else {
-            const { data: rawAlumnos } = await supabaseClient.from('alumnos').select('id, nombre').eq('plantel_id', state.plantelId).eq('grupo_id', gid).order('nombre');
+            const { data: rawAlumnos, error: eAl } = await supabaseClient.from('alumnos').select('id, nombre').eq('plantel_id', state.plantelId).eq('grupo_id', gid).order('nombre');
+            errAl = eAl;
             alumnos = rawAlumnos || [];
         }
-        console.log(">>> [ENCUADRE] Alumnos encontrados para notificar:", alumnos?.length, "Error:", errAl);
-        if(alumnos) console.log(">>> [ENCUADRE] Muestra de IDs de alumnos:", alumnos.slice(0,3).map(a => a.id));
+        if(errAl) {
+            console.error(">>> [ENCUADRE] Error al consultar alumnos:", errAl);
+            throw errAl;
+        }
+        console.log(">>> [ENCUADRE] Alumnos encontrados para notificar:", alumnos?.length);
+        if(alumnos && alumnos.length > 0) console.log(">>> [ENCUADRE] Muestra de IDs de alumnos:", alumnos.slice(0,3).map(a => a.id));
 
         // Obtener el nombre del maestro
         const { data: perfil } = await supabaseClient.from('perfiles').select('nombre').eq('id', u.data.user.id).maybeSingle();
@@ -17181,18 +17190,21 @@ window.cargarEncuadreActivo = async () => {
 
         // 3. Enviar notificaciones
         if(alumnos && alumnos.length > 0) {
-            // Obtener el ID del encuadre para la referencia invisible
-            let qEncId = supabaseClient.from('encuadres').select('id')
-                .eq('plantel_id', state.plantelId)
-                .eq('maestro_id', u.data.user.id)
-                .eq('materia', mat)
-                .eq('trimestre', window.currentTrimestre || 1);
-            
-            if(isTec) qEncId = qEncId.is('grupo_id', null).eq('target_grado', targetGrado);
-            else qEncId = qEncId.eq('grupo_id', gid);
-            
-            const { data: _encObjArr } = await qEncId.order('fecha_creacion', { ascending: false }).limit(1);
-            const encObj = _encObjArr && _encObjArr.length > 0 ? _encObjArr[0] : null;
+            // Obtener el ID del encuadre para la referencia invisible si no lo tenemos aún
+            if(!encId) {
+                let qEncId = supabaseClient.from('encuadres').select('id')
+                    .eq('plantel_id', state.plantelId)
+                    .eq('maestro_id', u.data.user.id)
+                    .eq('materia', mat)
+                    .eq('trimestre', window.currentTrimestre || 1);
+                
+                if(isTec) qEncId = qEncId.is('grupo_id', null).eq('target_grado', targetGrado);
+                else qEncId = qEncId.eq('grupo_id', gid);
+                
+                const { data: _encObjArr } = await qEncId.order('fecha_creacion', { ascending: false }).limit(1);
+                const encObj = _encObjArr && _encObjArr.length > 0 ? _encObjArr[0] : null;
+                encId = encObj?.id || null;
+            }
 
             const rubrosTexto = window.rubros.map(r => `• ${r.name}: ${r.val}%`).join('\n');
             const labelTri = (window.currentTrimestre || 1) + "° Trimestre";
@@ -17202,7 +17214,7 @@ window.cargarEncuadreActivo = async () => {
             notificaciones = alumnos.map(alum => ({
                 autor_id: u.data.user.id,
                 titulo: `📋 Encuadre: ${mat} (${labelGrupo}) - ${labelTri}`,
-                mensaje: `El profesor/a ${nombreMaestro} ha publicado los criterios de evaluación para el ${labelTri} en la materia "${mat}".\n\n📊 Estructura de Calificación:\n${rubrosTexto}\n\n✍️ Por favor, FIRMA DE ENTERADO.\n\n[REF_ID: ${encObj?.id || 'none'}]`,
+                mensaje: `El profesor/a ${nombreMaestro} ha publicado los criterios de evaluación para el ${labelTri} en la materia "${mat}".\n\n📊 Estructura de Calificación:\n${rubrosTexto}\n\n✍️ Por favor, FIRMA DE ENTERADO.\n\n[REF_ID: ${encId || 'none'}]`,
                 audiencia: `Alumno_${alum.id}`,
                 plantel_id: state.plantelId
             }));
@@ -17210,14 +17222,21 @@ window.cargarEncuadreActivo = async () => {
             if(errIns) throw errIns;
 
             // 4. Marcar encuadre como enviado
-            let qUpdate = supabaseClient.from('encuadres').update({ 
-                notificacion_enviada: true, 
-                fecha_envio_notif: new Date().toISOString() 
-            }).eq('plantel_id', state.plantelId).eq('maestro_id', u.data.user.id).eq('materia', mat).eq('trimestre', window.currentTrimestre || 1);
+            if(encId) {
+                await supabaseClient.from('encuadres').update({ 
+                    notificacion_enviada: true, 
+                    fecha_envio_notif: new Date().toISOString() 
+                }).eq('id', encId);
+            } else {
+                let qUpdate = supabaseClient.from('encuadres').update({ 
+                    notificacion_enviada: true, 
+                    fecha_envio_notif: new Date().toISOString() 
+                }).eq('plantel_id', state.plantelId).eq('maestro_id', u.data.user.id).eq('materia', mat).eq('trimestre', window.currentTrimestre || 1);
 
-            if(isTec) qUpdate = qUpdate.is('grupo_id', null).eq('target_grado', targetGrado);
-            else qUpdate = qUpdate.eq('grupo_id', gid);
-            await qUpdate;
+                if(isTec) qUpdate = qUpdate.is('grupo_id', null).eq('target_grado', targetGrado);
+                else qUpdate = qUpdate.eq('grupo_id', gid);
+                await qUpdate;
+            }
 
             const fechaHoy = new Date().toLocaleString('es-MX', { dateStyle: 'medium', timeStyle: 'short' });
             btn.style.background = 'var(--success)';
