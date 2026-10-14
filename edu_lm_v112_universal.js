@@ -11770,11 +11770,20 @@ window.loadActividadesMaestro = async () => {
                 `<span style="font-size:0.75rem; color:var(--text-muted); background:var(--page-bg); padding:2px 8px; border-radius:4px;">Cerrada el: ${new Date(act.fecha_finalizacion).toLocaleDateString()}</span>` : 
                 `<span style="font-size:0.75rem; color:var(--text-muted);">Creada: ${new Date(act.fecha_creacion).toLocaleDateString()}</span>`;
 
+            const btnRubro = act.rubro_name ? 
+                `<button class="btn btn-outline" style="border-color:#d97706; color:#b45309; font-size:0.8rem; padding:6px 12px;" onclick="window.abrirModalAsignarRubro('${act.id}')" title="Cambiar rubro del encuadre">
+                    <i class="fa-solid fa-tag"></i> Cambiar Rubro
+                </button>` :
+                `<button class="btn btn-outline" style="border-color:#f59e0b; color:#b45309; background:#fffbeb; font-size:0.8rem; padding:6px 12px; font-weight:600;" onclick="window.abrirModalAsignarRubro('${act.id}')" title="Asignar un rubro del encuadre para que pondere en la calificación">
+                    <i class="fa-solid fa-tag"></i> Asignar Rubro
+                </button>`;
+
             const actionButtons = isFinalizada ? 
-                `<div style="display:flex; gap:8px;">
+                `<div style="display:flex; gap:8px; flex-wrap:wrap;">
                     <button class="btn btn-outline" style="border-color:var(--primary); color:var(--primary); font-size:0.8rem; padding:6px 12px;" onclick="window.reabrirActividad('${act.id}')">
                         <i class="fa-solid fa-rotate-left"></i> Reabrir
                     </button>
+                    ${btnRubro}
                     <button class="btn btn-outline" style="border-color:var(--primary); color:var(--primary); font-size:0.8rem; padding:6px 12px;" onclick="window.abrirModalCopiarActividad('${act.id}')">
                         <i class="fa-solid fa-copy"></i> Asignar a grupos
                     </button>
@@ -11782,10 +11791,11 @@ window.loadActividadesMaestro = async () => {
                         <i class="fa-solid fa-trash-can"></i>
                     </button>
                 </div>` :
-                `<div style="display:flex; gap:8px;">
+                `<div style="display:flex; gap:8px; flex-wrap:wrap;">
                     <button class="btn btn-outline" style="border-color:var(--success); color:var(--success); font-size:0.8rem; padding:6px 12px;" onclick="window.abrirQREvaluacion('${act.id}', '${act.titulo.replace(/'/g, "\\'").replace(/"/g, '&quot;').replace(/[\\n\\r]/g, ' ')}', '${act.grupo_id || ''}', '${act.target_grado || ''}', '${act.materia || ''}')">
                         <i class="fa-solid fa-qrcode"></i> Evaluar QR
                     </button>
+                    ${btnRubro}
                     <button class="btn btn-outline" style="border-color:var(--primary); color:var(--primary); font-size:0.8rem; padding:6px 12px;" onclick="window.abrirModalCopiarActividad('${act.id}')">
                         <i class="fa-solid fa-copy"></i> Asignar a grupos
                     </button>
@@ -11799,20 +11809,23 @@ window.loadActividadesMaestro = async () => {
 
             return `
             <div class="card-actividad" style="border:1px solid var(--border); border-radius:12px; padding:20px; background: white; box-shadow: 0 2px 4px rgba(0,0,0,0.02); transition: all 0.2s ease;">
-               <div style="display:flex; justify-content:space-between; align-items:flex-start;">
-                   <div style="flex:1;">
-                      <div style="display:flex; gap:10px; align-items:center; margin-bottom:6px;">
+               <div style="display:flex; justify-content:space-between; align-items:flex-start; flex-wrap:wrap; gap:12px;">
+                   <div style="flex:1; min-width:260px;">
+                      <div style="display:flex; gap:10px; align-items:center; margin-bottom:6px; flex-wrap:wrap;">
                         <span style="font-weight:bold; font-size:1.15rem; color:var(--text-main);">${act.titulo}</span>
                         <span class="badge" style="background:#f0fdf4; color:#166534; border: 1px solid #166534; font-size:0.7rem;">${act.materia}</span>
                       </div>
                       <div style="font-size:0.85rem; color:var(--text-muted);">${act.grupos ? act.grupos.nombre : (act.target_grado ? act.target_grado+'° Grado' : 'Grupo')} • ${fechaTxt}</div>
                       
-                      <div style="margin-top:12px; display:flex; gap:15px; align-items:center;">
+                      <div style="margin-top:12px; display:flex; gap:12px; align-items:center; flex-wrap:wrap;">
                         <div style="font-size:0.85rem;">
                             <i class="fa-solid fa-users" style="color:var(--primary); opacity:0.6;"></i> 
                             Evaluados: <strong style="color:var(--text-main);">${count}</strong>
                         </div>
-                        ${act.rubro_name ? `<div style="font-size:0.8rem; color:var(--warning); font-weight:600;"><i class="fa-solid fa-tag"></i> ${act.rubro_name}</div>` : ''}
+                        ${act.rubro_name ? 
+                            `<div style="font-size:0.8rem; color:var(--warning); font-weight:600;"><i class="fa-solid fa-tag"></i> ${act.rubro_name} (${act.rubro_peso || 0}%)</div>` : 
+                            `<div style="font-size:0.8rem; color:#dc2626; background:#fef2f2; border:1px solid #fecaca; padding:2px 8px; border-radius:6px; font-weight:600; cursor:pointer;" onclick="window.abrirModalAsignarRubro('${act.id}')" title="Click para asignar rubro del encuadre"><i class="fa-solid fa-triangle-exclamation"></i> Sin Rubro Asignado (No promedia)</div>`
+                        }
                       </div>
                    </div>
                    ${actionButtons}
@@ -11896,6 +11909,316 @@ window.finalizarActividad = async (id) => {
     } catch(err) {
         console.error(err);
         alert("Error al cerrar actividad: " + err.message);
+    }
+};
+
+
+window.abrirModalAsignarRubro = async (actId) => {
+    try {
+        const modalId = 'modalAsignarRubro';
+        let existing = document.getElementById(modalId);
+        if(existing) existing.remove();
+
+        // 1. Cargar detalles de la actividad
+        const { data: act, error: errAct } = await supabaseClient.from('actividades_maestro')
+            .select('*, grupos(nombre)')
+            .eq('id', actId)
+            .single();
+
+        if(errAct || !act) {
+            return alert("Error al cargar la actividad: " + (errAct?.message || "No encontrada"));
+        }
+
+        // 2. Conteo de evaluaciones existentes
+        const { data: evalsData } = await supabaseClient.from('evaluaciones_actividades')
+            .select('id')
+            .eq('actividad_id', actId);
+        const evalCount = evalsData ? evalsData.length : 0;
+
+        // 3. Consultar Encuadre para esta materia, grupo/grado y trimestre
+        let q = supabaseClient.from('encuadres')
+            .select('id, rubros, materia, trimestre, grupo_id, target_grado')
+            .eq('plantel_id', state.plantelId)
+            .eq('maestro_id', act.maestro_id || (state.user && state.user.id))
+            .eq('materia', act.materia);
+
+        if(act.trimestre) q = q.eq('trimestre', act.trimestre);
+        if(act.target_grado) {
+            q = q.is('grupo_id', null).eq('target_grado', act.target_grado);
+        } else if(act.grupo_id) {
+            q = q.eq('grupo_id', act.grupo_id);
+        }
+
+        let { data: encArr } = await q.order('fecha_creacion', { ascending: false }).limit(1);
+        let encuadre = encArr && encArr.length > 0 ? encArr[0] : null;
+
+        // Fallback: si no hay encuadre específico para ese grupo/grado, buscar cualquier encuadre del maestro para esa materia
+        if(!encuadre || !encuadre.rubros || encuadre.rubros.length === 0) {
+            const { data: fallbackArr } = await supabaseClient.from('encuadres')
+                .select('id, rubros, materia, trimestre, grupo_id, target_grado')
+                .eq('plantel_id', state.plantelId)
+                .eq('maestro_id', act.maestro_id || (state.user && state.user.id))
+                .eq('materia', act.materia)
+                .order('fecha_creacion', { ascending: false })
+                .limit(1);
+            if(fallbackArr && fallbackArr.length > 0) {
+                encuadre = fallbackArr[0];
+            }
+        }
+
+        // 4. Buscar actividades hermanas (mismo maestro, materia, trimestre y título en otros grupos)
+        let siblingActs = [];
+        try {
+            const { data: sibs } = await supabaseClient.from('actividades_maestro')
+                .select('id, grupo_id, target_grado, rubro_name, rubro_peso, grupos(nombre)')
+                .eq('plantel_id', state.plantelId)
+                .eq('maestro_id', act.maestro_id)
+                .eq('materia', act.materia)
+                .eq('trimestre', act.trimestre)
+                .eq('titulo', act.titulo)
+                .neq('id', act.id);
+            siblingActs = sibs || [];
+        } catch(e) {
+            console.warn("No se pudieron consultar actividades hermanas:", e);
+        }
+
+        // Construir opciones de rubro
+        let rubrosHTML = '';
+        let hasOfficialRubros = false;
+        if(encuadre && encuadre.rubros && encuadre.rubros.length > 0) {
+            hasOfficialRubros = true;
+            rubrosHTML = encuadre.rubros.map((r) => {
+                const isCurrent = act.rubro_name === r.name;
+                const rValObj = JSON.stringify({ name: r.name, val: r.val }).replace(/"/g, '&quot;');
+                return `
+                <label style="display:flex; align-items:center; gap:12px; padding:12px; border:1px solid ${isCurrent ? 'var(--primary)' : 'var(--border)'}; border-radius:8px; cursor:pointer; background:${isCurrent ? '#f0f7ff' : '#fff'}; transition:all 0.15s ease;">
+                    <input type="radio" name="optRubroAsignar" value="${rValObj}" ${isCurrent ? 'checked' : ''} onchange="window._toggleCustomRubroInputs(false)" style="accent-color:var(--primary); transform:scale(1.15);">
+                    <div style="flex:1;">
+                        <div style="font-weight:600; color:var(--text-main); font-size:0.95rem;">${r.name}</div>
+                        <div style="font-size:0.8rem; color:var(--text-muted);">Ponderación configurada: ${r.val}%</div>
+                    </div>
+                    <span class="badge" style="background:#fef3c7; color:#92400e; font-weight:700; font-size:0.85rem; padding:4px 8px; border-radius:6px;">${r.val}%</span>
+                </label>`;
+            }).join('');
+        } else {
+            rubrosHTML = `
+            <div style="padding:12px; background:#fffbeb; border:1px solid #fef3c7; border-radius:8px; font-size:0.85rem; color:#92400e; margin-bottom:4px;">
+                <i class="fa-solid fa-triangle-exclamation"></i> No se encontró un encuadre guardado para esta materia en este trimestre. Puedes ingresar el rubro manualmente abajo.
+            </div>`;
+        }
+
+        // Opción personalizada y opción sin rubro
+        const isCustomCurrent = act.rubro_name && (!hasOfficialRubros || !encuadre.rubros.some(r => r.name === act.rubro_name));
+        const isNoneCurrent = !act.rubro_name;
+
+        rubrosHTML += `
+        <label style="display:flex; align-items:center; gap:12px; padding:12px; border:1px solid ${isCustomCurrent ? 'var(--primary)' : 'var(--border)'}; border-radius:8px; cursor:pointer; background:${isCustomCurrent ? '#f0f7ff' : '#fff'}; transition:all 0.15s ease; margin-top:8px;">
+            <input type="radio" name="optRubroAsignar" value="custom" ${isCustomCurrent ? 'checked' : ''} onchange="window._toggleCustomRubroInputs(true)" style="accent-color:var(--primary); transform:scale(1.15);">
+            <div style="flex:1;">
+                <div style="font-weight:600; color:var(--text-main); font-size:0.95rem;">Otro Rubro / Personalizado</div>
+                <div style="font-size:0.8rem; color:var(--text-muted);">Escribe el nombre y porcentaje de ponderación</div>
+            </div>
+            <i class="fa-solid fa-pen-to-square" style="color:var(--text-muted);"></i>
+        </label>
+
+        <div id="contenedorRubroPersonalizado" style="display:${isCustomCurrent || !hasOfficialRubros ? 'block' : 'none'}; padding:12px; background:#f8fafc; border:1px dashed var(--border); border-radius:8px; margin-top:8px;">
+            <div class="form-group" style="margin-bottom:8px;">
+                <label class="form-label" style="font-size:0.85rem;">Nombre del Rubro</label>
+                <input type="text" id="customRubroName" class="form-input" placeholder="Ej. Tareas y Prácticas, Examen..." value="${isCustomCurrent ? (act.rubro_name || '').replace(/"/g, '&quot;') : ''}">
+            </div>
+            <div class="form-group" style="margin-bottom:0;">
+                <label class="form-label" style="font-size:0.85rem;">Porcentaje de Ponderación (%)</label>
+                <input type="number" id="customRubroPeso" class="form-input" placeholder="Ej. 30" min="1" max="100" value="${isCustomCurrent ? (act.rubro_peso || '') : ''}">
+            </div>
+        </div>
+
+        <label style="display:flex; align-items:center; gap:12px; padding:12px; border:1px solid ${isNoneCurrent ? 'var(--primary)' : 'var(--border)'}; border-radius:8px; cursor:pointer; background:${isNoneCurrent ? '#f0f7ff' : '#fff'}; transition:all 0.15s ease; margin-top:8px;">
+            <input type="radio" name="optRubroAsignar" value="none" ${isNoneCurrent ? 'checked' : ''} onchange="window._toggleCustomRubroInputs(false)" style="accent-color:var(--primary); transform:scale(1.15);">
+            <div style="flex:1;">
+                <div style="font-weight:600; color:var(--text-main); font-size:0.95rem;">Sin Rubro (Actividad Extra)</div>
+                <div style="font-size:0.8rem; color:var(--text-muted);">No promedia en los porcentajes del encuadre</div>
+            </div>
+            <i class="fa-solid fa-ban" style="color:var(--text-muted);"></i>
+        </label>
+        `;
+
+        // Checkbox para actividades hermanas
+        let siblingHTML = '';
+        if(siblingActs.length > 0) {
+            const gruposTxt = siblingActs.map(s => s.grupos ? s.grupos.nombre : (s.target_grado ? s.target_grado+'° Grado' : 'Otro')).join(', ');
+            siblingHTML = `
+            <div style="margin-top:14px; padding:12px; background:#f0fdf4; border:1px solid #bbf7d0; border-radius:8px;">
+                <label style="display:flex; align-items:flex-start; gap:10px; cursor:pointer; font-size:0.85rem; color:#166534; font-weight:500; margin:0;">
+                    <input type="checkbox" id="chkAplicarHermanas" checked style="margin-top:3px; accent-color:var(--success); transform:scale(1.15);">
+                    <span>Aplicar también este rubro a otras <strong>${siblingActs.length}</strong> actividad(es) con el mismo título en otros grupos (<em>${gruposTxt}</em>).</span>
+                </label>
+            </div>`;
+        }
+
+        const div = document.createElement('div');
+        div.id = modalId;
+        div.className = 'modal-backdrop';
+        div.style = 'display:flex; position:fixed; z-index:1000; left:0; top:0; width:100%; height:100%; background:rgba(0,0,0,0.5); backdrop-filter:blur(4px); justify-content:center; align-items:center;';
+
+        const grupoNombre = act.grupos ? act.grupos.nombre : (act.target_grado ? act.target_grado+'° Grado' : 'General');
+
+        div.innerHTML = `
+            <div class="modal-content" style="max-width:540px; width:92%; padding:24px; background:white; border-radius:12px; box-shadow:0 12px 30px rgba(0,0,0,0.15); position:relative; overflow-y:auto; max-height:92vh;">
+                <button onclick="document.getElementById('${modalId}').remove()" style="position:absolute; right:16px; top:16px; background:none; border:none; color:var(--text-muted); cursor:pointer; font-size:1.2rem;"><i class="fa-solid fa-xmark"></i></button>
+                
+                <div style="display:flex; align-items:center; gap:10px; margin-bottom:12px;">
+                    <div style="width:38px; height:38px; border-radius:8px; background:#fef3c7; color:#b45309; display:flex; align-items:center; justify-content:center; font-size:1.1rem;">
+                        <i class="fa-solid fa-tag"></i>
+                    </div>
+                    <div>
+                        <h3 style="margin:0; font-size:1.2rem; color:var(--text-main);">Asignar Rubro del Encuadre</h3>
+                        <p style="margin:0; font-size:0.8rem; color:var(--text-muted);">Vincula esta actividad al encuadre para calcular la calificación</p>
+                    </div>
+                </div>
+
+                <!-- Detalles de la actividad -->
+                <div style="background:#f8fafc; padding:12px 14px; border-radius:8px; border:1px solid var(--border); margin-bottom:16px;">
+                    <div style="font-weight:700; font-size:1.05rem; color:var(--text-main); margin-bottom:6px;">${act.titulo}</div>
+                    <div style="display:flex; gap:8px; flex-wrap:wrap; font-size:0.8rem;">
+                        <span class="badge" style="background:#eff6ff; color:#1d4ed8; border:1px solid #bfdbfe;">${act.materia}</span>
+                        <span class="badge" style="background:#f3f4f6; color:#374151; border:1px solid #e5e7eb;">${grupoNombre}</span>
+                        <span class="badge" style="background:#f3f4f6; color:#374151; border:1px solid #e5e7eb;">${act.trimestre ? act.trimestre + '° Trimestre' : '1° Trimestre'}</span>
+                        <span class="badge" style="background:#ecfdf5; color:#047857; border:1px solid #a7f3d0;"><i class="fa-solid fa-users"></i> ${evalCount} evaluado(s)</span>
+                    </div>
+                    <div style="margin-top:8px; font-size:0.85rem; color:var(--text-muted);">
+                        Rubro actual: ${act.rubro_name ? `<strong style="color:var(--warning);">${act.rubro_name} (${act.rubro_peso || 0}%)</strong>` : `<strong style="color:#dc2626;"><i class="fa-solid fa-triangle-exclamation"></i> Sin Rubro Asignado</strong>`}
+                    </div>
+                </div>
+
+                <div style="font-weight:600; font-size:0.9rem; color:var(--text-main); margin-bottom:8px;">
+                    Selecciona el rubro correspondiente:
+                </div>
+
+                <!-- Lista de opciones -->
+                <div style="display:flex; flex-direction:column; gap:6px; margin-bottom:12px;">
+                    ${rubrosHTML}
+                </div>
+
+                ${siblingHTML}
+
+                <!-- Aviso de conservación de calificaciones -->
+                <div style="margin-top:14px; padding:12px; background:#eff6ff; border:1px solid #bfdbfe; border-radius:8px; font-size:0.82rem; color:#1e40af; display:flex; gap:10px; align-items:flex-start;">
+                    <i class="fa-solid fa-circle-check" style="color:#2563eb; font-size:1.1rem; margin-top:2px; flex-shrink:0;"></i>
+                    <div>
+                        <strong>Calificaciones preservadas:</strong> Las calificaciones que ya evaluaste (${evalCount} alumno(s)) <strong>no se borrarán</strong>. Al guardar el rubro, sus notas se incorporarán automáticamente a las listas y boletas sin tener que volver a evaluar.
+                    </div>
+                </div>
+
+                <!-- Acciones -->
+                <div style="display:flex; gap:12px; margin-top:20px;">
+                    <button id="btnGuardarRubroAct" class="btn btn-primary" style="flex:1;" onclick="window.guardarRubroActividad('${act.id}')">
+                        <i class="fa-solid fa-floppy-disk"></i> Guardar Rubro
+                    </button>
+                    <button class="btn btn-outline" style="flex:1;" onclick="document.getElementById('${modalId}').remove()">
+                        Cancelar
+                    </button>
+                </div>
+            </div>
+        `;
+
+        document.body.appendChild(div);
+
+    } catch(err) {
+        console.error("Error al abrir modal de asignación de rubro:", err);
+        alert("Error al abrir modal: " + (err.message || err));
+    }
+};
+
+window._toggleCustomRubroInputs = (show) => {
+    const cont = document.getElementById('contenedorRubroPersonalizado');
+    if(cont) cont.style.display = show ? 'block' : 'none';
+};
+
+window.guardarRubroActividad = async (actId) => {
+    const btn = document.getElementById('btnGuardarRubroAct');
+    const selectedRadio = document.querySelector('input[name="optRubroAsignar"]:checked');
+    if(!selectedRadio) return alert("Por favor selecciona una opción de rubro.");
+
+    let rName = null;
+    let rPeso = null;
+
+    if(selectedRadio.value === 'custom') {
+        const inName = document.getElementById('customRubroName')?.value.trim();
+        const inPeso = parseFloat(document.getElementById('customRubroPeso')?.value);
+        if(!inName) return alert("Por favor ingresa el nombre del rubro personalizado.");
+        if(isNaN(inPeso) || inPeso <= 0 || inPeso > 100) return alert("Por favor ingresa un porcentaje válido entre 1 y 100.");
+        rName = inName;
+        rPeso = inPeso;
+    } else if(selectedRadio.value === 'none') {
+        rName = null;
+        rPeso = null;
+    } else {
+        try {
+            const parsed = JSON.parse(selectedRadio.value);
+            rName = parsed.name;
+            rPeso = parseFloat(parsed.val) || null;
+        } catch(e) {
+            return alert("Error al leer datos del rubro seleccionado.");
+        }
+    }
+
+    try {
+        if(btn) {
+            btn.disabled = true;
+            btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Guardando...';
+        }
+
+        // Obtener actividad para checar hermanas si la casilla está marcada
+        const { data: act } = await supabaseClient.from('actividades_maestro')
+            .select('id, maestro_id, materia, trimestre, titulo')
+            .eq('id', actId)
+            .single();
+
+        let idsToUpdate = [actId];
+        const chkHermanas = document.getElementById('chkAplicarHermanas');
+        if(chkHermanas && chkHermanas.checked && act) {
+            const { data: sibs } = await supabaseClient.from('actividades_maestro')
+                .select('id')
+                .eq('plantel_id', state.plantelId)
+                .eq('maestro_id', act.maestro_id)
+                .eq('materia', act.materia)
+                .eq('trimestre', act.trimestre)
+                .eq('titulo', act.titulo);
+            if(sibs && sibs.length > 0) {
+                idsToUpdate = sibs.map(s => s.id);
+            }
+        }
+
+        const { error } = await supabaseClient.from('actividades_maestro')
+            .update({
+                rubro_name: rName,
+                rubro_peso: rPeso
+            })
+            .in('id', idsToUpdate);
+
+        if(error) throw error;
+
+        const modal = document.getElementById('modalAsignarRubro');
+        if(modal) modal.remove();
+
+        if(window.showToast) {
+            window.showToast(rName ? `Rubro "${rName}" asignado exitosamente (${idsToUpdate.length} actividad(es))` : `Actividad desvinculada de rubros`, "success");
+        } else {
+            alert("Rubro guardado exitosamente.");
+        }
+
+        // Recargar actividades
+        if(window.loadActividadesMaestro) {
+            window.loadActividadesMaestro();
+        }
+
+    } catch(err) {
+        console.error("Error al guardar rubro:", err);
+        alert("Error al guardar rubro: " + (err.message || err));
+        if(btn) {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fa-solid fa-floppy-disk"></i> Guardar Rubro';
+        }
     }
 };
 
