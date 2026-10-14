@@ -113,6 +113,16 @@ window._filtrarAlumnosPorTallerYGrado = (listaAlumnos, targetGrado, materia) => 
     });
 };
 
+window.esRubroAsistencia = (name) => {
+    if (!name) return false;
+    const norm = String(name)
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .toLowerCase()
+        .trim();
+    return norm.includes("asist") || norm.includes("attend") || norm.includes("pase de lista");
+};
+
 window._stopFirmaQRScanner = () => {
     if(window.__firmaQrState && window.__firmaQrState.scanner) {
         try { 
@@ -11766,6 +11776,8 @@ window.loadActividadesMaestro = async () => {
 
         constLista.innerHTML = actividadesMostrar.map(act => {
             const count = act.evaluaciones_actividades ? act.evaluaciones_actividades.length : 0;
+            const isAutoAsistencia = (act.titulo || '').includes('Asistencia Continua');
+            const autoBadge = isAutoAsistencia ? `<span class="badge" style="background:#e0f2fe; color:#0369a1; border: 1px solid #7dd3fc; font-size:0.75rem; font-weight:600;"><i class="fa-solid fa-bolt"></i> Auto (Pase de Lista)</span>` : '';
             const fechaTxt = isFinalizada ? 
                 `<span style="font-size:0.75rem; color:var(--text-muted); background:var(--page-bg); padding:2px 8px; border-radius:4px;">Cerrada el: ${new Date(act.fecha_finalizacion).toLocaleDateString()}</span>` : 
                 `<span style="font-size:0.75rem; color:var(--text-muted);">Creada: ${new Date(act.fecha_creacion).toLocaleDateString()}</span>`;
@@ -11792,9 +11804,15 @@ window.loadActividadesMaestro = async () => {
                     </button>
                 </div>` :
                 `<div style="display:flex; gap:8px; flex-wrap:wrap;">
-                    <button class="btn btn-outline" style="border-color:var(--success); color:var(--success); font-size:0.8rem; padding:6px 12px;" onclick="window.abrirQREvaluacion('${act.id}', '${act.titulo.replace(/'/g, "\\'").replace(/"/g, '&quot;').replace(/[\\n\\r]/g, ' ')}', '${act.grupo_id || ''}', '${act.target_grado || ''}', '${act.materia || ''}')">
-                        <i class="fa-solid fa-qrcode"></i> Evaluar QR
-                    </button>
+                    ${isAutoAsistencia ? `
+                        <button class="btn btn-outline" style="border-color:#0284c7; color:#0284c7; background:#f0f9ff; font-size:0.8rem; padding:6px 12px; font-weight:600;" onclick="window.sincronizarAsistenciaActividadManual('${act.grupo_id || ''}', '${(act.materia || '').replace(/'/g, "\\'")}', ${act.trimestre || 1}, '${act.target_grado || ''}')" title="Recalcular calificaciones desde el pase de lista">
+                            <i class="fa-solid fa-rotate"></i> Sincronizar Asistencias
+                        </button>
+                    ` : `
+                        <button class="btn btn-outline" style="border-color:var(--success); color:var(--success); font-size:0.8rem; padding:6px 12px;" onclick="window.abrirQREvaluacion('${act.id}', '${act.titulo.replace(/'/g, "\\'").replace(/"/g, '&quot;').replace(/[\\n\\r]/g, ' ')}', '${act.grupo_id || ''}', '${act.target_grado || ''}', '${act.materia || ''}')">
+                            <i class="fa-solid fa-qrcode"></i> Evaluar QR
+                        </button>
+                    `}
                     ${btnRubro}
                     <button class="btn btn-outline" style="border-color:var(--primary); color:var(--primary); font-size:0.8rem; padding:6px 12px;" onclick="window.abrirModalCopiarActividad('${act.id}')">
                         <i class="fa-solid fa-copy"></i> Asignar a grupos
@@ -11813,6 +11831,7 @@ window.loadActividadesMaestro = async () => {
                    <div style="flex:1; min-width:260px;">
                       <div style="display:flex; gap:10px; align-items:center; margin-bottom:6px; flex-wrap:wrap;">
                         <span style="font-weight:bold; font-size:1.15rem; color:var(--text-main);">${act.titulo}</span>
+                        ${autoBadge}
                         <span class="badge" style="background:#f0fdf4; color:#166534; border: 1px solid #166534; font-size:0.7rem;">${act.materia}</span>
                       </div>
                       <div style="font-size:0.85rem; color:var(--text-muted);">${act.grupos ? act.grupos.nombre : (act.target_grado ? act.target_grado+'° Grado' : 'Grupo')} • ${fechaTxt}</div>
@@ -15737,6 +15756,16 @@ window.finalizarSesionAsistencia = async () => {
         window._currentAsistenciaModo = null;
         window.showToast("Pase de lista cerrado. Faltas y avisos procesativos.", "success");
         window.updateSessionUI();
+        if (window.sincronizarAsistenciaActividad) {
+            const trimParaSinc = window._trimestreActivoParaPase || state.selectedMaestroTrimestre || window.currentTrimestre || 1;
+            window.sincronizarAsistenciaActividad({
+                grupoId: grupoId,
+                materia: materia,
+                trimestre: trimParaSinc,
+                targetGrado: grupoId.startsWith('grado:') ? grupoId.replace('grado:', '').split('|')[0].trim() : null,
+                maestroId: u.data.user.id
+            }).catch(e => console.error("Error al sincronizar actividad de asistencia en cierre:", e));
+        }
     } catch(e) { window.showToast("Error al cerrar", "error"); }
 };
 
@@ -16879,10 +16908,63 @@ window.renderRubros = () => {
         `;
     });
     
+    const rubroAsist = window.rubros.find(r => window.esRubroAsistencia(r.name));
+    if (rubroAsist) {
+        if (!rubroAsist.config_retardo) {
+            rubroAsist.config_retardo = { tipo: 'mitad', cada_cuantos: 3 };
+        }
+        const cfg = rubroAsist.config_retardo;
+        html += `
+          <div style="background: #f0fdf4; border: 1.5px solid #86efac; border-radius: 8px; padding: 14px; margin-top: 18px; margin-bottom: 10px;">
+            <div style="display:flex; align-items:center; gap:8px; font-weight:700; color:#166534; font-size:0.95rem; margin-bottom: 6px;">
+              <i class="fa-solid fa-clock-rotate-left"></i> Calificación Automática de Asistencia desde el Pase de Lista
+            </div>
+            <p style="font-size:0.83rem; color:#15803d; margin:0 0 10px 0;">
+              Al detectar el rubro "<strong>${rubroAsist.name}</strong>", el sistema creará y actualizará automáticamente la actividad de asistencia de cada alumno con el pase de lista diario.
+            </p>
+            <div style="font-size:0.85rem; font-weight:600; color:#14532d; margin-bottom: 6px;">¿Cómo deseas ponderar los retardos?</div>
+            <div style="display:flex; flex-direction:column; gap:8px; font-size:0.85rem; color:#14532d;">
+              <label style="display:flex; align-items:center; gap:8px; cursor:pointer;">
+                <input type="radio" name="tipoRetardoEncuadre" value="mitad" ${cfg.tipo === 'mitad' ? 'checked' : ''} onchange="window.setRetardoConfig('mitad')">
+                <span><strong>Darles la mitad del valor (50%):</strong> Cada retardo cuenta como 0.5 puntos de asistencia.</span>
+              </label>
+              <label style="display:flex; align-items:center; gap:8px; cursor:pointer;">
+                <input type="radio" name="tipoRetardoEncuadre" value="acumulacion" ${cfg.tipo === 'acumulacion' ? 'checked' : ''} onchange="window.setRetardoConfig('acumulacion')">
+                <span><strong>Regla de acumulación:</strong> Cada 
+                  <select id="selCadaCuantosRetardos" style="border:1px solid #86efac; border-radius:4px; padding:2px 6px; font-weight:bold; background:#fff;" onchange="window.setRetardoCadaCuantos(this.value)">
+                    <option value="2" ${String(cfg.cada_cuantos) === '2' ? 'selected' : ''}>2</option>
+                    <option value="3" ${String(cfg.cada_cuantos) === '3' || !cfg.cada_cuantos ? 'selected' : ''}>3</option>
+                    <option value="4" ${String(cfg.cada_cuantos) === '4' ? 'selected' : ''}>4</option>
+                    <option value="5" ${String(cfg.cada_cuantos) === '5' ? 'selected' : ''}>5</option>
+                  </select>
+                  retardos acumulados equivalen a 1 falta.
+                </span>
+              </label>
+            </div>
+          </div>
+        `;
+    }
+    
     if(window.rubros.length === 0) html = '<p style="text-align:center; color:var(--text-muted); padding:20px;">No hay rubros de evaluación.</p>';
     
     container.innerHTML = html;
     window.actualizarTotalEncuadreUI();
+};
+
+window.setRetardoConfig = (tipo) => {
+    const rubroAsist = window.rubros.find(r => window.esRubroAsistencia(r.name));
+    if (rubroAsist) {
+        if (!rubroAsist.config_retardo) rubroAsist.config_retardo = { tipo: 'mitad', cada_cuantos: 3 };
+        rubroAsist.config_retardo.tipo = tipo;
+    }
+};
+
+window.setRetardoCadaCuantos = (val) => {
+    const rubroAsist = window.rubros.find(r => window.esRubroAsistencia(r.name));
+    if (rubroAsist) {
+        if (!rubroAsist.config_retardo) rubroAsist.config_retardo = { tipo: 'acumulacion', cada_cuantos: 3 };
+        rubroAsist.config_retardo.cada_cuantos = parseInt(val, 10) || 3;
+    }
 };
 
 window.actualizarTotalEncuadreUI = () => {
@@ -17249,6 +17331,16 @@ window.cargarEncuadreActivo = async () => {
 
             alert(`✅ ¡Encuadre enviado con éxito!\nSe han generado avisos para ${alumnos.length} alumnos.`);
             window.cargarEncuadreActivo(); // Refrescar UI completa
+
+            if(window.sincronizarAsistenciaActividad) {
+                window.sincronizarAsistenciaActividad({
+                    grupoId: gid,
+                    materia: mat,
+                    trimestre: window.currentTrimestre || 1,
+                    targetGrado: targetGrado,
+                    maestroId: u.data.user.id
+                }).catch(e => console.error("Error auto-sync asistencia en encuadre:", e));
+            }
         } else {
             alert("⚠️ No se encontraron alumnos registrados en este grupo para notificar.");
             btn.disabled = false;
@@ -17263,6 +17355,204 @@ window.cargarEncuadreActivo = async () => {
         btn.innerHTML = origHtml;
         btn.style.background = '';
     }
+};
+
+window.sincronizarAsistenciaActividad = async ({ grupoId, materia, trimestre, targetGrado, maestroId }) => {
+    try {
+        const uRes = await supabaseClient.auth.getUser();
+        const user = uRes?.data?.user;
+        const uid = maestroId || user?.id || (state.user && state.user.id);
+        if (!uid) return;
+
+        const trim = parseInt(trimestre || window.currentTrimestre || 1, 10);
+        const mat = (materia || '').trim();
+        const gid = (grupoId && !String(grupoId).startsWith('grado:')) ? String(grupoId) : null;
+        let tGrado = targetGrado;
+        if (!tGrado && grupoId && String(grupoId).startsWith('grado:')) {
+            tGrado = String(grupoId).replace('grado:', '').split('|')[0].trim();
+        }
+        const isTec = !gid && !!tGrado;
+
+        // 1. Buscar si en el Encuadre de este maestro/materia/trimestre hay un rubro de Asistencia
+        let qEnc = supabaseClient.from('encuadres')
+            .select('id, rubros')
+            .eq('plantel_id', state.plantelId)
+            .eq('maestro_id', uid)
+            .ilike('materia', mat)
+            .eq('trimestre', trim);
+        
+        if (isTec) qEnc = qEnc.is('grupo_id', null).eq('target_grado', tGrado);
+        else qEnc = qEnc.eq('grupo_id', gid);
+
+        const { data: encArr } = await qEnc.order('fecha_creacion', { ascending: false }).limit(1);
+        const encuadre = encArr && encArr.length > 0 ? encArr[0] : null;
+        if (!encuadre || !encuadre.rubros) return;
+
+        const rubroAsist = (encuadre.rubros || []).find(r => window.esRubroAsistencia && window.esRubroAsistencia(r.name) && Number(r.val) > 0);
+        if (!rubroAsist) return; // No tiene rubro de asistencia en el encuadre
+
+        const pesoRubro = Number(rubroAsist.val) || 10;
+        const nombreRubro = rubroAsist.name;
+        const configRetardo = rubroAsist.config_retardo || { tipo: 'mitad', cada_cuantos: 3 };
+
+        // 2. Buscar o crear la actividad oficial del sistema para Asistencia
+        const tituloAct = `Asistencia Continua (Pase de Lista - Trimestre ${trim})`;
+        let qAct = supabaseClient.from('actividades_maestro')
+            .select('id, rubro_peso, rubro_name')
+            .eq('plantel_id', state.plantelId)
+            .eq('maestro_id', uid)
+            .ilike('materia', mat)
+            .eq('trimestre', trim)
+            .eq('titulo', tituloAct);
+
+        if (isTec) qAct = qAct.is('grupo_id', null).eq('target_grado', tGrado);
+        else qAct = qAct.eq('grupo_id', gid);
+
+        const { data: actExistenteArr } = await qAct.limit(1);
+        let actId = null;
+
+        if (actExistenteArr && actExistenteArr.length > 0) {
+            actId = actExistenteArr[0].id;
+            if (actExistenteArr[0].rubro_peso !== pesoRubro || actExistenteArr[0].rubro_name !== nombreRubro) {
+                await supabaseClient.from('actividades_maestro').update({
+                    rubro_peso: pesoRubro,
+                    rubro_name: nombreRubro
+                }).eq('id', actId);
+            }
+        } else {
+            const newActPayload = {
+                maestro_id: uid,
+                titulo: tituloAct,
+                descripcion: "Cálculo automático de calificación de asistencia a partir del registro diario del aula y sus justificaciones.",
+                materia: mat,
+                grupo_id: gid,
+                target_grado: tGrado,
+                rubro_name: nombreRubro,
+                rubro_peso: pesoRubro,
+                trimestre: trim,
+                plantel_id: state.plantelId
+            };
+            const { data: newAct, error: errAct } = await supabaseClient.from('actividades_maestro').insert([newActPayload]).select('id').maybeSingle();
+            if (errAct) {
+                console.error("Error al crear actividad de asistencia automática:", errAct);
+                return;
+            }
+            actId = newAct?.id;
+        }
+
+        if (!actId) return;
+
+        // 3. Obtener los alumnos del grupo o taller
+        let alumnos = [];
+        if (isTec) {
+            const { data: rawAl } = await supabaseClient.from('alumnos').select('id, nombre, grado, taller').eq('plantel_id', state.plantelId).order('nombre');
+            alumnos = window._filtrarAlumnosPorTallerYGrado ? window._filtrarAlumnosPorTallerYGrado(rawAl, tGrado, mat) : (rawAl || []);
+        } else {
+            const { data: rawAl } = await supabaseClient.from('alumnos').select('id, nombre').eq('plantel_id', state.plantelId).eq('grupo_id', gid).order('nombre');
+            alumnos = rawAl || [];
+        }
+
+        if (!alumnos || alumnos.length === 0) return;
+        const studentIds = alumnos.map(a => a.id);
+
+        // 4. Obtener todos los registros de asistencias del trimestre para esta materia y alumnos
+        let qAsist = supabaseClient.from('asistencias')
+            .select('alumno_id, estado, creado_en, fecha')
+            .in('alumno_id', studentIds)
+            .ilike('materia', mat)
+            .eq('plantel_id', state.plantelId)
+            .eq('trimestre', trim);
+
+        const { data: asistenciasRaw, error: errAsist } = await qAsist;
+        if (errAsist) {
+            console.error("Error al consultar asistencias para cálculo:", errAsist);
+            return;
+        }
+
+        // Obtener sesiones de clase registradas
+        let rawValSes = isTec ? `grado:${tGrado}|${mat}` : gid;
+        let qSes = supabaseClient.from('asistencia_sesiones')
+            .select('fecha')
+            .or(`grupo_id.eq.${rawValSes},grupo_id.eq.${gid || 'none'}`)
+            .ilike('materia', mat)
+            .eq('plantel_id', state.plantelId)
+            .eq('trimestre', trim);
+        const { data: sesiones } = await qSes;
+
+        const diasPaseLista = new Set();
+        if (sesiones) sesiones.forEach(s => { if (s.fecha) diasPaseLista.add(s.fecha); });
+        if (asistenciasRaw) {
+            asistenciasRaw.forEach(a => {
+                if (a.fecha) diasPaseLista.add(a.fecha);
+                else if (a.creado_en) {
+                    const d = new Date(a.creado_en);
+                    diasPaseLista.add(d.toISOString().split('T')[0]);
+                }
+            });
+        }
+        const totalSesiones = diasPaseLista.size;
+
+        // 5. Calcular calificación para cada alumno
+        const toSave = [];
+        alumnos.forEach(al => {
+            const susAsistencias = (asistenciasRaw || []).filter(a => a.alumno_id === al.id);
+            
+            let numAsist = 0;
+            let numJust = 0;
+            let numRet = 0;
+            let numFaltas = 0;
+
+            susAsistencias.forEach(a => {
+                const est = (a.estado || '').toLowerCase().trim();
+                if (est === 'asistencia') numAsist++;
+                else if (est === 'justificada' || est.includes('justif')) numJust++;
+                else if (est === 'retardo') numRet++;
+                else if (est === 'falta' || est.includes('falta')) numFaltas++;
+            });
+
+            // Si aún no hay sesiones registradas, la nota inicial es 10
+            let nota = 10;
+            if (totalSesiones > 0) {
+                let puntos = 0;
+                if (configRetardo.tipo === 'acumulacion') {
+                    const cadaCuantos = parseInt(configRetardo.cada_cuantos, 10) || 3;
+                    const faltasPorRetardo = Math.floor(numRet / cadaCuantos);
+                    puntos = (numAsist + numJust + numRet) - faltasPorRetardo;
+                } else {
+                    // Por defecto: mitad de valor (50%)
+                    puntos = numAsist + numJust + (numRet * 0.5);
+                }
+                nota = (puntos / totalSesiones) * 10;
+                if (nota > 10) nota = 10;
+                if (nota < 0) nota = 0;
+                nota = Math.round(nota * 10) / 10;
+            }
+
+            toSave.push({
+                actividad_id: actId,
+                alumno_id: al.id,
+                calificacion: nota,
+                plantel_id: state.plantelId
+            });
+        });
+
+        // 6. Guardar calificaciones calculadas en 'evaluaciones_actividades'
+        if (toSave.length > 0) {
+            const { error: errUpsert } = await supabaseClient.from('evaluaciones_actividades')
+                .upsert(toSave, { onConflict: 'actividad_id,alumno_id' });
+            if (errUpsert) console.error("Error al actualizar calificaciones de asistencia automática:", errUpsert);
+            else console.log(`>>> [ASISTENCIA AUTO] Sincronizadas calificaciones de ${toSave.length} alumnos para actividad ${actId}`);
+        }
+    } catch (e) {
+        console.error("Excepción en sincronizarAsistenciaActividad:", e);
+    }
+};
+
+window.sincronizarAsistenciaActividadManual = async (grupoId, materia, trimestre, targetGrado) => {
+    window.showToast("Sincronizando asistencias del pase de lista...", "info");
+    await window.sincronizarAsistenciaActividad({ grupoId, materia, trimestre, targetGrado });
+    window.showToast("✅ Calificaciones de asistencia actualizadas con éxito.", "success");
+    if (window.loadActividadesMaestro) window.loadActividadesMaestro();
 };
 
 
@@ -23249,6 +23539,15 @@ window.justificarFaltaDesdeAula = async (alumnoId) => {
 
         window.showToast("Inasistencia justificada correctamente.", "success");
         if(window.loadListaAsistenciaManual) window.loadListaAsistenciaManual();
+        if (window.sincronizarAsistenciaActividad) {
+            window.sincronizarAsistenciaActividad({
+                grupoId: grupoId,
+                materia: materiaGuardar,
+                trimestre: trim,
+                targetGrado: grupoId.startsWith('grado:') ? grupoId.replace('grado:', '').split('|')[0].trim() : null,
+                maestroId: u.data.user.id
+            }).catch(e => console.error("Error al sincronizar actividad de asistencia tras justificar:", e));
+        }
     } catch(e) {
         console.error(e);
         alert("Error al justificar inasistencia: " + e.message);

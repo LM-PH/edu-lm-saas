@@ -1,10 +1,10 @@
-const CACHE_NAME = 'edulm-cache-v157';
+const CACHE_NAME = 'edulm-cache-v158';
 const ASSETS_TO_CACHE = [
   './',
   './index.html',
   './styles.css',
   './edu_lm_v112_universal.js',
-  './edu_lm_v112_universal.js?v=157',
+  './edu_lm_v112_universal.js?v=158',
   './manifest.json',
   './icon-192.png',
   './icon-512.png'
