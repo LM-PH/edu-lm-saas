@@ -6225,6 +6225,7 @@ window.emitirJustificanteSalud = async (alumnoId, nombre) => {
 
         const d = new Date().toISOString().split('T')[0];
         window.showToast("Generando notificaciones individuales...", "info");
+        if (window.aplicarJustificacionAutomatica) await window.aplicarJustificacionAutomatica(alumnoId, d, d, state.plantelId);
         await window.notificarMaestrosJustificante(alumnoId, motivo, d, d);
         
         window.showToast("Justificante enviado exitosamente a los maestros del alumno.", "success");
@@ -9615,17 +9616,21 @@ window.updateNotificationBadge = async (clearAll = false) => {
         if (coms && (userRole === 'maestro' || userRole === 'docente')) {
             const { data: asigDoc } = await supabaseClient.from('asignaciones_maestros').select('materia, grupo_id').eq('docente_email', state.user.email).eq('plantel_id', state.plantelId);
             if (asigDoc && asigDoc.length > 0) {
+                const isTecMateria = (m) => {
+                    const lower = (m || '').toLowerCase();
+                    return lower.includes('tecnolog') || lower.includes('taller');
+                };
+
                 const misTalleres = asigDoc
-                    .filter(a => (a.materia || '').toLowerCase().includes('tecnolog') || (a.materia || '').toLowerCase().includes('taller') || !a.grupo_id)
-                    .map(a => window._normalizarTextoTaller ? window._normalizarTextoTaller(a.materia) : '')
+                    .filter(a => isTecMateria(a.materia))
+                    .map(a => window._normalizarTextoTaller ? window._normalizarTextoTaller(a.materia) : (a.materia || '').toLowerCase().trim())
                     .filter(Boolean);
 
-                const tieneMateriasRegulares = asigDoc.some(a => {
-                    const m = (a.materia || '').toLowerCase();
-                    return !m.includes('tecnolog') && !m.includes('taller') && !!a.grupo_id;
-                });
+                const tieneMateriasRegulares = asigDoc.some(a => !isTecMateria(a.materia));
 
                 coms = coms.filter(c => {
+                    if (c.audiencia === 'Maestro_' + state.user.id) return true;
+
                     if (c.titulo?.startsWith('JUSTIFICANTE MÉDICO:')) {
                         if (c.titulo.includes('[TALLER:')) {
                             const match = c.titulo.match(/\[TALLER:(.+?)\]/);
@@ -11525,17 +11530,22 @@ window.loadTimelinePersonal = async (selectedDate) => {
         if (data && (userRole === 'maestro' || userRole === 'docente') && uRes.data?.user) {
             const { data: asig } = await supabaseClient.from('asignaciones_maestros').select('materia, grupo_id, target_grado').eq('docente_email', uRes.data.user.email).eq('plantel_id', state.plantelId);
             if (asig && asig.length > 0) {
+                const isTecMateria = (m) => {
+                    const lower = (m || '').toLowerCase();
+                    return lower.includes('tecnolog') || lower.includes('taller');
+                };
+
                 const misTalleres = asig
-                    .filter(a => (a.materia || '').toLowerCase().includes('tecnolog') || (a.materia || '').toLowerCase().includes('taller') || !a.grupo_id)
-                    .map(a => window._normalizarTextoTaller ? window._normalizarTextoTaller(a.materia) : '')
+                    .filter(a => isTecMateria(a.materia))
+                    .map(a => window._normalizarTextoTaller ? window._normalizarTextoTaller(a.materia) : (a.materia || '').toLowerCase().trim())
                     .filter(Boolean);
 
-                const tieneMateriasRegulares = asig.some(a => {
-                    const m = (a.materia || '').toLowerCase();
-                    return !m.includes('tecnolog') && !m.includes('taller') && !!a.grupo_id;
-                });
+                const tieneMateriasRegulares = asig.some(a => !isTecMateria(a.materia));
 
                 data = data.filter(c => {
+                    // Si el comunicado fue enviado directamente a este maestro específico, mostrarlo siempre
+                    if (c.audiencia === 'Maestro_' + uRes.data.user.id) return true;
+
                     if (c.titulo?.startsWith('JUSTIFICANTE MÉDICO:')) {
                         if (c.titulo.includes('[TALLER:')) {
                             const match = c.titulo.match(/\[TALLER:(.+?)\]/);
@@ -20208,12 +20218,15 @@ window.initFlatpickrAvisos = async (isAlumno = false) => {
             }
             
             if (isTargeted && c.titulo?.startsWith('JUSTIFICANTE MÉDICO:') && c.titulo.includes('[TALLER:')) {
+                if (aud === `Maestro_${userId}`) {
+                    return true;
+                }
                 const match = c.titulo.match(/\[TALLER:(.+?)\]/);
                 if (match && maestroMaterias.length > 0) {
                     const reqTaller = match[1].toLowerCase().trim();
                     const canView = maestroMaterias.some(materia => {
-                        const m = materia.toLowerCase().trim();
-                        if (!m.includes('tecnología') && !m.includes('taller')) return true;
+                        const m = (materia || '').toLowerCase().trim();
+                        if (!m.includes('tecnolog') && !m.includes('taller')) return true;
                         return m.includes(reqTaller) || reqTaller.includes(m) || m === reqTaller;
                     });
                     if (!canView) return false;
