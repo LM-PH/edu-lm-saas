@@ -3519,8 +3519,10 @@ function renderApoyoReportes() {
                     <p style="font-size:0.85rem; color:var(--text-muted);">Seguimiento de firmas y atención a tutores.</p>
                 </div>
                 <div style="display:flex; gap:10px; align-items:center;">
-                    <select id="filtroFirmaCitatorio" class="form-input" style="max-width:180px; font-size:0.8rem; padding:6px 12px; margin:0;" onchange="window.loadCitatoriosApoyo()">
+                    <select id="filtroFirmaCitatorio" class="form-input" style="max-width:210px; font-size:0.8rem; padding:6px 12px; margin:0;" onchange="window.loadCitatoriosApoyo()">
                         <option value="activos">Todos (Vigentes)</option>
+                        <option value="sin_horario">⚠️ Horario Pendiente</option>
+                        <option value="con_horario">🗓️ Con Horario Asignado</option>
                         <option value="pendientes">No Enterado (Sin firma)</option>
                         <option value="enterados">Enterado (Firmados)</option>
                     </select>
@@ -3698,6 +3700,59 @@ function renderApoyoReportes() {
             <div style="margin-top:25px; display:flex; gap:10px;">
                 <button class="btn btn-outline" style="flex:1" onclick="document.getElementById('modalNuevoCitatorio').style.display='none'">Cancelar</button>
                 <button class="btn" id="btnGuardarCitatorio" style="flex:1; background:#f97316; color:white; border:none;" onclick="window.guardarCitatorio()">Enviar Citatorio</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal Agendar Horario Citatorio -->
+    <div id="modalAgendarHorarioCitatorio" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); z-index:9999; backdrop-filter:blur(4px); overflow-y:auto;">
+        <div class="card" style="max-width:550px; width:95%; margin:40px auto; padding:25px; position:relative; box-shadow:var(--shadow-lg); border-top:4px solid var(--warning);">
+            <button onclick="document.getElementById('modalAgendarHorarioCitatorio').style.display='none'" style="position:absolute; top:15px; right:15px; border:none; background:none; font-size:1.5rem; cursor:pointer; color:var(--text-muted)">&times;</button>
+            <h3 style="margin-top:0; color:#b45309; display:flex; align-items:center; gap:8px;">
+                <i class="fa-solid fa-calendar-check"></i> Programar Cita con Padre de Familia
+            </h3>
+            <p style="font-size:0.85rem; color:var(--text-muted); margin-bottom:15px;">
+                Asigna el día y la hora específica para atender al tutor de forma individual y evitar aglomeraciones en Trabajo Social.
+            </p>
+
+            <input type="hidden" id="agendarCitatorioId">
+            <input type="hidden" id="agendarAlumnoId">
+            <input type="hidden" id="agendarAlumnoNombre">
+            <input type="hidden" id="agendarCitatorioMotivo">
+            <div id="agendarCitatorioAlumnoInfo" style="padding:10px 14px; background:#fffbeb; border-radius:10px; font-size:0.9rem; border-left:4px solid #f59e0b; margin-bottom:15px;"></div>
+
+            <div style="margin-bottom:15px;">
+                <label style="display:block; font-size:0.85rem; margin-bottom:5px; font-weight:600;">Fecha y Hora de la Cita:</label>
+                <input type="datetime-local" id="agendarFechaHora" class="form-input" style="border-radius:10px; font-size:0.95rem; font-weight:600;" onchange="window.verificarDisponibilidadAgenda(this.value)">
+                <small style="color:var(--text-muted); display:block; margin-top:4px;">Se recomienda programar citas en intervalos de al menos 30 minutos.</small>
+            </div>
+
+            <!-- Contenedor dinámico de citas ya programadas para el día seleccionado -->
+            <div id="contenedorAgendaDiaCitatorios" style="background:var(--page-bg); border:1px solid var(--border); border-radius:10px; padding:12px; margin-bottom:15px; font-size:0.8rem;">
+                <div style="font-weight:700; color:var(--text-main); margin-bottom:6px; display:flex; align-items:center; justify-content:space-between;">
+                    <span><i class="fa-solid fa-list-check"></i> Citas ya agendadas para este día:</span>
+                    <span id="badgeCitasDia" class="badge" style="background:var(--primary); color:white; font-size:0.65rem;">0 citas</span>
+                </div>
+                <div id="listaCitasDiaOcupadas" style="color:var(--text-muted); font-style:italic;">
+                    Selecciona una fecha y hora para consultar disponibilidad.
+                </div>
+            </div>
+
+            <!-- Advertencia si hay traslape exacto -->
+            <div id="alertaTraslapeCita" style="display:none; background:#fee2e2; border:1px solid #fca5a5; color:#991b1b; padding:10px; border-radius:8px; margin-bottom:15px; font-size:0.8rem;">
+                <i class="fa-solid fa-triangle-exclamation"></i> <b>Advertencia de Empalme:</b> Ya existe otra cita programada en ese horario. Se sugiere elegir otra hora para no amontonar las atenciones.
+            </div>
+
+            <div style="margin-bottom:20px;">
+                <label style="display:block; font-size:0.85rem; margin-bottom:5px; font-weight:600;">Lugar o Indicación Adicional:</label>
+                <input type="text" id="agendarLugarIndicacion" class="form-input" value="Área de Trabajo Social" placeholder="Ej: Cubículo de Trabajo Social..." style="border-radius:10px; font-size:0.85rem;">
+            </div>
+
+            <div style="display:flex; gap:10px;">
+                <button class="btn btn-outline" style="flex:1;" onclick="document.getElementById('modalAgendarHorarioCitatorio').style.display='none'">Cancelar</button>
+                <button class="btn btn-primary" id="btnGuardarHorarioCitatorio" style="flex:1.5; background:#d97706; border-color:#d97706; font-weight:700;" onclick="window.guardarHorarioCitatorio()">
+                    <i class="fa-solid fa-paper-plane"></i> Guardar y Notificar al Padre
+                </button>
             </div>
         </div>
     </div>
@@ -4618,8 +4673,10 @@ window.ejecutarVigilanciaAutomatica = async (aid, cat, sev, desc, enviarAvisoMan
                             }
 
                             if (accionPrincipal.includes('citar') || accionPrincipal.includes('Citatorio')) {
-                                titulo = '🚨 CITATORIO URGENTE: ' + accionPrincipal;
-                                msj = `Estimado alumno y padre de familia/tutor:\n\nSe ha detectado una acumulación de reportes de clasificación ${cat}. ES REQUISITO INDISPENSABLE presentarse en el área de Trabajo Social para una junta de seguimiento.` + (nuevaGravedad ? `\n\n⚠️ Este caso ha sido escalado a Nivel ${nuevaGravedad.toUpperCase()}.` : '');
+                                titulo = '🚨 CITATORIO ESCOLAR: ' + accionPrincipal;
+                                msj = `Estimado alumno y padre de familia/tutor:\n\nSe ha emitido un citatorio escolar para seguimiento conductual/académico (${cat} - ${finalGravedad}).` +
+                                      `\n\n⏰ HORARIO DE ATENCIÓN: El área de Trabajo Social asignará y confirmará en este mismo portal el día y la hora específica para su cita, con el fin de brindarle una atención personalizada y evitar aglomeraciones. Favor de estar atento a la confirmación de su horario en este portal.` +
+                                      (nuevaGravedad ? `\n\n⚠️ Este caso ha sido escalado a Nivel ${nuevaGravedad.toUpperCase()}.` : '');
                                 
                                 await supabaseClient.from('citatorios').insert([{
                                     alumno_id: aid, emisor_id: u.data.user.id,
@@ -4837,6 +4894,10 @@ window.loadCitatoriosApoyo = async () => {
                 query = query.neq('estado', 'enterado');
             } else if (selectFiltro.value === 'enterados') {
                 query = query.eq('estado', 'enterado');
+            } else if (selectFiltro.value === 'sin_horario') {
+                query = query.is('fecha_cita', null);
+            } else if (selectFiltro.value === 'con_horario') {
+                query = query.not('fecha_cita', 'is', null);
             }
         }
 
@@ -4873,6 +4934,7 @@ window.loadCitatoriosApoyo = async () => {
         }
 
         window._citatoriosDetallesCache = {};
+        window._citatoriosMap = {};
 
         cont.innerHTML = data.map(c => {
             const isEnterado = c.estado === 'enterado';
@@ -5016,6 +5078,7 @@ window.loadCitatoriosApoyo = async () => {
                 `;
             }
 
+            window._citatoriosMap[c.id] = c;
             window._citatoriosDetallesCache[c.id] = {
                 alumnoNombre: c.alumnos?.nombre || 'Alumno',
                 grupo: c.alumnos?.grupos?.nombre || '',
@@ -5025,6 +5088,30 @@ window.loadCitatoriosApoyo = async () => {
             };
 
             const grupoStr = c.alumnos?.grupos?.nombre ? ` • Grupo: <b>${c.alumnos.grupos.nombre}</b>` : '';
+            const hasCita = !!c.fecha_cita;
+            const dateCitaFormatted = hasCita ? new Date(c.fecha_cita).toLocaleString('es-MX', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : null;
+
+            const blockHorarioCita = hasCita ? `
+                <div style="background:#f0fdf4; border:1px solid #86efac; border-radius:8px; padding:10px; margin-bottom:12px; font-size:0.83rem; display:flex; justify-content:space-between; align-items:center;">
+                    <div>
+                        <span style="font-size:0.72rem; font-weight:700; color:#15803d; text-transform:uppercase;"><i class="fa-solid fa-calendar-check"></i> Cita Confirmada</span>
+                        <div style="font-size:0.88rem; font-weight:700; color:#166534; margin-top:2px;">${dateCitaFormatted}</div>
+                    </div>
+                    <button class="btn btn-secondary btn-sm" style="font-size:0.75rem; padding:4px 8px; border-radius:6px; cursor:pointer;" onclick="window.abrirModalAgendarCita('${c.id}')" title="Modificar fecha/hora">
+                        <i class="fa-solid fa-pen-to-square"></i> Reagendar
+                    </button>
+                </div>
+            ` : `
+                <div style="background:#fffbeb; border:1px dashed #f59e0b; border-radius:8px; padding:10px; margin-bottom:12px; font-size:0.83rem; display:flex; justify-content:space-between; align-items:center;">
+                    <div>
+                        <span style="font-size:0.72rem; font-weight:700; color:#b45309; text-transform:uppercase;"><i class="fa-solid fa-clock"></i> Horario Pendiente</span>
+                        <div style="font-size:0.75rem; color:#92400e; margin-top:2px;">Sin cita asignada</div>
+                    </div>
+                    <button class="btn btn-sm" style="font-size:0.78rem; padding:5px 10px; border-radius:6px; font-weight:700; background:#f59e0b; color:white; border:none; cursor:pointer;" onclick="window.abrirModalAgendarCita('${c.id}')">
+                        <i class="fa-solid fa-calendar-plus"></i> Asignar Cita
+                    </button>
+                </div>
+            `;
 
             return `
                 <div class="card" style="padding:16px; border:1px solid ${isEnterado ? '#bbf7d0' : '#fed7aa'}; background:white; position:relative; box-shadow:var(--shadow-sm); display:flex; flex-direction:column; justify-content:space-between;">
@@ -5041,10 +5128,11 @@ window.loadCitatoriosApoyo = async () => {
                         <!-- BLOQUE DE ORIGEN Y EMISORES -->
                         ${htmlDetalleOrigen}
 
-                        <div style="background:var(--page-bg); padding:10px; border-radius:8px; margin-bottom:12px; font-size:0.83rem; border:1px solid var(--border);">
-                            <div style="margin-bottom:5px;"><b>Motivo registrado:</b> ${c.motivo}</div>
-                            <div><b>Cita programada:</b> <span style="color:var(--primary); font-weight:600;">${dateCita}</span></div>
+                        <div style="background:var(--page-bg); padding:10px; border-radius:8px; margin-bottom:10px; font-size:0.83rem; border:1px solid var(--border);">
+                            <div><b>Motivo registrado:</b> ${c.motivo}</div>
                         </div>
+
+                        ${blockHorarioCita}
 
                         ${c.firma_enterado ? `
                             <div style="font-size:0.8rem; padding:8px 10px; background:#f0fdf4; border-radius:8px; margin-bottom:12px; color:#166534; border:1px solid #bbf7d0;">
@@ -5185,6 +5273,238 @@ window.guardarAtencionFoco = async () => {
         if(btn) {
             btn.disabled = false;
             btn.innerHTML = old;
+        }
+    }
+};
+
+window.abrirModalAgendarCita = async (citatorioId) => {
+    const modal = document.getElementById('modalAgendarHorarioCitatorio');
+    if (!modal) return;
+
+    let c = window._citatoriosMap ? window._citatoriosMap[citatorioId] : null;
+    if (!c) {
+        try {
+            const { data, error } = await supabaseClient
+                .from('citatorios')
+                .select('*, alumnos(id, nombre, matricula, grupos(nombre))')
+                .eq('id', citatorioId)
+                .single();
+            if (!error && data) c = data;
+        } catch(e) { console.error(e); }
+    }
+    if (!c) return alert("No se encontró la información del citatorio.");
+
+    const inCid = document.getElementById('agendarCitatorioId');
+    const inAid = document.getElementById('agendarAlumnoId');
+    const inNom = document.getElementById('agendarAlumnoNombre');
+    const inMot = document.getElementById('agendarCitatorioMotivo');
+    const boxInfo = document.getElementById('agendarCitatorioAlumnoInfo');
+    const inFecha = document.getElementById('agendarFechaHora');
+
+    if (inCid) inCid.value = c.id;
+    if (inAid) inAid.value = c.alumno_id;
+    const alumnoNombre = c.alumnos?.nombre || 'Alumno';
+    if (inNom) inNom.value = alumnoNombre;
+    if (inMot) inMot.value = c.motivo || '';
+
+    if (boxInfo) {
+        boxInfo.innerHTML = `
+            <div style="font-weight:700; color:var(--text-main);"><i class="fa-solid fa-user-graduate"></i> ${alumnoNombre}</div>
+            <div style="color:var(--text-muted); font-size:0.8rem; margin-top:2px;">
+                <b>Matrícula:</b> ${c.alumnos?.matricula || '---'} ${c.alumnos?.grupos?.nombre ? `| <b>Grupo:</b> ${c.alumnos.grupos.nombre}` : ''}
+            </div>
+            <div style="margin-top:6px; color:#92400e; font-size:0.82rem; line-height:1.3;">
+                <b>Motivo:</b> ${c.motivo || 'Citatorio escolar'}
+            </div>
+        `;
+    }
+
+    // Establecer fecha por defecto o existente
+    if (inFecha) {
+        if (c.fecha_cita) {
+            const d = new Date(c.fecha_cita);
+            const tzOffset = d.getTimezoneOffset() * 60000;
+            const localISOTime = (new Date(d.getTime() - tzOffset)).toISOString().slice(0, 16);
+            inFecha.value = localISOTime;
+        } else {
+            // Sugerir mañana a las 09:00 AM
+            const manana = new Date();
+            manana.setDate(manana.getDate() + 1);
+            manana.setHours(9, 0, 0, 0);
+            const tzOffset = manana.getTimezoneOffset() * 60000;
+            const localISOTime = (new Date(manana.getTime() - tzOffset)).toISOString().slice(0, 16);
+            inFecha.value = localISOTime;
+        }
+    }
+
+    modal.style.display = 'block';
+
+    if (inFecha && inFecha.value) {
+        await window.verificarDisponibilidadAgenda(inFecha.value);
+    }
+};
+
+window.verificarDisponibilidadAgenda = async (valFechaHora) => {
+    const listEl = document.getElementById('listaCitasDiaOcupadas');
+    const badgeEl = document.getElementById('badgeCitasDia');
+    const alertaTraslape = document.getElementById('alertaTraslapeCita');
+    const citatorioId = document.getElementById('agendarCitatorioId')?.value;
+
+    if (!valFechaHora) {
+        if (listEl) listEl.innerHTML = '<span style="color:var(--text-muted); font-style:italic;">Selecciona una fecha y hora para consultar disponibilidad.</span>';
+        if (badgeEl) badgeEl.textContent = '0 citas';
+        if (alertaTraslape) alertaTraslape.style.display = 'none';
+        return;
+    }
+
+    try {
+        const fechaObj = new Date(valFechaHora);
+        if (isNaN(fechaObj.getTime())) return;
+
+        // Rango de todo el día
+        const year = fechaObj.getFullYear();
+        const month = String(fechaObj.getMonth() + 1).padStart(2, '0');
+        const day = String(fechaObj.getDate()).padStart(2, '0');
+        const startDayISO = `${year}-${month}-${day}T00:00:00.000Z`;
+        const endDayISO = `${year}-${month}-${day}T23:59:59.999Z`;
+
+        const { data, error } = await supabaseClient
+            .from('citatorios')
+            .select('id, fecha_cita, motivo, alumnos(nombre, matricula)')
+            .eq('plantel_id', state.plantelId)
+            .gte('fecha_cita', startDayISO)
+            .lte('fecha_cita', endDayISO)
+            .neq('estado', 'atendido')
+            .order('fecha_cita', { ascending: true });
+
+        if (error) throw error;
+
+        // Filtrar citas del día excluyendo la actual si se está reagendando
+        const otrasCitas = (data || []).filter(c => c.id !== citatorioId && c.fecha_cita);
+
+        if (badgeEl) badgeEl.textContent = `${otrasCitas.length} cita(s)`;
+
+        if (otrasCitas.length === 0) {
+            if (listEl) {
+                listEl.innerHTML = `
+                    <div style="color:#16a34a; font-weight:600; display:flex; align-items:center; gap:6px;">
+                        <i class="fa-solid fa-circle-check"></i> No hay otras citas programadas para este día. ¡Agenda libre!
+                    </div>
+                `;
+            }
+            if (alertaTraslape) alertaTraslape.style.display = 'none';
+            return;
+        }
+
+        // Renderizar lista de citas ocupadas del día
+        let hayEmpalme = false;
+        let empalmeDetalle = '';
+        const tiempoSeleccionado = fechaObj.getTime();
+
+        const itemsHtml = otrasCitas.map(c => {
+            const horaCitaObj = new Date(c.fecha_cita);
+            const horaStr = horaCitaObj.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' });
+            const diffMinutos = Math.abs(tiempoSeleccionado - horaCitaObj.getTime()) / (1000 * 60);
+
+            const isOverlap = diffMinutos < 25; // Dentro de 25 min consideramos advertencia de empalme
+            if (isOverlap) {
+                hayEmpalme = true;
+                empalmeDetalle = `${horaStr} con ${c.alumnos?.nombre || 'otro alumno'}`;
+            }
+
+            return `
+                <div style="display:flex; justify-content:space-between; align-items:center; padding:5px 8px; margin-bottom:4px; background:${isOverlap ? '#fee2e2' : 'white'}; border:1px solid ${isOverlap ? '#fca5a5' : 'var(--border)'}; border-radius:6px;">
+                    <div>
+                        <span style="font-weight:700; color:${isOverlap ? '#dc2626' : 'var(--primary)'}; font-size:0.85rem;"><i class="fa-regular fa-clock"></i> ${horaStr}</span>
+                        <span style="margin-left:8px; color:var(--text-main); font-weight:600;">${c.alumnos?.nombre || 'Alumno'}</span>
+                    </div>
+                    ${isOverlap ? '<span class="badge" style="background:#dc2626; color:white; font-size:0.65rem;">Empalme (±25m)</span>' : '<span style="color:var(--text-muted); font-size:0.75rem;">Ocupado</span>'}
+                </div>
+            `;
+        }).join('');
+
+        if (listEl) listEl.innerHTML = itemsHtml;
+
+        if (alertaTraslape) {
+            if (hayEmpalme) {
+                alertaTraslape.style.display = 'block';
+                alertaTraslape.innerHTML = `
+                    <i class="fa-solid fa-triangle-exclamation"></i> <b>Advertencia de Empalme:</b> Ya hay una cita agendada a las <b>${empalmeDetalle}</b>. Para no amontonar las atenciones se sugiere escalonar la cita con al menos 30 min de diferencia.
+                `;
+            } else {
+                alertaTraslape.style.display = 'none';
+            }
+        }
+    } catch(err) {
+        console.error("Error al verificar disponibilidad:", err);
+    }
+};
+
+window.guardarHorarioCitatorio = async () => {
+    const citatorioId = document.getElementById('agendarCitatorioId')?.value;
+    const alumnoId = document.getElementById('agendarAlumnoId')?.value;
+    const alumnoNombre = document.getElementById('agendarAlumnoNombre')?.value || 'el alumno';
+    const valFechaHora = document.getElementById('agendarFechaHora')?.value;
+    const lugar = document.getElementById('agendarLugarIndicacion')?.value || 'Área de Trabajo Social';
+    const btn = document.getElementById('btnGuardarHorarioCitatorio');
+
+    if (!citatorioId) return alert("Falta el identificador del citatorio.");
+    if (!valFechaHora) return alert("Por favor, selecciona la fecha y hora de la cita.");
+
+    const fechaCitaObj = new Date(valFechaHora);
+    if (isNaN(fechaCitaObj.getTime())) return alert("Fecha y hora no válidas.");
+
+    try {
+        if (btn) {
+            btn.disabled = true;
+            btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Guardando...';
+        }
+
+        const fechaISO = fechaCitaObj.toISOString();
+
+        // 1. Actualizar fecha_cita en el citatorio
+        const { error: errUpd } = await supabaseClient
+            .from('citatorios')
+            .update({ fecha_cita: fechaISO })
+            .eq('id', citatorioId);
+
+        if (errUpd) throw errUpd;
+
+        // 2. Notificar al padre y alumno por medio de un comunicado con la fecha exacta y recomendaciones
+        const fechaFormateada = fechaCitaObj.toLocaleString('es-MX', {
+            weekday: 'long',
+            day: 'numeric',
+            month: 'long',
+            year: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit'
+        });
+
+        const { data: userData } = await supabaseClient.auth.getUser();
+        const emisorUserId = userData?.user?.id || state.user?.id;
+
+        await supabaseClient.from('comunicados').insert([{
+            autor_id: emisorUserId,
+            titulo: '🗓️ Cita Programada con Trabajo Social',
+            mensaje: `Estimado padre de familia / tutor del alumno(a) ${alumnoNombre}:\n\nSe ha programado formalmente su cita de atención presencial en el plantel:\n📅 Fecha y hora: ${fechaFormateada}\n📍 Lugar: ${lugar}\n\nCon la finalidad de brindarle una atención oportuna y evitar esperas o aglomeraciones, le solicitamos presentarse puntualmente con su identificación oficial. Por favor ingrese a su portal para firmar el acuse de enterado.`,
+            audiencia: `Alumno_${alumnoId}`,
+            tipo: 'Urgente',
+            plantel_id: state.plantelId
+        }]);
+
+        window.showToast("Cita programada exitosamente y notificada al padre de familia", "success");
+        document.getElementById('modalAgendarHorarioCitatorio').style.display = 'none';
+
+        // Recargar citatorios para reflejar el nuevo horario y estado
+        if (window.loadCitatoriosApoyo) await window.loadCitatoriosApoyo();
+
+    } catch (e) {
+        console.error("Error al guardar horario de citatorio:", e);
+        alert("Error al programar cita: " + (e.message || e));
+    } finally {
+        if (btn) {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fa-solid fa-paper-plane"></i> Guardar y Notificar al Padre';
         }
     }
 };
@@ -10692,7 +11012,18 @@ window.loadCitatoriosAlumno = async (alumnoId) => {
                                     <small style="color:var(--text-muted); font-size:0.7rem;">${new Date(c.creado_en).toLocaleDateString()}</small>
                                 </div>
                                 <p style="font-size:0.85rem; margin:0 0 10px 0; color:var(--text-main); line-height:1.4;"><b>Motivo:</b> ${c.motivo}</p>
-                                ${c.fecha_cita ? `<p style="font-size:0.8rem; color:var(--primary); margin:0 0 10px 0;"><b>Cita programada:</b> ${new Date(c.fecha_cita).toLocaleString('es-MX', { dateStyle: 'medium', timeStyle: 'short' })}</p>` : ''}
+                                
+                                ${c.fecha_cita ? `
+                                    <div style="background:#f0fdf4; border:1px solid #86efac; border-radius:8px; padding:10px; margin-bottom:12px; font-size:0.85rem; color:#166534;">
+                                        <i class="fa-solid fa-calendar-check"></i> <b>Cita Confirmada:</b> ${new Date(c.fecha_cita).toLocaleString('es-MX', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                                        <div style="font-size:0.75rem; color:#15803d; margin-top:3px;">📍 Favor de presentarse puntualmente en el Área de Trabajo Social con identificación oficial.</div>
+                                    </div>
+                                ` : `
+                                    <div style="background:#fffbeb; border:1px dashed #f59e0b; border-radius:8px; padding:10px; margin-bottom:12px; font-size:0.82rem; color:#92400e;">
+                                        <i class="fa-solid fa-clock"></i> <b>Horario de atención:</b> En proceso de asignación por Trabajo Social.
+                                        <div style="font-size:0.75rem; color:#b45309; margin-top:3px;">Para evitar aglomeraciones y brindarle atención individual sin tiempos de espera, Trabajo Social le programará su horario específico aquí. Puede firmar de enterado a continuación.</div>
+                                    </div>
+                                `}
                                 
                                 ${!isEnterado ? `
                                     <div style="border-top:1px dashed #fed7aa; padding-top:10px; margin-top:5px;">
