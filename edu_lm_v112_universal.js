@@ -3061,11 +3061,11 @@ function renderMaestroActividades() {
               </div>
               <div id="qr-reader-eval" style="width:100%; max-width:350px; margin: 0 auto;"></div>
               
-              <div id="panelCalificacionQR" style="display:none; margin-top:20px;">
-                 <h4 style="color:var(--primary); margin-bottom:8px;" id="qrAlumnoEncontrado">Alumno...</h4>
-                 <label class="form-label">Calificación / Nota</label>
+              <div id="panelCalificacionQR" style="display:none; margin-top:20px; background:#f8fafc; border:1px solid #e2e8f0; border-radius:10px; padding:14px;">
+                 <h4 style="color:var(--primary); margin:0 0 8px 0; font-size:1.05rem;" id="qrAlumnoEncontrado">Alumno...</h4>
+                 <label class="form-label" style="font-size:0.85rem; font-weight:600; margin-bottom:4px;">Calificación / Nota</label>
                  <div style="display:flex; gap:8px;">
-                   <input type="text" id="inCalificacionQR" class="form-input" style="flex:1" placeholder="Ej. 10, Entregado, Incompleto" value="10">
+                   <input type="text" id="inCalificacionQR" class="form-input" style="flex:1" placeholder="Ej. 10, Entregado, Incompleto" value="10" onkeydown="if(event.key === 'Enter'){ event.preventDefault(); window.guardarEvaluacionQR(); }">
                    <button class="btn btn-success" onclick="window.guardarEvaluacionQR()"><i class="fa-solid fa-check"></i> Asentar</button>
                  </div>
               </div>
@@ -11809,7 +11809,7 @@ window.loadActividadesMaestro = async () => {
                             <i class="fa-solid fa-rotate"></i> Sincronizar Asistencias
                         </button>
                     ` : `
-                        <button class="btn btn-outline" style="border-color:var(--success); color:var(--success); font-size:0.8rem; padding:6px 12px;" onclick="window.abrirQREvaluacion('${act.id}', '${act.titulo.replace(/'/g, "\\'").replace(/"/g, '&quot;').replace(/[\\n\\r]/g, ' ')}', '${act.grupo_id || ''}', '${act.target_grado || ''}', '${act.materia || ''}')">
+                        <button class="btn btn-outline" style="border-color:var(--success); color:var(--success); font-size:0.8rem; padding:6px 12px;" onclick="window.abrirQREvaluacion('${act.id}', '${act.titulo.replace(/'/g, "\\'").replace(/"/g, '&quot;').replace(/[\\n\\r]/g, ' ')}', '${act.grupo_id || ''}', '${act.target_grado || ''}', '${(act.materia || '').replace(/'/g, "\\'")}', ${act.trimestre || 1})">
                             <i class="fa-solid fa-qrcode"></i> Evaluar QR
                         </button>
                     `}
@@ -12423,21 +12423,65 @@ window.agregarActividad = async () => {
 
 let qrEvalScanner = null;
 let currentActividadId = null;
+let currentActTitulo = '';
+let currentActGrupoId = '';
+let currentActTargetGrado = '';
+let currentActMateria = '';
+let currentActTrimestre = 1;
+let currentActIsTec = false;
 let targetStudentId = null;
 
-window.abrirQREvaluacion = (actId, actTitulo, actGrupoId, actTargetGrado, actMateria) => {
-    window._lastEvalParams = [actId, actTitulo, actGrupoId, actTargetGrado, actMateria];
-    currentActividadId = actId;
-    // Limpiar espacios que puedan venir del template literal
+window.abrirQREvaluacion = async (actId, actTitulo, actGrupoId, actTargetGrado, actMateria, actTrimestre) => {
+    // Normalizar cadenas para evitar 'null', 'undefined' o espacios
     actGrupoId = (actGrupoId || '').trim();
-    actTargetGrado = (actTargetGrado || '').trim();
-    actMateria = (actMateria || '').trim();
-    const isTec = !actGrupoId && !!actTargetGrado;
+    if (actGrupoId === 'null' || actGrupoId === 'undefined') actGrupoId = '';
 
-    document.getElementById('qrActividadInfo').innerText = "Abierto para: " + actTitulo;
-    document.getElementById('modalQREvaluacion').style.display = 'flex';
-    document.getElementById('panelCalificacionQR').style.display = 'none';
-    
+    actTargetGrado = (actTargetGrado || '').trim();
+    if (actTargetGrado === 'null' || actTargetGrado === 'undefined') actTargetGrado = '';
+
+    actMateria = (actMateria || '').trim();
+    if (actMateria === 'null' || actMateria === 'undefined') actMateria = '';
+
+    const isTec = (!actGrupoId && !!actTargetGrado) ||
+                  (actGrupoId.startsWith('grado:')) ||
+                  (actMateria.toLowerCase().includes('tecnolog') || actMateria.toLowerCase().includes('taller'));
+
+    const trim = actTrimestre ? parseInt(actTrimestre) : (state.selectedMaestroTrimestre || 1);
+
+    // Guardar en variables de módulo y en _lastEvalParams
+    window._lastEvalParams = [actId, actTitulo, actGrupoId, actTargetGrado, actMateria, trim];
+    currentActividadId = actId;
+    currentActTitulo = actTitulo;
+    currentActGrupoId = actGrupoId;
+    currentActTargetGrado = actTargetGrado;
+    currentActMateria = actMateria;
+    currentActTrimestre = trim;
+    currentActIsTec = isTec;
+    targetStudentId = null;
+
+    // Verificar si el periodo de evaluación está bloqueado para este trimestre
+    if (window.checkPaseListaBloqueado) {
+        const rawGrupoRef = isTec ? `grado:${actTargetGrado}|${actMateria}` : (actGrupoId || '');
+        const bMsg = await window.checkPaseListaBloqueado(actMateria, rawGrupoRef, trim);
+        if (bMsg) {
+            alert("⚠️ No es posible evaluar esta actividad: " + bMsg.replace(/Pase de lista/g, "Evaluación").replace(/pase de lista/g, "evaluación"));
+            return;
+        }
+    }
+
+    const infoElem = document.getElementById('qrActividadInfo');
+    if (infoElem) {
+        const extraDesc = isTec 
+            ? ` [Taller/Tecnología: ${actMateria}${actTargetGrado ? ' - Grado ' + actTargetGrado : ''}]` 
+            : ` [Materia: ${actMateria}]`;
+        infoElem.innerText = "Abierto para: " + actTitulo + extraDesc;
+    }
+
+    const modalElem = document.getElementById('modalQREvaluacion');
+    if (modalElem) modalElem.style.display = 'flex';
+    const panelQR = document.getElementById('panelCalificacionQR');
+    if (panelQR) panelQR.style.display = 'none';
+
     window.switchModoEval('qr');
 };
 
@@ -12451,94 +12495,197 @@ window.startEvalScanner = () => {
     
     qrEvalScanner.start({ facingMode: state.cameraMode }, { fps: 30, qrbox: {width: 250, height: 250} }, async (decodedText) => {
         try { await qrEvalScanner.stop(); } catch(e){}
-        document.getElementById('qr-reader-eval').innerHTML = '<div style="color:var(--success); text-align:center; padding:20px;"><i class="fa-solid fa-check-circle fa-3x"></i><p>QR Detectado</p></div>';
+        const readerElem = document.getElementById('qr-reader-eval');
+        if (readerElem) {
+            readerElem.innerHTML = '<div style="color:var(--success); text-align:center; padding:20px;"><i class="fa-solid fa-check-circle fa-3x"></i><p style="margin-top:8px; font-weight:600;">QR Detectado</p></div>';
+        }
         
         try {
-           // Buscamos por matrícula o ID (que es lo que se codifica en el QR)
-           let alumno = null;
-           const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(decodedText);
-           if (isUUID) {
-               const { data } = await supabaseClient.from('alumnos').select('id, nombre, grupo_id, grado, taller').eq('id', decodedText).maybeSingle();
-               alumno = data;
-           }
-           if (!alumno) {
-               const { data } = await supabaseClient.from('alumnos').select('id, nombre, grupo_id, grado, taller').eq('matricula', decodedText).eq('plantel_id', state.plantelId).maybeSingle();
-               alumno = data;
-           }
-           
-           if(alumno) {
-               if(isTec) {
-                   // Para tecnologías: validar que el alumno tenga el mismo grado y taller
-                   const gAlu = window._normalizarGradoParaPase ? window._normalizarGradoParaPase(alumno.grado) : String(alumno.grado || '').trim();
-                   const gAct = window._normalizarGradoParaPase ? window._normalizarGradoParaPase(actTargetGrado) : String(actTargetGrado || '').trim();
-                   const gradoOk = !gAct || !gAlu || gAlu === gAct;
+            const cleanText = String(decodedText || '').trim();
+            if (!cleanText) {
+                alert("El código QR escaneado está vacío.");
+                window.startEvalScanner();
+                return;
+            }
 
-                   const cleanAluTaller = window._normalizarTextoTaller ? window._normalizarTextoTaller(alumno.taller) : '';
-                   const cleanActMat = window._normalizarTextoTaller ? window._normalizarTextoTaller(actMateria) : '';
-                   
-                   const tallerOk = !cleanActMat || !cleanAluTaller ||
-                                    cleanAluTaller.includes(cleanActMat) ||
-                                    cleanActMat.includes(cleanAluTaller) ||
-                                    cleanAluTaller === cleanActMat;
+            // Buscamos por matrícula o ID (que es lo que se codifica en el QR)
+            let alumno = null;
+            const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(cleanText);
+            if (isUUID) {
+                const { data } = await supabaseClient.from('alumnos')
+                    .select('id, nombre, matricula, grupo_id, grado, taller, plantel_id')
+                    .eq('id', cleanText)
+                    .maybeSingle();
+                alumno = data;
+            }
+            if (!alumno) {
+                let q = supabaseClient.from('alumnos')
+                    .select('id, nombre, matricula, grupo_id, grado, taller, plantel_id')
+                    .ilike('matricula', cleanText);
+                if (state.plantelId) q = q.eq('plantel_id', state.plantelId);
+                const { data } = await q.maybeSingle();
+                alumno = data;
+            }
+            if (!alumno && !isUUID) {
+                try {
+                    const parsed = JSON.parse(cleanText);
+                    const candId = parsed.id || parsed.alumno_id || parsed.matricula;
+                    if (candId) {
+                        const { data } = await supabaseClient.from('alumnos')
+                            .select('id, nombre, matricula, grupo_id, grado, taller, plantel_id')
+                            .or(`id.eq.${candId},matricula.eq.${candId}`)
+                            .maybeSingle();
+                        alumno = data;
+                    }
+                } catch(e) {}
+            }
 
-                   if(!gradoOk || !tallerOk) {
-                       alert(`\u26a0\uFE0F ¡Alto! El alumno ${alumno.nombre} fue detectado, pero NO está inscrito en la Tecnología de esta actividad (${actMateria} - Grado ${actTargetGrado}).`);
-                       window.cerrarQREvaluacion();
-                       return;
-                   }
-               } else {
-                   // Para materias normales: validar grupo_id
-                   if (alumno.grupo_id && String(alumno.grupo_id) !== String(actGrupoId)) {
-                       alert("\u26a0\uFE0F ¡Alto! Este alumno fue detectado exitosamente, pero NO PERTENECE al grupo al que le fue asignada esta actividad.");
-                       window.cerrarQREvaluacion();
-                       return;
-                   }
-               }
-               
-               targetStudentId = alumno.id;
-               document.getElementById('qrAlumnoEncontrado').innerText = alumno.nombre;
-               document.getElementById('panelCalificacionQR').style.display = 'block';
-           } else {
-               alert("Estudiante no encontrado en base de datos.");
-               window.cerrarQREvaluacion();
-           }
+            if(!alumno) {
+                alert(`Estudiante no encontrado en base de datos (QR: ${cleanText}).`);
+                window.startEvalScanner();
+                return;
+            }
+
+            // Validar pertenencia según disciplina o tecnología/taller
+            if(currentActIsTec) {
+                // Para tecnologías: validar que el alumno tenga el mismo grado y taller
+                const gAlu = window._normalizarGradoParaPase ? window._normalizarGradoParaPase(alumno.grado) : String(alumno.grado || '').trim();
+                const gAct = window._normalizarGradoParaPase ? window._normalizarGradoParaPase(currentActTargetGrado) : String(currentActTargetGrado || '').trim();
+                const gradoOk = !gAct || !gAlu || gAlu === gAct;
+
+                const cleanAluTaller = window._normalizarTextoTaller ? window._normalizarTextoTaller(alumno.taller) : '';
+                const cleanActMat = window._normalizarTextoTaller ? window._normalizarTextoTaller(currentActMateria) : '';
+
+                // Si tanto la actividad como el alumno tienen taller especificado, comprobar coincidencia
+                let tallerOk = true;
+                if (cleanActMat && cleanAluTaller) {
+                    tallerOk = cleanAluTaller.includes(cleanActMat) ||
+                               cleanActMat.includes(cleanAluTaller) ||
+                               cleanAluTaller === cleanActMat;
+                }
+
+                if(!gradoOk || !tallerOk) {
+                    alert(`⚠️ ¡Alto! El alumno ${alumno.nombre} fue detectado, pero NO coincide con la Tecnología de esta actividad.\n\n` +
+                          `• Actividad: ${currentActMateria} (Grado ${currentActTargetGrado || 'General'})\n` +
+                          `• Alumno: ${alumno.taller || 'Sin taller asignado'} (${alumno.grado || 'S/G'})`);
+                    window.startEvalScanner();
+                    return;
+                }
+            } else {
+                // Para materias normales: validar grupo_id si está especificado
+                if (currentActGrupoId && alumno.grupo_id) {
+                    const gidAlu = String(alumno.grupo_id).toLowerCase().trim();
+                    const gidAct = String(currentActGrupoId).toLowerCase().trim();
+                    if (gidAlu !== gidAct) {
+                        alert(`⚠️ ¡Alto! El alumno ${alumno.nombre} fue detectado exitosamente, pero NO PERTENECE al grupo asignado a esta actividad.`);
+                        window.startEvalScanner();
+                        return;
+                    }
+                }
+            }
+
+            targetStudentId = alumno.id;
+
+            // Consultar si ya tiene calificación registrada en esta actividad
+            let notaExistente = null;
+            try {
+                const { data: evalData } = await supabaseClient.from('evaluaciones_actividades')
+                    .select('calificacion')
+                    .eq('actividad_id', currentActividadId)
+                    .eq('alumno_id', alumno.id)
+                    .maybeSingle();
+                if(evalData && evalData.calificacion !== undefined && evalData.calificacion !== null) {
+                    notaExistente = evalData.calificacion;
+                }
+            } catch(e) {
+                console.error(e);
+            }
+
+            const aluInfoElem = document.getElementById('qrAlumnoEncontrado');
+            if (aluInfoElem) {
+                const matriculaInfo = alumno.matricula ? ` <span style="font-size:0.8rem; color:var(--text-muted);">(${alumno.matricula})</span>` : '';
+                const tallerInfo = alumno.taller ? `<br><span style="font-size:0.8rem; color:var(--text-muted); font-weight:normal;">Taller: ${alumno.taller}</span>` : '';
+                const notaInfo = (notaExistente !== null) 
+                    ? `<br><span style="font-size:0.85rem; color:#d97706; font-weight:600;"><i class="fa-solid fa-pen"></i> Calificación actual: ${notaExistente} (puedes actualizarla)</span>` 
+                    : '';
+                aluInfoElem.innerHTML = `${alumno.nombre}${matriculaInfo}${tallerInfo}${notaInfo}`;
+            }
+
+            const inputNota = document.getElementById('inCalificacionQR');
+            if (inputNota) {
+                inputNota.value = (notaExistente !== null) ? notaExistente : '10';
+                inputNota.focus();
+                inputNota.select();
+            }
+
+            const panelQR = document.getElementById('panelCalificacionQR');
+            if (panelQR) panelQR.style.display = 'block';
+
         } catch(err) {
-           console.error(err);
-           alert("Error al buscar estudiante");
-           window.cerrarQREvaluacion();
+            console.error("Error en startEvalScanner callback:", err);
+            alert("Error al buscar estudiante: " + (err.message || 'Error desconocido'));
+            window.startEvalScanner();
         }
     }).catch(err => {
-        console.error(err);
+        console.error("Error al iniciar escáner:", err);
     });
 };
 
 window.cerrarQREvaluacion = () => {
-    document.getElementById('modalQREvaluacion').style.display = 'none';
+    const modal = document.getElementById('modalQREvaluacion');
+    if (modal) modal.style.display = 'none';
     if(qrEvalScanner) {
         try { qrEvalScanner.stop().catch(()=>{}); } catch(e){}
     }
-    document.getElementById('qr-reader-eval').innerHTML = '';
-    // Reseteamos ID de alumno para evitar asentar nota al alumno equivocado si se reabre el modal:
+    const readerElem = document.getElementById('qr-reader-eval');
+    if (readerElem) readerElem.innerHTML = '';
+
     targetStudentId = null;
-    document.getElementById('inCalificacionQR').value = '10';
+    const inputNota = document.getElementById('inCalificacionQR');
+    if (inputNota) inputNota.value = '10';
+    const panelQR = document.getElementById('panelCalificacionQR');
+    if (panelQR) panelQR.style.display = 'none';
+
     // Refrescar lista de fondo al cerrar el modal
     if (window.loadActividadesMaestro) window.loadActividadesMaestro();
 };
 
 window.guardarEvaluacionQR = async () => {
-    const nota = document.getElementById('inCalificacionQR').value;
-    if(!nota || !targetStudentId || !currentActividadId) return alert("Faltan datos");
-    
+    const inputNota = document.getElementById('inCalificacionQR');
+    const nota = inputNota ? inputNota.value.trim() : '';
+    if(!nota || !targetStudentId || !currentActividadId) return alert("Faltan datos para registrar la calificación.");
+
     try {
         const { error } = await supabaseClient.from('evaluaciones_actividades')
-          .upsert({ actividad_id: currentActividadId, alumno_id: targetStudentId, calificacion: nota, plantel_id: state.plantelId }, { onConflict: 'actividad_id, alumno_id' });
+          .upsert({ 
+              actividad_id: currentActividadId, 
+              alumno_id: targetStudentId, 
+              calificacion: nota, 
+              plantel_id: state.plantelId 
+          }, { onConflict: 'actividad_id, alumno_id' });
         
         if(error) throw error;
-        alert("Evaluación registrada exitosamente!");
-        window.cerrarQREvaluacion();
+
+        if (window.showToast) {
+            window.showToast(`✅ Calificación (${nota}) registrada con éxito`, "success");
+        } else {
+            alert("Evaluación registrada exitosamente!");
+        }
+
+        // Preparar inmediatamente para el siguiente escaneo
+        targetStudentId = null;
+        if (inputNota) inputNota.value = '10';
+        const panelQR = document.getElementById('panelCalificacionQR');
+        if (panelQR) panelQR.style.display = 'none';
+
+        // Actualizar lista de actividades en background
+        if (window.loadActividadesMaestro) window.loadActividadesMaestro();
+
+        // Reiniciar escáner para escanear al siguiente alumno
+        window.startEvalScanner();
     } catch(err) {
-        console.error(err);
-        alert("Error crítico al guardar: " + (err.message || 'Error desconocido') + ". \nRevisa permisos RLS o la conexión.");
+        console.error("Error al guardar evaluación QR:", err);
+        alert("Error al guardar calificación: " + (err.message || 'Error desconocido') + ". \nRevisa permisos RLS o la conexión.");
     }
 };
 
@@ -12578,20 +12725,32 @@ window.loadListaEvalManual = async () => {
     contenedor.innerHTML = '<div style="padding:20px; text-align:center;"><i class="fa-solid fa-spinner fa-spin"></i> Cargando lista...</div>';
     
     try {
-        const [actId, actTitulo, actGrupoId, actTargetGrado, actMateria] = window._lastEvalParams;
-        const isTec = !actGrupoId && !!actTargetGrado;
+        const [actId, actTitulo, actGrupoId, actTargetGrado, actMateria] = window._lastEvalParams || [];
+        const isTec = currentActIsTec || (!actGrupoId && !!actTargetGrado) || 
+                      (actGrupoId && String(actGrupoId).startsWith('grado:')) ||
+                      (actMateria && (actMateria.toLowerCase().includes('tecnolog') || actMateria.toLowerCase().includes('taller')));
         
         let alumnos = [];
         if(isTec) {
-            const { data: rawAlumnos } = await supabaseClient.from('alumnos').select('id, nombre, matricula, grado, taller').eq('plantel_id', state.plantelId).order('nombre');
-            alumnos = window._filtrarAlumnosPorTallerYGrado ? window._filtrarAlumnosPorTallerYGrado(rawAlumnos, actTargetGrado, actMateria) : (rawAlumnos || []);
+            const { data: rawAlumnos } = await supabaseClient.from('alumnos')
+                .select('id, nombre, matricula, grado, taller')
+                .eq('plantel_id', state.plantelId);
+            alumnos = window._filtrarAlumnosPorTallerYGrado 
+                ? window._filtrarAlumnosPorTallerYGrado(rawAlumnos, actTargetGrado, actMateria) 
+                : (rawAlumnos || []);
         } else {
-            const { data: rawAlumnos } = await supabaseClient.from('alumnos').select('id, nombre, matricula, grado, taller').eq('plantel_id', state.plantelId).eq('grupo_id', actGrupoId).order('nombre');
+            let q = supabaseClient.from('alumnos')
+                .select('id, nombre, matricula, grado, taller')
+                .eq('plantel_id', state.plantelId);
+            if(actGrupoId) q = q.eq('grupo_id', actGrupoId);
+            const { data: rawAlumnos } = await q;
             alumnos = rawAlumnos || [];
         }
+
+        alumnos.sort((a, b) => (a.nombre || '').localeCompare(b.nombre || ''));
         
         if (!alumnos || alumnos.length === 0) {
-            contenedor.innerHTML = '<div style="text-align:center; padding: 20px; color:var(--text-muted)">No hay alumnos registrados en este grupo.</div>';
+            contenedor.innerHTML = '<div style="text-align:center; padding: 20px; color:var(--text-muted)">No hay alumnos registrados que coincidan con este grupo o tecnología.</div>';
             return;
         }
 
@@ -12614,13 +12773,13 @@ window.loadListaEvalManual = async () => {
         `;
         alumnos.forEach((al, index) => {
             const nota = evalMap[al.id] || '';
-            const statusColor = nota ? 'var(--success)' : 'var(--border)';
             const borderStyle = nota ? 'border:1px solid var(--success);' : 'border:1px solid var(--border);';
+            const tallerBadge = isTec && al.taller ? ` <span style="font-size:0.75rem; color:var(--primary); font-weight:normal;">[${al.taller}]</span>` : '';
             
             html += `
             <div id="row_eval_${al.id}" style="display:flex; justify-content:space-between; align-items:center; padding:12px; ${borderStyle} background:white; border-radius:8px; margin-bottom: 8px;">
                 <div style="flex:1;">
-                    <div style="font-weight:600; font-size:0.95rem;">${index+1}. ${al.nombre}</div>
+                    <div style="font-weight:600; font-size:0.95rem;">${index+1}. ${al.nombre}${tallerBadge}</div>
                     <div style="font-size:0.75rem; color:var(--text-muted);">${al.matricula || 'Sin matrícula'}</div>
                 </div>
                 <div style="display:flex; gap:5px; align-items:center;">
@@ -12640,8 +12799,8 @@ window.loadListaEvalManual = async () => {
         contenedor.innerHTML = html;
         
     } catch(err) {
-        console.error(err);
-        contenedor.innerHTML = '<div style="color:var(--danger); padding:20px;">Error al cargar la lista.</div>';
+        console.error("Error en loadListaEvalManual:", err);
+        contenedor.innerHTML = '<div style="color:var(--danger); padding:20px;">Error al cargar la lista: ' + (err.message || 'Desconocido') + '</div>';
     }
 };
 
