@@ -9220,7 +9220,7 @@ window.eliminarPlantelSaaS = async (id, nombre) => {
         const tablas = [
             'accesos_plantel', 'actividades_maestro', 'asistencia_sesiones', 'asistencias',
             'autorizaciones_movimientos', 'biblioteca_prestamos', 'biblioteca_reservas',
-            'bitacora_maestro', 'calificaciones', 'calificaciones_historial', 'citatorios',
+            'bitacora_maestro', 'calificaciones', 'citatorios',
             'comunicados_vistos', 'comunicados_adjuntos', 'comunicados', 'cuestionarios_psicosociales',
             'cuestionarios_salud', 'encuadres', 'estudios_psicosociales', 'evaluaciones_actividades',
             'expedientes', 'expedientes_docentes', 'expedientes_salud', 'fichas_salud',
@@ -15757,7 +15757,7 @@ window.finalizarSesionAsistencia = async () => {
         window.showToast("Pase de lista cerrado. Faltas y avisos procesativos.", "success");
         window.updateSessionUI();
         if (window.sincronizarAsistenciaActividad) {
-            const trimParaSinc = window._trimestreActivoParaPase || state.selectedMaestroTrimestre || window.currentTrimestre || 1;
+            const trimParaSinc = window._trimestreActivoParaPase || await window.getTrimestreActivoPaseLista(materia, grupoId) || 1;
             window.sincronizarAsistenciaActividad({
                 grupoId: grupoId,
                 materia: materia,
@@ -16506,43 +16506,67 @@ window.checkPaseListaBloqueado = async (materia, grupoId, trimestre) => {
             }
         }
 
-        // 2. Validar si ya enviaron calificaciones (Historial)
-        const rawMat = (materia || '').trim().toLowerCase();
-        const matNorm = window._normalizarTextoTaller ? window._normalizarTextoTaller(materia) : rawMat;
-        const gid = String(grupoId).startsWith('grado:') ? null : String(grupoId);
-        const targetGrado = String(grupoId).startsWith('grado:') ? (window._normalizarGradoParaPase ? window._normalizarGradoParaPase(String(grupoId).replace('grado:', '').split('|')[0]) : null) : null;
-        
-        const { data: rawHistorial } = await supabaseClient.from('calificaciones_historial')
-            .select('id, materia_nombre, payload_json')
-            .eq('plantel_id', state.plantelId)
-            .eq('trimestre', trimestre);
-            
-        const historial = (rawHistorial || []).filter(h => {
-            const mNombre = (h.materia_nombre || '').trim().toLowerCase();
-            const payload = h.payload_json || {};
-            const pMateria = (payload.materia || '').trim().toLowerCase();
-            
-            // Coincidencia precisa de materia: no bloquear indiscriminadamente si no hay término
-            const matchMateria = (matNorm && (mNombre.includes(matNorm) || matNorm.includes(mNombre) || pMateria.includes(matNorm) || matNorm.includes(pMateria))) ||
-                                 (rawMat && (mNombre.includes(rawMat) || rawMat.includes(mNombre) || pMateria.includes(rawMat)));
-            
-            let matchGrupo = false;
-            if (gid) {
-                matchGrupo = (payload.grupo_id === gid);
-            } else if (targetGrado) {
-                const payloadGrado = window._normalizarGradoParaPase ? window._normalizarGradoParaPase(payload.grado || payload.target_grado) : '';
-                matchGrupo = !payloadGrado || payloadGrado === targetGrado;
-            } else {
-                matchGrupo = true;
-            }
-            return matchMateria && matchGrupo;
-        });
+        // 2. Validar si el maestro ya selló y asentó calificaciones oficiales en la tabla oficial 'calificaciones'
+        const isTec = String(grupoId).startsWith('grado:');
+        const gid = isTec ? null : String(grupoId).split('|')[0].trim();
+        const targetGrado = isTec ? String(grupoId).replace('grado:', '').split('|')[0].trim() : null;
+        const taller = isTec ? String(grupoId).split('|')[1]?.trim() : null;
 
-        if (historial.length > 0) return "Calificaciones enviadas. Pase de lista cerrado para este trimestre.";
-        
+        let alumnoIds = [];
+        if (isTec) {
+            const gNorm = window._normalizarGradoParaPase ? window._normalizarGradoParaPase(targetGrado) : targetGrado.replace(/[°\s]/g, '');
+            const gSin = targetGrado.replace(/[°\s]/g, '');
+            const { data: rawAlumnos } = await supabaseClient.from('alumnos')
+                .select('id, grado, taller')
+                .eq('plantel_id', state.plantelId)
+                .or(`grado.eq.${gSin},grado.eq.${gSin}°,grado.ilike.%${gSin}%`);
+
+            const cleanTargetT = window._normalizarTextoTaller ? window._normalizarTextoTaller(taller) : '';
+            const alms = (rawAlumnos || []).filter(al => {
+                const alG = window._normalizarGradoParaPase ? window._normalizarGradoParaPase(al.grado) : (al.grado || '').replace(/[°\s]/g, '');
+                if (alG !== gNorm) return false;
+                if (!cleanTargetT) return true;
+                const cleanAlT = window._normalizarTextoTaller ? window._normalizarTextoTaller(al.taller) : '';
+                if (!cleanAlT) return true;
+                return cleanAlT.includes(cleanTargetT) || cleanTargetT.includes(cleanAlT);
+            });
+            alumnoIds = alms.map(a => a.id);
+        } else if (gid) {
+            const { data: alms } = await supabaseClient.from('alumnos')
+                .select('id')
+                .eq('plantel_id', state.plantelId)
+                .eq('grupo_id', gid);
+            alumnoIds = (alms || []).map(a => a.id);
+        }
+
+        if (alumnoIds.length > 0) {
+            const trimNum = parseInt(trimestre, 10) || 1;
+            const { data: califs, error: errCal } = await supabaseClient
+                .from('calificaciones')
+                .select('id, materia_nombre')
+                .eq('plantel_id', state.plantelId)
+                .eq('trimestre', trimNum)
+                .in('alumno_id', alumnoIds);
+
+            if (!errCal && califs && califs.length > 0) {
+                const rawMat = (materia || '').trim().toLowerCase();
+                const matNorm = window._normalizarTextoTaller ? window._normalizarTextoTaller(materia) : rawMat;
+
+                const tieneCalificaciones = califs.some(c => {
+                    const mNombre = (c.materia_nombre || '').trim().toLowerCase();
+                    const mNorm = window._normalizarTextoTaller ? window._normalizarTextoTaller(mNombre) : mNombre;
+                    return mNombre === rawMat || mNorm === matNorm || mNombre.includes(rawMat) || rawMat.includes(mNombre);
+                });
+
+                if (tieneCalificaciones) {
+                    return "Calificaciones selladas y enviadas. Pase de lista cerrado para este trimestre.";
+                }
+            }
+        }
+
         return false;
     } catch(e) {
-        console.error(e);
+        console.error("Error en checkPaseListaBloqueado:", e);
         return false;
     }
 };
@@ -16610,13 +16634,49 @@ window.updateSessionUI = async () => {
         // Guardamos el trimestre activo globalmente para que el escáner lo use
         window._trimestreActivoParaPase = trimActivo;
 
+        // Mostrar el badge del trimestre activo en el encabezado
+        const titleEl = document.getElementById('classDetailTitle');
+        if (titleEl) {
+            const cleanTitle = titleEl.innerText.replace(/\s*\d+°\s*Trimestre/gi, '').trim();
+            titleEl.innerHTML = `${cleanTitle} <span class="badge-trim-activo" style="font-size:0.75rem; background:#10b981; color:#fff; padding:3px 10px; border-radius:12px; margin-left:8px; vertical-align:middle; font-weight:700;"><i class="fa-solid fa-calendar-check"></i> ${trimActivo}° Trimestre</span>`;
+        }
+
         const { data: sesion } = await supabaseClient.from('asistencia_sesiones')
-            .select('estado')
+            .select('estado, trimestre')
             .eq('grupo_id', String(window.currentAulaGrupoId))
             .eq('materia', materia)
             .eq('fecha', hoy)
             .eq('plantel_id', state.plantelId)
             .maybeSingle();
+
+        // Si la sesión de hoy se había creado con un trimestre previo ya sellado, corregirla automáticamente a trimActivo
+        if (sesion && sesion.trimestre && sesion.trimestre !== trimActivo) {
+            console.log(`[AULA] Auto-reparando sesión de hoy: Trimestre ${sesion.trimestre} -> ${trimActivo}`);
+            await supabaseClient.from('asistencia_sesiones')
+                .update({ trimestre: trimActivo })
+                .eq('grupo_id', String(window.currentAulaGrupoId))
+                .eq('materia', materia)
+                .eq('fecha', hoy)
+                .eq('plantel_id', state.plantelId);
+
+            const isTec = String(window.currentAulaGrupoId).startsWith('grado:');
+            let qUpdAsist = supabaseClient.from('asistencias')
+                .update({ trimestre: trimActivo })
+                .eq('materia', materia)
+                .eq('fecha', hoy)
+                .eq('plantel_id', state.plantelId);
+            if (!isTec) qUpdAsist = qUpdAsist.eq('grupo_id', String(window.currentAulaGrupoId));
+            await qUpdAsist;
+
+            if (window.sincronizarAsistenciaActividad) {
+                window.sincronizarAsistenciaActividad({
+                    grupoId: String(window.currentAulaGrupoId),
+                    materia: materia,
+                    trimestre: trimActivo,
+                    targetGrado: isTec ? String(window.currentAulaGrupoId).replace('grado:', '').split('|')[0].trim() : null
+                }).catch(e => console.error("Error al re-sincronizar tras ajuste de trimestre:", e));
+            }
+        }
 
         const estado = sesion?.estado || 'pendiente';
         window.currentAulaEstadoSesion = estado;
@@ -23104,7 +23164,9 @@ window.abrirSesionManual = async (modo) => {
             return alert("⚠️ El pase de lista del día de hoy ya fue CERRADO y finalizado.\n\nNo es posible volver a abrirlo hasta el próximo día de pase de lista. Si algún alumno presenta comprobante médico o institucional, utiliza el botón 'Justificar'.");
         }
 
-        const trimActivo = window._trimestreActivoParaPase || await window.getTrimestreActivoPaseLista(materia, window.currentAulaGrupoId);
+        const trimActivo = await window.getTrimestreActivoPaseLista(materia, window.currentAulaGrupoId) || window._trimestreActivoParaPase || 1;
+        window._trimestreActivoParaPase = trimActivo;
+
         if(!trimActivo) {
             window.showToast("Todos los trimestres están cerrados.", "error");
             return;
@@ -23141,6 +23203,19 @@ window.loadListaAsistenciaManual = async () => {
         const hoy = new Date().toLocaleDateString('en-CA');
         const materia = (window.currentAulaMateria || 'N/A').trim();
         const rawVal = String(window.currentAulaGrupoId);
+
+        // Asegurar que _trimestreActivoParaPase esté calculado
+        if (!window._trimestreActivoParaPase) {
+            window._trimestreActivoParaPase = await window.getTrimestreActivoPaseLista(materia, window.currentAulaGrupoId);
+        }
+        const trimActivo = window._trimestreActivoParaPase || 1;
+
+        // Mostrar badge en título
+        const titleEl = document.getElementById('classDetailTitle');
+        if (titleEl) {
+            const cleanTitle = titleEl.innerText.replace(/\s*\d+°\s*Trimestre/gi, '').trim();
+            titleEl.innerHTML = `${cleanTitle} <span class="badge-trim-activo" style="font-size:0.75rem; background:#10b981; color:#fff; padding:3px 10px; border-radius:12px; margin-left:8px; vertical-align:middle; font-weight:700;"><i class="fa-solid fa-calendar-check"></i> ${trimActivo}° Trimestre</span>`;
+        }
         
         // Ver estado de la sesión
         const { data: sesion } = await supabaseClient.from('asistencia_sesiones')
@@ -23339,7 +23414,8 @@ window.marcarAsistenciaManual = async (alumnoId, estado) => {
         const hoy = new Date().toLocaleDateString('en-CA');
         const materiaGuardar = (window.currentAulaMateria || 'N/A').trim();
         const grupoId = String(window.currentAulaGrupoId);
-        const trim = window._trimestreActivoParaPase || state.selectedMaestroTrimestre || 1;
+        const trim = window._trimestreActivoParaPase || await window.getTrimestreActivoPaseLista(materiaGuardar, grupoId) || 1;
+        window._trimestreActivoParaPase = trim;
 
         // 1. REGLA ESTRICTA: Si la sesión ya cerró, el maestro NO puede modificar asistencias directamente.
         // SOLAMENTE se puede justificar inasistencias mediante el botón 'Justificar'.
@@ -23444,7 +23520,8 @@ window.marcarTodosAsistenciaManual = async () => {
         const hoy = new Date().toLocaleDateString('en-CA');
         const materia = (window.currentAulaMateria || 'N/A').trim();
         const rawVal = String(window.currentAulaGrupoId);
-        const trimActivo = window._trimestreActivoParaPase || state.selectedMaestroTrimestre || 1;
+        const trimActivo = window._trimestreActivoParaPase || await window.getTrimestreActivoPaseLista(materia, rawVal) || 1;
+        window._trimestreActivoParaPase = trimActivo;
 
         // 1. Consultar estado actual de la sesión
         const { data: sesionData } = await supabaseClient.from('asistencia_sesiones')
@@ -23619,7 +23696,8 @@ window.justificarFaltaDesdeAula = async (alumnoId) => {
         const hoy = new Date().toLocaleDateString('en-CA');
         const materiaGuardar = (window.currentAulaMateria || 'N/A').trim();
         const grupoId = String(window.currentAulaGrupoId);
-        const trim = window._trimestreActivoParaPase || state.selectedMaestroTrimestre || 1;
+        const trim = window._trimestreActivoParaPase || await window.getTrimestreActivoPaseLista(materiaGuardar, grupoId) || 1;
+        window._trimestreActivoParaPase = trim;
 
         const { data: existente } = await supabaseClient.from('asistencias')
             .select('id')
