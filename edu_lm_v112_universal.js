@@ -2657,6 +2657,57 @@ function renderAdminComunicados() {
   `;
 }
 
+window.renderAdjuntosComunicado = (archivoUrl, btnClass = 'btn btn-outline btn-xs') => {
+    if (!archivoUrl) return '';
+    let items = [];
+    try {
+        if (typeof archivoUrl === 'string' && archivoUrl.trim().startsWith('[') && archivoUrl.trim().endsWith(']')) {
+            const parsed = JSON.parse(archivoUrl);
+            if (Array.isArray(parsed)) {
+                items = parsed.map((item, idx) => {
+                    if (typeof item === 'string') {
+                        let clean = decodeURIComponent(item.split('/').pop().split('?')[0]);
+                        clean = clean.replace(/^aviso_maestro_\d+_\d+_/, '').replace(/^aviso_maestro_\d+_/, '');
+                        return { name: clean || `Documento ${idx + 1}`, url: item };
+                    } else if (item && item.url) {
+                        return { name: item.name || `Documento ${idx + 1}`, url: item.url };
+                    }
+                    return null;
+                }).filter(Boolean);
+            }
+        }
+    } catch (e) {}
+
+    if (items.length === 0) {
+        if (typeof archivoUrl === 'string' && archivoUrl.includes(',') && archivoUrl.includes('http')) {
+            items = archivoUrl.split(',').map((u, idx) => {
+                const tr = u.trim();
+                let clean = decodeURIComponent(tr.split('/').pop().split('?')[0]);
+                clean = clean.replace(/^aviso_maestro_\d+_\d+_/, '').replace(/^aviso_maestro_\d+_/, '');
+                return { name: clean || `Documento ${idx + 1}`, url: tr };
+            });
+        } else if (typeof archivoUrl === 'string' && archivoUrl.trim()) {
+            let clean = decodeURIComponent(archivoUrl.split('/').pop().split('?')[0]);
+            clean = clean.replace(/^aviso_maestro_\d+_\d+_/, '').replace(/^aviso_maestro_\d+_/, '');
+            items = [{ name: clean && clean.length <= 40 ? clean : 'Ver Documento', url: archivoUrl.trim() }];
+        }
+    }
+
+    if (items.length === 0) return '';
+
+    return `
+        <div style="display:flex; flex-wrap:wrap; gap:8px; margin-top:8px;">
+            ${items.map(it => `
+                <a href="${it.url}" target="_blank" class="${btnClass}" style="display:inline-flex; align-items:center; gap:6px; text-decoration:none; border-color:var(--primary); color:var(--primary); font-size:0.8rem; padding:4px 10px; border-radius:6px; background:rgba(37,99,235,0.05); font-weight:600;" title="Abrir ${it.name}">
+                    <i class="fa-solid fa-paperclip"></i>
+                    <span style="max-width:220px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${it.name || 'Ver Documento'}</span>
+                    <i class="fa-solid fa-arrow-up-right-from-square" style="font-size:0.65rem; opacity:0.75;"></i>
+                </a>
+            `).join('')}
+        </div>
+    `;
+};
+
 window.loadComunicadosAdmin = async (fechaFiltro = null) => {
     console.log("Cargando comunicados...");
     const cont = document.getElementById('divComHistorial');
@@ -2725,9 +2776,7 @@ window.loadComunicadosAdmin = async (fechaFiltro = null) => {
             else if (audText && audText.startsWith('Maestro_')) audText = "Maestro Específico";
             
             const color = tipoColores[c.audiencia] || 'var(--text-muted)';
-            const btnAdjunto = c.archivo_url
-                ? `<a href="${c.archivo_url}" target="_blank" class="btn btn-outline btn-xs" style="margin-top:8px; border-color:var(--primary); color:var(--primary); display:inline-flex; gap:4px; align-items:center;"><i class="fa-solid fa-paperclip"></i> Ver adjunto</a>`
-                : '';
+            const btnAdjunto = window.renderAdjuntosComunicado(c.archivo_url, 'btn btn-outline btn-xs');
 
             const vList = vistosMap[c.id] || [];
             let badgeLectura = '';
@@ -11745,10 +11794,7 @@ window.loadTimelineAlumno = async (mostrarHistorial = false, selectedDateStr = n
            const delay = i * 0.1;
            const date = new Date(c.fecha_envio).toLocaleDateString('es-MX', { year: '2-digit', month: 'short', day: 'numeric' });
            const esEncuadre = c.titulo && c.titulo.toLowerCase().includes('encuadre');
-           let btnAdjunto = '';
-           if(c.archivo_url) {
-               btnAdjunto = `<a href="${c.archivo_url}" target="_blank" class="btn btn-outline" style="margin-top: 12px; font-size: 0.8rem; padding: 6px 12px; border-color:var(--primary); color:var(--primary)"><i class="fa-solid fa-paperclip"></i> Ver Documento</a>`;
-           }
+           const btnAdjunto = window.renderAdjuntosComunicado ? window.renderAdjuntosComunicado(c.archivo_url, 'btn btn-outline') : '';
            const esFirmaBoletaAviso = c.tipo === 'aviso_firma_boleta';
            const requiereFirma = esEncuadre || esFirmaBoletaAviso;
            
@@ -12493,10 +12539,7 @@ window.loadTimelinePersonal = async (selectedDate) => {
         
         cont.innerHTML = data.map((c) => {
            const date = new Date(c.fecha_envio).toLocaleString('es-MX', { timeStyle: 'short' });
-           let btnAdjunto = '';
-           if(c.archivo_url) {
-               btnAdjunto = `<a href="${c.archivo_url}" target="_blank" class="btn btn-outline" style="margin-top: 12px; font-size: 0.85rem; border-color:var(--primary); color:var(--primary); border-radius:20px;"><i class="fa-solid fa-file-pdf"></i> Descargar Adjunto</a>`;
-           }
+           const btnAdjunto = window.renderAdjuntosComunicado ? window.renderAdjuntosComunicado(c.archivo_url, 'btn btn-outline') : '';
            let tipoColor = c.audiencia === 'General' ? 'var(--success)' : 'var(--primary)';
            let iconAud = c.audiencia === 'General' ? 'globe' : 'chalkboard-user';
            
@@ -24073,25 +24116,50 @@ function renderMaestroEnviarComunicados() {
     <div style="display:flex; gap:24px; flex-wrap:wrap;">
       <!-- Creador de Comunicado -->
       <div class="card" style="flex:2; min-width:350px;">
-        <h3 style="margin-bottom:16px">Nuevo Comunicado / Aviso</h3>
+        <h3 style="margin-bottom:16px"><i class="fa-solid fa-bullhorn text-primary"></i> Nuevo Comunicado / Aviso</h3>
+        
         <div class="form-group">
-          <label class="form-label">Asunto o Título del Aviso</label>
+          <label class="form-label" style="font-weight:600;">Asunto o Título del Aviso</label>
           <input type="text" id="inMaestroComTitulo" class="form-input" placeholder="Ej: Traer material para laboratorio">
         </div>
+
         <div class="form-group">
-          <label class="form-label">Audiencia Destino (Mis Grupos)</label>
-          <select id="selMaestroComAudiencia" class="form-select">
-            <option value="">Cargando grupos...</option>
-          </select>
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; flex-wrap:wrap; gap:6px;">
+            <label class="form-label" style="margin:0; font-weight:700;">
+              <i class="fa-solid fa-users text-primary"></i> Audiencia Destino (Selecciona uno o varios grupos)
+            </label>
+            <div style="display:flex; gap:6px;">
+              <button type="button" class="btn btn-outline btn-xs" onclick="window.seleccionarTodosGruposMaestro(true)" style="font-size:0.75rem; padding:3px 8px; border-radius:6px;">
+                <i class="fa-solid fa-check-double"></i> Marcar todos
+              </button>
+              <button type="button" class="btn btn-outline btn-xs" onclick="window.seleccionarTodosGruposMaestro(false)" style="font-size:0.75rem; padding:3px 8px; border-radius:6px;">
+                <i class="fa-solid fa-xmark"></i> Desmarcar
+              </button>
+            </div>
+          </div>
+          <div id="contenedorGruposMaestro" style="max-height:190px; overflow-y:auto; border:1px solid var(--border); border-radius:10px; padding:10px; background:var(--page-bg); display:grid; grid-template-columns:repeat(auto-fill, minmax(210px, 1fr)); gap:8px;">
+            <div style="text-align:center; padding:20px; color:var(--text-muted); grid-column:1/-1;">
+              <i class="fa-solid fa-spinner fa-spin"></i> Cargando tus grupos asignados...
+            </div>
+          </div>
+          <div id="resumenGruposSeleccionados" style="margin-top:6px; font-size:0.8rem; color:var(--text-muted); font-weight:500;">
+            <i class="fa-solid fa-circle-info"></i> Selecciona los grupos a los que deseas enviar el aviso.
+          </div>
         </div>
+
         <div class="form-group">
-          <label class="form-label">Mensaje Detallado</label>
+          <label class="form-label" style="font-weight:600;">Mensaje Detallado</label>
           <textarea id="inMaestroComMensaje" class="form-input" style="height:120px; resize:vertical; font-family:inherit;" placeholder="Escribe el contenido del aviso aquí..."></textarea>
         </div>
+
         <div class="form-group">
-          <label class="form-label">Adjuntar Documento / Material (.pdf, .jpg, .png)</label>
-          <input type="file" id="inMaestroComArchivo" class="form-input" style="padding:8px; cursor:pointer;" accept=".pdf,.jpg,.png">
+          <label class="form-label" style="font-weight:700;">
+            <i class="fa-solid fa-paperclip text-primary"></i> Adjuntar Documentos / Material (.pdf, .jpg, .png, .docx, .xlsx)
+          </label>
+          <input type="file" id="inMaestroComArchivo" class="form-input" style="padding:8px; cursor:pointer;" accept=".pdf,.jpg,.jpeg,.png,.webp,.docx,.xlsx,.pptx" multiple onchange="window.mostrarArchivosSeleccionadosMaestro(this)">
+          <div id="listaArchivosSeleccionadosMaestro" style="margin-top:8px; display:flex; flex-direction:column; gap:6px;"></div>
         </div>
+
         <button id="btnPublicarMaestroComunicado" class="btn btn-primary btn-lg" style="width:100%" onclick="window.publicarComunicadoMaestro()">
           <i class="fa-solid fa-paper-plane"></i> Enviar a Alumnos
         </button>
@@ -24100,7 +24168,7 @@ function renderMaestroEnviarComunicados() {
       <!-- Historial de Comunicados Enviados -->
       <div class="card" style="flex:1; min-width:300px;">
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
-          <h3 style="margin:0;">Enviados Recientemente</h3>
+          <h3 style="margin:0;"><i class="fa-solid fa-clock-rotate-left"></i> Enviados Recientemente</h3>
           <button class="btn btn-outline" style="padding:4px 8px; font-size:0.8rem;" onclick="window.loadComunicadosEnviadosMaestro()"><i class="fa-solid fa-arrows-rotate"></i></button>
         </div>
         <div id="divMaestroComHistorial" style="max-height:500px; overflow-y:auto; display:flex; flex-direction:column; gap:12px;">
@@ -24112,8 +24180,8 @@ function renderMaestroEnviarComunicados() {
 }
 
 window.loadMaestroAvisosGrupos = async () => {
-    const sel = document.getElementById('selMaestroComAudiencia');
-    if(!sel) return;
+    const cont = document.getElementById('contenedorGruposMaestro');
+    if(!cont) return;
     try {
         const u = await supabaseClient.auth.getUser();
         if(!u.data.user) return;
@@ -24125,41 +24193,147 @@ window.loadMaestroAvisosGrupos = async () => {
            .or('grupo_id.not.is.null,target_grado.not.is.null');
 
         if(asigs && asigs.length > 0) {
-            let optionsHtml = '<option value="" data-materia="">-- Selecciona un Grupo --</option>';
+            let items = [];
             for (const a of asigs) {
                 if(a.grupos) {
-                    optionsHtml += `<option value="Grupo_${a.grupos.id}" data-materia="${a.materia}">${a.materia} - ${a.grupos.nombre}</option>`;
+                    items.push({
+                        id: a.grupos.id,
+                        nombre: a.grupos.nombre,
+                        materia: a.materia || 'General',
+                        audiencia: `Grupo_${a.grupos.id}`
+                    });
                 } else if(a.target_grado) {
-                    const { data: grps } = await supabaseClient.from('grupos').select('id, nombre').like('nombre', a.target_grado + '%').eq('plantel_id', state.plantelId);
-                    optionsHtml += `<option value="Grado_${a.target_grado}" data-materia="${a.materia}" style="font-weight:bold;">${a.materia} - TODOS los grupos de ${a.target_grado}</option>`;
+                    const { data: grps } = await supabaseClient.from('grupos')
+                        .select('id, nombre')
+                        .like('nombre', a.target_grado + '%')
+                        .eq('plantel_id', state.plantelId)
+                        .order('nombre');
                     if(grps && grps.length > 0) {
                         grps.forEach(g => {
-                            optionsHtml += `<option value="Grupo_${g.id}" data-materia="${a.materia}">&nbsp;&nbsp;&nbsp;↳ Solo ${g.nombre}</option>`;
+                            items.push({
+                                id: g.id,
+                                nombre: g.nombre,
+                                materia: a.materia || `Grado ${a.target_grado}`,
+                                audiencia: `Grupo_${g.id}`
+                            });
                         });
                     }
                 }
             }
-            sel.innerHTML = optionsHtml;
+
+            // Deduplicar grupos si aparecen repetidos con la misma materia
+            const uniqueMap = new Map();
+            items.forEach(it => {
+                const key = `${it.audiencia}_${it.materia}`;
+                if (!uniqueMap.has(key)) {
+                    uniqueMap.set(key, it);
+                }
+            });
+            const finalGroups = Array.from(uniqueMap.values());
+
+            if (finalGroups.length === 0) {
+                cont.innerHTML = '<div style="text-align:center; padding:15px; color:var(--text-muted); grid-column:1/-1;">No se encontraron grupos asignados activos.</div>';
+                window.actualizarResumenGruposMaestro();
+                return;
+            }
+
+            cont.innerHTML = finalGroups.map(g => `
+                <label class="card-grupo-maestro" style="display:flex; align-items:center; gap:10px; padding:9px 12px; background:white; border:1px solid var(--border); border-radius:8px; cursor:pointer; font-size:0.85rem; user-select:none; transition:all 0.15s ease; box-shadow:0 1px 2px rgba(0,0,0,0.02);">
+                    <input type="checkbox" class="chk-maestro-grupo" value="${g.audiencia}" data-id="${g.id}" data-nombre="${g.nombre}" data-materia="${g.materia}" onchange="window.actualizarResumenGruposMaestro()" style="width:17px; height:17px; accent-color:var(--primary); cursor:pointer;">
+                    <div style="display:flex; flex-direction:column; line-height:1.25; overflow:hidden;">
+                        <span style="font-weight:700; color:var(--text-main); font-size:0.9rem;">${g.nombre}</span>
+                        <span style="font-size:0.75rem; color:var(--primary); font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${g.materia}</span>
+                    </div>
+                </label>
+            `).join('');
+
+            window.actualizarResumenGruposMaestro();
         } else {
-            sel.innerHTML = '<option value="">No tienes grupos asignados</option>';
+            cont.innerHTML = '<div style="text-align:center; padding:15px; color:var(--text-muted); grid-column:1/-1;">No tienes grupos asignados actualmente.</div>';
+            window.actualizarResumenGruposMaestro();
         }
     } catch(e) {
-        console.error(e);
-        sel.innerHTML = '<option value="">Error al cargar grupos</option>';
+        console.error("Error al cargar grupos del maestro:", e);
+        cont.innerHTML = '<div style="text-align:center; padding:15px; color:var(--danger); grid-column:1/-1;">Error al cargar grupos.</div>';
     }
+};
+
+window.seleccionarTodosGruposMaestro = (marcar) => {
+    const chks = document.querySelectorAll('.chk-maestro-grupo');
+    chks.forEach(chk => {
+        chk.checked = Boolean(marcar);
+    });
+    window.actualizarResumenGruposMaestro();
+};
+
+window.actualizarResumenGruposMaestro = () => {
+    const res = document.getElementById('resumenGruposSeleccionados');
+    if(!res) return;
+    const chks = Array.from(document.querySelectorAll('.chk-maestro-grupo:checked'));
+    if (chks.length === 0) {
+        res.innerHTML = '<span style="color:var(--danger);"><i class="fa-solid fa-circle-exclamation"></i> Ningún grupo seleccionado. Selecciona al menos uno.</span>';
+    } else if (chks.length === 1) {
+        const nom = chks[0].getAttribute('data-nombre') || 'Grupo';
+        const mat = chks[0].getAttribute('data-materia') || '';
+        res.innerHTML = `<span style="color:#16a34a; font-weight:600;"><i class="fa-solid fa-check"></i> 1 grupo seleccionado: <b>${nom}</b> ${mat ? `(${mat})` : ''}</span>`;
+    } else {
+        const nombres = chks.map(c => `<b>${c.getAttribute('data-nombre')}</b>`);
+        res.innerHTML = `<span style="color:var(--primary); font-weight:700;"><i class="fa-solid fa-layer-group"></i> ${chks.length} grupos seleccionados:</span> ${nombres.join(', ')}`;
+    }
+};
+
+window.mostrarArchivosSeleccionadosMaestro = (input) => {
+    const cont = document.getElementById('listaArchivosSeleccionadosMaestro');
+    if(!cont) return;
+    const files = input.files ? Array.from(input.files) : [];
+    if(files.length === 0) {
+        cont.innerHTML = '';
+        return;
+    }
+
+    cont.innerHTML = `
+        <div style="background:white; border:1px solid #e2e8f0; border-radius:8px; padding:10px; display:flex; flex-direction:column; gap:6px;">
+            <div style="font-size:0.78rem; font-weight:700; color:var(--text-muted); text-transform:uppercase; margin-bottom:2px;">
+                <i class="fa-solid fa-paperclip"></i> ${files.length} archivo(s) listo(s) para adjuntar:
+            </div>
+            ${files.map((f) => {
+                const ext = f.name.split('.').pop().toLowerCase();
+                let icon = 'fa-file';
+                let iconColor = 'var(--text-muted)';
+                if (ext === 'pdf') { icon = 'fa-file-pdf'; iconColor = '#ef4444'; }
+                else if (['jpg', 'jpeg', 'png', 'webp'].includes(ext)) { icon = 'fa-file-image'; iconColor = '#0284c7'; }
+                else if (['doc', 'docx'].includes(ext)) { icon = 'fa-file-word'; iconColor = '#2563eb'; }
+                else if (['xls', 'xlsx'].includes(ext)) { icon = 'fa-file-excel'; iconColor = '#16a34a'; }
+                else if (['ppt', 'pptx'].includes(ext)) { icon = 'fa-file-powerpoint'; iconColor = '#ea580c'; }
+
+                const sizeStr = f.size > 1048576 ? (f.size / 1048576).toFixed(1) + ' MB' : (f.size / 1024).toFixed(0) + ' KB';
+                return `
+                    <div style="display:flex; justify-content:space-between; align-items:center; background:var(--page-bg); padding:6px 10px; border-radius:6px; font-size:0.8rem;">
+                        <div style="display:flex; align-items:center; gap:8px; overflow:hidden;">
+                            <i class="fa-solid ${icon}" style="color:${iconColor}; font-size:1rem;"></i>
+                            <span style="font-weight:600; color:var(--text-main); text-overflow:ellipsis; overflow:hidden; white-space:nowrap; max-width:280px;">${f.name}</span>
+                        </div>
+                        <span style="color:var(--text-muted); font-size:0.75rem; font-weight:500;">${sizeStr}</span>
+                    </div>
+                `;
+            }).join('')}
+        </div>
+    `;
 };
 
 window.publicarComunicadoMaestro = async () => {
     const btn = document.getElementById('btnPublicarMaestroComunicado');
     const titulo = document.getElementById('inMaestroComTitulo').value.trim();
-    const selObj = document.getElementById('selMaestroComAudiencia');
-    const aud = selObj.value;
     const msg = document.getElementById('inMaestroComMensaje').value.trim();
     const fInp = document.getElementById('inMaestroComArchivo');
+    const chks = Array.from(document.querySelectorAll('.chk-maestro-grupo:checked'));
     
-    if(!titulo || !msg || !aud) return alert("Llena todos los campos (título, audiencia y mensaje).");
-    
-    const materiaAsignada = selObj.options[selObj.selectedIndex].getAttribute('data-materia') || '';
+    if(!titulo || !msg) {
+        return alert("Por favor escribe el título y el mensaje detallado del comunicado.");
+    }
+    if(chks.length === 0) {
+        return alert("Por favor selecciona al menos un grupo destinatario.");
+    }
     
     btn.disabled = true;
     const originalHtml = btn.innerHTML;
@@ -24167,67 +24341,93 @@ window.publicarComunicadoMaestro = async () => {
     
     try {
         const uRes = await supabaseClient.auth.getUser();
+        if(!uRes.data?.user) throw new Error("Sesión no válida o expirada.");
         
         const { data: perfil } = await supabaseClient.from('perfiles').select('nombre').eq('id', uRes.data.user.id).single();
         const maestroNombre = perfil ? perfil.nombre : 'Tu Maestro';
         
+        // 1. Subir archivos si existen
         let fileUrl = null;
+        let uploadedDocs = [];
+
         if (fInp.files && fInp.files.length > 0) {
-            const file = fInp.files[0];
-            const fileExt = file.name.split('.').pop();
-            const fileName = `aviso_maestro_${Date.now()}.${fileExt}`;
+            const files = Array.from(fInp.files);
+            const totalFiles = files.length;
 
-            const { error: uploadError } = await supabaseClient.storage
-                .from('comunicados_adjuntos')
-                .upload(fileName, file);
+            for (let i = 0; i < totalFiles; i++) {
+                const file = files[i];
+                if (file.size > 25 * 1024 * 1024) {
+                    throw new Error(`El archivo "${file.name}" supera el límite de 25MB.`);
+                }
+                btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Subiendo archivo ${i+1}/${totalFiles}...`;
+                
+                const cleanName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+                const fileName = `aviso_maestro_${Date.now()}_${i}_${cleanName}`;
 
-            if (uploadError) throw uploadError;
-            const { data: { publicUrl } } = supabaseClient.storage
-                .from('comunicados_adjuntos')
-                .getPublicUrl(fileName);
-            fileUrl = publicUrl;
-        }
+                const { error: uploadError } = await supabaseClient.storage
+                    .from('comunicados_adjuntos')
+                    .upload(fileName, file);
 
-        // Formatear el mensaje para incluir quién lo mandó y de qué materia
-        const mensajeCompuesto = `De: Prof. ${maestroNombre}\nMateria: ${materiaAsignada}\n\n${msg}`;
+                if (uploadError) throw new Error(`Error al subir "${file.name}": ${uploadError.message || uploadError}`);
 
-        let audienciasObj = [];
-        if(aud.startsWith('Grado_')) {
-            const numGrado = aud.replace('Grado_','');
-            const { data: grps } = await supabaseClient.from('grupos').select('id').like('nombre', numGrado+'%').eq('plantel_id', state.plantelId);
-            if(grps && grps.length > 0) {
-                grps.forEach(g => {
-                    audienciasObj.push('Grupo_' + g.id);
+                const { data: { publicUrl } } = supabaseClient.storage
+                    .from('comunicados_adjuntos')
+                    .getPublicUrl(fileName);
+
+                uploadedDocs.push({
+                    name: file.name,
+                    url: publicUrl,
+                    size: file.size
                 });
-            } else {
-                audienciasObj.push(aud);
             }
-        } else {
-            audienciasObj.push(aud);
+
+            if (uploadedDocs.length === 1) {
+                fileUrl = uploadedDocs[0].url;
+            } else if (uploadedDocs.length > 1) {
+                fileUrl = JSON.stringify(uploadedDocs);
+            }
         }
 
-        const inserts = audienciasObj.map(audiencia => ({
-            autor_id: uRes.data.user.id,
-            tipo: 'AvisoMaestro',
-            titulo: titulo,
-            mensaje: mensajeCompuesto,
-            audiencia: audiencia,
-            archivo_url: fileUrl,
-            plantel_id: state.plantelId
-        }));
-        
+        btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Enviando comunicados...';
+
+        // 2. Enlace de respaldo en texto si son varios archivos
+        let fallbackTextoArchivos = '';
+        if (uploadedDocs.length > 1) {
+            fallbackTextoArchivos = '\n\n📎 Archivos adjuntos:\n' + uploadedDocs.map(d => `• ${d.name}: ${d.url}`).join('\n');
+        }
+
+        // 3. Crear inserts por cada grupo seleccionado
+        const inserts = chks.map(chk => {
+            const aud = chk.value; // e.g. Grupo_UUID
+            const materia = chk.getAttribute('data-materia') || '';
+            const mensajeCompuesto = `De: Prof. ${maestroNombre}\nMateria: ${materia}\n\n${msg}${fallbackTextoArchivos}`;
+            return {
+                autor_id: uRes.data.user.id,
+                tipo: 'AvisoMaestro',
+                titulo: titulo,
+                mensaje: mensajeCompuesto,
+                audiencia: aud,
+                archivo_url: fileUrl,
+                plantel_id: state.plantelId
+            };
+        });
+
         const { error } = await supabaseClient.from('comunicados').insert(inserts);
         if(error) throw error;
         
-        alert("Comunicado enviado exitosamente al grupo/grado.");
+        window.showToast(`Comunicado enviado exitosamente a ${inserts.length} grupo(s).`, "success");
+        
+        // Limpiar campos
         document.getElementById('inMaestroComTitulo').value = '';
         document.getElementById('inMaestroComMensaje').value = '';
-        selObj.selectedIndex = 0;
         fInp.value = '';
+        const listArchivos = document.getElementById('listaArchivosSeleccionadosMaestro');
+        if(listArchivos) listArchivos.innerHTML = '';
+        window.seleccionarTodosGruposMaestro(false);
         
         window.loadComunicadosEnviadosMaestro();
     } catch(e) {
-        console.error(e);
+        console.error("Error al publicar comunicado:", e);
         alert("Ocurrió un error al enviar: " + (e.message || ""));
     } finally {
         btn.disabled = false;
@@ -24313,7 +24513,7 @@ window.loadComunicadosEnviadosMaestro = async () => {
                </div>
                <div style="font-size:0.8rem; color:var(--secondary);">Enviado a: ${audLabel} - ${new Date(c.fecha_envio).toLocaleString('es-MX')}</div>
                <div style="font-size:0.85rem; color:var(--text-color); white-space:pre-wrap; opacity:0.85; max-height:80px; overflow:hidden; text-overflow:ellipsis;">${(c.mensaje || '').replace(/\[REF_ID:.*?\]/gi, '').replace(/\[REF_REPORTE:.*?\]/gi, '').trim()}</div>
-               ${c.archivo_url ? `<div style="margin-top:2px;"><a href="${c.archivo_url}" target="_blank" class="btn btn-outline btn-xs" style="color:var(--primary); border-color:var(--primary); display:inline-flex; gap:4px; align-items:center; text-decoration:none;"><i class="fa-solid fa-paperclip"></i> Ver adjunto</a></div>` : ''}
+               ${window.renderAdjuntosComunicado ? window.renderAdjuntosComunicado(c.archivo_url, 'btn btn-outline btn-xs') : ''}
             </div>
             `;
         }).join('');
