@@ -437,7 +437,7 @@ CREATE POLICY "Personal y maestros suben adjuntos comunicados" ON storage.object
     TO authenticated
     WITH CHECK (
         bucket_id = 'comunicados_adjuntos' AND
-        (SELECT rol FROM perfiles WHERE perfiles.id = auth.uid()) IN ('admin', 'administrador', 'directivo', 'director', 'subdirector', 'maestro', 'docente', 'coordinador', 'prefectura', 'control_escolar')
+        (SELECT rol::text FROM public.perfiles WHERE perfiles.id = auth.uid()) IN ('admin', 'maestro', 'directivo', 'apoyo')
     );
 
 -- 12. TABLA ACTIVIDADES DOCENTE
