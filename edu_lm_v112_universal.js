@@ -11235,6 +11235,27 @@ window.firmarEncuadre = async (encuadre_id, alumno_id) => {
     }
 };
 
+window._guardarAvisoVistoLocal = (id, userId, alumnoId) => {
+    try {
+        if (userId) {
+            const k = 'edulm_coms_vistos_' + userId;
+            const cur = JSON.parse(localStorage.getItem(k) || '[]');
+            if (!cur.includes(id)) {
+                cur.push(id);
+                localStorage.setItem(k, JSON.stringify(cur));
+            }
+        }
+        if (alumnoId) {
+            const k2 = 'edulm_coms_vistos_al_' + alumnoId;
+            const cur2 = JSON.parse(localStorage.getItem(k2) || '[]');
+            if (!cur2.includes(id)) {
+                cur2.push(id);
+                localStorage.setItem(k2, JSON.stringify(cur2));
+            }
+        }
+    } catch(e) {}
+};
+
 window.loadTimelineAlumno = async (mostrarHistorial = false, selectedDateStr = null) => {
     const cont = document.getElementById('timelineAlumnoContenedor');
     if(!cont) return;
@@ -11258,15 +11279,15 @@ window.loadTimelineAlumno = async (mostrarHistorial = false, selectedDateStr = n
         const u = await supabaseClient.auth.getUser();
         if(!u.data?.user) return;
         
-        let audArr = ['General', 'Alumnos'];
+        let audArr = ['General', 'Alumnos', 'Todos'];
         let al = null;
         const userEmail = (u.data?.user?.email || '').toLowerCase().trim();
         const userId = u.data?.user?.id;
 
         const { data: alData } = await supabaseClient
             .from('alumnos')
-            .select('id, creado_en, grupo_id, grado, nombre, matricula')
-            .or(`contacto_email.ilike.${userEmail},perfil_id.eq.${userId}`)
+            .select('id, creado_en, grupo_id, grado, nombre, matricula, perfil_id, contacto_email')
+            .or(`contacto_email.ilike.%${userEmail}%,perfil_id.eq.${userId}`)
             .maybeSingle();
         al = alData;
 
@@ -11274,16 +11295,19 @@ window.loadTimelineAlumno = async (mostrarHistorial = false, selectedDateStr = n
             const possibleMat = userEmail.split('@')[0].toUpperCase().trim();
             const { data: alMat } = await supabaseClient
                 .from('alumnos')
-                .select('id, creado_en, grupo_id, grado, nombre, matricula')
-                .eq('matricula', possibleMat)
+                .select('id, creado_en, grupo_id, grado, nombre, matricula, perfil_id, contacto_email')
+                .or(`matricula.ilike.%${possibleMat}%,matricula.eq.${possibleMat}`)
                 .maybeSingle();
             if (alMat) {
                 al = alMat;
-                await supabaseClient.from('alumnos').update({ perfil_id: userId }).eq('id', al.id).catch(() => {});
             }
         }
 
-        if(al) {
+        if (al) {
+            if (!al.perfil_id && userId) {
+                await supabaseClient.from('alumnos').update({ perfil_id: userId }).eq('id', al.id).catch(() => {});
+                al.perfil_id = userId;
+            }
             console.log(">>> [TIMELINE] Alumno detectado:", al.id, "| Inscrito en:", al.creado_en);
             audArr.push('Alumno_' + al.id);
             if(al.grupo_id) audArr.push('Grupo_' + al.grupo_id);
@@ -11293,10 +11317,27 @@ window.loadTimelineAlumno = async (mostrarHistorial = false, selectedDateStr = n
             console.warn(">>> [TIMELINE] No se encontró vínculo de Alumno para el usuario logueado.");
         }
         
-        // Obtener vistos
-        const { data: vistos } = await supabaseClient.from('comunicados_vistos').select('comunicado_id').eq('perfil_id', u.data.user.id);
+        // Obtener vistos tanto de BD como de localStorage (Dual-persistence)
+        let vistosQuery = supabaseClient.from('comunicados_vistos').select('comunicado_id');
+        if (al?.perfil_id && al.perfil_id !== userId) {
+            vistosQuery = vistosQuery.or(`perfil_id.eq.${userId},perfil_id.eq.${al.perfil_id}`);
+        } else {
+            vistosQuery = vistosQuery.eq('perfil_id', userId);
+        }
+        const { data: vistos } = await vistosQuery;
         const vistosIds = vistos ? vistos.map(v => v.comunicado_id) : [];
-        const yaVistosIds = new Set(vistosIds);
+
+        // Leer caché local
+        const localKey = 'edulm_coms_vistos_' + userId;
+        const localKeyAl = al?.id ? ('edulm_coms_vistos_al_' + al.id) : null;
+        let localVistos = [];
+        try {
+            const v1 = JSON.parse(localStorage.getItem(localKey) || '[]');
+            const v2 = localKeyAl ? JSON.parse(localStorage.getItem(localKeyAl) || '[]') : [];
+            localVistos = [...new Set([...v1, ...v2])];
+        } catch(e) {}
+
+        const yaVistosIds = new Set([...vistosIds, ...localVistos]);
 
         // Obtener firmas registradas para no mostrar encuadres o boletas ya firmados
         let signedEncIds = [];
@@ -11354,9 +11395,8 @@ window.loadTimelineAlumno = async (mostrarHistorial = false, selectedDateStr = n
                 }
             });
 
-        // Auto-marcar como vistos los comunicados que NO requieren firma explícita (Zero-click)
-        // Únicamente se marcan los que acaban de ser presentados en pantalla al alumno
-        const noVistosSinFirma = dFinal.filter(c => {
+        // Registrar lectura en segundo plano para que el profesor/directivo vea que el alumno abrió su portal
+        const noVistosSinFirma = (data || []).filter(c => {
             const esEnc = (c.titulo && c.titulo.toLowerCase().includes('encuadre')) || false;
             const esBol = (c.tipo === 'aviso_firma_boleta') || false;
             return !esEnc && !esBol && !yaVistosIds.has(c.id);
@@ -11365,34 +11405,32 @@ window.loadTimelineAlumno = async (mostrarHistorial = false, selectedDateStr = n
         if (noVistosSinFirma.length > 0) {
             const ahoraIso = new Date().toISOString();
             const inserts = noVistosSinFirma.map(c => ({
-                perfil_id: u.data.user.id,
+                perfil_id: userId,
                 comunicado_id: c.id,
                 visto_en: ahoraIso
             }));
-            try {
-                // Asegurar que el perfil exista para evitar FK constraint error
-                await supabaseClient.from('perfiles').upsert({
-                    id: u.data.user.id,
-                    rol: 'alumno',
-                    nombre: al?.nombre || u.data.user.email,
-                    plantel_id: state.plantelId || null
-                }, { onConflict: 'id' }).catch(() => {});
+            noVistosSinFirma.forEach(c => {
+                window._guardarAvisoVistoLocal(c.id, userId, al?.id);
+            });
+            // Guardar en BD silenciosamente
+            (async () => {
+                try {
+                    await supabaseClient.from('perfiles').upsert({
+                        id: userId,
+                        rol: 'alumno',
+                        nombre: al?.nombre || u.data.user.email,
+                        plantel_id: state.plantelId || null
+                    }, { onConflict: 'id' }).catch(() => {});
 
-                const { error: upErr } = await supabaseClient.from('comunicados_vistos')
-                    .upsert(inserts, { onConflict: 'perfil_id,comunicado_id' });
-                if (upErr) {
-                    console.warn("Aviso upsert comunicados_vistos:", upErr);
-                    for (const ins of inserts) {
-                        await supabaseClient.from('comunicados_vistos').insert(ins).catch(() => {});
+                    const { error: upErr } = await supabaseClient.from('comunicados_vistos')
+                        .upsert(inserts, { onConflict: 'perfil_id,comunicado_id' });
+                    if (upErr) {
+                        for (const ins of inserts) {
+                            await supabaseClient.from('comunicados_vistos').insert(ins).catch(() => {});
+                        }
                     }
-                }
-                noVistosSinFirma.forEach(c => {
-                    vistosIds.push(c.id);
-                    yaVistosIds.add(c.id);
-                });
-            } catch (err) {
-                console.warn("Error auto-marcando comunicados vistos:", err);
-            }
+                } catch(e) {}
+            })();
         }
 
         if(!dFinal || dFinal.length === 0) {
@@ -11446,7 +11484,7 @@ window.loadTimelineAlumno = async (mostrarHistorial = false, selectedDateStr = n
                    btnAccion = '<span style="font-size:0.75rem; color:var(--success); display:flex; align-items:center; gap:4px;"><i class="fa-solid fa-pen-nib"></i> Firmado</span>';
                }
            } else {
-               if (esHistorial) {
+               if (esVisto) {
                    btnAccion = '<span class="badge" style="font-size:0.75rem; color:#15803d; background:#dcfce7; border:1px solid #86efac; padding:3px 8px; border-radius:6px; display:inline-flex; align-items:center; gap:4px;"><i class="fa-solid fa-check-double"></i> Revisado</span>';
                } else {
                    btnAccion = `<button onclick="window.marcarAvisoEnterado('${c.id}')" class="btn btn-sm" style="font-size:0.75rem; display:inline-flex; align-items:center; gap:5px; color:#15803d; background:#dcfce7; border:1px solid #86efac; padding:3px 10px; border-radius:6px; cursor:pointer;" title="Marcar como revisado">
@@ -11456,7 +11494,7 @@ window.loadTimelineAlumno = async (mostrarHistorial = false, selectedDateStr = n
            }
            
            return `
-           <div class="timeline-item" id="aviso-${c.id}" style="animation: fadeInUp 0.5s ease backwards; animation-delay: ${delay}s; ${esVisto && esHistorial ? 'opacity: 0.7; background:#f8fafc;' : 'background:white;'} border-radius:10px; transition:all 0.3s ease;">
+           <div class="timeline-item" id="aviso-${c.id}" style="animation: fadeInUp 0.5s ease backwards; animation-delay: ${delay}s; ${esVisto ? 'opacity: 0.7; background:#f8fafc; border:1px solid #e2e8f0;' : 'background:white; border:1px solid #e2e8f0;'} border-radius:10px; transition:all 0.3s ease;">
              <div class="timeline-icon" style="border-color: ${tipoColor}; background:white;"><i class="fa-solid ${icon}" style="color: ${tipoColor};"></i></div>
              <div class="timeline-content" style="position:relative">
                <div style="font-size:0.75rem; color: var(--text-muted); float:right;">${date}</div>
@@ -11482,33 +11520,77 @@ window.loadTimelineAlumno = async (mostrarHistorial = false, selectedDateStr = n
 window.marcarAvisoEnterado = async (id) => {
     try {
         const u = await supabaseClient.auth.getUser();
-        if(!u.data?.user) return;
+        const userId = u.data?.user?.id;
         
-        const { error } = await supabaseClient.from('comunicados_vistos').upsert({
-            perfil_id: u.data.user.id,
-            comunicado_id: id,
-            visto_en: new Date().toISOString()
-        }, { onConflict: 'perfil_id,comunicado_id' });
-        
-        if(error) throw error;
-        
+        // 1. Inmediatamente actualizar la UI del card en pantalla:
+        // Ponerlo en tenue y con el badge de Revisado para feedback visual instantáneo
         const card = document.getElementById(`aviso-${id}`);
         if(card) {
-            card.style.transform = 'translateX(100%)';
-            card.style.opacity = '0';
-            card.style.transition = 'all 0.5s ease';
-            setTimeout(() => {
-                card.remove();
-                const cont = document.getElementById('timelineAlumnoContenedor');
-                if (cont && cont.querySelectorAll('.timeline-item').length === 0) {
-                    cont.innerHTML = `<div style="padding:40px 20px; text-align:center; color:var(--text-muted);">
-                        <i class="fa-solid fa-check-circle" style="font-size:3rem; margin-bottom:15px; opacity:0.3"></i>
-                        <p>¡Todo al día! No tienes comunicados pendientes.</p>
-                    </div>`;
-                }
-            }, 500);
+            card.style.opacity = '0.7';
+            card.style.background = '#f8fafc';
+            card.style.borderColor = '#e2e8f0';
+            const btn = card.querySelector('button[onclick*="marcarAvisoEnterado"]');
+            if(btn && btn.parentElement) {
+                btn.parentElement.innerHTML = '<span class="badge" style="font-size:0.75rem; color:#15803d; background:#dcfce7; border:1px solid #86efac; padding:3px 8px; border-radius:6px; display:inline-flex; align-items:center; gap:4px;"><i class="fa-solid fa-check-double"></i> Revisado</span>';
+            }
         }
-    } catch(e) { console.error(e); }
+
+        // 2. Dual persistence en localStorage INMEDIATAMENTE
+        if(window._guardarAvisoVistoLocal) {
+            window._guardarAvisoVistoLocal(id, userId);
+        }
+
+        // 3. Si no estamos en historial (estamos en Recientes), dar pausa visual y retirar de la lista
+        const inputFecha = document.getElementById('filtroFechaAvisos');
+        const esHistorial = Boolean(inputFecha && inputFecha.value);
+        if(!esHistorial && card) {
+            setTimeout(() => {
+                card.style.transform = 'translateX(100%)';
+                card.style.opacity = '0';
+                card.style.transition = 'all 0.5s ease';
+                setTimeout(() => {
+                    card.remove();
+                    const cont = document.getElementById('timelineAlumnoContenedor');
+                    if (cont && cont.querySelectorAll('.timeline-item').length === 0) {
+                        cont.innerHTML = `<div style="padding:40px 20px; text-align:center; color:var(--text-muted);">
+                            <i class="fa-solid fa-check-circle" style="font-size:3rem; margin-bottom:15px; opacity:0.3"></i>
+                            <p>¡Todo al día! No tienes comunicados pendientes.</p>
+                        </div>`;
+                    }
+                }, 500);
+            }, 400);
+        }
+
+        // 4. Persistir en Supabase comunicados_vistos
+        if(userId) {
+            const ahoraIso = new Date().toISOString();
+            await supabaseClient.from('perfiles').upsert({
+                id: userId,
+                rol: 'alumno',
+                plantel_id: state.plantelId || null
+            }, { onConflict: 'id' }).catch(() => {});
+
+            const { error: upErr } = await supabaseClient.from('comunicados_vistos').upsert({
+                perfil_id: userId,
+                comunicado_id: id,
+                visto_en: ahoraIso
+            }, { onConflict: 'perfil_id,comunicado_id' });
+
+            if(upErr) {
+                console.warn("Aviso upsert comunicados_vistos:", upErr);
+                await supabaseClient.from('comunicados_vistos').insert({
+                    perfil_id: userId,
+                    comunicado_id: id,
+                    visto_en: ahoraIso
+                }).catch(() => {});
+            }
+        }
+
+        // 5. Actualizar badge
+        if (window.updateNotificationBadge) window.updateNotificationBadge(true);
+    } catch(e) { 
+        console.error("Error en marcarAvisoEnterado:", e); 
+    }
 };
 
 window.loadCitatoriosAlumno = async (alumnoId) => {
@@ -11716,9 +11798,16 @@ window.firmarEncuadreDesdeTimeline = async (comunicadoId, btn) => {
             }
         }
 
-        // 5. Actualizar UI
+        // 5. Actualizar UI y persistencia local
+        if(window._guardarAvisoVistoLocal) {
+            window._guardarAvisoVistoLocal(comunicadoId, u.data?.user?.id, al?.id);
+        }
+
         const card = document.getElementById(`aviso-${comunicadoId}`);
         if(card) {
+            card.style.opacity = '0.7';
+            card.style.background = '#f8fafc';
+            card.style.borderColor = '#e2e8f0';
             const btnWrap = card.querySelector('.btn-primary')?.parentElement;
             if(btnWrap) btnWrap.innerHTML = '<span style="color:var(--success); font-size:0.75rem;"><i class="fa-solid fa-pen-nib"></i> Firmado ✔</span>';
             const inputFecha = document.getElementById('filtroFechaAvisos');
@@ -11738,7 +11827,7 @@ window.firmarEncuadreDesdeTimeline = async (comunicadoId, btn) => {
                             </div>`;
                         }
                     }, 500);
-                }, 800);
+                }, 500);
             }
         }
     } catch(e) {
@@ -19554,22 +19643,33 @@ window.firmarBoletaDesdeTimeline = async (comunicadoId, btn) => {
                 plantel_id: pId
             }]);
         }
+        // Guardar persistencia local y efecto visual tenue
+        if(window._guardarAvisoVistoLocal) {
+            window._guardarAvisoVistoLocal(comunicadoId, u.data?.user?.id, alumnoId);
+        }
 
         // Animar la eliminación del card del timeline
         const card = document.getElementById(`aviso-${comunicadoId}`);
         if(card) {
-            card.style.transform = 'translateX(100%)';
-            card.style.opacity = '0';
-            card.style.transition = 'all 0.5s ease';
+            card.style.opacity = '0.7';
+            card.style.background = '#f8fafc';
+            card.style.borderColor = '#e2e8f0';
+            const btnWrap = card.querySelector('.btn-primary')?.parentElement;
+            if(btnWrap) btnWrap.innerHTML = '<span style="color:var(--success); font-size:0.75rem;"><i class="fa-solid fa-pen-nib"></i> Firmado ✔</span>';
             setTimeout(() => {
-                card.remove();
-                const cont = document.getElementById('timelineAlumnoContenedor');
-                if (cont && cont.querySelectorAll('.timeline-item').length === 0) {
-                    cont.innerHTML = `<div style="padding:40px 20px; text-align:center; color:var(--text-muted);">
-                        <i class="fa-solid fa-check-circle" style="font-size:3rem; margin-bottom:15px; opacity:0.3"></i>
-                        <p>¡Todo al día! No tienes comunicados pendientes.</p>
-                    </div>`;
-                }
+                card.style.transform = 'translateX(100%)';
+                card.style.opacity = '0';
+                card.style.transition = 'all 0.5s ease';
+                setTimeout(() => {
+                    card.remove();
+                    const cont = document.getElementById('timelineAlumnoContenedor');
+                    if (cont && cont.querySelectorAll('.timeline-item').length === 0) {
+                        cont.innerHTML = `<div style="padding:40px 20px; text-align:center; color:var(--text-muted);">
+                            <i class="fa-solid fa-check-circle" style="font-size:3rem; margin-bottom:15px; opacity:0.3"></i>
+                            <p>¡Todo al día! No tienes comunicados pendientes.</p>
+                        </div>`;
+                    }
+                }, 500);
             }, 500);
         }
 
@@ -21738,16 +21838,16 @@ window.initFlatpickrAvisos = async (isAlumno = false) => {
             const userEmail = (uRes.data?.user?.email || '').toLowerCase().trim();
             const { data: alData } = await supabaseClient
                 .from('alumnos')
-                .select('id, grupo_id, grado, matricula')
-                .or(`contacto_email.ilike.${userEmail},perfil_id.eq.${userId}`)
+                .select('id, grupo_id, grado, matricula, perfil_id, contacto_email')
+                .or(`contacto_email.ilike.%${userEmail}%,perfil_id.eq.${userId}`)
                 .maybeSingle();
             al = alData;
             if (!al && userEmail) {
                 const possibleMat = userEmail.split('@')[0].toUpperCase().trim();
                 const { data: alMat } = await supabaseClient
                     .from('alumnos')
-                    .select('id, grupo_id, grado, matricula')
-                    .eq('matricula', possibleMat)
+                    .select('id, grupo_id, grado, matricula, perfil_id, contacto_email')
+                    .or(`matricula.ilike.%${possibleMat}%,matricula.eq.${possibleMat}`)
                     .maybeSingle();
                 if (alMat) al = alMat;
             }
