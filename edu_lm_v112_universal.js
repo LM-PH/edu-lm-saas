@@ -4063,17 +4063,18 @@ window.obtenerEstadoLecturaReportes = async (reportes = []) => {
         const alumnoAuds = [...new Set(reportes.map(r => r.alumno_id ? `Alumno_${r.alumno_id}` : null).filter(Boolean))];
         if (alumnoAuds.length === 0) return {};
 
+        // Query comunicados (NO incluir creado_en porque en DB la columna es fecha_envio)
         let comQuery = supabaseClient
             .from('comunicados')
-            .select('id, mensaje, audiencia, creado_en, fecha_envio, tipo, titulo')
+            .select('id, mensaje, audiencia, fecha_envio, tipo, titulo')
             .in('audiencia', alumnoAuds);
 
-        if (state.plantelId) {
-            comQuery = comQuery.eq('plantel_id', state.plantelId);
-        }
-
         const { data: coms, error: errComs } = await comQuery;
-        if (errComs || !coms || coms.length === 0) return {};
+        if (errComs) {
+            console.warn("Aviso en obtenerEstadoLecturaReportes:", errComs);
+            return {};
+        }
+        if (!coms || coms.length === 0) return {};
 
         const comIds = coms.map(c => c.id);
         const { data: vistos, error: errVistos } = await supabaseClient
@@ -4081,9 +4082,15 @@ window.obtenerEstadoLecturaReportes = async (reportes = []) => {
             .select('comunicado_id, visto_en')
             .in('comunicado_id', comIds);
 
+        if (errVistos) {
+            console.warn("Aviso consultando comunicados_vistos:", errVistos);
+        }
+
         const vistoMap = {};
         (vistos || []).forEach(v => {
-            vistoMap[v.comunicado_id] = v.visto_en;
+            if (!vistoMap[v.comunicado_id] || new Date(v.visto_en) > new Date(vistoMap[v.comunicado_id])) {
+                vistoMap[v.comunicado_id] = v.visto_en;
+            }
         });
 
         const resMap = {};
@@ -4095,15 +4102,37 @@ window.obtenerEstadoLecturaReportes = async (reportes = []) => {
             // 1. Coincidencia directa con [REF_REPORTE: uuid]
             let comMatch = alumnoComs.find(c => c.mensaje && c.mensaje.includes(r.id));
             
-            // 2. Si no hay tag exacto (reportes anteriores a v163):
+            // 2. Coincidencia por texto/descripción (para reportes que no tengan el tag exacto)
             if (!comMatch && alumnoComs.length > 0) {
-                // Si el alumno tiene comunicados que ya fueron vistos, darles prioridad
-                const vistosDelAlumno = alumnoComs.filter(c => vistoMap[c.id]);
-                if (vistosDelAlumno.length > 0) {
-                    comMatch = vistosDelAlumno[0];
-                } else {
-                    comMatch = alumnoComs[0];
+                const descClean = (r.descripcion || '').replace(/\[.*?\]/g, '').trim().toLowerCase();
+                if (descClean.length >= 4) {
+                    const words = descClean.split(/\s+/).slice(0, 3).join(' ');
+                    comMatch = alumnoComs.find(c => c.mensaje && c.mensaje.toLowerCase().includes(words));
                 }
+            }
+
+            // 3. Coincidencia por cercanía temporal (fecha del reporte vs fecha_envio del comunicado)
+            if (!comMatch && alumnoComs.length > 0) {
+                const repTime = new Date(r.fecha || r.creado_en || r.created_at || Date.now()).getTime();
+                let minDiff = Infinity;
+                let bestByDate = null;
+                alumnoComs.forEach(c => {
+                    const comTime = new Date(c.fecha_envio).getTime();
+                    const diff = Math.abs(comTime - repTime);
+                    if (diff < minDiff) {
+                        minDiff = diff;
+                        bestByDate = c;
+                    }
+                });
+                if (bestByDate && minDiff < 4 * 24 * 60 * 60 * 1000) {
+                    comMatch = bestByDate;
+                }
+            }
+
+            // 4. Fallback: Si el alumno tiene comunicados vistos, priorizarlos
+            if (!comMatch && alumnoComs.length > 0) {
+                const vistosDelAlumno = alumnoComs.filter(c => vistoMap[c.id]);
+                comMatch = (vistosDelAlumno.length > 0) ? vistosDelAlumno[0] : alumnoComs[0];
             }
 
             if (comMatch && vistoMap[comMatch.id]) {
@@ -4264,7 +4293,7 @@ window.buscarMisReportes = async (term = '') => {
             .select('*, alumnos!inner(nombre, matricula, grupo_id)')
             .eq('autor_id', u.data.user.id)
             .eq('plantel_id', state.plantelId)
-            .order('creado_en', { ascending: false })
+            .order('fecha', { ascending: false })
             .limit(50);
         
         if(term && term.trim().length > 0) {
@@ -4671,7 +4700,7 @@ window.loadReportesRecientesApoyo = async () => {
             .from('reportes_conducta')
             .select('*, alumnos!alumno_id(nombre, matricula), autor:perfiles!autor_id(nombre, rol)')
             .eq('plantel_id', state.plantelId)
-            .order('creado_en', { ascending: false })
+            .order('fecha', { ascending: false })
             .limit(15);
 
         if(error) {
@@ -4681,7 +4710,7 @@ window.loadReportesRecientesApoyo = async () => {
                 .from('reportes_conducta')
                 .select('*, alumnos!alumno_id(nombre, matricula)')
                 .eq('plantel_id', state.plantelId)
-                .order('creado_en', { ascending: false })
+                .order('fecha', { ascending: false })
                 .limit(15);
             
             if(e2) throw e2;
@@ -4711,7 +4740,7 @@ const renderListaReciente = (data, cont, estadoLecturas = {}) => {
     }
 
     cont.innerHTML = data.map(r => {
-        const dateObj = new Date(r.creado_en);
+        const dateObj = new Date(r.fecha || r.creado_en || r.created_at || Date.now());
         const fechaStr = dateObj.toLocaleDateString();
         const hour = dateObj.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' });
         const sevColor = r.gravedad === 'Grave' ? 'var(--danger)' : (r.gravedad === 'Moderado' ? 'var(--warning)' : 'var(--success)');
@@ -11228,12 +11257,29 @@ window.loadTimelineAlumno = async (modo = 'pendientes', selectedDateStr = null) 
         if(!u.data?.user) return;
         
         let audArr = ['General', 'Alumnos'];
-        
-        const { data: al } = await supabaseClient
+        let al = null;
+        const userEmail = (u.data?.user?.email || '').toLowerCase().trim();
+        const userId = u.data?.user?.id;
+
+        const { data: alData } = await supabaseClient
             .from('alumnos')
-            .select('id, creado_en, grupo_id, grado')
-            .or(`contacto_email.eq.${u.data.user.email},perfil_id.eq.${u.data.user.id}`)
+            .select('id, creado_en, grupo_id, grado, nombre, matricula')
+            .or(`contacto_email.ilike.${userEmail},perfil_id.eq.${userId}`)
             .maybeSingle();
+        al = alData;
+
+        if (!al && userEmail) {
+            const possibleMat = userEmail.split('@')[0].toUpperCase().trim();
+            const { data: alMat } = await supabaseClient
+                .from('alumnos')
+                .select('id, creado_en, grupo_id, grado, nombre, matricula')
+                .eq('matricula', possibleMat)
+                .maybeSingle();
+            if (alMat) {
+                al = alMat;
+                await supabaseClient.from('alumnos').update({ perfil_id: userId }).eq('id', al.id).catch(() => {});
+            }
+        }
 
         if(al) {
             console.log(">>> [TIMELINE] Alumno detectado:", al.id, "| Inscrito en:", al.creado_en);
@@ -11252,7 +11298,9 @@ window.loadTimelineAlumno = async (modo = 'pendientes', selectedDateStr = null) 
 
         console.log(">>> [TIMELINE] Buscando comunicados para audiencia:", audArr);
         let query = supabaseClient.from('comunicados').select('*').in('audiencia', audArr).order('fecha_envio', { ascending: false });
-        if(state.plantelId) query = query.eq('plantel_id', state.plantelId);
+        if(state.plantelId) {
+            query = query.or(`plantel_id.eq.${state.plantelId},plantel_id.is.null,audiencia.ilike.Alumno_%`);
+        }
 
         if(modoFinal === 'historial') {
             const fecha = selectedDateStr || document.getElementById('filtroFechaAvisos')?.value;
@@ -11286,6 +11334,14 @@ window.loadTimelineAlumno = async (modo = 'pendientes', selectedDateStr = null) 
                 visto_en: ahoraIso
             }));
             try {
+                // Asegurar que el perfil exista para evitar FK constraint error
+                await supabaseClient.from('perfiles').upsert({
+                    id: u.data.user.id,
+                    rol: 'alumno',
+                    nombre: al?.nombre || u.data.user.email,
+                    plantel_id: state.plantelId || null
+                }, { onConflict: 'id' }).catch(() => {});
+
                 const { error: upErr } = await supabaseClient.from('comunicados_vistos')
                     .upsert(inserts, { onConflict: 'perfil_id,comunicado_id' });
                 if (upErr) {
