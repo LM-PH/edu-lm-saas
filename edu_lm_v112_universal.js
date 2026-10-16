@@ -4063,12 +4063,16 @@ window.obtenerEstadoLecturaReportes = async (reportes = []) => {
         const alumnoAuds = [...new Set(reportes.map(r => r.alumno_id ? `Alumno_${r.alumno_id}` : null).filter(Boolean))];
         if (alumnoAuds.length === 0) return {};
 
-        const { data: coms, error: errComs } = await supabaseClient
+        let comQuery = supabaseClient
             .from('comunicados')
-            .select('id, mensaje, audiencia, creado_en, fecha_envio')
-            .in('audiencia', alumnoAuds)
-            .eq('plantel_id', state.plantelId);
+            .select('id, mensaje, audiencia, creado_en, fecha_envio, tipo, titulo')
+            .in('audiencia', alumnoAuds);
 
+        if (state.plantelId) {
+            comQuery = comQuery.eq('plantel_id', state.plantelId);
+        }
+
+        const { data: coms, error: errComs } = await comQuery;
         if (errComs || !coms || coms.length === 0) return {};
 
         const comIds = coms.map(c => c.id);
@@ -4085,27 +4089,34 @@ window.obtenerEstadoLecturaReportes = async (reportes = []) => {
         const resMap = {};
         reportes.forEach(r => {
             if (!r || !r.id) return;
-            // 1. Intento de coincidencia directa con [REF_REPORTE: uuid]
-            let comMatch = coms.find(c => c.mensaje && c.mensaje.includes(r.id));
+            const aud = `Alumno_${r.alumno_id}`;
+            const alumnoComs = coms.filter(c => c.audiencia === aud);
+
+            // 1. Coincidencia directa con [REF_REPORTE: uuid]
+            let comMatch = alumnoComs.find(c => c.mensaje && c.mensaje.includes(r.id));
             
-            // 2. Si no hay tag exacto (reportes antiguos), buscar por alumno y ventana de tiempo cercana (+-10 min)
-            if (!comMatch && r.alumno_id) {
-                const repTime = new Date(r.creado_en || r.fecha || r.created_at).getTime();
-                if (!isNaN(repTime)) {
-                    comMatch = coms.find(c => {
-                        if (c.audiencia !== `Alumno_${r.alumno_id}`) return false;
-                        const comTime = new Date(c.fecha_envio || c.creado_en).getTime();
-                        return Math.abs(comTime - repTime) < 10 * 60 * 1000;
-                    });
+            // 2. Si no hay tag exacto (reportes anteriores a v163):
+            if (!comMatch && alumnoComs.length > 0) {
+                // Si el alumno tiene comunicados que ya fueron vistos, darles prioridad
+                const vistosDelAlumno = alumnoComs.filter(c => vistoMap[c.id]);
+                if (vistosDelAlumno.length > 0) {
+                    comMatch = vistosDelAlumno[0];
+                } else {
+                    comMatch = alumnoComs[0];
                 }
             }
 
-            if (comMatch) {
-                const vistoEn = vistoMap[comMatch.id];
+            if (comMatch && vistoMap[comMatch.id]) {
                 resMap[r.id] = {
                     comunicado_id: comMatch.id,
-                    visto: !!vistoEn,
-                    visto_en: vistoEn || null
+                    visto: true,
+                    visto_en: vistoMap[comMatch.id]
+                };
+            } else if (comMatch) {
+                resMap[r.id] = {
+                    comunicado_id: comMatch.id,
+                    visto: false,
+                    visto_en: null
                 };
             } else {
                 resMap[r.id] = {
@@ -4125,13 +4136,13 @@ window.obtenerEstadoLecturaReportes = async (reportes = []) => {
 
 window.renderBadgeLectura = (estadoLectura) => {
     if (!estadoLectura) {
-        return `<span class="badge" style="background:#fef9c3; color:#854d0e; border:1px solid #fde047; font-size:0.75rem; font-weight:600; display:inline-flex; align-items:center; gap:4px;"><i class="fa-solid fa-clock"></i> Pendiente</span>`;
+        return `<span class="badge" style="background:#fef9c3; color:#854d0e; border:1px solid #fde047; font-size:0.75rem; font-weight:600; display:inline-flex; align-items:center; gap:4px;"><i class="fa-solid fa-eye-slash"></i> Sin leer por tutor</span>`;
     }
     if (estadoLectura.visto) {
         const fechaStr = estadoLectura.visto_en ? new Date(estadoLectura.visto_en).toLocaleDateString('es-MX', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : '';
         return `<span class="badge" style="background:#dcfce7; color:#15803d; border:1px solid #86efac; font-size:0.75rem; font-weight:600; display:inline-flex; align-items:center; gap:4px;"><i class="fa-solid fa-eye"></i> Revisado por tutor ${fechaStr ? `(${fechaStr})` : ''}</span>`;
     } else {
-        return `<span class="badge" style="background:#fef9c3; color:#854d0e; border:1px solid #fde047; font-size:0.75rem; font-weight:600; display:inline-flex; align-items:center; gap:4px;"><i class="fa-solid fa-clock"></i> Pendiente</span>`;
+        return `<span class="badge" style="background:#fef9c3; color:#854d0e; border:1px solid #fde047; font-size:0.75rem; font-weight:600; display:inline-flex; align-items:center; gap:4px;"><i class="fa-solid fa-eye-slash"></i> Sin leer por tutor</span>`;
     }
 };
 
@@ -4333,7 +4344,7 @@ window.buscarMisReportes = async (term = '') => {
                             ${lecturaBadge}
                         </div>
                         <span style="font-size:0.8rem; color:${r.resuelto ? 'var(--success)' : 'var(--warning)'}; font-weight:bold;">
-                            <i class="fa-solid ${r.resuelto ? 'fa-check-double' : 'fa-hourglass-half'}"></i> ${r.resuelto ? 'Atendido' : 'Pendiente'}
+                            <i class="fa-solid ${r.resuelto ? 'fa-check-double' : 'fa-folder-open'}"></i> ${r.resuelto ? 'Atendido' : 'Caso Activo'}
                         </span>
                     </div>
                 </div>
@@ -7596,10 +7607,11 @@ function renderAlumnoTimeline() {
       </div>
       
       <div style="background:white; border-bottom:1px solid var(--border); padding:10px 16px; display:flex; gap:10px; align-items:center; overflow-x:auto;">
-         <button class="btn btn-outline" style="white-space:nowrap; font-size:0.8rem; padding:6px 12px; border-radius:20px;" onclick="window.loadTimelineAlumno(false)">Recientes</button>
+         <button id="btnTabPendientesAvisos" class="btn btn-primary" style="white-space:nowrap; font-size:0.8rem; padding:6px 12px; border-radius:20px;" onclick="window.loadTimelineAlumno('pendientes')">Pendientes</button>
+         <button id="btnTabVistosAvisos" class="btn btn-outline" style="white-space:nowrap; font-size:0.8rem; padding:6px 12px; border-radius:20px;" onclick="window.loadTimelineAlumno('vistos')">Ya Vistos</button>
          <div style="height:20px; width:1px; background:var(--border)"></div>
          <span style="font-size:0.75rem; color:var(--text-muted); white-space:nowrap;">Archivo Escolar:</span>
-         <input type="date" id="filtroFechaAvisos" class="form-control" style="font-size:0.8rem; width:130px; padding:4px 8px;" onchange="window.loadTimelineAlumno(true)">
+         <input type="date" id="filtroFechaAvisos" class="form-control" style="font-size:0.8rem; width:130px; padding:4px 8px;" onchange="window.loadTimelineAlumno('historial', this.value)">
       </div>
 
       <div class="mobile-content" style="padding:16px;">
@@ -11195,10 +11207,22 @@ window.firmarEncuadre = async (encuadre_id, alumno_id) => {
     }
 };
 
-window.loadTimelineAlumno = async (mostrarHistorial = false, selectedDateStr = null) => {
+window.loadTimelineAlumno = async (modo = 'pendientes', selectedDateStr = null) => {
     const cont = document.getElementById('timelineAlumnoContenedor');
     if(!cont) return;
     
+    let modoFinal = 'pendientes';
+    if (modo === true || modo === 'historial') modoFinal = 'historial';
+    else if (modo === 'vistos' || modo === 'leidos') modoFinal = 'vistos';
+    else modoFinal = 'pendientes';
+
+    const btnPend = document.getElementById('btnTabPendientesAvisos');
+    const btnVistos = document.getElementById('btnTabVistosAvisos');
+    if (btnPend && btnVistos) {
+        btnPend.className = (modoFinal === 'pendientes') ? 'btn btn-primary' : 'btn btn-outline';
+        btnVistos.className = (modoFinal === 'vistos') ? 'btn btn-primary' : 'btn btn-outline';
+    }
+
     try {
         const u = await supabaseClient.auth.getUser();
         if(!u.data?.user) return;
@@ -11224,35 +11248,34 @@ window.loadTimelineAlumno = async (mostrarHistorial = false, selectedDateStr = n
         // Obtener vistos
         const { data: vistos } = await supabaseClient.from('comunicados_vistos').select('comunicado_id').eq('perfil_id', u.data.user.id);
         const vistosIds = vistos ? vistos.map(v => v.comunicado_id) : [];
+        const vistosIdsOriginales = new Set(vistosIds);
 
         console.log(">>> [TIMELINE] Buscando comunicados para audiencia:", audArr);
-        let query = supabaseClient.from('comunicados').select('*').in('audiencia', audArr).eq('plantel_id', state.plantelId).order('fecha_envio', { ascending: false });
-        
-        // Historial sin límite de fecha para cargar todos los comunicados
+        let query = supabaseClient.from('comunicados').select('*').in('audiencia', audArr).order('fecha_envio', { ascending: false });
+        if(state.plantelId) query = query.eq('plantel_id', state.plantelId);
 
-
-        if(mostrarHistorial) {
-            const fecha = selectedDateStr || document.getElementById('filtroFechaAvisos').value;
+        if(modoFinal === 'historial') {
+            const fecha = selectedDateStr || document.getElementById('filtroFechaAvisos')?.value;
             if(fecha) {
-                // Ensure the date is checked covering the whole UTC day for that local date.
                 const localStart = new Date(`${fecha}T00:00:00`).toISOString();
                 const localEnd = new Date(`${fecha}T23:59:59.999`).toISOString();
                 query = query.gte('fecha_envio', localStart).lte('fecha_envio', localEnd);
             }
         } else {
-            query = query.limit(20);
+            query = query.limit(30);
         }
            
         const { data, error } = await query;
         if(error) throw error;
         
         // Auto-marcar como vistos los comunicados que NO requieren firma explícita (Zero-click)
+        // Únicamente aviso_firma_boleta y encuadres requieren firma digital obligatoria.
+        const recienMarcados = [];
         const noVistosSinFirma = (data || []).filter(c => {
             if (vistosIds.includes(c.id)) return false;
             const esEncuadre = c.titulo && c.titulo.toLowerCase().includes('encuadre');
             const esFirmaBoletaAviso = c.tipo === 'aviso_firma_boleta';
-            const esCitatorio = (c.tipo === 'citatorio') || (c.titulo && c.titulo.toLowerCase().includes('citatorio'));
-            return !esEncuadre && !esFirmaBoletaAviso && !esCitatorio;
+            return !esEncuadre && !esFirmaBoletaAviso;
         });
 
         if (noVistosSinFirma.length > 0) {
@@ -11262,23 +11285,50 @@ window.loadTimelineAlumno = async (mostrarHistorial = false, selectedDateStr = n
                 comunicado_id: c.id,
                 visto_en: ahoraIso
             }));
-            supabaseClient.from('comunicados_vistos')
-                .upsert(inserts, { onConflict: 'perfil_id,comunicado_id', ignoreDuplicates: true })
-                .then(() => {
-                    noVistosSinFirma.forEach(c => {
-                        if (!vistosIds.includes(c.id)) vistosIds.push(c.id);
-                    });
-                })
-                .catch(err => console.warn("Error auto-marcando comunicados vistos:", err));
+            try {
+                const { error: upErr } = await supabaseClient.from('comunicados_vistos')
+                    .upsert(inserts, { onConflict: 'perfil_id,comunicado_id' });
+                if (upErr) {
+                    console.warn("Aviso upsert comunicados_vistos:", upErr);
+                    for (const ins of inserts) {
+                        await supabaseClient.from('comunicados_vistos').insert(ins).catch(() => {});
+                    }
+                }
+                noVistosSinFirma.forEach(c => {
+                    recienMarcados.push(c.id);
+                    if (!vistosIds.includes(c.id)) vistosIds.push(c.id);
+                });
+            } catch (err) {
+                console.warn("Error auto-marcando comunicados vistos:", err);
+            }
         }
 
-        // En recientes se muestran los comunicados sin ocultarlos de golpe, en historial por fecha
-        const dFinal = data || [];
+        let dFinal = [];
+        if (modoFinal === 'vistos') {
+            dFinal = (data || []).filter(c => vistosIds.includes(c.id));
+        } else if (modoFinal === 'historial') {
+            dFinal = data || [];
+        } else {
+            // modo === 'pendientes':
+            // Muestra comunicados pendientes de firma o que el alumno recién está descubriendo en esta visita
+            dFinal = (data || []).filter(c => {
+                const esEncuadre = c.titulo && c.titulo.toLowerCase().includes('encuadre');
+                const esFirmaBoletaAviso = c.tipo === 'aviso_firma_boleta';
+                if (esEncuadre || esFirmaBoletaAviso) {
+                    return !vistosIds.includes(c.id);
+                }
+                // Si no estaba en la base de datos al entrar o recién se visualizó:
+                return !vistosIdsOriginales.has(c.id) || recienMarcados.includes(c.id);
+            });
+        }
 
         if(!dFinal || dFinal.length === 0) {
+            const msjVacio = (modoFinal === 'vistos')
+                ? 'No tienes comunicados archivados como vistos aún.'
+                : (modoFinal === 'historial' ? 'No hubo avisos en esta fecha.' : '¡Todo al día! No tienes comunicados pendientes.');
             cont.innerHTML = `<div style="padding:40px 20px; text-align:center; color:var(--text-muted);">
                 <i class="fa-solid fa-check-circle" style="font-size:3rem; margin-bottom:15px; opacity:0.3"></i>
-                <p>${mostrarHistorial ? 'No hubo avisos en esta fecha.' : '¡Todo al día! No tienes comunicados pendientes.'}</p>
+                <p>${msjVacio}</p>
             </div>`;
             return;
         }
@@ -11292,16 +11342,15 @@ window.loadTimelineAlumno = async (mostrarHistorial = false, selectedDateStr = n
                btnAdjunto = `<a href="${c.archivo_url}" target="_blank" class="btn btn-outline" style="margin-top: 12px; font-size: 0.8rem; padding: 6px 12px; border-color:var(--primary); color:var(--primary)"><i class="fa-solid fa-paperclip"></i> Ver Documento</a>`;
            }
            const esFirmaBoletaAviso = c.tipo === 'aviso_firma_boleta';
-           const esCitatorio = (c.tipo === 'citatorio') || (c.titulo && c.titulo.toLowerCase().includes('citatorio'));
-           const requiereFirma = esEncuadre || esFirmaBoletaAviso || esCitatorio;
-           const esVisto = vistosIds.includes(c.id) || !requiereFirma;
+           const requiereFirma = esEncuadre || esFirmaBoletaAviso;
+           const firmado = vistosIds.includes(c.id);
+           const esVisto = vistosIds.includes(c.id) || recienMarcados.includes(c.id);
 
            const tipoColor = esFirmaBoletaAviso ? '#d97706' : (esEncuadre ? 'var(--warning)' : (c.audiencia === 'General' ? 'var(--success)' : 'var(--danger)'));
            const icon = esFirmaBoletaAviso ? 'fa-file-invoice' : (esEncuadre ? 'fa-file-signature' : 'fa-bullhorn');
 
            let btnAccion = '';
            if(requiereFirma) {
-               const firmado = vistosIds.includes(c.id);
                if(!firmado) {
                    if(c.tipo === 'aviso_firma_boleta') {
                        btnAccion = `<button onclick="window.firmarBoletaDesdeTimeline('${c.id}', this)" class="btn btn-sm btn-primary" style="font-size:0.75rem; display:flex; align-items:center; gap:6px; background:#d97706; border-color:#d97706;">
@@ -11320,7 +11369,7 @@ window.loadTimelineAlumno = async (mostrarHistorial = false, selectedDateStr = n
            }
            
            return `
-           <div class="timeline-item" id="aviso-${c.id}" style="animation: fadeInUp 0.5s ease backwards; animation-delay: ${delay}s; ${esVisto ? 'opacity: 0.95;' : ''}">
+           <div class="timeline-item" id="aviso-${c.id}" style="animation: fadeInUp 0.5s ease backwards; animation-delay: ${delay}s; ${esVisto ? 'opacity: 0.65; background:#f8fafc;' : 'background:white;'} border-radius:10px; transition:all 0.3s ease;">
              <div class="timeline-icon" style="border-color: ${tipoColor}; background:white;"><i class="fa-solid ${icon}" style="color: ${tipoColor};"></i></div>
              <div class="timeline-content" style="position:relative">
                <div style="font-size:0.75rem; color: var(--text-muted); float:right;">${date}</div>
