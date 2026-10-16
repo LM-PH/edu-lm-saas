@@ -2690,6 +2690,23 @@ window.loadComunicadosAdmin = async (fechaFiltro = null) => {
             return;
         }
 
+        const comIds = data.map(c => c.id);
+        let vistosMap = {};
+        if (comIds.length > 0) {
+            try {
+                const { data: vData } = await supabaseClient
+                    .from('comunicados_vistos')
+                    .select('comunicado_id, visto_en, perfil_id')
+                    .in('comunicado_id', comIds);
+                (vData || []).forEach(v => {
+                    if (!vistosMap[v.comunicado_id]) vistosMap[v.comunicado_id] = [];
+                    vistosMap[v.comunicado_id].push(v);
+                });
+            } catch(eV) {
+                console.warn("Error cargando vistos en admin:", eV);
+            }
+        }
+
         const tipoColores = {
             'General': 'var(--success)',
             'Todos':   'var(--primary)',
@@ -2711,13 +2728,31 @@ window.loadComunicadosAdmin = async (fechaFiltro = null) => {
             const btnAdjunto = c.archivo_url
                 ? `<a href="${c.archivo_url}" target="_blank" class="btn btn-outline btn-xs" style="margin-top:8px; border-color:var(--primary); color:var(--primary); display:inline-flex; gap:4px; align-items:center;"><i class="fa-solid fa-paperclip"></i> Ver adjunto</a>`
                 : '';
+
+            const vList = vistosMap[c.id] || [];
+            let badgeLectura = '';
+            if (c.audiencia && c.audiencia.startsWith('Alumno_')) {
+                if (vList.length > 0) {
+                    const fechaStr = new Date(vList[0].visto_en).toLocaleDateString('es-MX', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
+                    badgeLectura = `<span class="badge" style="background:#dcfce7; color:#15803d; border:1px solid #86efac; font-size:0.75rem; font-weight:600;"><i class="fa-solid fa-eye"></i> Revisado (${fechaStr})</span>`;
+                } else {
+                    badgeLectura = `<span class="badge" style="background:#fef9c3; color:#854d0e; border:1px solid #fde047; font-size:0.75rem; font-weight:600;"><i class="fa-solid fa-clock"></i> Pendiente</span>`;
+                }
+            } else {
+                const count = vList.length;
+                badgeLectura = `<span class="badge" style="background:${count > 0 ? '#dcfce7' : '#fef9c3'}; color:${count > 0 ? '#15803d' : '#854d0e'}; border:1px solid ${count > 0 ? '#86efac' : '#fde047'}; font-size:0.75rem; font-weight:600; cursor:pointer;" onclick="window.verLecturasComunicado('${c.id}')"><i class="fa-solid fa-eye"></i> ${count > 0 ? `Visto por ${count} usuario(s)` : 'Sin lecturas aún'} <i class="fa-solid fa-arrow-up-right-from-square" style="font-size:0.65rem; margin-left:2px;"></i></span>`;
+            }
+
             return `
             <div style="border-left:4px solid ${color}; padding:12px 14px; background:var(--page-bg); border-radius:8px; border:1px solid var(--border);">
                 <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:6px; gap:8px; flex-wrap:wrap;">
                     <span style="font-weight:600; color:var(--text-main); font-size:0.95rem;">${(c.titulo || '').replace(/\s*\[TALLER:.*?\]/gi, '')}</span>
-                    <span style="font-size:0.7rem; background:${color}22; color:${color}; padding:2px 8px; border-radius:20px; white-space:nowrap; font-weight:600;">${audText}</span>
+                    <div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap;">
+                        ${badgeLectura}
+                        <span style="font-size:0.7rem; background:${color}22; color:${color}; padding:2px 8px; border-radius:20px; white-space:nowrap; font-weight:600;">${audText}</span>
+                    </div>
                 </div>
-                <p style="font-size:0.85rem; color:var(--text-main); margin:0 0 8px 0; white-space:pre-wrap;">${(c.mensaje || '').replace(/\[REF_ID:.*?\]/gi, '').trim()}</p>
+                <p style="font-size:0.85rem; color:var(--text-main); margin:0 0 8px 0; white-space:pre-wrap;">${(c.mensaje || '').replace(/\[REF_ID:.*?\]/gi, '').replace(/\[REF_REPORTE:.*?\]/gi, '').trim()}</p>
                 <div style="font-size:0.75rem; color:var(--text-muted);">
                     <i class="fa-regular fa-clock"></i> ${date} &nbsp;|&nbsp; <i class="fa-solid fa-user"></i> ${autor}
                 </div>
@@ -4022,6 +4057,188 @@ window.selectAlumnoExpedienteReportes = (id, nombre) => {
     if(window.showAlumnoExpediente) window.showAlumnoExpediente(id, 'conducta');
 };
 
+window.obtenerEstadoLecturaReportes = async (reportes = []) => {
+    if (!reportes || reportes.length === 0) return {};
+    try {
+        const alumnoAuds = [...new Set(reportes.map(r => r.alumno_id ? `Alumno_${r.alumno_id}` : null).filter(Boolean))];
+        if (alumnoAuds.length === 0) return {};
+
+        const { data: coms, error: errComs } = await supabaseClient
+            .from('comunicados')
+            .select('id, mensaje, audiencia, creado_en, fecha_envio')
+            .in('audiencia', alumnoAuds)
+            .eq('plantel_id', state.plantelId);
+
+        if (errComs || !coms || coms.length === 0) return {};
+
+        const comIds = coms.map(c => c.id);
+        const { data: vistos, error: errVistos } = await supabaseClient
+            .from('comunicados_vistos')
+            .select('comunicado_id, visto_en')
+            .in('comunicado_id', comIds);
+
+        const vistoMap = {};
+        (vistos || []).forEach(v => {
+            vistoMap[v.comunicado_id] = v.visto_en;
+        });
+
+        const resMap = {};
+        reportes.forEach(r => {
+            if (!r || !r.id) return;
+            // 1. Intento de coincidencia directa con [REF_REPORTE: uuid]
+            let comMatch = coms.find(c => c.mensaje && c.mensaje.includes(r.id));
+            
+            // 2. Si no hay tag exacto (reportes antiguos), buscar por alumno y ventana de tiempo cercana (+-10 min)
+            if (!comMatch && r.alumno_id) {
+                const repTime = new Date(r.creado_en || r.fecha || r.created_at).getTime();
+                if (!isNaN(repTime)) {
+                    comMatch = coms.find(c => {
+                        if (c.audiencia !== `Alumno_${r.alumno_id}`) return false;
+                        const comTime = new Date(c.fecha_envio || c.creado_en).getTime();
+                        return Math.abs(comTime - repTime) < 10 * 60 * 1000;
+                    });
+                }
+            }
+
+            if (comMatch) {
+                const vistoEn = vistoMap[comMatch.id];
+                resMap[r.id] = {
+                    comunicado_id: comMatch.id,
+                    visto: !!vistoEn,
+                    visto_en: vistoEn || null
+                };
+            } else {
+                resMap[r.id] = {
+                    comunicado_id: null,
+                    visto: false,
+                    visto_en: null
+                };
+            }
+        });
+
+        return resMap;
+    } catch (e) {
+        console.warn("Error en obtenerEstadoLecturaReportes:", e);
+        return {};
+    }
+};
+
+window.renderBadgeLectura = (estadoLectura) => {
+    if (!estadoLectura) {
+        return `<span class="badge" style="background:#fef9c3; color:#854d0e; border:1px solid #fde047; font-size:0.75rem; font-weight:600; display:inline-flex; align-items:center; gap:4px;"><i class="fa-solid fa-clock"></i> Pendiente</span>`;
+    }
+    if (estadoLectura.visto) {
+        const fechaStr = estadoLectura.visto_en ? new Date(estadoLectura.visto_en).toLocaleDateString('es-MX', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : '';
+        return `<span class="badge" style="background:#dcfce7; color:#15803d; border:1px solid #86efac; font-size:0.75rem; font-weight:600; display:inline-flex; align-items:center; gap:4px;"><i class="fa-solid fa-eye"></i> Revisado por tutor ${fechaStr ? `(${fechaStr})` : ''}</span>`;
+    } else {
+        return `<span class="badge" style="background:#fef9c3; color:#854d0e; border:1px solid #fde047; font-size:0.75rem; font-weight:600; display:inline-flex; align-items:center; gap:4px;"><i class="fa-solid fa-clock"></i> Pendiente</span>`;
+    }
+};
+
+window.verLecturasComunicado = async (comunicadoId) => {
+    let modal = document.getElementById('modalLecturasComunicado');
+    if (!modal) {
+        modal = document.createElement('div');
+        modal.id = 'modalLecturasComunicado';
+        modal.style.cssText = 'position:fixed; top:0; left:0; width:100vw; height:100vh; background:rgba(0,0,0,0.5); z-index:99999; display:grid; place-items:center; padding:15px; box-sizing:border-box;';
+        document.body.appendChild(modal);
+    }
+    modal.style.display = 'grid';
+    modal.innerHTML = `
+        <div style="background:white; border-radius:12px; width:100%; max-width:650px; max-height:85vh; display:flex; flex-direction:column; box-shadow:0 10px 25px rgba(0,0,0,0.2); overflow:hidden;">
+            <div style="padding:16px 20px; background:var(--primary); color:white; display:flex; justify-content:space-between; align-items:center;">
+                <h3 style="margin:0; font-size:1.1rem; display:flex; align-items:center; gap:8px;">
+                    <i class="fa-solid fa-eye"></i> Confirmación de Lectura
+                </h3>
+                <button onclick="document.getElementById('modalLecturasComunicado').style.display='none'" style="background:none; border:none; color:white; font-size:1.4rem; cursor:pointer; line-height:1;">&times;</button>
+            </div>
+            <div id="bodyLecturasComunicado" style="padding:20px; overflow-y:auto; flex:1;">
+                <div style="text-align:center; padding:30px; color:var(--text-muted);"><i class="fa-solid fa-spinner fa-spin"></i> Cargando lecturas...</div>
+            </div>
+        </div>
+    `;
+
+    try {
+        const [comRes, vistosRes] = await Promise.all([
+            supabaseClient.from('comunicados').select('id, titulo, audiencia, fecha_envio').eq('id', comunicadoId).maybeSingle(),
+            supabaseClient.from('comunicados_vistos').select('perfil_id, visto_en').eq('comunicado_id', comunicadoId).order('visto_en', { ascending: false })
+        ]);
+
+        const com = comRes.data;
+        const vistos = vistosRes.data || [];
+        const body = document.getElementById('bodyLecturasComunicado');
+        if (!body) return;
+
+        if (vistos.length === 0) {
+            body.innerHTML = `
+                <div style="text-align:center; padding:35px 15px; color:var(--text-muted);">
+                    <i class="fa-solid fa-clock" style="font-size:2.5rem; color:#f59e0b; margin-bottom:12px;"></i>
+                    <h4 style="margin:0 0 6px 0; color:var(--text-main);">Sin confirmaciones aún</h4>
+                    <p style="margin:0; font-size:0.85rem;">Ningún alumno o padre de familia ha abierto este comunicado todavía.</p>
+                </div>
+            `;
+            return;
+        }
+
+        const perfilIds = vistos.map(v => v.perfil_id);
+        const [perfilesRes, alumnosRes] = await Promise.all([
+            supabaseClient.from('perfiles').select('id, nombre, email, rol').in('id', perfilIds),
+            supabaseClient.from('alumnos').select('id, perfil_id, nombre, matricula, grupos(nombre)').in('perfil_id', perfilIds)
+        ]);
+
+        const perfilesMap = {};
+        (perfilesRes.data || []).forEach(p => perfilesMap[p.id] = p);
+        const alumnosMap = {};
+        (alumnosRes.data || []).forEach(a => alumnosMap[a.perfil_id] = a);
+
+        let filasHtml = vistos.map((v, idx) => {
+            const al = alumnosMap[v.perfil_id];
+            const p = perfilesMap[v.perfil_id];
+            const nombre = al?.nombre || p?.nombre || 'Usuario';
+            const extra = al ? `${al.matricula || ''} - ${al.grupos?.nombre || 'S/G'}` : (p?.rol ? p.rol.toUpperCase() : '');
+            const fecha = v.visto_en ? new Date(v.visto_en).toLocaleString('es-MX', { dateStyle: 'medium', timeStyle: 'short' }) : 'Registrado';
+
+            return `
+                <tr style="border-bottom:1px solid var(--border);">
+                    <td style="padding:10px 8px; font-size:0.8rem; color:var(--text-muted);">${idx + 1}</td>
+                    <td style="padding:10px 8px; font-size:0.85rem; font-weight:600; color:var(--text-main);">${nombre}</td>
+                    <td style="padding:10px 8px; font-size:0.8rem; color:var(--text-muted);">${extra}</td>
+                    <td style="padding:10px 8px; font-size:0.8rem; color:#15803d; white-space:nowrap;"><i class="fa-solid fa-check-double"></i> ${fecha}</td>
+                </tr>
+            `;
+        }).join('');
+
+        body.innerHTML = `
+            <div style="margin-bottom:15px; padding-bottom:10px; border-bottom:1px solid var(--border);">
+                <h4 style="margin:0 0 4px 0; font-size:1rem; color:var(--primary);">${(com?.titulo || 'Comunicado').replace(/\\s*\\[TALLER:.*?\\]/gi, '')}</h4>
+                <div style="font-size:0.8rem; color:var(--text-muted);">
+                    <i class="fa-solid fa-users"></i> Audiencia: <b>${com?.audiencia || 'General'}</b> &nbsp;|&nbsp; 
+                    <i class="fa-solid fa-circle-check" style="color:var(--success)"></i> Total de lecturas: <b>${vistos.length}</b>
+                </div>
+            </div>
+            <div style="overflow-x:auto;">
+                <table style="width:100%; border-collapse:collapse; text-align:left;">
+                    <thead>
+                        <tr style="border-bottom:2px solid var(--border); font-size:0.75rem; color:var(--text-muted); text-transform:uppercase;">
+                            <th style="padding:8px;">#</th>
+                            <th style="padding:8px;">Nombre</th>
+                            <th style="padding:8px;">Detalle / Grupo</th>
+                            <th style="padding:8px;">Fecha de Lectura</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${filasHtml}
+                    </tbody>
+                </table>
+            </div>
+        `;
+    } catch (e) {
+        console.error("Error al cargar lecturas de comunicado:", e);
+        const body = document.getElementById('bodyLecturasComunicado');
+        if (body) body.innerHTML = `<div style="color:var(--danger); padding:20px; text-align:center;">Error al consultar lecturas: ${e.message}</div>`;
+    }
+};
+
 window.buscarMisReportes = async (term = '') => {
     const container = document.getElementById('contenedorMisReportes');
     if(!container) return;
@@ -4088,6 +4305,13 @@ window.buscarMisReportes = async (term = '') => {
             return;
         }
         
+        let estadoLecturas = {};
+        try {
+            estadoLecturas = await window.obtenerEstadoLecturaReportes(data);
+        } catch (eL) {
+            console.warn("No se pudo obtener estado de lectura de reportes:", eL);
+        }
+
         let html = '';
         data.forEach(r => {
             const fechaVal = r.creado_en || r.fecha || r.created_at;
@@ -4095,14 +4319,19 @@ window.buscarMisReportes = async (term = '') => {
             const badgeCls = r.resuelto ? 'success' : (r.gravedad === 'Grave' ? 'danger' : (r.gravedad === 'Moderado' ? 'warning' : 'info'));
             const alumnoNombre = r.alumnos ? r.alumnos.nombre : 'Alumno Desconocido';
             const alumnoMat = r.alumnos ? r.alumnos.matricula : 'N/A';
+            const lecturaBadge = window.renderBadgeLectura(estadoLecturas[r.id]);
+
             html += `
                 <div class="card" style="border-left:4px solid var(--${badgeCls}); padding:15px; background:white; position:relative; box-shadow:0 2px 5px rgba(0,0,0,0.05);">
                     <div style="font-size:0.8rem; color:var(--text-muted); margin-bottom:8px;"><i class="fa-regular fa-calendar"></i> ${fechaDate}</div>
                     <div style="font-weight:bold; margin-bottom:4px; font-size:1.05rem;">${alumnoNombre}</div>
                     <div style="font-size:0.85rem; color:var(--text-muted); margin-bottom:8px;">Matrícula: ${alumnoMat}</div>
                     <div style="font-size:0.9rem; color:var(--text); margin-bottom:12px;">${r.descripcion}</div>
-                    <div style="display:flex; justify-content:space-between; align-items:center;">
-                        <span class="badge" style="background:var(--${badgeCls}); color:white; font-size:0.75rem;">${r.gravedad}</span>
+                    <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; margin-top:10px; padding-top:8px; border-top:1px solid #f1f5f9;">
+                        <div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap;">
+                            <span class="badge" style="background:var(--${badgeCls}); color:white; font-size:0.75rem;">${r.gravedad}</span>
+                            ${lecturaBadge}
+                        </div>
                         <span style="font-size:0.8rem; color:${r.resuelto ? 'var(--success)' : 'var(--warning)'}; font-weight:bold;">
                             <i class="fa-solid ${r.resuelto ? 'fa-check-double' : 'fa-hourglass-half'}"></i> ${r.resuelto ? 'Atendido' : 'Pendiente'}
                         </span>
@@ -4426,6 +4655,7 @@ window.loadReportesRecientesApoyo = async () => {
     if(!cont) return;
 
     try {
+        let finalData = [];
         const { data, error } = await supabaseClient
             .from('reportes_conducta')
             .select('*, alumnos!alumno_id(nombre, matricula), autor:perfiles!autor_id(nombre, rol)')
@@ -4444,17 +4674,26 @@ window.loadReportesRecientesApoyo = async () => {
                 .limit(15);
             
             if(e2) throw e2;
-            renderListaReciente(fallback || [], cont);
+            finalData = fallback || [];
         } else {
-            renderListaReciente(data || [], cont);
+            finalData = data || [];
         }
+
+        let estadoLecturas = {};
+        try {
+            estadoLecturas = await window.obtenerEstadoLecturaReportes(finalData);
+        } catch(eL) {
+            console.warn("No se pudo obtener estado de lecturas:", eL);
+        }
+
+        renderListaReciente(finalData, cont, estadoLecturas);
     } catch(e) { 
         console.error("Failed to load reports:", e);
         cont.innerHTML = `<div style="padding:20px; text-align:center; color:var(--danger)">No se pudo cargar la bitácora: ${e.message}</div>`;
     }
 };
 
-const renderListaReciente = (data, cont) => {
+const renderListaReciente = (data, cont, estadoLecturas = {}) => {
     if(!data || data.length === 0) {
         cont.innerHTML = '<div style="text-align:center; padding:30px; color:var(--text-muted)">No hay registros recientes.</div>';
         return;
@@ -4467,14 +4706,18 @@ const renderListaReciente = (data, cont) => {
         const sevColor = r.gravedad === 'Grave' ? 'var(--danger)' : (r.gravedad === 'Moderado' ? 'var(--warning)' : 'var(--success)');
         const autorNombre = r.autor?.nombre || r.perfiles?.nombre || 'Personal';
         const metaStr = r.autor_metadata ? ` <span style="font-weight:normal; color:var(--text-muted);">(${r.autor_metadata})</span>` : '';
+        const lecturaBadge = window.renderBadgeLectura(estadoLecturas[r.id]);
 
         return `
         <div style="padding:15px; border:1px solid var(--border); border-radius:12px; background:white; display:flex; flex-direction:column; gap:8px;">
-            <div style="display:flex; justify-content:space-between; align-items:center;">
+            <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:6px;">
                 <span style="font-size:0.75rem; color:var(--text-muted)">
                     <i class="fa-solid fa-calendar-day"></i> ${fechaStr} ${hour} | <i class="fa-solid fa-user-tie"></i> <b>${autorNombre}</b>${metaStr}
                 </span>
-                <span class="badge" style="background:${r.resuelto ? 'var(--success)' : sevColor}; color:white; font-size:0.65rem;">${r.resuelto ? 'ATENDIDO' : r.gravedad.toUpperCase()}</span>
+                <div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap;">
+                    ${lecturaBadge}
+                    <span class="badge" style="background:${r.resuelto ? 'var(--success)' : sevColor}; color:white; font-size:0.65rem;">${r.resuelto ? 'ATENDIDO' : r.gravedad.toUpperCase()}</span>
+                </div>
             </div>
             <div style="font-size:0.9rem;">
                 <b>Alumno:</b> ${r.alumnos?.nombre || '---'} <span style="color:var(--text-muted); font-size:0.8rem;">(${r.alumnos?.matricula || 'N/A'})</span>
@@ -4571,12 +4814,13 @@ window.seleccionarAlumnoReporteApoyo = (id, nombre, grupo, mode = 'reporte') => 
     }
 };
 
-window.ejecutarVigilanciaAutomatica = async (aid, cat, sev, desc, enviarAvisoManual = true) => {
+window.ejecutarVigilanciaAutomatica = async (aid, cat, sev, desc, enviarAvisoManual = true, reporteId = null) => {
     try {
         const u = await supabaseClient.auth.getUser();
         if(!u.data.user) return;
         
         const finalGravedad = (cat === 'Atención Prioritaria') ? 'N/A' : sev;
+        const refReporteTag = reporteId ? `\n\n[REF_REPORTE: ${reporteId}]` : '';
 
         if (cat === 'Atención Prioritaria') {
             await supabaseClient.from('citatorios').insert([{
@@ -4586,7 +4830,7 @@ window.ejecutarVigilanciaAutomatica = async (aid, cat, sev, desc, enviarAvisoMan
             }]);
             await supabaseClient.from('comunicados').insert([{
                 autor_id: u.data.user.id, titulo: '🚨 CITATORIO URGENTE: Atención Prioritaria',
-                mensaje: `Estimado padre de familia/tutor:\n\nPor protocolo de protección, se requiere su presencia INMEDIATA en el área de Trabajo Social debido a un reporte de Atención Prioritaria.\n\nSube a la parte superior de esta pantalla para ver el documento oficial y firmarlo.`,
+                mensaje: `Estimado padre de familia/tutor:\n\nPor protocolo de protección, se requiere su presencia INMEDIATA en el área de Trabajo Social debido a un reporte de Atención Prioritaria.\n\nSube a la parte superior de esta pantalla para ver el documento oficial y firmarlo.${refReporteTag}`,
                 audiencia: `Alumno_${aid}`, tipo: 'General', plantel_id: state.plantelId
             }]);
             window.showToast("Citatorio de protección enviado automáticamente.", "warning");
@@ -4698,7 +4942,7 @@ window.ejecutarVigilanciaAutomatica = async (aid, cat, sev, desc, enviarAvisoMan
 
                             if (accionPrincipal !== 'Solo registro') {
                                 await supabaseClient.from('comunicados').insert([{
-                                    autor_id: u.data.user.id, titulo: titulo, mensaje: msj,
+                                    autor_id: u.data.user.id, titulo: titulo, mensaje: msj + refReporteTag,
                                     audiencia: `Alumno_${aid}`, tipo: 'General', plantel_id: state.plantelId
                                 }]);
                             }
@@ -4712,7 +4956,7 @@ window.ejecutarVigilanciaAutomatica = async (aid, cat, sev, desc, enviarAvisoMan
             await supabaseClient.from('comunicados').insert([{
                 autor_id: u.data.user.id,
                 titulo: `Aviso de Incidencia: ${cat}`,
-                mensaje: `Se ha registrado un reporte de tipo ${cat} (${finalGravedad}) para seguimiento.\n\nDescripción breve: ${desc.substring(0, 100)}...`,
+                mensaje: `Se ha registrado un reporte de tipo ${cat} (${finalGravedad}) para seguimiento.\n\nDescripción breve: ${desc.substring(0, 100)}...${refReporteTag}`,
                 audiencia: `Alumno_${aid}`,
                 tipo: 'General',
                 plantel_id: state.plantelId
@@ -4767,8 +5011,9 @@ window.guardarReporteApoyo = async () => {
         const enviarAviso = enviarAvisoCheckbox ? enviarAvisoCheckbox.checked : true;
 
         const finalGravedad = (cat === 'Atención Prioritaria') ? 'N/A' : sev;
+        const repId = crypto.randomUUID();
         const { error } = await supabaseClient.from('reportes_conducta').insert([{
-            id: crypto.randomUUID(),
+            id: repId,
             alumno_id: aid,
             autor_id: u.data.user.id,
             descripcion: finalDesc,
@@ -4781,7 +5026,7 @@ window.guardarReporteApoyo = async () => {
         if(error) throw error;
 
         // VIGILANCIA AUTOMÁTICA UNIFICADA
-        await window.ejecutarVigilanciaAutomatica(aid, cat, sev, desc, enviarAviso);
+        await window.ejecutarVigilanciaAutomatica(aid, cat, sev, desc, enviarAviso, repId);
 
         // Terminar UI
         window.showToast("Reporte levantado con éxito", "success");
@@ -5542,6 +5787,13 @@ window.showAlumnoExpediente = async (idAlumno, context = 'completo') => {
         const reps = (repsRes.data || []).sort((a,b) => new Date(b.creado_en || b.fecha || b.created_at) - new Date(a.creado_en || a.fecha || a.created_at));
         const intervs = (intervsRes.data || []).sort((a,b) => new Date(b.creado_en || b.fecha || b.created_at) - new Date(a.creado_en || a.fecha || a.created_at));
         
+        let estadoLecturas = {};
+        try {
+            estadoLecturas = await window.obtenerEstadoLecturaReportes(reps);
+        } catch(eL) {
+            console.warn("No se pudo obtener estado de lectura en expediente:", eL);
+        }
+
         const fichaSalud = (saludRes.data && saludRes.data.length > 0) ? saludRes.data[0] : null;
 
         if(!al) throw new Error("Alumno no encontrado");
@@ -5612,13 +5864,23 @@ window.showAlumnoExpediente = async (idAlumno, context = 'completo') => {
                         <i class="fa-solid fa-shield-halved"></i> Reportes de Conducta
                     </h4>
                     <div style="display:flex; flex-direction:column; gap:10px;">
-                        ${reps.length > 0 ? reps.map(r => `
+                        ${reps.length > 0 ? reps.map(r => {
+                            const lBadge = window.renderBadgeLectura(estadoLecturas[r.id]);
+                            const fechaStr = new Date(r.fecha || r.creado_en || r.created_at).toLocaleDateString();
+                            return `
                             <div style="font-size:0.85rem; border:1px solid var(--border); border-radius:8px; padding:10px; border-left:4px solid ${r.gravedad === 'Grave' ? 'var(--danger)' : 'var(--warning)'}">
-                                <div style="display:flex; justify-content:space-between;"><b>${r.gravedad}</b> <small>${new Date(r.fecha).toLocaleDateString()}</small></div>
+                                <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:6px; margin-bottom:4px;">
+                                    <b>${r.gravedad}</b>
+                                    <div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap;">
+                                        ${lBadge}
+                                        <small style="color:var(--text-muted);">${fechaStr}</small>
+                                    </div>
+                                </div>
                                 <p style="margin:4px 0;">${r.descripcion}</p>
                                 <small style="color:var(--text-muted)">Por: ${r.perfiles?.nombre || 'Maestro'}</small>
                             </div>
-                        `).join('') : '<p style="color:var(--text-muted); font-style:italic;">Sin reportes registrados.</p>'}
+                            `;
+                        }).join('') : '<p style="color:var(--text-muted); font-style:italic;">Sin reportes registrados.</p>'}
                     </div>
                 </section>
 
@@ -9676,9 +9938,9 @@ window.updateNotificationBadge = async (clearAll = false) => {
         if (clearAll && unread > 0) {
             const missingIds = comIds.filter(id => !vistosIds.includes(id) && !idsReqFirma.includes(id));
             if(missingIds.length > 0) {
-                const inserts = missingIds.map(id => ({ perfil_id: pId, comunicado_id: id }));
+                const inserts = missingIds.map(id => ({ perfil_id: pId, comunicado_id: id, visto_en: new Date().toISOString() }));
                 // Insertar para limpiar el badge de comunicados regulares
-                await supabaseClient.from('comunicados_vistos').upsert(inserts, { onConflict: 'perfil_id, comunicado_id', ignoreDuplicates: true });
+                await supabaseClient.from('comunicados_vistos').upsert(inserts, { onConflict: 'perfil_id,comunicado_id', ignoreDuplicates: true });
             }
             unread = comIds.filter(id => !vistosIds.includes(id) && !missingIds.includes(id)).length;
         }
@@ -10984,8 +11246,34 @@ window.loadTimelineAlumno = async (mostrarHistorial = false, selectedDateStr = n
         const { data, error } = await query;
         if(error) throw error;
         
-        // Filtrar en JS si no es historial (solo mostrar no vistos)
-        const dFinal = mostrarHistorial ? data : data.filter(c => !vistosIds.includes(c.id));
+        // Auto-marcar como vistos los comunicados que NO requieren firma explícita (Zero-click)
+        const noVistosSinFirma = (data || []).filter(c => {
+            if (vistosIds.includes(c.id)) return false;
+            const esEncuadre = c.titulo && c.titulo.toLowerCase().includes('encuadre');
+            const esFirmaBoletaAviso = c.tipo === 'aviso_firma_boleta';
+            const esCitatorio = (c.tipo === 'citatorio') || (c.titulo && c.titulo.toLowerCase().includes('citatorio'));
+            return !esEncuadre && !esFirmaBoletaAviso && !esCitatorio;
+        });
+
+        if (noVistosSinFirma.length > 0) {
+            const ahoraIso = new Date().toISOString();
+            const inserts = noVistosSinFirma.map(c => ({
+                perfil_id: u.data.user.id,
+                comunicado_id: c.id,
+                visto_en: ahoraIso
+            }));
+            supabaseClient.from('comunicados_vistos')
+                .upsert(inserts, { onConflict: 'perfil_id,comunicado_id', ignoreDuplicates: true })
+                .then(() => {
+                    noVistosSinFirma.forEach(c => {
+                        if (!vistosIds.includes(c.id)) vistosIds.push(c.id);
+                    });
+                })
+                .catch(err => console.warn("Error auto-marcando comunicados vistos:", err));
+        }
+
+        // En recientes se muestran los comunicados sin ocultarlos de golpe, en historial por fecha
+        const dFinal = data || [];
 
         if(!dFinal || dFinal.length === 0) {
             cont.innerHTML = `<div style="padding:40px 20px; text-align:center; color:var(--text-muted);">
@@ -11003,37 +11291,41 @@ window.loadTimelineAlumno = async (mostrarHistorial = false, selectedDateStr = n
            if(c.archivo_url) {
                btnAdjunto = `<a href="${c.archivo_url}" target="_blank" class="btn btn-outline" style="margin-top: 12px; font-size: 0.8rem; padding: 6px 12px; border-color:var(--primary); color:var(--primary)"><i class="fa-solid fa-paperclip"></i> Ver Documento</a>`;
            }
-           const esVisto = vistosIds.includes(c.id);
            const esFirmaBoletaAviso = c.tipo === 'aviso_firma_boleta';
+           const esCitatorio = (c.tipo === 'citatorio') || (c.titulo && c.titulo.toLowerCase().includes('citatorio'));
+           const requiereFirma = esEncuadre || esFirmaBoletaAviso || esCitatorio;
+           const esVisto = vistosIds.includes(c.id) || !requiereFirma;
+
            const tipoColor = esFirmaBoletaAviso ? '#d97706' : (esEncuadre ? 'var(--warning)' : (c.audiencia === 'General' ? 'var(--success)' : 'var(--danger)'));
            const icon = esFirmaBoletaAviso ? 'fa-file-invoice' : (esEncuadre ? 'fa-file-signature' : 'fa-bullhorn');
 
            let btnAccion = '';
-           if(!esVisto) {
-               if(c.tipo === 'aviso_firma_boleta') {
-                   btnAccion = `<button onclick="window.firmarBoletaDesdeTimeline('${c.id}', this)" class="btn btn-sm btn-primary" style="font-size:0.75rem; display:flex; align-items:center; gap:6px; background:#d97706; border-color:#d97706;">
-                       <i class="fa-solid fa-signature"></i> Firmar de Enterado
-                   </button>`;
-               } else if(esEncuadre) {
-                   btnAccion = `<button onclick="window.firmarEncuadreDesdeTimeline('${c.id}', this)" class="btn btn-sm btn-primary" style="font-size:0.75rem; display:flex; align-items:center; gap:6px;">
-                       <i class="fa-solid fa-signature"></i> Firmar de Enterado
-                   </button>`;
+           if(requiereFirma) {
+               const firmado = vistosIds.includes(c.id);
+               if(!firmado) {
+                   if(c.tipo === 'aviso_firma_boleta') {
+                       btnAccion = `<button onclick="window.firmarBoletaDesdeTimeline('${c.id}', this)" class="btn btn-sm btn-primary" style="font-size:0.75rem; display:flex; align-items:center; gap:6px; background:#d97706; border-color:#d97706;">
+                           <i class="fa-solid fa-signature"></i> Firmar de Enterado
+                       </button>`;
+                   } else if(esEncuadre) {
+                       btnAccion = `<button onclick="window.firmarEncuadreDesdeTimeline('${c.id}', this)" class="btn btn-sm btn-primary" style="font-size:0.75rem; display:flex; align-items:center; gap:6px;">
+                           <i class="fa-solid fa-signature"></i> Firmar de Enterado
+                       </button>`;
+                   }
                } else {
-                   btnAccion = `<button onclick="window.marcarAvisoEnterado('${c.id}')" class="btn btn-sm" style="font-size:0.7rem; background:var(--page-bg); color:var(--text-main); border:1px solid var(--border)"><i class="fa-solid fa-check"></i> Enterado</button>`;
+                   btnAccion = '<span style="font-size:0.75rem; color:var(--success); display:flex; align-items:center; gap:4px;"><i class="fa-solid fa-pen-nib"></i> Firmado</span>';
                }
            } else {
-               btnAccion = (esEncuadre || c.tipo === 'aviso_firma_boleta')
-                   ? '<span style="font-size:0.75rem; color:var(--success); display:flex; align-items:center; gap:4px;"><i class="fa-solid fa-pen-nib"></i> Firmado</span>'
-                   : '<span style="font-size:0.7rem; color:var(--success)"><i class="fa-solid fa-check-double"></i> Leído</span>';
+               btnAccion = '<span class="badge" style="font-size:0.75rem; color:#15803d; background:#dcfce7; border:1px solid #86efac; padding:3px 8px; border-radius:6px; display:inline-flex; align-items:center; gap:4px;"><i class="fa-solid fa-check-double"></i> Revisado</span>';
            }
            
            return `
-           <div class="timeline-item" id="aviso-${c.id}" style="animation: fadeInUp 0.5s ease backwards; animation-delay: ${delay}s; ${esVisto ? 'opacity: 0.6;' : ''}">
+           <div class="timeline-item" id="aviso-${c.id}" style="animation: fadeInUp 0.5s ease backwards; animation-delay: ${delay}s; ${esVisto ? 'opacity: 0.95;' : ''}">
              <div class="timeline-icon" style="border-color: ${tipoColor}; background:white;"><i class="fa-solid ${icon}" style="color: ${tipoColor};"></i></div>
              <div class="timeline-content" style="position:relative">
                <div style="font-size:0.75rem; color: var(--text-muted); float:right;">${date}</div>
                <h4 style="color: ${tipoColor}; margin:0 0 4px 0;">${(c.titulo || '').replace(/\s*\[TALLER:.*?\]/gi, '')}</h4>
-               <p style="font-size: 0.85rem; white-space:pre-wrap; margin-bottom:10px;">${(c.mensaje || '').replace(/\[REF_ID:.*?\]/gi, '').trim()}</p>
+               <p style="font-size: 0.85rem; white-space:pre-wrap; margin-bottom:10px;">${(c.mensaje || '').replace(/\[REF_ID:.*?\]/gi, '').replace(/\[REF_REPORTE:.*?\]/gi, '').trim()}</p>
                
                <div style="display:flex; justify-content:space-between; align-items:center; gap:10px;">
                   ${btnAdjunto}
@@ -11056,10 +11348,11 @@ window.marcarAvisoEnterado = async (id) => {
         const u = await supabaseClient.auth.getUser();
         if(!u.data?.user) return;
         
-        const { error } = await supabaseClient.from('comunicados_vistos').insert({
+        const { error } = await supabaseClient.from('comunicados_vistos').upsert({
             perfil_id: u.data.user.id,
-            comunicado_id: id
-        });
+            comunicado_id: id,
+            visto_en: new Date().toISOString()
+        }, { onConflict: 'perfil_id,comunicado_id' });
         
         if(error) throw error;
         
@@ -17114,8 +17407,9 @@ window.enviarReporteRapido = async () => {
         const autor_id = u.data.user.id;
         
         const metaMateria = window.currentAulaMateria ? `Docente de ${window.currentAulaMateria.trim()}` : 'Docente';
+        const repId = crypto.randomUUID();
         const { error } = await supabaseClient.from('reportes_conducta').insert([{
-           id: crypto.randomUUID(),
+           id: repId,
            alumno_id: alumno_id,
            autor_id: autor_id,
            descripcion: finalDesc,
@@ -17130,7 +17424,7 @@ window.enviarReporteRapido = async () => {
         }
         
         // VIGILANCIA AUTOMÁTICA (incluye las notificaciones si aplican)
-        await window.ejecutarVigilanciaAutomatica(alumno_id, tipo, sev, desc, true);
+        await window.ejecutarVigilanciaAutomatica(alumno_id, tipo, sev, desc, true, repId);
         
         alert("Reporte guardado y canalizado exitosamente.");
         document.getElementById('reporteModal').remove();
@@ -23372,6 +23666,23 @@ window.loadComunicadosEnviadosMaestro = async () => {
             }
         }
 
+        const comIds = data.map(c => c.id);
+        let vistosMap = {};
+        if (comIds.length > 0) {
+            try {
+                const { data: vData } = await supabaseClient
+                    .from('comunicados_vistos')
+                    .select('comunicado_id, visto_en, perfil_id')
+                    .in('comunicado_id', comIds);
+                (vData || []).forEach(v => {
+                    if (!vistosMap[v.comunicado_id]) vistosMap[v.comunicado_id] = [];
+                    vistosMap[v.comunicado_id].push(v);
+                });
+            } catch(eV) {
+                console.warn("Error cargando vistos en maestro:", eV);
+            }
+        }
+
         cont.innerHTML = data.map(c => {
             let audLabel = c.audiencia;
             if (c.audiencia.startsWith('Grupo_')) {
@@ -23379,12 +23690,32 @@ window.loadComunicadosEnviadosMaestro = async () => {
                 audLabel = groupsMap[gId] ? 'Grupo: ' + groupsMap[gId] : 'Grupo (ID): ' + gId.substring(0,6) + '...';
             } else if (c.audiencia.startsWith('Grado_')) {
                 audLabel = 'Todos los grupos de ' + c.audiencia.replace('Grado_', '');
+            } else if (c.audiencia.startsWith('Alumno_')) {
+                audLabel = 'Alumno Específico';
             }
+
+            const vList = vistosMap[c.id] || [];
+            let badgeLectura = '';
+            if (c.audiencia && c.audiencia.startsWith('Alumno_')) {
+                if (vList.length > 0) {
+                    const fechaStr = new Date(vList[0].visto_en).toLocaleDateString('es-MX', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
+                    badgeLectura = `<span class="badge" style="background:#dcfce7; color:#15803d; border:1px solid #86efac; font-size:0.75rem; font-weight:600;"><i class="fa-solid fa-eye"></i> Revisado (${fechaStr})</span>`;
+                } else {
+                    badgeLectura = `<span class="badge" style="background:#fef9c3; color:#854d0e; border:1px solid #fde047; font-size:0.75rem; font-weight:600;"><i class="fa-solid fa-clock"></i> Pendiente</span>`;
+                }
+            } else {
+                const count = vList.length;
+                badgeLectura = `<span class="badge" style="background:${count > 0 ? '#dcfce7' : '#fef9c3'}; color:${count > 0 ? '#15803d' : '#854d0e'}; border:1px solid ${count > 0 ? '#86efac' : '#fde047'}; font-size:0.75rem; font-weight:600; cursor:pointer;" onclick="window.verLecturasComunicado('${c.id}')"><i class="fa-solid fa-eye"></i> ${count > 0 ? `Visto por ${count} alumno(s)` : 'Sin lecturas aún'} <i class="fa-solid fa-arrow-up-right-from-square" style="font-size:0.65rem; margin-left:2px;"></i></span>`;
+            }
+
             return `
             <div style="background:var(--page-bg); border:1px solid var(--border); padding:12px; border-radius:8px; display:flex; flex-direction:column; gap:8px; box-shadow:0 1px 3px rgba(0,0,0,0.03);">
-               <div><strong style="color:var(--primary); font-size:0.95rem;">${(c.titulo || '').replace(/\s*\[TALLER:.*?\]/gi, '')}</strong></div>
+               <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:8px; flex-wrap:wrap;">
+                   <strong style="color:var(--primary); font-size:0.95rem;">${(c.titulo || '').replace(/\s*\[TALLER:.*?\]/gi, '')}</strong>
+                   ${badgeLectura}
+               </div>
                <div style="font-size:0.8rem; color:var(--secondary);">Enviado a: ${audLabel} - ${new Date(c.fecha_envio).toLocaleString('es-MX')}</div>
-               <div style="font-size:0.85rem; color:var(--text-color); white-space:pre-wrap; opacity:0.85; max-height:80px; overflow:hidden; text-overflow:ellipsis;">${(c.mensaje || '').replace(/\[REF_ID:.*?\]/gi, '').trim()}</div>
+               <div style="font-size:0.85rem; color:var(--text-color); white-space:pre-wrap; opacity:0.85; max-height:80px; overflow:hidden; text-overflow:ellipsis;">${(c.mensaje || '').replace(/\[REF_ID:.*?\]/gi, '').replace(/\[REF_REPORTE:.*?\]/gi, '').trim()}</div>
             </div>
             `;
         }).join('');
