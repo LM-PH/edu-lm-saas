@@ -6326,6 +6326,7 @@ window.buscarHistorialSalud = async (query) => {
 };
 
 window.verHistorialSaludUnico = async (id, nombre) => {
+    window._ultimoAlumnoSalud = { id, nombre };
     document.getElementById('resBusquedaSaludLocal').style.display = 'none';
     const cont = document.getElementById('historialSaludCont');
     cont.innerHTML = '<p style="text-align:center; padding:20px;"><i class="fa-solid fa-spinner fa-spin"></i> Cargando expediente completo...</p>';
@@ -6363,7 +6364,7 @@ window.verHistorialSaludUnico = async (id, nombre) => {
                     <button class="btn btn-xs btn-outline" onclick="window.imprimirExpedienteMedico('${id}')" style="margin-right:8px; border-color:var(--primary); color:var(--primary);">
                         <i class="fa-solid fa-print"></i> Imprimir
                     </button>
-                    <button class="btn btn-xs btn-outline" onclick="window.loadHistorialSalud()">
+                    <button class="btn btn-xs btn-outline" onclick="window._ultimoAlumnoSalud = null; window.loadHistorialSalud();">
                         <i class="fa-solid fa-rotate-left"></i> Ver Recientes
                     </button>
                 </div>
@@ -6392,6 +6393,14 @@ window.verHistorialSaludUnico = async (id, nombre) => {
                             Rango: <strong>${new Date(s.fecha_inicio).toLocaleDateString()}</strong> al <strong>${new Date(s.fecha_fin).toLocaleDateString()}</strong>
                         </p>
                         <div style="font-size:0.75rem; color:var(--text-muted); margin-top:4px;">Por: ${s.perfiles?.nombre || 'Trabajo Social'}</div>
+                        <div style="display:flex; gap:8px; margin-top:8px; padding-top:8px; border-top:1px dashed #fde047; justify-content:flex-end; align-items:center;">
+                            <button class="btn btn-outline btn-xs" onclick="window.abrirModalEditarJustificante('${s.id}')" style="border-color:#ca8a04; color:#854d0e; display:inline-flex; align-items:center; gap:4px; font-weight:600; padding:3px 8px; border-radius:6px;">
+                                <i class="fa-solid fa-pen-to-square"></i> Editar
+                            </button>
+                            <button class="btn btn-outline btn-xs" onclick="window.eliminarJustificanteMedico('${s.id}', '${id}', '${(nombre || '').replace(/'/g, "\\'")}')" style="border-color:var(--danger); color:var(--danger); display:inline-flex; align-items:center; gap:4px; font-weight:600; padding:3px 8px; border-radius:6px;">
+                                <i class="fa-solid fa-trash-can"></i> Eliminar
+                            </button>
+                        </div>
                       </div>`;
                 }
             }).join('')}
@@ -10592,6 +10601,210 @@ window.notificarMaestrosJustificante = async (alumnoId, motivo, inicio, fin) => 
     }
 };
 
+window.abrirModalEditarJustificante = async (justificanteId) => {
+    let modal = document.getElementById('modalEditarJustificante');
+    if (!modal) {
+        modal = document.createElement('div');
+        modal.id = 'modalEditarJustificante';
+        modal.className = 'modal';
+        modal.style.cssText = 'display:none; position:fixed; z-index:9999; left:0; top:0; width:100%; height:100%; background:rgba(0,0,0,0.5); backdrop-filter:blur(4px); align-items:center; justify-content:center; overflow-y:auto; padding:20px; box-sizing:border-box;';
+        document.body.appendChild(modal);
+    }
+
+    modal.style.display = 'flex';
+    modal.innerHTML = `
+        <div class="modal-content" style="max-width:520px; width:100%; background:white; border-radius:14px; padding:24px; box-shadow:0 12px 35px rgba(0,0,0,0.2); position:relative; text-align:center;">
+            <i class="fa-solid fa-spinner fa-spin fa-2x" style="color:var(--primary); margin:20px 0;"></i>
+            <p style="margin:0; color:var(--text-muted);">Cargando información del justificante...</p>
+        </div>
+    `;
+
+    try {
+        const { data: j, error } = await supabaseClient
+            .from('justificantes_medicos')
+            .select('*, alumnos(id, nombre, matricula, grupos(nombre))')
+            .eq('id', justificanteId)
+            .single();
+
+        if (error || !j) throw new Error("No se pudo cargar el justificante: " + (error?.message || ""));
+
+        const alNombre = j.alumnos?.nombre || 'Alumno';
+        const alGrupo = j.alumnos?.grupos?.nombre || 'Sin Grupo';
+        const fInicio = j.fecha_inicio ? j.fecha_inicio.split('T')[0] : '';
+        const fFin = j.fecha_fin ? j.fecha_fin.split('T')[0] : '';
+
+        modal.innerHTML = `
+            <div class="modal-content" style="max-width:540px; width:100%; background:white; border-radius:14px; padding:24px; box-shadow:0 12px 35px rgba(0,0,0,0.2); position:relative;">
+                <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid var(--border); padding-bottom:12px; margin-bottom:16px;">
+                    <h3 style="margin:0; font-size:1.15rem; color:#854d0e; display:flex; align-items:center; gap:8px;">
+                        <i class="fa-solid fa-pen-to-square"></i> Editar Justificante Médico
+                    </h3>
+                    <button class="btn-close" onclick="window.cerrarModalEditarJustificante()" style="border:none; background:none; font-size:1.4rem; cursor:pointer; color:var(--text-muted);">&times;</button>
+                </div>
+
+                <div style="background:#fefce8; border:1px solid #fef08a; padding:12px 14px; border-radius:10px; margin-bottom:16px;">
+                    <div style="font-weight:700; color:var(--primary); font-size:1rem;">${alNombre}</div>
+                    <div style="font-size:0.8rem; color:var(--text-muted);">Matrícula: ${j.alumnos?.matricula || '---'} | Grupo: ${alGrupo}</div>
+                </div>
+
+                <div class="form-group" style="margin-bottom:14px;">
+                    <label class="form-label" style="font-weight:600; font-size:0.85rem;">Motivo / Diagnóstico de la Falta</label>
+                    <input type="text" id="editJustificanteMotivo" class="form-input" value="${(j.motivo || '').replace(/"/g, '&quot;')}" placeholder="Ej. Influenza tipo A, Cita Médica IMSS...">
+                </div>
+
+                <div style="display:flex; gap:12px; margin-bottom:14px;">
+                    <div style="flex:1">
+                        <label class="form-label" style="font-weight:600; font-size:0.85rem;">Desde (Fecha de Inicio)</label>
+                        <input type="date" id="editJustificanteInicio" class="form-input" value="${fInicio}">
+                    </div>
+                    <div style="flex:1">
+                        <label class="form-label" style="font-weight:600; font-size:0.85rem;">Hasta (Fecha de Fin)</label>
+                        <input type="date" id="editJustificanteFin" class="form-input" value="${fFin}">
+                    </div>
+                </div>
+
+                <div style="background:#eff6ff; border:1px solid #bfdbfe; padding:10px 12px; border-radius:8px; font-size:0.75rem; color:#1e40af; margin-bottom:18px; display:flex; gap:8px; align-items:flex-start;">
+                    <i class="fa-solid fa-circle-info" style="margin-top:2px;"></i>
+                    <div>Al guardar, se actualizarán las fechas y el motivo, y se re-aplicará la justificación automática de inasistencias en el aula y torniquetes para el nuevo rango de fechas.</div>
+                </div>
+
+                <div style="display:flex; justify-content:space-between; align-items:center; gap:10px; flex-wrap:wrap;">
+                    <button class="btn btn-outline" onclick="window.eliminarJustificanteMedico('${j.id}', '${j.alumno_id}', '${alNombre.replace(/'/g, "\\'")}')" style="border-color:var(--danger); color:var(--danger); font-size:0.85rem;">
+                        <i class="fa-solid fa-trash-can"></i> Eliminar Justificante
+                    </button>
+                    <div style="display:flex; gap:8px;">
+                        <button class="btn btn-outline" onclick="window.cerrarModalEditarJustificante()" style="font-size:0.85rem;">
+                            Cancelar
+                        </button>
+                        <button id="btnGuardarEditJustificante" class="btn btn-warning" onclick="window.guardarEdicionJustificante('${j.id}', '${j.alumno_id}', '${alNombre.replace(/'/g, "\\'")}')" style="color:white; font-size:0.85rem; font-weight:600;">
+                            <i class="fa-solid fa-floppy-disk"></i> Guardar Cambios
+                        </button>
+                    </div>
+                </div>
+            </div>
+        `;
+    } catch(err) {
+        console.error(err);
+        modal.innerHTML = `
+            <div class="modal-content" style="max-width:400px; width:100%; background:white; border-radius:14px; padding:24px; text-align:center;">
+                <p style="color:var(--danger);">${err.message}</p>
+                <button class="btn btn-outline" onclick="window.cerrarModalEditarJustificante()">Cerrar</button>
+            </div>
+        `;
+    }
+};
+
+window.cerrarModalEditarJustificante = () => {
+    const modal = document.getElementById('modalEditarJustificante');
+    if (modal) modal.style.display = 'none';
+};
+
+window.guardarEdicionJustificante = async (justificanteId, alumnoId, alumnoNombre) => {
+    const motivoInp = document.getElementById('editJustificanteMotivo');
+    const inicioInp = document.getElementById('editJustificanteInicio');
+    const finInp = document.getElementById('editJustificanteFin');
+    const btn = document.getElementById('btnGuardarEditJustificante');
+
+    const motivo = (motivoInp?.value || '').trim();
+    const inicio = (inicioInp?.value || '').trim();
+    const fin = (finInp?.value || '').trim();
+
+    if (!motivo || !inicio || !fin) {
+        return alert("Por favor completa el motivo y el rango de fechas (Desde y Hasta).");
+    }
+    if (inicio > fin) {
+        return alert("La fecha de inicio no puede ser posterior a la fecha de fin.");
+    }
+
+    if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Guardando...';
+    }
+
+    try {
+        // 1. Actualizar el registro en justificantes_medicos
+        const { error: updErr } = await supabaseClient
+            .from('justificantes_medicos')
+            .update({
+                motivo: motivo,
+                fecha_inicio: inicio + 'T12:00:00Z',
+                fecha_fin: fin + 'T12:00:00Z'
+            })
+            .eq('id', justificanteId);
+
+        if (updErr) throw updErr;
+
+        // 2. Re-aplicar justificación automática retroactiva para las fechas corregidas
+        if (window.aplicarJustificacionAutomatica) {
+            await window.aplicarJustificacionAutomatica(alumnoId, inicio, fin, state.plantelId);
+        }
+
+        // 3. Actualizar el texto del comunicado asociado para que los maestros vean los datos corregidos
+        try {
+            const fInicioStr = new Date(inicio + 'T12:00:00').toLocaleDateString();
+            const fFinStr = new Date(fin + 'T12:00:00').toLocaleDateString();
+            const nuevoMensaje = `[ACTUALIZADO / CORRECCIÓN]\nSe informa que el alumno(a) **${alumnoNombre}** cuenta con justificante médico del **${fInicioStr}** al **${fFinStr}** por motivo de: ${motivo}. Favor de brindar las facilidades académicas necesarias.`;
+
+            await supabaseClient
+                .from('comunicados')
+                .update({ mensaje: nuevoMensaje })
+                .ilike('titulo', `JUSTIFICANTE MÉDICO: ${alumnoNombre}%`)
+                .eq('plantel_id', state.plantelId);
+        } catch(eCom) {
+            console.warn("No se pudieron actualizar comunicados previos:", eCom);
+        }
+
+        window.cerrarModalEditarJustificante();
+        window.showToast("Justificante médico actualizado y corregido correctamente.", "success");
+
+        // 4. Refrescar vistas activas
+        if (window._ultimoAlumnoSalud && window.verHistorialSaludUnico) {
+            window.verHistorialSaludUnico(window._ultimoAlumnoSalud.id, window._ultimoAlumnoSalud.nombre);
+        } else if (window.loadHistorialSalud) {
+            window.loadHistorialSalud();
+        }
+    } catch(e) {
+        console.error("Error al editar justificante:", e);
+        alert("Ocurrió un error al guardar los cambios: " + (e.message || ""));
+    } finally {
+        if (btn) {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fa-solid fa-floppy-disk"></i> Guardar Cambios';
+        }
+    }
+};
+
+window.eliminarJustificanteMedico = async (justificanteId, alumnoId, alumnoNombre) => {
+    const nom = alumnoNombre || 'este alumno';
+    if (!confirm(`¿Estás seguro de que deseas eliminar este justificante médico de ${nom}?\n\nEsta acción eliminará el registro del expediente.`)) {
+        return;
+    }
+
+    try {
+        window.showToast("Eliminando justificante...", "info");
+
+        const { error } = await supabaseClient
+            .from('justificantes_medicos')
+            .delete()
+            .eq('id', justificanteId);
+
+        if (error) throw error;
+
+        window.cerrarModalEditarJustificante();
+        window.showToast("Justificante médico eliminado con éxito.", "success");
+
+        // Refrescar vistas activas
+        if (window._ultimoAlumnoSalud && window.verHistorialSaludUnico) {
+            window.verHistorialSaludUnico(window._ultimoAlumnoSalud.id, window._ultimoAlumnoSalud.nombre);
+        } else if (window.loadHistorialSalud) {
+            window.loadHistorialSalud();
+        }
+    } catch(e) {
+        console.error("Error al eliminar justificante:", e);
+        alert("Error al eliminar justificante: " + (e.message || ""));
+    }
+};
+
 window.loadHistorialSalud = async () => {
     const cont = document.getElementById('historialSaludCont');
     if(!cont) return;
@@ -10606,7 +10819,7 @@ window.loadHistorialSalud = async () => {
         // 2. Obtener Justificantes
         const { data: justificantes, error: errJust } = await supabaseClient
             .from('justificantes_medicos')
-            .select('*, alumnos(nombre, grupos(nombre)), perfiles(nombre)')
+            .select('*, alumnos(id, nombre, grupos(nombre)), perfiles(nombre)')
             .order('fecha_emision', {ascending: false})
             .limit(10);
 
@@ -10651,6 +10864,14 @@ window.loadHistorialSalud = async () => {
                 </div>
                 <div style="font-size:0.75rem; color:var(--text-muted); margin-top:4px;">Por: ${s.perfiles?.nombre || 'Trabajo Social'}</div>
                 <p style="margin:0; font-size:0.8rem; color:var(--text-muted)">Justificante oficial enviado a maestros.</p>
+                <div style="display:flex; gap:8px; margin-top:8px; padding-top:8px; border-top:1px dashed #fde047; justify-content:flex-end; align-items:center;">
+                    <button class="btn btn-outline btn-xs" onclick="window.abrirModalEditarJustificante('${s.id}')" style="border-color:#ca8a04; color:#854d0e; display:inline-flex; align-items:center; gap:4px; font-weight:600; padding:3px 8px; border-radius:6px;">
+                        <i class="fa-solid fa-pen-to-square"></i> Editar
+                    </button>
+                    <button class="btn btn-outline btn-xs" onclick="window.eliminarJustificanteMedico('${s.id}', '${s.alumno_id}', '${(s.alumnos?.nombre || '').replace(/'/g, "\\'")}')" style="border-color:var(--danger); color:var(--danger); display:inline-flex; align-items:center; gap:4px; font-weight:600; padding:3px 8px; border-radius:6px;">
+                        <i class="fa-solid fa-trash-can"></i> Eliminar
+                    </button>
+                </div>
               </div>`;
           }
         }).join('');
