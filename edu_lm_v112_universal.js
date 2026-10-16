@@ -11247,6 +11247,11 @@ window.loadTimelineAlumno = async (mostrarHistorial = false, selectedDateStr = n
     const inputFecha = document.getElementById('filtroFechaAvisos');
     if (!esHistorial && inputFecha) {
         inputFecha.value = '';
+        if (inputFecha._flatpickr) inputFecha._flatpickr.clear();
+    }
+    if (esHistorial) {
+        const citCont = document.getElementById('citatoriosPendientesAlumno');
+        if(citCont) citCont.style.display = 'none';
     }
 
     try {
@@ -11283,7 +11288,7 @@ window.loadTimelineAlumno = async (mostrarHistorial = false, selectedDateStr = n
             audArr.push('Alumno_' + al.id);
             if(al.grupo_id) audArr.push('Grupo_' + al.grupo_id);
             if(al.grado) audArr.push('Grado_' + al.grado);
-            if(window.loadCitatoriosAlumno) window.loadCitatoriosAlumno(al.id);
+            if(window.loadCitatoriosAlumno && !esHistorial) window.loadCitatoriosAlumno(al.id);
         } else {
             console.warn(">>> [TIMELINE] No se encontró vínculo de Alumno para el usuario logueado.");
         }
@@ -11291,6 +11296,17 @@ window.loadTimelineAlumno = async (mostrarHistorial = false, selectedDateStr = n
         // Obtener vistos
         const { data: vistos } = await supabaseClient.from('comunicados_vistos').select('comunicado_id').eq('perfil_id', u.data.user.id);
         const vistosIds = vistos ? vistos.map(v => v.comunicado_id) : [];
+        const yaVistosIds = new Set(vistosIds);
+
+        // Obtener firmas registradas para no mostrar encuadres o boletas ya firmados
+        let signedEncIds = [];
+        let signedBolTrimestres = [];
+        if (al) {
+            const { data: fe } = await supabaseClient.from('firmas_encuadre').select('encuadre_id').eq('alumno_id', al.id);
+            if (fe) signedEncIds = fe.map(f => f.encuadre_id);
+            const { data: fb } = await supabaseClient.from('firmas_boleta').select('trimestre').eq('alumno_id', al.id);
+            if (fb) signedBolTrimestres = fb.map(f => f.trimestre);
+        }
 
         console.log(">>> [TIMELINE] Buscando comunicados para audiencia:", audArr);
         let query = supabaseClient.from('comunicados').select('*').in('audiencia', audArr).order('fecha_envio', { ascending: false });
@@ -11306,19 +11322,44 @@ window.loadTimelineAlumno = async (mostrarHistorial = false, selectedDateStr = n
                 query = query.gte('fecha_envio', localStart).lte('fecha_envio', localEnd);
             }
         } else {
-            query = query.limit(30);
+            query = query.limit(100);
         }
            
         const { data, error } = await query;
         if(error) throw error;
         
+        // En Recientes solo deben aparecer los avisos que NO se han visto y los que NO se han firmado.
+        // Si ya se vieron o ya se firmaron, solo aparecen en el calendario (Archivo Escolar).
+        const dFinal = esHistorial 
+            ? (data || []) 
+            : (data || []).filter(c => {
+                const esEnc = (c.titulo && c.titulo.toLowerCase().includes('encuadre')) || false;
+                const esBol = (c.tipo === 'aviso_firma_boleta') || false;
+                const reqFirma = esEnc || esBol;
+
+                if (reqFirma) {
+                    let firmado = yaVistosIds.has(c.id);
+                    if (!firmado) {
+                        if (esEnc) {
+                            const ref = (c.mensaje || '').match(/\[REF_ID:\s*([a-f0-9-]{36})\]/i);
+                            if (ref && signedEncIds.includes(ref[1])) firmado = true;
+                        } else if (esBol) {
+                            const tr = (c.titulo || '').match(/Trimestre\s+\d+/i);
+                            if (tr && signedBolTrimestres.includes(tr[0])) firmado = true;
+                        }
+                    }
+                    return !firmado;
+                } else {
+                    return !yaVistosIds.has(c.id);
+                }
+            });
+
         // Auto-marcar como vistos los comunicados que NO requieren firma explícita (Zero-click)
-        // Únicamente aviso_firma_boleta y encuadres requieren firma digital obligatoria.
-        const noVistosSinFirma = (data || []).filter(c => {
-            if (vistosIds.includes(c.id)) return false;
-            const esEncuadre = c.titulo && c.titulo.toLowerCase().includes('encuadre');
-            const esFirmaBoletaAviso = c.tipo === 'aviso_firma_boleta';
-            return !esEncuadre && !esFirmaBoletaAviso;
+        // Únicamente se marcan los que acaban de ser presentados en pantalla al alumno
+        const noVistosSinFirma = dFinal.filter(c => {
+            const esEnc = (c.titulo && c.titulo.toLowerCase().includes('encuadre')) || false;
+            const esBol = (c.tipo === 'aviso_firma_boleta') || false;
+            return !esEnc && !esBol && !yaVistosIds.has(c.id);
         });
 
         if (noVistosSinFirma.length > 0) {
@@ -11346,17 +11387,16 @@ window.loadTimelineAlumno = async (mostrarHistorial = false, selectedDateStr = n
                     }
                 }
                 noVistosSinFirma.forEach(c => {
-                    if (!vistosIds.includes(c.id)) vistosIds.push(c.id);
+                    vistosIds.push(c.id);
+                    yaVistosIds.add(c.id);
                 });
             } catch (err) {
                 console.warn("Error auto-marcando comunicados vistos:", err);
             }
         }
 
-        const dFinal = data || [];
-
         if(!dFinal || dFinal.length === 0) {
-            const msjVacio = esHistorial ? 'No hubo avisos en esta fecha.' : '¡Todo al día! No tienes comunicados recientes.';
+            const msjVacio = esHistorial ? 'No hubo avisos en esta fecha.' : '¡Todo al día! No tienes comunicados pendientes.';
             cont.innerHTML = `<div style="padding:40px 20px; text-align:center; color:var(--text-muted);">
                 <i class="fa-solid fa-check-circle" style="font-size:3rem; margin-bottom:15px; opacity:0.3"></i>
                 <p>${msjVacio}</p>
@@ -11374,8 +11414,18 @@ window.loadTimelineAlumno = async (mostrarHistorial = false, selectedDateStr = n
            }
            const esFirmaBoletaAviso = c.tipo === 'aviso_firma_boleta';
            const requiereFirma = esEncuadre || esFirmaBoletaAviso;
-           const firmado = vistosIds.includes(c.id);
-           const esVisto = vistosIds.includes(c.id);
+           
+           let firmado = yaVistosIds.has(c.id);
+           if (!firmado && requiereFirma) {
+               if (esEncuadre) {
+                   const ref = (c.mensaje || '').match(/\[REF_ID:\s*([a-f0-9-]{36})\]/i);
+                   if (ref && signedEncIds.includes(ref[1])) firmado = true;
+               } else if (esFirmaBoletaAviso) {
+                   const tr = (c.titulo || '').match(/Trimestre\s+\d+/i);
+                   if (tr && signedBolTrimestres.includes(tr[0])) firmado = true;
+               }
+           }
+           const esVisto = yaVistosIds.has(c.id) || firmado;
 
            const tipoColor = esFirmaBoletaAviso ? '#d97706' : (esEncuadre ? 'var(--warning)' : (c.audiencia === 'General' ? 'var(--success)' : 'var(--danger)'));
            const icon = esFirmaBoletaAviso ? 'fa-file-invoice' : (esEncuadre ? 'fa-file-signature' : 'fa-bullhorn');
@@ -11396,11 +11446,17 @@ window.loadTimelineAlumno = async (mostrarHistorial = false, selectedDateStr = n
                    btnAccion = '<span style="font-size:0.75rem; color:var(--success); display:flex; align-items:center; gap:4px;"><i class="fa-solid fa-pen-nib"></i> Firmado</span>';
                }
            } else {
-               btnAccion = '<span class="badge" style="font-size:0.75rem; color:#15803d; background:#dcfce7; border:1px solid #86efac; padding:3px 8px; border-radius:6px; display:inline-flex; align-items:center; gap:4px;"><i class="fa-solid fa-check-double"></i> Revisado</span>';
+               if (esHistorial) {
+                   btnAccion = '<span class="badge" style="font-size:0.75rem; color:#15803d; background:#dcfce7; border:1px solid #86efac; padding:3px 8px; border-radius:6px; display:inline-flex; align-items:center; gap:4px;"><i class="fa-solid fa-check-double"></i> Revisado</span>';
+               } else {
+                   btnAccion = `<button onclick="window.marcarAvisoEnterado('${c.id}')" class="btn btn-sm" style="font-size:0.75rem; display:inline-flex; align-items:center; gap:5px; color:#15803d; background:#dcfce7; border:1px solid #86efac; padding:3px 10px; border-radius:6px; cursor:pointer;" title="Marcar como revisado">
+                       <i class="fa-solid fa-check-double"></i> Revisado <i class="fa-solid fa-circle-check" style="font-size:0.75rem; margin-left:2px;"></i>
+                   </button>`;
+               }
            }
            
            return `
-           <div class="timeline-item" id="aviso-${c.id}" style="animation: fadeInUp 0.5s ease backwards; animation-delay: ${delay}s; ${esVisto ? 'opacity: 0.65; background:#f8fafc;' : 'background:white;'} border-radius:10px; transition:all 0.3s ease;">
+           <div class="timeline-item" id="aviso-${c.id}" style="animation: fadeInUp 0.5s ease backwards; animation-delay: ${delay}s; ${esVisto && esHistorial ? 'opacity: 0.7; background:#f8fafc;' : 'background:white;'} border-radius:10px; transition:all 0.3s ease;">
              <div class="timeline-icon" style="border-color: ${tipoColor}; background:white;"><i class="fa-solid ${icon}" style="color: ${tipoColor};"></i></div>
              <div class="timeline-content" style="position:relative">
                <div style="font-size:0.75rem; color: var(--text-muted); float:right;">${date}</div>
@@ -11441,7 +11497,16 @@ window.marcarAvisoEnterado = async (id) => {
             card.style.transform = 'translateX(100%)';
             card.style.opacity = '0';
             card.style.transition = 'all 0.5s ease';
-            setTimeout(() => card.remove(), 500);
+            setTimeout(() => {
+                card.remove();
+                const cont = document.getElementById('timelineAlumnoContenedor');
+                if (cont && cont.querySelectorAll('.timeline-item').length === 0) {
+                    cont.innerHTML = `<div style="padding:40px 20px; text-align:center; color:var(--text-muted);">
+                        <i class="fa-solid fa-check-circle" style="font-size:3rem; margin-bottom:15px; opacity:0.3"></i>
+                        <p>¡Todo al día! No tienes comunicados pendientes.</p>
+                    </div>`;
+                }
+            }, 500);
         }
     } catch(e) { console.error(e); }
 };
@@ -11656,6 +11721,25 @@ window.firmarEncuadreDesdeTimeline = async (comunicadoId, btn) => {
         if(card) {
             const btnWrap = card.querySelector('.btn-primary')?.parentElement;
             if(btnWrap) btnWrap.innerHTML = '<span style="color:var(--success); font-size:0.75rem;"><i class="fa-solid fa-pen-nib"></i> Firmado ✔</span>';
+            const inputFecha = document.getElementById('filtroFechaAvisos');
+            const esHistorial = Boolean(inputFecha && inputFecha.value);
+            if (!esHistorial) {
+                setTimeout(() => {
+                    card.style.transform = 'translateX(100%)';
+                    card.style.opacity = '0';
+                    card.style.transition = 'all 0.5s ease';
+                    setTimeout(() => {
+                        card.remove();
+                        const cont = document.getElementById('timelineAlumnoContenedor');
+                        if (cont && cont.querySelectorAll('.timeline-item').length === 0) {
+                            cont.innerHTML = `<div style="padding:40px 20px; text-align:center; color:var(--text-muted);">
+                                <i class="fa-solid fa-check-circle" style="font-size:3rem; margin-bottom:15px; opacity:0.3"></i>
+                                <p>¡Todo al día! No tienes comunicados pendientes.</p>
+                            </div>`;
+                        }
+                    }, 500);
+                }, 800);
+            }
         }
     } catch(e) {
         console.error(e);
@@ -19477,7 +19561,16 @@ window.firmarBoletaDesdeTimeline = async (comunicadoId, btn) => {
             card.style.transform = 'translateX(100%)';
             card.style.opacity = '0';
             card.style.transition = 'all 0.5s ease';
-            setTimeout(() => card.remove(), 500);
+            setTimeout(() => {
+                card.remove();
+                const cont = document.getElementById('timelineAlumnoContenedor');
+                if (cont && cont.querySelectorAll('.timeline-item').length === 0) {
+                    cont.innerHTML = `<div style="padding:40px 20px; text-align:center; color:var(--text-muted);">
+                        <i class="fa-solid fa-check-circle" style="font-size:3rem; margin-bottom:15px; opacity:0.3"></i>
+                        <p>¡Todo al día! No tienes comunicados pendientes.</p>
+                    </div>`;
+                }
+            }, 500);
         }
 
         alert(`✅ ¡Firma registrada con éxito!\n\nNombre: ${firmaTexto.trim()}\nTrimestre: ${trimestre}\n\nTu firma quedó registrada en el sistema escolar.`);
@@ -21621,12 +21714,14 @@ window.initFlatpickrAvisos = async (isAlumno = false) => {
     let page = 0;
     const pageSize = 1000;
     while(true) {
-        let { data } = await supabaseClient
+        let q = supabaseClient
             .from('comunicados')
             .select('fecha_envio, audiencia, titulo, tipo')
-            .eq('plantel_id', state.plantelId)
-            .order('fecha_envio', { ascending: false })
-            .range(page * pageSize, (page + 1) * pageSize - 1);
+            .order('fecha_envio', { ascending: false });
+        if(state.plantelId) {
+            q = q.or(`plantel_id.eq.${state.plantelId},plantel_id.is.null,audiencia.ilike.Alumno_%`);
+        }
+        let { data } = await q.range(page * pageSize, (page + 1) * pageSize - 1);
         
         if (data && data.length > 0) allData.push(...data);
         if (!data || data.length < pageSize) break;
@@ -21639,15 +21734,28 @@ window.initFlatpickrAvisos = async (isAlumno = false) => {
     if(isAlumno) {
         let audSet = new Set(['General', 'Alumnos', 'Todos']);
         if(userId) {
-            const { data: al } = await supabaseClient
+            let al = null;
+            const userEmail = (uRes.data?.user?.email || '').toLowerCase().trim();
+            const { data: alData } = await supabaseClient
                 .from('alumnos')
-                .select('id, grupo_id')
-                .or(`contacto_email.eq.${uRes.data.user.email},perfil_id.eq.${userId}`)
+                .select('id, grupo_id, grado, matricula')
+                .or(`contacto_email.ilike.${userEmail},perfil_id.eq.${userId}`)
                 .maybeSingle();
+            al = alData;
+            if (!al && userEmail) {
+                const possibleMat = userEmail.split('@')[0].toUpperCase().trim();
+                const { data: alMat } = await supabaseClient
+                    .from('alumnos')
+                    .select('id, grupo_id, grado, matricula')
+                    .eq('matricula', possibleMat)
+                    .maybeSingle();
+                if (alMat) al = alMat;
+            }
 
             if(al) {
                 audSet.add('Alumno_' + al.id);
                 if(al.grupo_id) audSet.add('Grupo_' + al.grupo_id);
+                if(al.grado) audSet.add('Grado_' + al.grado);
             }
         }
         datesWithComs = data.filter(c => !c.audiencia || audSet.has(c.audiencia))
