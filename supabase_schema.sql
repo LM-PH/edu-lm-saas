@@ -662,14 +662,14 @@ ALTER TABLE public.horarios_maestros ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Read Horarios Maestros" ON public.horarios_maestros
 FOR SELECT TO authenticated USING (
     (maestro_email = (auth.jwt() ->> 'email'::text)) OR
-    ((SELECT rol FROM public.perfiles WHERE id = auth.uid()) IN ('admin', 'directivo', 'apoyo'))
+    ((SELECT rol FROM public.perfiles WHERE id = auth.uid()) IN ('admin', 'directivo', 'apoyo', 'secretaria_direccion', 'administrativo'))
 );
 
 CREATE POLICY "Manage Horarios Maestros" ON public.horarios_maestros
 FOR ALL TO authenticated USING (
-    (SELECT rol FROM public.perfiles WHERE id = auth.uid()) IN ('admin', 'directivo')
+    (SELECT rol FROM public.perfiles WHERE id = auth.uid()) IN ('admin', 'directivo', 'secretaria_direccion', 'administrativo')
 ) WITH CHECK (
-    (SELECT rol FROM public.perfiles WHERE id = auth.uid()) IN ('admin', 'directivo')
+    (SELECT rol FROM public.perfiles WHERE id = auth.uid()) IN ('admin', 'directivo', 'secretaria_direccion', 'administrativo')
 );
 
 -- =======================================================
