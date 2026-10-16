@@ -23866,16 +23866,15 @@ window.publicarComunicadoMaestro = async () => {
             const file = fInp.files[0];
             const fileExt = file.name.split('.').pop();
             const fileName = `aviso_maestro_${Date.now()}.${fileExt}`;
-            const filePath = `avisos_adjuntos/${fileName}`;
 
             const { error: uploadError } = await supabaseClient.storage
-                .from('comunicados')
-                .upload(filePath, file);
+                .from('comunicados_adjuntos')
+                .upload(fileName, file);
 
             if (uploadError) throw uploadError;
             const { data: { publicUrl } } = supabaseClient.storage
-                .from('comunicados')
-                .getPublicUrl(filePath);
+                .from('comunicados_adjuntos')
+                .getPublicUrl(fileName);
             fileUrl = publicUrl;
         }
 
@@ -23932,7 +23931,7 @@ window.loadComunicadosEnviadosMaestro = async () => {
     try {
         const uRes = await supabaseClient.auth.getUser();
         const { data, error } = await supabaseClient.from('comunicados')
-            .select('id, titulo, mensaje, fecha_envio, audiencia')
+            .select('id, titulo, mensaje, fecha_envio, audiencia, archivo_url')
             .eq('autor_id', uRes.data.user.id)
             .eq('plantel_id', state.plantelId)
             .eq('tipo', 'AvisoMaestro')
@@ -24004,6 +24003,7 @@ window.loadComunicadosEnviadosMaestro = async () => {
                </div>
                <div style="font-size:0.8rem; color:var(--secondary);">Enviado a: ${audLabel} - ${new Date(c.fecha_envio).toLocaleString('es-MX')}</div>
                <div style="font-size:0.85rem; color:var(--text-color); white-space:pre-wrap; opacity:0.85; max-height:80px; overflow:hidden; text-overflow:ellipsis;">${(c.mensaje || '').replace(/\[REF_ID:.*?\]/gi, '').replace(/\[REF_REPORTE:.*?\]/gi, '').trim()}</div>
+               ${c.archivo_url ? `<div style="margin-top:2px;"><a href="${c.archivo_url}" target="_blank" class="btn btn-outline btn-xs" style="color:var(--primary); border-color:var(--primary); display:inline-flex; gap:4px; align-items:center; text-decoration:none;"><i class="fa-solid fa-paperclip"></i> Ver adjunto</a></div>` : ''}
             </div>
             `;
         }).join('');

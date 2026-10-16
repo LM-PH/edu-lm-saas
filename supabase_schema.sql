@@ -432,11 +432,12 @@ CREATE POLICY "Lectura de adjuntos comunicados" ON storage.objects
     FOR SELECT
     USING (bucket_id = 'comunicados_adjuntos');
 
-CREATE POLICY "Admins suben adjuntos comunicados" ON storage.objects
+CREATE POLICY "Personal y maestros suben adjuntos comunicados" ON storage.objects
     FOR INSERT
+    TO authenticated
     WITH CHECK (
         bucket_id = 'comunicados_adjuntos' AND
-        (SELECT rol FROM perfiles WHERE perfiles.id = auth.uid()) = 'admin'
+        (SELECT rol FROM perfiles WHERE perfiles.id = auth.uid()) IN ('admin', 'administrador', 'directivo', 'director', 'subdirector', 'maestro', 'docente', 'coordinador', 'prefectura', 'control_escolar')
     );
 
 -- 12. TABLA ACTIVIDADES DOCENTE
