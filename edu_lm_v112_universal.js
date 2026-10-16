@@ -3568,6 +3568,8 @@ function renderApoyoReportes() {
                         <option value="activos">Todos (Vigentes)</option>
                         <option value="sin_horario">⚠️ Horario Pendiente</option>
                         <option value="con_horario">🗓️ Con Horario Asignado</option>
+                        <option value="vistos_sin_firma">👁️ Visualizados (Sin firma)</option>
+                        <option value="pendientes_vista">⏳ Pendientes de vista</option>
                         <option value="pendientes">No Enterado (Sin firma)</option>
                         <option value="enterados">Enterado (Firmados)</option>
                     </select>
@@ -5193,6 +5195,10 @@ window.loadCitatoriosApoyo = async () => {
                 query = query.is('fecha_cita', null);
             } else if (selectFiltro.value === 'con_horario') {
                 query = query.not('fecha_cita', 'is', null);
+            } else if (selectFiltro.value === 'vistos_sin_firma') {
+                query = query.neq('estado', 'enterado').eq('visto_por_alumno', true);
+            } else if (selectFiltro.value === 'pendientes_vista') {
+                query = query.neq('estado', 'enterado').or('visto_por_alumno.is.null,visto_por_alumno.eq.false');
             }
         }
 
@@ -5204,9 +5210,10 @@ window.loadCitatoriosApoyo = async () => {
             return;
         }
 
-        // 1. Obtener IDs únicos de alumnos para consulta en bloque de sus reportes
+        // 1. Obtener IDs únicos de alumnos para consulta en bloque de sus reportes y visualizaciones
         const studentIds = [...new Set(data.map(c => c.alumno_id).filter(Boolean))];
         const reportesPorAlumno = {};
+        const alumnosConVisto = new Set();
 
         if (studentIds.length > 0) {
             try {
@@ -5225,6 +5232,36 @@ window.loadCitatoriosApoyo = async () => {
                 }
             } catch (errRep) {
                 console.warn("Aviso al consultar reportes_conducta vinculados:", errRep);
+            }
+
+            // Consultar si el alumno ya abrió/visualizó el aviso de citatorio en comunicados
+            try {
+                const audiencias = studentIds.map(id => `Alumno_${id}`);
+                const { data: comData } = await supabaseClient
+                    .from('comunicados')
+                    .select('id, audiencia')
+                    .in('audiencia', audiencias)
+                    .ilike('titulo', '%CITATORIO%');
+
+                if (comData && comData.length > 0) {
+                    const comIds = comData.map(c => c.id);
+                    const { data: vistosData } = await supabaseClient
+                        .from('comunicados_vistos')
+                        .select('comunicado_id')
+                        .in('comunicado_id', comIds);
+
+                    if (vistosData && vistosData.length > 0) {
+                        const vistosIds = new Set(vistosData.map(v => v.comunicado_id));
+                        comData.forEach(c => {
+                            if (vistosIds.has(c.id)) {
+                                const aid = (c.audiencia || '').replace('Alumno_', '');
+                                if (aid) alumnosConVisto.add(aid);
+                            }
+                        });
+                    }
+                }
+            } catch (errVistos) {
+                console.warn("Aviso al verificar comunicados_vistos de citatorios:", errVistos);
             }
         }
 
@@ -5408,13 +5445,39 @@ window.loadCitatoriosApoyo = async () => {
                 </div>
             `;
 
+            // Sincronizar si fue visto por alumno/notificación/cita
+            const fueVisto = Boolean(c.visto_por_alumno || (c.alumno_id && alumnosConVisto.has(c.alumno_id)) || c.fecha_cita);
+            if (!c.visto_por_alumno && fueVisto) {
+                c.visto_por_alumno = true;
+                supabaseClient.from('citatorios').update({ visto_por_alumno: true }).eq('id', c.id).then(()=>{}).catch(()=>{});
+            }
+
+            let badgeEstadoHtml = '';
+            if (isEnterado) {
+                badgeEstadoHtml = `
+                    <span class="badge" style="background:#16a34a; color:white; font-size:0.72rem; padding:4px 10px; border-radius:8px; font-weight:600;" title="Citatorio firmado digitalmente por el padre o tutor">
+                        <i class="fa-solid fa-file-signature"></i> FIRMADO POR PADRE
+                    </span>
+                `;
+            } else if (c.visto_por_alumno) {
+                badgeEstadoHtml = `
+                    <span class="badge" onclick="window.toggleVistoCitatorio('${c.id}', false)" style="background:#2563eb; color:white; font-size:0.72rem; padding:4px 10px; border-radius:8px; font-weight:600; cursor:pointer;" title="Visualizado por el alumno o tutor (sin firma). Clic para volver a marcar como pendiente">
+                        <i class="fa-solid fa-eye"></i> VISUALIZADO (SIN FIRMA)
+                    </span>
+                `;
+            } else {
+                badgeEstadoHtml = `
+                    <span class="badge" onclick="window.toggleVistoCitatorio('${c.id}', true)" style="background:#ea580c; color:white; font-size:0.72rem; padding:4px 10px; border-radius:8px; font-weight:600; cursor:pointer;" title="Aún no visualizado en el portal. Clic para marcar como visualizado manualmente">
+                        <i class="fa-solid fa-clock"></i> PENDIENTE DE VISTA
+                    </span>
+                `;
+            }
+
             return `
                 <div class="card" style="padding:16px; border:1px solid ${isEnterado ? '#bbf7d0' : '#fed7aa'}; background:white; position:relative; box-shadow:var(--shadow-sm); display:flex; flex-direction:column; justify-content:space-between;">
                     <div>
                         <div style="display:flex; justify-content:space-between; margin-bottom:10px; align-items:center;">
-                            <span class="badge" style="background:${isEnterado ? '#22c55e' : (c.visto_por_alumno ? '#3b82f6' : '#f97316')}; color:white; font-size:0.72rem; padding:4px 10px; border-radius:8px; font-weight:600;">
-                                ${isEnterado ? '<i class="fa-solid fa-file-signature"></i> FIRMADO POR PADRE' : (c.visto_por_alumno ? '<i class="fa-solid fa-eye"></i> VISTO POR ALUMNO' : '<i class="fa-solid fa-clock"></i> PENDIENTE DE VISTA')}
-                            </span>
+                            ${badgeEstadoHtml}
                             <small style="color:var(--text-muted); font-size:0.75rem;"><i class="fa-regular fa-calendar"></i> ${new Date(c.creado_en).toLocaleDateString('es-MX')}</small>
                         </div>
                         <h4 style="margin:0 0 4px 0; font-size:1.05rem; color:var(--primary); font-weight:700;">${c.alumnos?.nombre || '---'}</h4>
@@ -5448,6 +5511,21 @@ window.loadCitatoriosApoyo = async () => {
             `;
         }).join('');
     } catch(e) { console.error("Error load citatorios:", e); }
+};
+
+window.toggleVistoCitatorio = async (citatorioId, nuevoEstado) => {
+    try {
+        const { error } = await supabaseClient
+            .from('citatorios')
+            .update({ visto_por_alumno: Boolean(nuevoEstado) })
+            .eq('id', citatorioId);
+        if (error) throw error;
+        window.showToast(nuevoEstado ? "Citatorio marcado como visualizado" : "Citatorio marcado como pendiente de vista", "info");
+        if (window.loadCitatoriosApoyo) window.loadCitatoriosApoyo();
+    } catch (e) {
+        console.error("Error al actualizar visto_por_alumno:", e);
+        window.showToast("No se pudo actualizar el estado de vista", "error");
+    }
 };
 
 window.abrirModalAtencionFoco = (id, nombre, citatorioId = null) => {
@@ -11830,6 +11908,17 @@ window.loadCitatoriosAlumno = async (alumnoId) => {
         if(!data || data.length === 0) {
             cont.style.display = 'none';
             return;
+        }
+
+        // Marcar citatorios automáticamente como vistos por el alumno al ser cargados en su portal
+        const noVistos = (data || []).filter(c => !c.visto_por_alumno).map(c => c.id);
+        if (noVistos.length > 0) {
+            supabaseClient
+                .from('citatorios')
+                .update({ visto_por_alumno: true })
+                .in('id', noVistos)
+                .then(() => {})
+                .catch(err => console.warn("Aviso al marcar citatorios como vistos:", err));
         }
 
         cont.style.display = 'block';
