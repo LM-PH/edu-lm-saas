@@ -26895,19 +26895,34 @@ window.guardarBloqueHorarioDocente = async () => {
     if (!hora_inicio || !hora_fin) return alert("Por favor ingresa la hora de inicio y hora de fin.");
     
     const timeToMinutes = (t) => {
-        if(!t) return 0;
-        const parts = t.split(/[:.]/);
-        return (parseInt(parts[0]) || 0) * 60 + (parseInt(parts[1]) || 0);
+        if(!t) return null;
+        const clean = String(t).trim();
+        const parts = clean.split(/[:.]/);
+        if (parts.length < 2) return null;
+        const h = parseInt(parts[0], 10);
+        const m = parseInt(parts[1], 10);
+        if (isNaN(h) || isNaN(m)) return null;
+        return h * 60 + m;
     };
     
     const mStart = timeToMinutes(hora_inicio);
     const mEnd = timeToMinutes(hora_fin);
+    if (mStart === null || mEnd === null) return alert("Por favor ingresa un formato de hora válido (ej. 07:00).");
     if (mStart >= mEnd) return alert("La hora de inicio debe ser anterior a la hora de fin.");
+    
+    // Normalizar formato de hora a HH:MM
+    const formatNormHM = (mins) => {
+        const h = Math.floor(mins / 60);
+        const m = mins % 60;
+        return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+    };
+    const normHoraInicio = formatNormHM(mStart);
+    const normHoraFin = formatNormHM(mEnd);
     
     const orden_hora = parseInt(ordenStr) || 1;
     const targetDays = isMultiDia ? ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes'] : [dia];
     
-    window.showToast("Validando empalmes...", "info");
+    window.showToast("Validando horarios...", "info");
     
     try {
         let pid = state.plantelId || window.currentUserProfile?.plantel_id;
@@ -26925,21 +26940,26 @@ window.guardarBloqueHorarioDocente = async () => {
             for (const s of daySlots) {
                 const sStart = timeToMinutes(s.hora_inicio);
                 const sEnd = timeToMinutes(s.hora_fin);
-                const timeOverlap = (mStart < sEnd && mEnd > sStart) || (parseInt(s.orden_hora) === orden_hora);
+                
+                // Si el slot existente no tiene hora válida, omitir comparación
+                if (sStart === null || sEnd === null || sStart >= sEnd) continue;
+                
+                // VALIDACIÓN ESTRICTA DE HORARIO:
+                // Dos bloques solo se empalman si sus intervalos de tiempo se solapan:
+                const timeOverlap = (mStart < sEnd && mEnd > sStart);
                 
                 if (timeOverlap) {
-                    if (s.maestro_email === email) {
+                    if (s.maestro_email && s.maestro_email.toLowerCase().trim() === email.toLowerCase().trim()) {
                         const grp = s.grupos ? s.grupos.nombre : (s.target_grado ? `Grado ${s.target_grado}` : 'Sin Grupo');
-                        return alert(`⚠️ EMPALME DE DOCENTE:\nEl docente ya tiene asignada la materia "${s.materia}" (${grp}) el día ${targetDay} en el horario ${s.hora_inicio} - ${s.hora_fin} (Sesión ${s.orden_hora}°).\nPor favor, verifica el horario.`);
-                    }
-                    
-                    if (grupo_id && s.grupo_id && s.grupo_id === grupo_id) {
-                        const grpName = s.grupos ? s.grupos.nombre : 'el grupo';
-                        return alert(`⚠️ EMPALME DE GRUPO:\nEl grupo "${grpName}" ya tiene ocupado este horario con la materia "${s.materia}" impartida por ${s.maestro_email} el día ${targetDay} de ${s.hora_inicio} a ${s.hora_fin} (Sesión ${s.orden_hora}°).\nPor favor, elige otra hora o grupo.`);
-                    }
-                    
-                    if (target_grado && s.target_grado && String(s.target_grado) === String(target_grado)) {
-                        return alert(`⚠️ EMPALME DE GRADO:\nEl grado ${target_grado}° ya tiene ocupado este horario con "${s.materia}" impartida por ${s.maestro_email} el día ${targetDay} de ${s.hora_inicio} a ${s.hora_fin}.\nPor favor, verifica.`);
+                        const proceed = confirm(`⚠️ EMPALME DE DOCENTE:\nEl docente ya tiene asignada la materia "${s.materia}" (${grp}) el día ${targetDay} en el mismo horario (${s.hora_inicio} - ${s.hora_fin}).\n\n¿Estás seguro de que deseas guardar este bloque de todos modos ignorando la advertencia?`);
+                        if (!proceed) return;
+                    } else if (grupo_id && s.grupo_id && String(s.grupo_id) === String(grupo_id)) {
+                        const grpName = s.grupos ? s.grupos.nombre : 'el grupo seleccionado';
+                        const proceed = confirm(`⚠️ EMPALME DE GRUPO:\nEl grupo "${grpName}" ya tiene una clase de "${s.materia}" con ${s.maestro_email} el día ${targetDay} en el mismo horario (${s.hora_inicio} - ${s.hora_fin}).\n\n¿Estás seguro de que deseas guardar este bloque de todos modos ignorando la advertencia?`);
+                        if (!proceed) return;
+                    } else if (target_grado && s.target_grado && String(s.target_grado).replace(/[^0-9]/g, '') === String(target_grado).replace(/[^0-9]/g, '')) {
+                        const proceed = confirm(`⚠️ EMPALME DE GRADO:\nEl grado ${target_grado}° ya tiene ocupado este horario con "${s.materia}" impartida por ${s.maestro_email} el día ${targetDay} de ${s.hora_inicio} a ${s.hora_fin}.\n\n¿Estás seguro de que deseas guardar este bloque de todos modos ignorando la advertencia?`);
+                        if (!proceed) return;
                     }
                 }
             }
@@ -26953,8 +26973,8 @@ window.guardarBloqueHorarioDocente = async () => {
                 grupo_id,
                 target_grado,
                 dia,
-                hora_inicio,
-                hora_fin,
+                hora_inicio: normHoraInicio,
+                hora_fin: normHoraFin,
                 orden_hora
             }).eq('id', editId);
             
@@ -26968,8 +26988,8 @@ window.guardarBloqueHorarioDocente = async () => {
                 grupo_id,
                 target_grado,
                 dia: d,
-                hora_inicio,
-                hora_fin,
+                hora_inicio: normHoraInicio,
+                hora_fin: normHoraFin,
                 orden_hora
             }));
             
