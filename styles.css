@@ -1209,3 +1209,119 @@ body {
     left: 50%;
     transform: translateX(-50%);
 }
+
+/* ==========================================================================
+   TABLAS CONGELADAS (STICKY HEADER Y PRIMERA COLUMNA CONGELADA)
+   Permite ver la columna de actividades o asistencias fija al bajar (scroll vertical)
+   y los nombres de los alumnos fijos al recorrer horizontalmente a la derecha en móviles.
+   ========================================================================== */
+
+.table-sticky-container {
+  overflow: auto;
+  max-height: 70vh;
+  max-height: calc(100dvh - 250px);
+  min-height: 360px;
+  position: relative;
+  -webkit-overflow-scrolling: touch;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  overscroll-behavior: contain;
+}
+
+/* Scrollbar estilizado para la tabla */
+.table-sticky-container::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+.table-sticky-container::-webkit-scrollbar-track {
+  background: var(--page-bg);
+  border-radius: 4px;
+}
+.table-sticky-container::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 4px;
+}
+.table-sticky-container::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+
+/* Tabla freeze con separación de bordes compatible con Safari y Chrome */
+.risk-table.table-freeze {
+  width: 100%;
+  border-collapse: separate !important;
+  border-spacing: 0 !important;
+}
+
+/* 1. Encabezados fijos al bajar (scroll vertical) */
+.table-freeze thead th {
+  position: sticky !important;
+  top: 0 !important;
+  z-index: 20 !important;
+  background: #f8fafc !important;
+  color: var(--text-main) !important;
+  border-bottom: 2px solid var(--border) !important;
+  box-shadow: 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+}
+
+/* 2. Primera columna fija al recorrer a la derecha (scroll horizontal) */
+.table-freeze th:first-child,
+.table-freeze td:first-child,
+.table-freeze .col-sticky-alumno {
+  position: sticky !important;
+  left: 0 !important;
+  background: #ffffff !important;
+  border-right: 2px solid var(--border) !important;
+  box-shadow: 3px 0 6px -2px rgba(0, 0, 0, 0.08);
+  min-width: 200px;
+  max-width: 260px;
+}
+
+/* 3. Intersección (Esquina superior izquierda: Alumno) - Debe estar encima de todo */
+.table-freeze thead th:first-child,
+.table-freeze thead th.col-sticky-alumno {
+  position: sticky !important;
+  top: 0 !important;
+  left: 0 !important;
+  z-index: 35 !important;
+  background: #f1f5f9 !important;
+  border-right: 2px solid var(--border) !important;
+  border-bottom: 2px solid var(--border) !important;
+  box-shadow: 3px 3px 6px -2px rgba(0, 0, 0, 0.1);
+}
+
+/* Hover de filas sincronizado con la celda sticky */
+.table-freeze tbody tr:hover td {
+  background-color: var(--surface-hover) !important;
+}
+.table-freeze tbody tr:hover td:first-child,
+.table-freeze tbody tr:hover .col-sticky-alumno {
+  background-color: var(--surface-hover) !important;
+}
+
+/* Excepción para mensajes de estado con colspan */
+.table-freeze tbody td[colspan] {
+  position: static !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  border-right: none !important;
+}
+
+/* Ajustes responsivos para dispositivos móviles */
+@media (max-width: 768px) {
+  .table-sticky-container {
+    max-height: 60vh;
+    max-height: calc(100dvh - 210px);
+    min-height: 300px;
+    border-radius: var(--radius-sm);
+  }
+  
+  .table-freeze th:first-child,
+  .table-freeze td:first-child,
+  .table-freeze .col-sticky-alumno {
+    min-width: 165px !important;
+    max-width: 195px !important;
+    padding: 8px 10px !important;
+  }
+}
+

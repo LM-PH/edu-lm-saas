@@ -2164,11 +2164,11 @@ function renderAdminCalificaciones() {
           <h3 style="margin:0;">Matriz de Seguimiento del Maestro</h3>
         </div>
         <div id="statsListaMaestro" style="margin-bottom:20px;"></div>
-        <div style="overflow-x:auto;">
-          <table class="risk-table" style="width:100%">
+        <div class="table-sticky-container">
+          <table class="risk-table table-freeze" style="width:100%">
             <thead id="listaMaestroCabecera">
               <tr>
-                 <th style="padding:12px; text-align:left;">Alumno</th>
+                 <th class="col-sticky-alumno" style="padding:12px; text-align:left;">Alumno</th>
                  <th style="padding:12px; text-align:center;">Actividades / Asistencias</th>
                  <th style="padding:12px; text-align:center;">Estimación / Resumen</th>
                  <th style="padding:12px; text-align:center;">Estatus</th>
@@ -3205,11 +3205,11 @@ function renderMaestroListas() {
           </div>
        </div>
        
-       <div style="overflow-x:auto;">
-         <table class="risk-table" style="width:100%">
+       <div class="table-sticky-container">
+         <table class="risk-table table-freeze" style="width:100%">
            <thead id="listaMaestroCabecera">
              <tr>
-                <th style="padding:12px; text-align:left;">Alumno</th>
+                <th class="col-sticky-alumno" style="padding:12px; text-align:left;">Alumno</th>
                 <th style="padding:12px; text-align:center;">Actividades Revisadas</th>
                 <th style="padding:12px; text-align:center;">Estimación Actual</th>
                 <th style="padding:12px; text-align:center;">Contacto</th>
@@ -3319,11 +3319,11 @@ function renderMaestroCalificaciones() {
     </div>
 
     <div class="card">
-      <div style="overflow-x:auto;">
-      <table class="risk-table" style="width:100%; text-align:center;">
+      <div class="table-sticky-container">
+      <table class="risk-table table-freeze" style="width:100%; text-align:center;">
         <thead id="tablaBoletasCabecera">
           <tr>
-             <th style="padding:12px; text-align:left;">Alumno</th>
+             <th class="col-sticky-alumno" style="padding:12px; text-align:left;">Alumno</th>
              <th style="padding:12px; text-align:center;">Cargando...</th>
           </tr>
         </thead>
@@ -13994,7 +13994,7 @@ window.cargarAlumnosLista = async () => {
         }
         
         if(!rawAlumnos || rawAlumnos.length === 0) {
-             cabecera.innerHTML = `<tr><th style="padding:12px;">Sin Alumnos</th></tr>`;
+             cabecera.innerHTML = `<tr><th class="col-sticky-alumno" style="padding:12px;">Sin Alumnos</th></tr>`;
              tbody.innerHTML = '<tr><td style="text-align:center; padding: 20px; color:var(--text-muted)">Este grupo no tiene alumnos registrados.</td></tr>';
              if(statsCont) statsCont.innerHTML = '';
              return;
@@ -14028,7 +14028,7 @@ window.cargarAlumnosLista = async () => {
             
             if(isModoFinal) {
                 cabecera.innerHTML = `<tr>
-                    <th style="padding:12px; text-align:left; min-width:200px;">Alumno (Apellido)</th>
+                    <th class="col-sticky-alumno" style="padding:12px; text-align:left; min-width:180px;">Alumno (Apellido)</th>
                     <th style="padding:12px; text-align:center;">1° Trimestre</th>
                     <th style="padding:12px; text-align:center;">2° Trimestre</th>
                     <th style="padding:12px; text-align:center;">3° Trimestre</th>
@@ -14050,7 +14050,7 @@ window.cargarAlumnosLista = async () => {
                     : `<th style="padding:12px; text-align:center;">Actividades</th>`;
 
                 cabecera.innerHTML = `<tr>
-                    <th style="padding:12px; text-align:left; min-width:200px;">Alumno (Apellido)</th>
+                    <th class="col-sticky-alumno" style="padding:12px; text-align:left; min-width:180px;">Alumno (Apellido)</th>
                     ${actHeaders}
                     <th style="padding:12px; text-align:center;">Promedio T${currentTrim}</th>
                     <th style="padding:12px; text-align:center;">Estatus</th>
@@ -14098,9 +14098,14 @@ window.cargarAlumnosLista = async () => {
 
                     htmlRows += `
                     <tr style="border-bottom:1px solid var(--border)">
-                        <td style="padding:12px; display:flex; gap:12px; align-items:center;">
-                           <div style="width:32px; height:32px; border-radius:50%; background:var(--primary); color:white; display:flex; justify-content:center; align-items:center; font-size:12px; font-weight:bold; flex-shrink:0;">${initials}</div>
-                           <div><span style="font-weight:600;">${al.nombre}</span> <br> <span style="font-size:0.75rem; color:var(--text-muted)">${al.matricula}</span></div>
+                        <td class="col-sticky-alumno" style="padding:10px 12px;">
+                           <div style="display:flex; gap:10px; align-items:center; min-width:0;">
+                              <div style="width:32px; height:32px; border-radius:50%; background:var(--primary); color:white; display:flex; justify-content:center; align-items:center; font-size:11px; font-weight:bold; flex-shrink:0;">${initials}</div>
+                              <div style="min-width:0; overflow:hidden;">
+                                 <span style="font-weight:600; display:block; font-size:0.85rem; line-height:1.2; word-break:break-word;">${al.nombre}</span>
+                                 <span style="font-size:0.72rem; color:var(--text-muted); display:block; margin-top:2px;">${al.matricula}</span>
+                              </div>
+                           </div>
                         </td>
                         <td style="text-align:center; padding:12px;">${p1.toFixed(1)}</td>
                         <td style="text-align:center; padding:12px;">${p2.toFixed(1)}</td>
@@ -14148,9 +14153,14 @@ window.cargarAlumnosLista = async () => {
                     
                     htmlRows += `
                     <tr style="border-bottom:1px solid var(--border)">
-                        <td style="padding:12px; display:flex; gap:12px; align-items:center;">
-                           <div style="width:32px; height:32px; border-radius:50%; background:var(--primary); color:white; display:flex; justify-content:center; align-items:center; font-size:12px; font-weight:bold; flex-shrink:0;">${initials}</div>
-                           <div><span style="font-weight:600;">${al.nombre}</span> <br> <span style="font-size:0.75rem; color:var(--text-muted)">${al.matricula}</span></div>
+                        <td class="col-sticky-alumno" style="padding:10px 12px;">
+                           <div style="display:flex; gap:10px; align-items:center; min-width:0;">
+                              <div style="width:32px; height:32px; border-radius:50%; background:var(--primary); color:white; display:flex; justify-content:center; align-items:center; font-size:11px; font-weight:bold; flex-shrink:0;">${initials}</div>
+                              <div style="min-width:0; overflow:hidden;">
+                                 <span style="font-weight:600; display:block; font-size:0.85rem; line-height:1.2; word-break:break-word;">${al.nombre}</span>
+                                 <span style="font-size:0.72rem; color:var(--text-muted); display:block; margin-top:2px;">${al.matricula}</span>
+                              </div>
+                           </div>
                         </td>
                         ${actCells}
                         <td style="text-align:center; padding:12px; font-weight:bold;">${promFinalNum.toFixed(2)}</td>
@@ -14260,7 +14270,7 @@ window.cargarAlumnosLista = async () => {
             let totalDias = diasPaseLista.size;
 
             cabecera.innerHTML = `<tr>
-                <th style="padding:12px; text-align:left; min-width:200px;">Alumno (Apellido)</th>
+                <th class="col-sticky-alumno" style="padding:12px; text-align:left; min-width:180px;">Alumno (Apellido)</th>
                 <th style="padding:12px; text-align:center;">Asistencias (%)</th>
                 <th style="padding:12px; text-align:center;">Calif. ${isModoFinal ? 'Final' : 'T' + currentTrim}</th>
                 <th style="padding:12px; text-align:center;">Estatus</th>
@@ -14357,9 +14367,14 @@ window.cargarAlumnosLista = async () => {
                 
                 htmlRows += `
                 <tr style="border-bottom:1px solid var(--border)">
-                    <td style="padding:12px; display:flex; gap:12px; align-items:center;">
-                       <div style="width:32px; height:32px; border-radius:50%; background:var(--primary); color:white; display:flex; justify-content:center; align-items:center; font-size:12px; font-weight:bold; flex-shrink:0;">${initials}</div>
-                       <div><span style="font-weight:600;">${al.nombre}</span> <br> <span style="font-size:0.75rem; color:var(--text-muted)">${al.matricula}</span></div>
+                    <td class="col-sticky-alumno" style="padding:10px 12px;">
+                       <div style="display:flex; gap:10px; align-items:center; min-width:0;">
+                          <div style="width:32px; height:32px; border-radius:50%; background:var(--primary); color:white; display:flex; justify-content:center; align-items:center; font-size:11px; font-weight:bold; flex-shrink:0;">${initials}</div>
+                          <div style="min-width:0; overflow:hidden;">
+                             <span style="font-weight:600; display:block; font-size:0.85rem; line-height:1.2; word-break:break-word;">${al.nombre}</span>
+                             <span style="font-size:0.72rem; color:var(--text-muted); display:block; margin-top:2px;">${al.matricula}</span>
+                          </div>
+                       </div>
                     </td>
                     <td style="text-align:center; padding:12px;"><b>${pctAsist}%</b></td>
                     <td style="text-align:center; padding:12px; font-weight:bold; color:var(--primary); font-size:1.1rem;">${Number(displayVal).toFixed(1)}</td>
@@ -14416,7 +14431,7 @@ window.cargarAlumnosLista = async () => {
             if(diasArray.length === 0) dateHeaders = `<th style="padding:12px; text-align:center;">Días</th>`;
             
             cabecera.innerHTML = `<tr>
-                <th style="padding:12px; text-align:left; min-width:180px;">Alumno (Apellido)</th>
+                <th class="col-sticky-alumno" style="padding:12px; text-align:left; min-width:180px;">Alumno (Apellido)</th>
                 ${dateHeaders}
                 <th style="padding:12px; text-align:center;">Resumen (%)</th>
                 <th style="padding:12px; text-align:center;">Estatus Actual</th>
@@ -14473,9 +14488,14 @@ window.cargarAlumnosLista = async () => {
                 
                 htmlRows += `
                 <tr style="border-bottom:1px solid var(--border)">
-                    <td style="padding:12px; display:flex; gap:12px; align-items:center;">
-                       <div style="width:32px; height:32px; border-radius:50%; background:var(--primary); color:white; display:flex; justify-content:center; align-items:center; font-size:12px; font-weight:bold; flex-shrink:0;">${initials}</div>
-                       <div><span style="font-weight:600;">${al.nombre}</span> <br> <span style="font-size:0.75rem; color:var(--text-muted)">${al.matricula}</span></div>
+                    <td class="col-sticky-alumno" style="padding:10px 12px;">
+                       <div style="display:flex; gap:10px; align-items:center; min-width:0;">
+                          <div style="width:32px; height:32px; border-radius:50%; background:var(--primary); color:white; display:flex; justify-content:center; align-items:center; font-size:11px; font-weight:bold; flex-shrink:0;">${initials}</div>
+                          <div style="min-width:0; overflow:hidden;">
+                             <span style="font-weight:600; display:block; font-size:0.85rem; line-height:1.2; word-break:break-word;">${al.nombre}</span>
+                             <span style="font-size:0.72rem; color:var(--text-muted); display:block; margin-top:2px;">${al.matricula}</span>
+                          </div>
+                       </div>
                     </td>
                     ${asistCell}
                     <td style="text-align:center; padding:12px;">${summaryText}</td>
@@ -14851,7 +14871,7 @@ window.cargarBoletasGrupo = async () => {
         // 5. Preparar Cabecera
         if(isModoFinal) {
             cabecera.innerHTML = `<tr>
-                <th style="padding:12px; text-align:left; min-width:200px;">Alumno</th>
+                <th class="col-sticky-alumno" style="padding:12px; text-align:left; min-width:180px;">Alumno</th>
                 <th style="padding:12px; text-align:center; background:#f8fafc; color:#64748b;">1° Trim</th>
                 <th style="padding:12px; text-align:center; background:#f8fafc; color:#64748b;">2° Trim</th>
                 <th style="padding:12px; text-align:center; background:#f8fafc; color:#64748b;">3° Trim</th>
@@ -14860,7 +14880,7 @@ window.cargarBoletasGrupo = async () => {
              </tr>`;
         } else {
             cabecera.innerHTML = `<tr>
-                <th style="padding:12px; text-align:left; min-width:200px;">Alumno</th>
+                <th class="col-sticky-alumno" style="padding:12px; text-align:left; min-width:180px;">Alumno</th>
                 <th style="padding:12px; text-align:center; background:var(--surface-hover);">Propuesta (Seguimiento T${currentTrim})</th>
                 <th style="padding:12px; text-align:center; background:var(--surface-hover);">Calificación Final T${currentTrim}</th>
              </tr>`;
@@ -14955,9 +14975,14 @@ window.cargarBoletasGrupo = async () => {
 
             htmlRows += `
             <tr style="border-bottom:1px solid var(--border)">
-                <td style="padding:12px; display:flex; gap:12px; align-items:center;">
-                   <div style="width:32px; height:32px; border-radius:50%; background:var(--primary); color:white; display:flex; justify-content:center; align-items:center; font-size:12px; font-weight:bold; flex-shrink:0;">${initials}</div>
-                   <div><span style="font-weight:600;">${al.nombre}</span> <br> <span style="font-size:0.75rem; color:var(--text-muted)">${al.matricula}</span></div>
+                <td class="col-sticky-alumno" style="padding:10px 12px; text-align:left;">
+                   <div style="display:flex; gap:10px; align-items:center; min-width:0;">
+                      <div style="width:32px; height:32px; border-radius:50%; background:var(--primary); color:white; display:flex; justify-content:center; align-items:center; font-size:11px; font-weight:bold; flex-shrink:0;">${initials}</div>
+                      <div style="min-width:0; overflow:hidden;">
+                         <span style="font-weight:600; display:block; font-size:0.85rem; line-height:1.2; word-break:break-word;">${al.nombre}</span>
+                         <span style="font-size:0.72rem; color:var(--text-muted); display:block; margin-top:2px;">${al.matricula}</span>
+                      </div>
+                   </div>
                 </td>
                 ${histCells}
                 <td style="background:var(--surface-hover); text-align:center; color:var(--text-muted); font-weight:bold;">${promFinalNum.toFixed(2)}</td>
