@@ -100,6 +100,72 @@ window._normalizarTextoTaller = (txt) => {
         .trim();
 };
 
+window._esMateriaTecnologia = (materia) => {
+    if (!materia) return false;
+    const norm = String(materia)
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .toLowerCase();
+    return norm.includes('tecnolog') || norm.includes('taller') || norm.includes('enfasis');
+};
+
+window._coincidenTalleres = (taller1, taller2) => {
+    if (!taller1 || !taller2) return false;
+    const norm1 = window._normalizarTextoTaller ? window._normalizarTextoTaller(taller1) : String(taller1).toLowerCase().trim();
+    const norm2 = window._normalizarTextoTaller ? window._normalizarTextoTaller(taller2) : String(taller2).toLowerCase().trim();
+    if (!norm1 || !norm2) return false;
+    
+    // Coincidencia exacta o contenida completa
+    if (norm1 === norm2 || norm1.includes(norm2) || norm2.includes(norm1)) return true;
+    
+    // Comparación por palabras clave significativas (longitud >= 4)
+    const words1 = norm1.split(/\s+/).filter(w => w.length >= 4);
+    const words2 = norm2.split(/\s+/).filter(w => w.length >= 4);
+    
+    return words1.some(w1 => words2.some(w2 => w1.includes(w2) || w2.includes(w1) || (w1.length >= 5 && w2.length >= 5 && w1.substring(0, 5) === w2.substring(0, 5))));
+};
+
+window._extraerMateriaComunicado = (c) => {
+    if (!c) return '';
+    // 1. Tag explícito [TALLER: ...] o [MATERIA: ...] en título o mensaje
+    const mTag = (c.titulo || '').match(/\[(?:TALLER|MATERIA):\s*([^\]]+)\]/i) || 
+                 (c.mensaje || '').match(/\[(?:TALLER|MATERIA):\s*([^\]]+)\]/i);
+    if (mTag) return mTag[1].trim();
+
+    // 2. Línea "Materia: <nombre>" en el cuerpo del mensaje (aviso de maestro)
+    const mMat = (c.mensaje || '').match(/(?:^|\n)\s*Materia:\s*([^\n\r]+)/i);
+    if (mMat) return mMat[1].trim();
+
+    // 3. Título de Encuadre: "📋 Encuadre: <materia> (<grupo>)"
+    const mEnc = (c.titulo || '').match(/📋\s*Encuadre:\s*([^(]+)/i);
+    if (mEnc) return mEnc[1].trim();
+
+    // 4. Actividad / Incumplimiento: "en la asignatura de <materia>"
+    const mAsig = (c.mensaje || '').match(/en la asignatura de\s+([^\n\r\.\,]+)/i);
+    if (mAsig) return mAsig[1].trim();
+
+    return '';
+};
+
+window._comunicadoCorrespondeAAlumno = (c, al) => {
+    if (!c || !al) return true;
+    
+    // Si fue enviado directamente a este alumno específico por ID, siempre corresponde
+    if (c.audiencia === 'Alumno_' + al.id) return true;
+    
+    // Extraer materia si el comunicado pertenece a una materia o taller
+    const mat = window._extraerMateriaComunicado ? window._extraerMateriaComunicado(c) : '';
+    const esTec = window._esMateriaTecnologia ? window._esMateriaTecnologia(mat) : false;
+
+    // Si es un aviso de tecnología/taller
+    if (esTec) {
+        if (!al.taller) return false; // Alumno sin taller no cursa tecnologías
+        return window._coincidenTalleres ? window._coincidenTalleres(al.taller, mat) : false;
+    }
+    
+    return true;
+};
+
 window._filtrarAlumnosPorTallerYGrado = (listaAlumnos, targetGrado, materia) => {
     const targetGradoNorm = window._normalizarGradoParaPase ? window._normalizarGradoParaPase(targetGrado) : String(targetGrado || '').replace(/[°\s]/g, '');
     const cleanTallerBuscado = window._normalizarTextoTaller ? window._normalizarTextoTaller(materia) : '';
@@ -107,9 +173,8 @@ window._filtrarAlumnosPorTallerYGrado = (listaAlumnos, targetGrado, materia) => 
         const gNorm = window._normalizarGradoParaPase ? window._normalizarGradoParaPase(al.grado) : String(al.grado || '').replace(/[°\s]/g, '');
         if (targetGradoNorm && gNorm && targetGradoNorm !== gNorm) return false;
         if (!cleanTallerBuscado) return true;
-        const cleanAlT = window._normalizarTextoTaller ? window._normalizarTextoTaller(al.taller) : '';
-        if (!cleanAlT) return true;
-        return cleanAlT.includes(cleanTallerBuscado) || cleanTallerBuscado.includes(cleanAlT);
+        if (!al.taller) return false;
+        return window._coincidenTalleres ? window._coincidenTalleres(al.taller, materia) : false;
     });
 };
 
@@ -4250,13 +4315,24 @@ window.verLecturasComunicado = async (comunicadoId) => {
     `;
 
     try {
+        const idList = String(comunicadoId || '').split(',').map(s => s.trim()).filter(Boolean);
         const [comRes, vistosRes] = await Promise.all([
-            supabaseClient.from('comunicados').select('id, titulo, audiencia, fecha_envio').eq('id', comunicadoId).maybeSingle(),
-            supabaseClient.from('comunicados_vistos').select('perfil_id, visto_en').eq('comunicado_id', comunicadoId).order('visto_en', { ascending: false })
+            idList.length === 1 
+                ? supabaseClient.from('comunicados').select('id, titulo, audiencia, fecha_envio').eq('id', idList[0]).maybeSingle()
+                : supabaseClient.from('comunicados').select('id, titulo, audiencia, fecha_envio').in('id', idList).limit(1).maybeSingle(),
+            supabaseClient.from('comunicados_vistos').select('perfil_id, visto_en, comunicado_id').in('comunicado_id', idList).order('visto_en', { ascending: false })
         ]);
 
         const com = comRes.data;
-        const vistos = vistosRes.data || [];
+        const rawVistos = vistosRes.data || [];
+        const perfilSeen = new Set();
+        const vistos = [];
+        rawVistos.forEach(v => {
+            if (!perfilSeen.has(v.perfil_id)) {
+                perfilSeen.add(v.perfil_id);
+                vistos.push(v);
+            }
+        });
         const body = document.getElementById('bodyLecturasComunicado');
         if (!body) return;
 
@@ -10034,22 +10110,26 @@ window.updateNotificationBadge = async (clearAll = false) => {
                     }
                 }
             }
-        } else if (userRole === 'apoyo' || userRole === 'biblioteca') {
+        }
+
+        let alAlumno = null;
+        if (userRole === 'apoyo' || userRole === 'biblioteca') {
             audArr.push('Personal');
         } else if (userRole === 'alumno' || userRole === 'estudiante') {
             audArr.push('Alumnos');
-            const { data: al } = await supabaseClient.from('alumnos').select('id, creado_en, grupo_id, grado').eq('contacto_email', state.user.email).maybeSingle();
+            const { data: al } = await supabaseClient.from('alumnos').select('id, creado_en, grupo_id, grado, taller').eq('contacto_email', state.user.email).maybeSingle();
             if(al) {
+                alAlumno = al;
                 audArr.push('Alumno_' + al.id);
                 if(al.grupo_id) audArr.push('Grupo_' + al.grupo_id);
-            if(al.grado) audArr.push('Grado_' + al.grado);
+                if(al.grado) audArr.push('Grado_' + al.grado);
                 creadoEn = al.creado_en;
             }
         } else if (userRole === 'directivo' || userRole === 'secretaria_direccion' || userRole === 'admin' || userRole === 'administrativo') {
             audArr.push('Maestros', 'Personal', 'Alumnos');
         }
 
-        let query = supabaseClient.from('comunicados').select('id, tipo, titulo').in('audiencia', audArr).eq('plantel_id', state.plantelId);
+        let query = supabaseClient.from('comunicados').select('id, tipo, titulo, mensaje, audiencia').in('audiencia', audArr).eq('plantel_id', state.plantelId);
         if (userRole === 'alumno' || userRole === 'estudiante') {
             const now = new Date();
             const startYear = now.getMonth() >= 7 ? now.getFullYear() : now.getFullYear() - 1;
@@ -10059,6 +10139,11 @@ window.updateNotificationBadge = async (clearAll = false) => {
 
         let { data: coms, error } = await query;
         if(error || !coms) return;
+
+        // Filtrar comunicados para alumnos según su taller asignado
+        if (coms && (userRole === 'alumno' || userRole === 'estudiante') && alAlumno) {
+            coms = coms.filter(c => window._comunicadoCorrespondeAAlumno ? window._comunicadoCorrespondeAAlumno(c, alAlumno) : true);
+        }
 
         // Filtrar justificantes médicos para maestros de tecnología (no contar en el badge los de otros talleres)
         if (coms && (userRole === 'maestro' || userRole === 'docente')) {
@@ -11634,7 +11719,7 @@ window.loadTimelineAlumno = async (mostrarHistorial = false, selectedDateStr = n
 
         const { data: alData } = await supabaseClient
             .from('alumnos')
-            .select('id, creado_en, grupo_id, grado, nombre, matricula, perfil_id, contacto_email')
+            .select('id, creado_en, grupo_id, grado, nombre, matricula, perfil_id, contacto_email, taller')
             .or(`contacto_email.ilike.%${userEmail}%,perfil_id.eq.${userId}`)
             .maybeSingle();
         al = alData;
@@ -11643,7 +11728,7 @@ window.loadTimelineAlumno = async (mostrarHistorial = false, selectedDateStr = n
             const possibleMat = userEmail.split('@')[0].toUpperCase().trim();
             const { data: alMat } = await supabaseClient
                 .from('alumnos')
-                .select('id, creado_en, grupo_id, grado, nombre, matricula, perfil_id, contacto_email')
+                .select('id, creado_en, grupo_id, grado, nombre, matricula, perfil_id, contacto_email, taller')
                 .or(`matricula.ilike.%${possibleMat}%,matricula.eq.${possibleMat}`)
                 .maybeSingle();
             if (alMat) {
@@ -11656,7 +11741,7 @@ window.loadTimelineAlumno = async (mostrarHistorial = false, selectedDateStr = n
                 await supabaseClient.from('alumnos').update({ perfil_id: userId }).eq('id', al.id).catch(() => {});
                 al.perfil_id = userId;
             }
-            console.log(">>> [TIMELINE] Alumno detectado:", al.id, "| Inscrito en:", al.creado_en);
+            console.log(">>> [TIMELINE] Alumno detectado:", al.id, "| Taller:", al.taller, "| Inscrito en:", al.creado_en);
             audArr.push('Alumno_' + al.id);
             if(al.grupo_id) audArr.push('Grupo_' + al.grupo_id);
             if(al.grado) audArr.push('Grado_' + al.grado);
@@ -11714,9 +11799,12 @@ window.loadTimelineAlumno = async (mostrarHistorial = false, selectedDateStr = n
             query = query.limit(100);
         }
            
-        const { data, error } = await query;
+        const { data: rawData, error } = await query;
         if(error) throw error;
         
+        // Filtrar avisos para que solo lleguen comunicados correspondientes al taller del alumno (excluir talleres ajenos)
+        const data = (rawData || []).filter(c => window._comunicadoCorrespondeAAlumno ? window._comunicadoCorrespondeAAlumno(c, al) : true);
+
         // En Recientes solo deben aparecer los avisos que NO se han visto y los que NO se han firmado.
         // Si ya se vieron o ya se firmaron, solo aparecen en el calendario (Archivo Escolar).
         const dFinal = esHistorial 
@@ -22194,7 +22282,7 @@ window.initFlatpickrAvisos = async (isAlumno = false) => {
     while(true) {
         let q = supabaseClient
             .from('comunicados')
-            .select('fecha_envio, audiencia, titulo, tipo')
+            .select('fecha_envio, audiencia, titulo, tipo, mensaje')
             .order('fecha_envio', { ascending: false });
         if(state.plantelId) {
             q = q.or(`plantel_id.eq.${state.plantelId},plantel_id.is.null,audiencia.ilike.Alumno_%`);
@@ -22216,7 +22304,7 @@ window.initFlatpickrAvisos = async (isAlumno = false) => {
             const userEmail = (uRes.data?.user?.email || '').toLowerCase().trim();
             const { data: alData } = await supabaseClient
                 .from('alumnos')
-                .select('id, grupo_id, grado, matricula, perfil_id, contacto_email')
+                .select('id, grupo_id, grado, matricula, perfil_id, contacto_email, taller')
                 .or(`contacto_email.ilike.%${userEmail}%,perfil_id.eq.${userId}`)
                 .maybeSingle();
             al = alData;
@@ -22224,7 +22312,7 @@ window.initFlatpickrAvisos = async (isAlumno = false) => {
                 const possibleMat = userEmail.split('@')[0].toUpperCase().trim();
                 const { data: alMat } = await supabaseClient
                     .from('alumnos')
-                    .select('id, grupo_id, grado, matricula, perfil_id, contacto_email')
+                    .select('id, grupo_id, grado, matricula, perfil_id, contacto_email, taller')
                     .or(`matricula.ilike.%${possibleMat}%,matricula.eq.${possibleMat}`)
                     .maybeSingle();
                 if (alMat) al = alMat;
@@ -22236,8 +22324,10 @@ window.initFlatpickrAvisos = async (isAlumno = false) => {
                 if(al.grado) audSet.add('Grado_' + al.grado);
             }
         }
-        datesWithComs = data.filter(c => !c.audiencia || audSet.has(c.audiencia))
-                            .map(c => getLocalDateStringHelper(c.fecha_envio));
+        datesWithComs = data.filter(c => {
+            if (c.audiencia && !audSet.has(c.audiencia)) return false;
+            return window._comunicadoCorrespondeAAlumno ? window._comunicadoCorrespondeAAlumno(c, al) : true;
+        }).map(c => getLocalDateStringHelper(c.fecha_envio));
     } else {
         // Obtener asignaciones si es maestro para abarcar grupos específicos y filtrar talleres
         let maestroGrupos = [];
@@ -24220,12 +24310,15 @@ window.loadMaestroAvisosGrupos = async () => {
         if(asigs && asigs.length > 0) {
             let items = [];
             for (const a of asigs) {
+                const isTec = Boolean(a.target_grado) || (window._esMateriaTecnologia ? window._esMateriaTecnologia(a.materia) : false);
                 if(a.grupos) {
                     items.push({
                         id: a.grupos.id,
                         nombre: a.grupos.nombre,
                         materia: a.materia || 'General',
-                        audiencia: `Grupo_${a.grupos.id}`
+                        audiencia: `Grupo_${a.grupos.id}`,
+                        isTec: isTec,
+                        targetGrado: a.target_grado || (a.grupos.nombre ? a.grupos.nombre.charAt(0) : '')
                     });
                 } else if(a.target_grado) {
                     const { data: grps } = await supabaseClient.from('grupos')
@@ -24239,7 +24332,9 @@ window.loadMaestroAvisosGrupos = async () => {
                                 id: g.id,
                                 nombre: g.nombre,
                                 materia: a.materia || `Grado ${a.target_grado}`,
-                                audiencia: `Grupo_${g.id}`
+                                audiencia: `Grupo_${g.id}`,
+                                isTec: true,
+                                targetGrado: a.target_grado
                             });
                         });
                     }
@@ -24249,7 +24344,7 @@ window.loadMaestroAvisosGrupos = async () => {
             // Deduplicar grupos si aparecen repetidos con la misma materia
             const uniqueMap = new Map();
             items.forEach(it => {
-                const key = `${it.audiencia}_${it.materia}`;
+                const key = `${it.audiencia}_${it.materia}_${it.isTec}`;
                 if (!uniqueMap.has(key)) {
                     uniqueMap.set(key, it);
                 }
@@ -24264,9 +24359,12 @@ window.loadMaestroAvisosGrupos = async () => {
 
             cont.innerHTML = finalGroups.map(g => `
                 <label class="card-grupo-maestro" style="display:flex; align-items:center; gap:10px; padding:9px 12px; background:white; border:1px solid var(--border); border-radius:8px; cursor:pointer; font-size:0.85rem; user-select:none; transition:all 0.15s ease; box-shadow:0 1px 2px rgba(0,0,0,0.02);">
-                    <input type="checkbox" class="chk-maestro-grupo" value="${g.audiencia}" data-id="${g.id}" data-nombre="${g.nombre}" data-materia="${g.materia}" onchange="window.actualizarResumenGruposMaestro()" style="width:17px; height:17px; accent-color:var(--primary); cursor:pointer;">
+                    <input type="checkbox" class="chk-maestro-grupo" value="${g.audiencia}" data-id="${g.id}" data-nombre="${g.nombre}" data-materia="${g.materia}" data-is-tec="${g.isTec ? 'true' : 'false'}" data-target-grado="${g.targetGrado || ''}" onchange="window.actualizarResumenGruposMaestro()" style="width:17px; height:17px; accent-color:var(--primary); cursor:pointer;">
                     <div style="display:flex; flex-direction:column; line-height:1.25; overflow:hidden;">
-                        <span style="font-weight:700; color:var(--text-main); font-size:0.9rem;">${g.nombre}</span>
+                        <span style="font-weight:700; color:var(--text-main); font-size:0.9rem;">
+                            ${g.nombre}
+                            ${g.isTec ? '<span class="badge" style="font-size:0.65rem; background:#eff6ff; color:#2563eb; border:1px solid #bfdbfe; margin-left:4px; padding:1px 5px;"><i class="fa-solid fa-screwdriver-wrench"></i> Taller</span>' : ''}
+                        </span>
                         <span style="font-size:0.75rem; color:var(--primary); font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${g.materia}</span>
                     </div>
                 </label>
@@ -24300,10 +24398,12 @@ window.actualizarResumenGruposMaestro = () => {
     } else if (chks.length === 1) {
         const nom = chks[0].getAttribute('data-nombre') || 'Grupo';
         const mat = chks[0].getAttribute('data-materia') || '';
-        res.innerHTML = `<span style="color:#16a34a; font-weight:600;"><i class="fa-solid fa-check"></i> 1 grupo seleccionado: <b>${nom}</b> ${mat ? `(${mat})` : ''}</span>`;
+        const isTec = chks[0].getAttribute('data-is-tec') === 'true';
+        res.innerHTML = `<span style="color:#16a34a; font-weight:600;"><i class="fa-solid fa-check"></i> 1 grupo seleccionado: <b>${nom}</b> ${mat ? `(${mat})` : ''} ${isTec ? '<span class="badge" style="font-size:0.7rem; background:#eff6ff; color:#2563eb; margin-left:4px;">(Solo alumnos de este taller)</span>' : ''}</span>`;
     } else {
         const nombres = chks.map(c => `<b>${c.getAttribute('data-nombre')}</b>`);
-        res.innerHTML = `<span style="color:var(--primary); font-weight:700;"><i class="fa-solid fa-layer-group"></i> ${chks.length} grupos seleccionados:</span> ${nombres.join(', ')}`;
+        const hayTec = chks.some(c => c.getAttribute('data-is-tec') === 'true');
+        res.innerHTML = `<span style="color:var(--primary); font-weight:700;"><i class="fa-solid fa-layer-group"></i> ${chks.length} grupos seleccionados:</span> ${nombres.join(', ')} ${hayTec ? '<span style="font-size:0.75rem; color:#2563eb; font-weight:normal; margin-left:4px;">(En talleres solo se enviará a los alumnos que lo cursan)</span>' : ''}`;
     }
 };
 
@@ -24421,26 +24521,82 @@ window.publicarComunicadoMaestro = async () => {
             fallbackTextoArchivos = '\n\n📎 Archivos adjuntos:\n' + uploadedDocs.map(d => `• ${d.name}: ${d.url}`).join('\n');
         }
 
-        // 3. Crear inserts por cada grupo seleccionado
-        const inserts = chks.map(chk => {
-            const aud = chk.value; // e.g. Grupo_UUID
+        // 3. Crear inserts diferenciando materias regulares de talleres/tecnologías
+        const inserts = [];
+        let totalDestinatariosTaller = 0;
+        let gruposAfectados = 0;
+
+        for (const chk of chks) {
+            const isTec = chk.getAttribute('data-is-tec') === 'true';
+            const gid = chk.getAttribute('data-id');
+            const nomGrupo = chk.getAttribute('data-nombre') || 'Grupo';
             const materia = chk.getAttribute('data-materia') || '';
+            const targetGrado = chk.getAttribute('data-target-grado') || '';
             const mensajeCompuesto = `De: Prof. ${maestroNombre}\nMateria: ${materia}\n\n${msg}${fallbackTextoArchivos}`;
-            return {
-                autor_id: uRes.data.user.id,
-                tipo: 'AvisoMaestro',
-                titulo: titulo,
-                mensaje: mensajeCompuesto,
-                audiencia: aud,
-                archivo_url: fileUrl,
-                plantel_id: state.plantelId
-            };
-        });
+
+            if (isTec) {
+                // Consultar únicamente los alumnos de este grupo que cursan este taller
+                let qAlu = supabaseClient.from('alumnos')
+                    .select('id, nombre, grado, taller, grupo_id')
+                    .eq('plantel_id', state.plantelId);
+                
+                if (gid) {
+                    qAlu = qAlu.eq('grupo_id', gid);
+                } else if (targetGrado) {
+                    qAlu = qAlu.like('grado', targetGrado + '%');
+                }
+                
+                const { data: rawAlumnos, error: eAl } = await qAlu.order('nombre');
+                if (eAl) throw eAl;
+
+                const alumnosTaller = (rawAlumnos || []).filter(al => {
+                    if (!al.taller) return false;
+                    return window._coincidenTalleres ? window._coincidenTalleres(al.taller, materia) : false;
+                });
+
+                if (alumnosTaller.length > 0) {
+                    alumnosTaller.forEach(alum => {
+                        inserts.push({
+                            autor_id: uRes.data.user.id,
+                            tipo: 'AvisoMaestro',
+                            titulo: titulo,
+                            mensaje: mensajeCompuesto,
+                            audiencia: `Alumno_${alum.id}`,
+                            archivo_url: fileUrl,
+                            plantel_id: state.plantelId
+                        });
+                    });
+                    totalDestinatariosTaller += alumnosTaller.length;
+                    gruposAfectados++;
+                } else {
+                    console.warn(`[AVISO MAESTRO] No se encontraron alumnos con taller "${materia}" en el grupo ${nomGrupo}.`);
+                }
+            } else {
+                // Materia regular: enviar a nivel grupo
+                inserts.push({
+                    autor_id: uRes.data.user.id,
+                    tipo: 'AvisoMaestro',
+                    titulo: titulo,
+                    mensaje: mensajeCompuesto,
+                    audiencia: chk.value,
+                    archivo_url: fileUrl,
+                    plantel_id: state.plantelId
+                });
+                gruposAfectados++;
+            }
+        }
+
+        if (inserts.length === 0) {
+            throw new Error("No se encontraron alumnos pertenecientes al taller seleccionado en los grupos marcados.");
+        }
 
         const { error } = await supabaseClient.from('comunicados').insert(inserts);
         if(error) throw error;
         
-        window.showToast(`Comunicado enviado exitosamente a ${inserts.length} grupo(s).`, "success");
+        const txtExito = totalDestinatariosTaller > 0
+            ? `Aviso enviado exitosamente a ${totalDestinatariosTaller} alumno(s) de Tecnología (${gruposAfectados} grupo(s)).`
+            : `Comunicado enviado exitosamente a ${gruposAfectados} grupo(s).`;
+        window.showToast(txtExito, "success");
         
         // Limpiar campos
         document.getElementById('inMaestroComTitulo').value = '';
@@ -24471,15 +24627,41 @@ window.loadComunicadosEnviadosMaestro = async () => {
             .eq('plantel_id', state.plantelId)
             .eq('tipo', 'AvisoMaestro')
             .order('fecha_envio', {ascending: false})
-            .limit(20);
+            .limit(60);
             
         if(error) throw error;
         if(!data || data.length === 0) {
             cont.innerHTML = '<p style="text-align:center; padding:20px; color:var(--text-muted);">No has enviado comunicados recientemente.</p>';
             return;
         }
+
+        // Agrupar comunicados idénticos enviados en el mismo minuto (por ejemplo envíos individuales a alumnos de un taller)
+        const itemsAgrupados = [];
+        data.forEach(c => {
+            const fechaMin = c.fecha_envio ? c.fecha_envio.substring(0, 16) : '';
+            const existente = itemsAgrupados.find(g => g.titulo === c.titulo && g.mensaje === c.mensaje && g.fechaMin === fechaMin);
+            if (existente) {
+                existente.ids.push(c.id);
+                existente.audiencias.push(c.audiencia);
+            } else {
+                itemsAgrupados.push({
+                    ...c,
+                    fechaMin,
+                    ids: [c.id],
+                    audiencias: [c.audiencia]
+                });
+            }
+        });
         
-        const groupIds = data.map(c => c.audiencia.replace('Grupo_', '')).filter(id => id && id.length > 10);
+        const groupIds = [];
+        itemsAgrupados.forEach(c => {
+            c.audiencias.forEach(aud => {
+                if (aud && aud.startsWith('Grupo_')) {
+                    const id = aud.replace('Grupo_', '');
+                    if (id && id.length > 10) groupIds.push(id);
+                }
+            });
+        });
         let groupsMap = {};
         if (groupIds.length > 0) {
             const { data: grps } = await supabaseClient.from('grupos').select('id, nombre').in('id', groupIds);
@@ -24488,14 +24670,14 @@ window.loadComunicadosEnviadosMaestro = async () => {
             }
         }
 
-        const comIds = data.map(c => c.id);
+        const allComIds = data.map(c => c.id);
         let vistosMap = {};
-        if (comIds.length > 0) {
+        if (allComIds.length > 0) {
             try {
                 const { data: vData } = await supabaseClient
                     .from('comunicados_vistos')
                     .select('comunicado_id, visto_en, perfil_id')
-                    .in('comunicado_id', comIds);
+                    .in('comunicado_id', allComIds);
                 (vData || []).forEach(v => {
                     if (!vistosMap[v.comunicado_id]) vistosMap[v.comunicado_id] = [];
                     vistosMap[v.comunicado_id].push(v);
@@ -24505,29 +24687,50 @@ window.loadComunicadosEnviadosMaestro = async () => {
             }
         }
 
-        cont.innerHTML = data.map(c => {
+        cont.innerHTML = itemsAgrupados.slice(0, 20).map(c => {
             let audLabel = c.audiencia;
-            if (c.audiencia.startsWith('Grupo_')) {
+            const esPorAlumno = c.audiencias.every(a => a && a.startsWith('Alumno_'));
+            const totalAlumnos = c.audiencias.length;
+
+            if (esPorAlumno) {
+                audLabel = totalAlumnos > 1 ? `Taller (${totalAlumnos} alumnos)` : 'Alumno Específico';
+            } else if (c.audiencia && c.audiencia.startsWith('Grupo_')) {
                 const gId = c.audiencia.replace('Grupo_', '');
                 audLabel = groupsMap[gId] ? 'Grupo: ' + groupsMap[gId] : 'Grupo (ID): ' + gId.substring(0,6) + '...';
-            } else if (c.audiencia.startsWith('Grado_')) {
+            } else if (c.audiencia && c.audiencia.startsWith('Grado_')) {
                 audLabel = 'Todos los grupos de ' + c.audiencia.replace('Grado_', '');
-            } else if (c.audiencia.startsWith('Alumno_')) {
-                audLabel = 'Alumno Específico';
             }
 
-            const vList = vistosMap[c.id] || [];
+            // Consolidar lecturas de todos los IDs agrupados (deduplicadas por perfil_id)
+            const vistosPerfilSet = new Set();
+            let vListUnicos = [];
+            c.ids.forEach(cid => {
+                const list = vistosMap[cid] || [];
+                list.forEach(v => {
+                    if (!vistosPerfilSet.has(v.perfil_id)) {
+                        vistosPerfilSet.add(v.perfil_id);
+                        vListUnicos.push(v);
+                    }
+                });
+            });
+
+            const count = vListUnicos.length;
+            const idsParam = c.ids.join(',');
             let badgeLectura = '';
-            if (c.audiencia && c.audiencia.startsWith('Alumno_')) {
-                if (vList.length > 0) {
-                    const fechaStr = new Date(vList[0].visto_en).toLocaleDateString('es-MX', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
+            if (esPorAlumno && totalAlumnos === 1) {
+                if (count > 0) {
+                    const fechaStr = new Date(vListUnicos[0].visto_en).toLocaleDateString('es-MX', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
                     badgeLectura = `<span class="badge" style="background:#dcfce7; color:#15803d; border:1px solid #86efac; font-size:0.75rem; font-weight:600;"><i class="fa-solid fa-eye"></i> Revisado (${fechaStr})</span>`;
                 } else {
                     badgeLectura = `<span class="badge" style="background:#fef9c3; color:#854d0e; border:1px solid #fde047; font-size:0.75rem; font-weight:600;"><i class="fa-solid fa-clock"></i> Pendiente</span>`;
                 }
+            } else if (esPorAlumno && totalAlumnos > 1) {
+                const badgeColor = count > 0 ? '#15803d' : '#854d0e';
+                const badgeBg = count > 0 ? '#dcfce7' : '#fef9c3';
+                const badgeBorder = count > 0 ? '#86efac' : '#fde047';
+                badgeLectura = `<span class="badge" style="background:${badgeBg}; color:${badgeColor}; border:1px solid ${badgeBorder}; font-size:0.75rem; font-weight:600; cursor:pointer;" onclick="window.verLecturasComunicado('${idsParam}')"><i class="fa-solid fa-eye"></i> Visto por ${count} de ${totalAlumnos} <i class="fa-solid fa-arrow-up-right-from-square" style="font-size:0.65rem; margin-left:2px;"></i></span>`;
             } else {
-                const count = vList.length;
-                badgeLectura = `<span class="badge" style="background:${count > 0 ? '#dcfce7' : '#fef9c3'}; color:${count > 0 ? '#15803d' : '#854d0e'}; border:1px solid ${count > 0 ? '#86efac' : '#fde047'}; font-size:0.75rem; font-weight:600; cursor:pointer;" onclick="window.verLecturasComunicado('${c.id}')"><i class="fa-solid fa-eye"></i> ${count > 0 ? `Visto por ${count} alumno(s)` : 'Sin lecturas aún'} <i class="fa-solid fa-arrow-up-right-from-square" style="font-size:0.65rem; margin-left:2px;"></i></span>`;
+                badgeLectura = `<span class="badge" style="background:${count > 0 ? '#dcfce7' : '#fef9c3'}; color:${count > 0 ? '#15803d' : '#854d0e'}; border:1px solid ${count > 0 ? '#86efac' : '#fde047'}; font-size:0.75rem; font-weight:600; cursor:pointer;" onclick="window.verLecturasComunicado('${idsParam}')"><i class="fa-solid fa-eye"></i> ${count > 0 ? `Visto por ${count} alumno(s)` : 'Sin lecturas aún'} <i class="fa-solid fa-arrow-up-right-from-square" style="font-size:0.65rem; margin-left:2px;"></i></span>`;
             }
 
             return `
