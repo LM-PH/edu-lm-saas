@@ -22240,176 +22240,257 @@ function getLocalDateStringHelper(dateVal) {
     return `${y}-${m}-${day}`;
 }
 
+function ensureFlatpickrDotStyles() {
+    if (document.getElementById('flatpickr-dots-style')) return;
+    const style = document.createElement('style');
+    style.id = 'flatpickr-dots-style';
+    style.innerHTML = `
+        .flatpickr-day { position: relative !important; }
+        .calendar-event-dot,
+        .flatpickr-bitacora-dot,
+        .flatpickr-day.has-comunicado::after {
+            content: '' !important;
+            display: block !important;
+            position: absolute !important;
+            bottom: 3px !important;
+            left: 50% !important;
+            transform: translateX(-50%) !important;
+            width: 6px !important;
+            height: 6px !important;
+            background-color: var(--danger, #ef4444) !important;
+            border-radius: 50% !important;
+            z-index: 10 !important;
+            pointer-events: none !important;
+            box-shadow: 0 0 2px rgba(0, 0, 0, 0.4);
+        }
+        .flatpickr-day.selected .calendar-event-dot,
+        .flatpickr-day.selected .flatpickr-bitacora-dot,
+        .flatpickr-day.selected.has-comunicado::after {
+            background-color: #ffffff !important;
+            box-shadow: 0 0 2px rgba(0, 0, 0, 0.8);
+        }
+    `;
+    document.head.appendChild(style);
+}
+
 window.initFlatpickrAdmin = async () => {
     const el = document.getElementById('filtroFechaComAdmin');
     if(!el) return;
+    ensureFlatpickrDotStyles();
     
-    // Obtener fechas con comunicados, justificantes y autorizaciones oficiales
-    const { data } = await supabaseClient.from('comunicados').select('fecha_envio').eq('plantel_id', state.plantelId);
     let datesWithComs = [];
-    if(data) datesWithComs = [...new Set(data.map(d => getLocalDateStringHelper(d.fecha_envio)).filter(Boolean))];
 
-    flatpickr(el, {
+    if (el._flatpickr) {
+        try { el._flatpickr.destroy(); } catch(e) {}
+    }
+
+    const fp = flatpickr(el, {
         locale: "es",
-        disableMobile: "true",
+        dateFormat: "Y-m-d",
+        disableMobile: true,
         onChange: function(selectedDates, dateStr, instance) {
             if(window.loadComunicadosAdmin) window.loadComunicadosAdmin(dateStr);
         },
-        onDayCreate: function(dObj, dStr, fp, dayElem) {
-            const localDate = dayElem.dateObj;
-            const y = localDate.getFullYear();
-            const m = String(localDate.getMonth() + 1).padStart(2, '0');
-            const d = String(localDate.getDate()).padStart(2, '0');
-            const dateStrCheck = `${y}-${m}-${d}`;
+        onDayCreate: function(dObj, dStr, fpInstance, dayElem) {
+            const dateStrCheck = getLocalDateStringHelper(dayElem.dateObj);
             if (datesWithComs.includes(dateStrCheck)) {
                 dayElem.classList.add("has-comunicado");
+                if (!dayElem.querySelector('.calendar-event-dot')) {
+                    const dot = document.createElement('span');
+                    dot.className = 'calendar-event-dot';
+                    dayElem.appendChild(dot);
+                }
             }
         }
     });
+
+    try {
+        let allDates = [];
+        let page = 0;
+        const pageSize = 1000;
+        while(page < 10) {
+            let q = supabaseClient
+                .from('comunicados')
+                .select('fecha_envio')
+                .order('fecha_envio', { ascending: false });
+            if(state.plantelId) {
+                q = q.eq('plantel_id', state.plantelId);
+            }
+            const { data, error } = await q.range(page * pageSize, (page + 1) * pageSize - 1);
+            if (error) {
+                console.warn('[FlatpickrAdmin] Error consultando fechas:', error);
+                break;
+            }
+            if (data && data.length > 0) allDates.push(...data);
+            if (!data || data.length < pageSize) break;
+            page++;
+        }
+        datesWithComs = [...new Set(allDates.map(d => getLocalDateStringHelper(d.fecha_envio)).filter(Boolean))];
+        if (fp && fp.calendarContainer) {
+            fp.redraw();
+        }
+    } catch(err) {
+        console.error('[FlatpickrAdmin] Error en consulta de fechas:', err);
+    }
 };
 
 window.initFlatpickrAvisos = async (isAlumno = false) => {
     const el = document.getElementById('filtroFechaAvisos');
     if(!el) return;
+    ensureFlatpickrDotStyles();
     
-    const uRes = await supabaseClient.auth.getUser();
-    const userId = uRes.data?.user?.id;
-    const userRole = state.role || '';
-    
-    let allData = [];
-    let page = 0;
-    const pageSize = 1000;
-    while(true) {
-        let q = supabaseClient
-            .from('comunicados')
-            .select('fecha_envio, audiencia, titulo, tipo, mensaje')
-            .order('fecha_envio', { ascending: false });
-        if(state.plantelId) {
-            q = q.or(`plantel_id.eq.${state.plantelId},plantel_id.is.null,audiencia.ilike.Alumno_%`);
-        }
-        let { data } = await q.range(page * pageSize, (page + 1) * pageSize - 1);
-        
-        if (data && data.length > 0) allData.push(...data);
-        if (!data || data.length < pageSize) break;
-        page++;
-    }
-    let data = allData;
-
     let datesWithComs = [];
 
-    if(isAlumno) {
-        let audSet = new Set(['General', 'Alumnos', 'Todos']);
-        if(userId) {
-            let al = null;
-            const userEmail = (uRes.data?.user?.email || '').toLowerCase().trim();
-            const { data: alData } = await supabaseClient
-                .from('alumnos')
-                .select('id, grupo_id, grado, matricula, perfil_id, contacto_email, taller')
-                .or(`contacto_email.ilike.%${userEmail}%,perfil_id.eq.${userId}`)
-                .maybeSingle();
-            al = alData;
-            if (!al && userEmail) {
-                const possibleMat = userEmail.split('@')[0].toUpperCase().trim();
-                const { data: alMat } = await supabaseClient
-                    .from('alumnos')
-                    .select('id, grupo_id, grado, matricula, perfil_id, contacto_email, taller')
-                    .or(`matricula.ilike.%${possibleMat}%,matricula.eq.${possibleMat}`)
-                    .maybeSingle();
-                if (alMat) al = alMat;
-            }
-
-            if(al) {
-                audSet.add('Alumno_' + al.id);
-                if(al.grupo_id) audSet.add('Grupo_' + al.grupo_id);
-                if(al.grado) audSet.add('Grado_' + al.grado);
-            }
-        }
-        datesWithComs = data.filter(c => {
-            if (c.audiencia && !audSet.has(c.audiencia)) return false;
-            return window._comunicadoCorrespondeAAlumno ? window._comunicadoCorrespondeAAlumno(c, al) : true;
-        }).map(c => getLocalDateStringHelper(c.fecha_envio));
-    } else {
-        // Obtener asignaciones si es maestro para abarcar grupos específicos y filtrar talleres
-        let maestroGrupos = [];
-        let maestroMaterias = [];
-        if((userRole === 'maestro' || userRole === 'docente') && uRes.data?.user?.email) {
-            const { data: asigs } = await supabaseClient.from('asignaciones_maestros').select('grupo_id, materia').eq('docente_email', uRes.data.user.email).eq('plantel_id', state.plantelId);
-            if(asigs) {
-                maestroGrupos = asigs.map(a => a.grupo_id).filter(Boolean);
-                maestroMaterias = asigs.map(a => a.materia).filter(Boolean);
-            }
-        }
-
-        datesWithComs = data.filter(c => {
-            // Mantener consistencia con el filtro de loadTimelinePersonal
-            if (c.titulo?.includes('HORARIO DE CLASE DISPONIBLE')) return false;
-            if (c.tipo === 'AvisoMaestro') return false;
-
-            if(!c.audiencia) return true;
-            const aud = c.audiencia;
-            let isTargeted = false;
-            
-            if(['Todos', 'General'].includes(aud)) isTargeted = true;
-            else if(userRole === 'maestro' || userRole === 'docente') {
-                if(['Maestros', 'Personal'].includes(aud)) isTargeted = true;
-                else if(aud === `Maestro_${userId}`) isTargeted = true;
-                else if(aud.startsWith('Maestros_Grupo_')) {
-                    const gId = aud.replace('Maestros_Grupo_', '');
-                    isTargeted = maestroGrupos.includes(gId);
-                }
-                else if(aud.startsWith('Grupo_')) {
-                    const gId = aud.replace('Grupo_', '');
-                    isTargeted = maestroGrupos.includes(gId);
-                }
-            } else if (userRole === 'directivo' || userRole === 'secretaria_direccion' || userRole === 'admin' || userRole === 'administrador' || userRole === 'administrativo') {
-                isTargeted = true; // Admin/Directivos ven todas las fechas con avisos
-            } else if (userRole === 'apoyo' || userRole === 'biblioteca') {
-                if(['Personal', 'Maestros'].includes(aud)) isTargeted = true;
-            }
-            
-            if (isTargeted && c.titulo?.startsWith('JUSTIFICANTE MÉDICO:') && c.titulo.includes('[TALLER:')) {
-                if (aud === `Maestro_${userId}`) {
-                    return true;
-                }
-                const match = c.titulo.match(/\[TALLER:(.+?)\]/);
-                if (match && maestroMaterias.length > 0) {
-                    const reqTaller = match[1].toLowerCase().trim();
-                    const canView = maestroMaterias.some(materia => {
-                        const m = (materia || '').toLowerCase().trim();
-                        if (!m.includes('tecnolog') && !m.includes('taller')) return true;
-                        return m.includes(reqTaller) || reqTaller.includes(m) || m === reqTaller;
-                    });
-                    if (!canView) return false;
-                }
-            }
-
-            return isTargeted;
-        }).map(c => getLocalDateStringHelper(c.fecha_envio));
+    if (el._flatpickr) {
+        try { el._flatpickr.destroy(); } catch(e) {}
     }
-    
-    datesWithComs = [...new Set(datesWithComs.filter(Boolean))];
 
-    flatpickr(el, {
+    const fp = flatpickr(el, {
         locale: "es",
-        disableMobile: "true",
+        dateFormat: "Y-m-d",
+        disableMobile: true,
         onChange: function(selectedDates, dateStr, instance) {
-            if(isAlumno) {
-                if(window.loadTimelineAlumno) window.loadTimelineAlumno(true, dateStr);
+            if (isAlumno) {
+                if (window.loadTimelineAlumno) window.loadTimelineAlumno(true, dateStr);
             } else {
-                if(window.loadTimelinePersonal) window.loadTimelinePersonal(dateStr);
+                if (window.loadTimelinePersonal) window.loadTimelinePersonal(dateStr);
             }
         },
-        onDayCreate: function(dObj, dStr, fp, dayElem) {
-            const localDate = dayElem.dateObj;
-            const y = localDate.getFullYear();
-            const m = String(localDate.getMonth() + 1).padStart(2, '0');
-            const d = String(localDate.getDate()).padStart(2, '0');
-            const dateStrCheck = `${y}-${m}-${d}`;
+        onDayCreate: function(dObj, dStr, fpInstance, dayElem) {
+            const dateStrCheck = getLocalDateStringHelper(dayElem.dateObj);
             if (datesWithComs.includes(dateStrCheck)) {
                 dayElem.classList.add("has-comunicado");
+                if (!dayElem.querySelector('.calendar-event-dot')) {
+                    const dot = document.createElement('span');
+                    dot.className = 'calendar-event-dot';
+                    dayElem.appendChild(dot);
+                }
             }
         }
     });
+
+    try {
+        const uRes = await supabaseClient.auth.getUser();
+        const userId = uRes.data?.user?.id;
+        const userEmail = (uRes.data?.user?.email || '').toLowerCase().trim();
+        const userRole = state.role || '';
+
+        if (isAlumno) {
+            let audArr = ['General', 'Alumnos', 'Todos'];
+            let al = null;
+            if (userId || userEmail) {
+                const { data: alData } = await supabaseClient
+                    .from('alumnos')
+                    .select('id, grupo_id, grado, matricula, perfil_id, contacto_email, taller')
+                    .or(`contacto_email.ilike.%${userEmail}%,perfil_id.eq.${userId}`)
+                    .maybeSingle();
+                al = alData;
+                if (!al && userEmail) {
+                    const possibleMat = userEmail.split('@')[0].toUpperCase().trim();
+                    const { data: alMat } = await supabaseClient
+                        .from('alumnos')
+                        .select('id, grupo_id, grado, matricula, perfil_id, contacto_email, taller')
+                        .or(`matricula.ilike.%${possibleMat}%,matricula.eq.${possibleMat}`)
+                        .maybeSingle();
+                    if (alMat) al = alMat;
+                }
+
+                if (al) {
+                    audArr.push('Alumno_' + al.id);
+                    if (al.grupo_id) audArr.push('Grupo_' + al.grupo_id);
+                    if (al.grado) audArr.push('Grado_' + al.grado);
+                }
+            }
+
+            // Consulta rápida directamente filtrada por audiencia del alumno
+            let q = supabaseClient
+                .from('comunicados')
+                .select('fecha_envio, audiencia, titulo, tipo, mensaje')
+                .in('audiencia', audArr)
+                .order('fecha_envio', { ascending: false });
+
+            if (state.plantelId) {
+                q = q.or(`plantel_id.eq.${state.plantelId},plantel_id.is.null,audiencia.ilike.Alumno_%`);
+            }
+
+            const { data, error } = await q.limit(300);
+            if (data && data.length > 0) {
+                datesWithComs = data.filter(c => {
+                    return window._comunicadoCorrespondeAAlumno ? window._comunicadoCorrespondeAAlumno(c, al) : true;
+                }).map(c => getLocalDateStringHelper(c.fecha_envio));
+            }
+        } else {
+            // Personal / Maestros / Directivos
+            let audArr = ['Todos', 'General'];
+            let maestroGrupos = [];
+            let maestroMaterias = [];
+
+            if (userRole === 'maestro' || userRole === 'docente') {
+                audArr.push('Maestros', 'Personal');
+                if (userId) audArr.push('Maestro_' + userId);
+                if (userEmail) {
+                    const { data: asigs } = await supabaseClient
+                        .from('asignaciones_maestros')
+                        .select('grupo_id, materia, target_grado')
+                        .eq('docente_email', userEmail)
+                        .eq('plantel_id', state.plantelId);
+                    if (asigs && asigs.length > 0) {
+                        for (const a of asigs) {
+                            if (a.grupo_id) {
+                                maestroGrupos.push(a.grupo_id);
+                                audArr.push('Grupo_' + a.grupo_id);
+                                audArr.push('Maestros_Grupo_' + a.grupo_id);
+                            }
+                            if (a.materia) maestroMaterias.push(a.materia);
+                            if (a.target_grado) {
+                                const { data: relatedGroups } = await supabaseClient
+                                    .from('grupos')
+                                    .select('id')
+                                    .like('nombre', a.target_grado + '%');
+                                if (relatedGroups) {
+                                    relatedGroups.forEach(rg => {
+                                        maestroGrupos.push(rg.id);
+                                        audArr.push('Grupo_' + rg.id);
+                                        audArr.push('Maestros_Grupo_' + rg.id);
+                                    });
+                                }
+                            }
+                        }
+                    }
+                }
+            } else if (userRole === 'directivo' || userRole === 'secretaria_direccion' || userRole === 'admin' || userRole === 'administrador' || userRole === 'administrativo') {
+                audArr.push('Maestros', 'Personal', 'Alumnos');
+            } else if (userRole === 'apoyo' || userRole === 'biblioteca') {
+                audArr.push('Personal', 'Maestros');
+            }
+
+            let q = supabaseClient
+                .from('comunicados')
+                .select('fecha_envio, audiencia, titulo, tipo, mensaje')
+                .in('audiencia', audArr)
+                .order('fecha_envio', { ascending: false });
+
+            if (state.plantelId) {
+                q = q.eq('plantel_id', state.plantelId);
+            }
+
+            const { data } = await q.limit(500);
+            if (data && data.length > 0) {
+                datesWithComs = data.filter(c => {
+                    if (c.titulo?.includes('HORARIO DE CLASE DISPONIBLE')) return false;
+                    if (c.tipo === 'AvisoMaestro') return false; // AvisoMaestro no va a bandeja institucional
+                    return true;
+                }).map(c => getLocalDateStringHelper(c.fecha_envio));
+            }
+        }
+
+        datesWithComs = [...new Set(datesWithComs.filter(Boolean))];
+        if (fp && fp.calendarContainer) {
+            fp.redraw();
+        }
+    } catch(err) {
+        console.error('[FlatpickrAvisos] Error obteniendo fechas con avisos:', err);
+    }
 };
 
 // Pull to refresh visual e intuitivo (con soporte para scroll interno)
@@ -22617,10 +22698,15 @@ window.initBitacoraCalendar = async (inputId, cbName) => {
         }
     } catch(e) { console.error('Error fetching bitacora dates', e); }
 
+    if (el._flatpickr) {
+        try { el._flatpickr.destroy(); } catch(e) {}
+    }
+
     // Inicializar Flatpickr DESPUÉS de obtener las fechas para que onDayCreate funcione
     flatpickr(el, {
         locale: 'es',
         dateFormat: 'Y-m-d',
+        disableMobile: true,
         onChange: function(selectedDates, dateStr, instance) {
             if(window[cbName]) window[cbName](dateStr);
         },

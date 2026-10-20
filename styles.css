@@ -1184,30 +1184,36 @@ body {
     opacity: 1;
 }
 
-/* Flatpickr Customization */
-.flatpickr-day.has-comunicado::after {
-  content: '';
-  position: absolute;
-  bottom: 2px;
-  left: 50%;
-  transform: translateX(-50%);
-  width: 5px;
-  height: 5px;
-  background-color: var(--danger);
-  border-radius: 50%;
+/* ==========================================================================
+   FLATPICKR PUNTOS INDICADORES (COMUNICADOS / EVENTOS / BITÁCORA)
+   ========================================================================== */
+.flatpickr-day {
+  position: relative !important;
 }
 
-/* Punto rojo para fechas con bitácora */
-.flatpickr-bitacora-dot {
-    display: block;
-    width: 6px;
-    height: 6px;
-    background-color: var(--danger, #dc3545);
-    border-radius: 50%;
-    position: absolute;
-    bottom: 2px;
-    left: 50%;
-    transform: translateX(-50%);
+.calendar-event-dot,
+.flatpickr-bitacora-dot,
+.flatpickr-day.has-comunicado::after {
+  content: '' !important;
+  display: block !important;
+  position: absolute !important;
+  bottom: 3px !important;
+  left: 50% !important;
+  transform: translateX(-50%) !important;
+  width: 6px !important;
+  height: 6px !important;
+  background-color: var(--danger, #ef4444) !important;
+  border-radius: 50% !important;
+  z-index: 10 !important;
+  pointer-events: none !important;
+  box-shadow: 0 0 2px rgba(0, 0, 0, 0.4);
+}
+
+.flatpickr-day.selected .calendar-event-dot,
+.flatpickr-day.selected .flatpickr-bitacora-dot,
+.flatpickr-day.selected.has-comunicado::after {
+  background-color: #ffffff !important;
+  box-shadow: 0 0 2px rgba(0, 0, 0, 0.8);
 }
 
 /* ==========================================================================
