@@ -13981,7 +13981,7 @@ window.loadListaEvalManual = async () => {
     }
 };
 
-window.modalPedirCalificacion = ({ titulo, subtitulo, valorInicial = '', permitirBorrar = true }) => {
+window.modalPedirCalificacion = ({ titulo, subtitulo, valorInicial = '', permitirBorrar = true, tieneSiguiente = false, textoBotonSiguiente = null }) => {
     return new Promise((resolve) => {
         let modal = document.getElementById('modalCalificacionRapida');
         if (!modal) {
@@ -13990,6 +13990,19 @@ window.modalPedirCalificacion = ({ titulo, subtitulo, valorInicial = '', permiti
             modal.style.cssText = 'position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.65); z-index:10000; display:flex; justify-content:center; align-items:center; backdrop-filter:blur(3px); padding:16px; box-sizing:border-box;';
             document.body.appendChild(modal);
         }
+
+        const btnSiguienteHTML = tieneSiguiente ? `
+            <button id="btnGuardarSiguienteCalRapida" class="btn btn-primary" style="width:100%; padding:11px; font-size:0.95rem; font-weight:700; border-radius:8px; display:flex; align-items:center; justify-content:center; gap:8px;">
+                <i class="fa-solid fa-arrow-down"></i> ${textoBotonSiguiente || 'Guardar y Siguiente ↓'}
+            </button>
+            <button id="btnGuardarSoloCalRapida" class="btn btn-outline" style="width:100%; padding:9px; font-size:0.85rem; font-weight:600; border-radius:8px; border-color:var(--primary); color:var(--primary);">
+                <i class="fa-solid fa-check"></i> Solo Guardar
+            </button>
+        ` : `
+            <button id="btnGuardarSoloCalRapida" class="btn btn-primary" style="width:100%; padding:10px; font-size:0.95rem; font-weight:600; border-radius:8px;">
+                <i class="fa-solid fa-check"></i> Guardar Calificación
+            </button>
+        `;
 
         modal.innerHTML = `
             <div style="background:var(--surface, #ffffff); border-radius:14px; width:100%; max-width:340px; padding:22px 20px; box-shadow:0 12px 30px rgba(0,0,0,0.3); text-align:center; border:1px solid var(--border, #e2e8f0);">
@@ -14006,15 +14019,13 @@ window.modalPedirCalificacion = ({ titulo, subtitulo, valorInicial = '', permiti
                 </div>
 
                 <div style="display:flex; flex-direction:column; gap:8px; margin-top:16px;">
-                    <button id="btnGuardarCalRapida" class="btn btn-primary" style="width:100%; padding:10px; font-size:0.95rem; font-weight:600; border-radius:8px;">
-                        <i class="fa-solid fa-check"></i> Guardar Calificación
-                    </button>
+                    ${btnSiguienteHTML}
                     ${permitirBorrar ? `
                     <button id="btnBorrarCalRapida" class="btn btn-outline" style="width:100%; padding:8px; font-size:0.82rem; border-color:var(--danger, #ef4444); color:var(--danger, #ef4444); border-radius:8px;">
                         <i class="fa-solid fa-trash-can"></i> Dejar en blanco (Eliminar)
                     </button>` : ''}
                     <button id="btnCancelarCalRapida" class="btn btn-ghost" style="width:100%; padding:8px; font-size:0.82rem; color:var(--text-muted, #64748b); background:none; border:none; cursor:pointer;">
-                        Cancelar
+                        Cerrar
                     </button>
                 </div>
             </div>
@@ -14022,26 +14033,45 @@ window.modalPedirCalificacion = ({ titulo, subtitulo, valorInicial = '', permiti
         modal.style.display = 'flex';
 
         const inp = document.getElementById('inputCalificacionRapida');
-        const btnGuardar = document.getElementById('btnGuardarCalRapida');
+        const btnSiguiente = document.getElementById('btnGuardarSiguienteCalRapida');
+        const btnGuardarSolo = document.getElementById('btnGuardarSoloCalRapida');
         const btnBorrar = document.getElementById('btnBorrarCalRapida');
         const btnCancelar = document.getElementById('btnCancelarCalRapida');
 
         let cerrado = false;
-        const cerrar = (val) => {
+        const makeResult = (accion, valor) => {
+            return {
+                accion,
+                valor,
+                toString() { return this.valor; },
+                valueOf() { return this.valor; },
+                trim() { return this.valor.trim(); }
+            };
+        };
+
+        const cerrar = (res) => {
             if (cerrado) return;
             cerrado = true;
             modal.style.display = 'none';
-            resolve(val);
+            resolve(res);
         };
 
-        const confirmar = () => {
-            const raw = inp.value.trim().replace(',', '.');
-            cerrar(raw);
-        };
+        const obtenerValor = () => inp.value.trim().replace(',', '.');
 
-        btnGuardar.onclick = confirmar;
+        if (btnSiguiente) {
+            btnSiguiente.onclick = () => cerrar(makeResult('guardar_siguiente', obtenerValor()));
+        }
+        if (btnGuardarSolo) {
+            btnGuardarSolo.onclick = () => cerrar(makeResult('guardar', obtenerValor()));
+        }
         if (btnBorrar) {
-            btnBorrar.onclick = () => cerrar('');
+            btnBorrar.onclick = () => {
+                if (btnSiguiente) {
+                    cerrar(makeResult('borrar_siguiente', ''));
+                } else {
+                    cerrar(makeResult('borrar', ''));
+                }
+            };
         }
         btnCancelar.onclick = () => cerrar(null);
 
@@ -14052,7 +14082,11 @@ window.modalPedirCalificacion = ({ titulo, subtitulo, valorInicial = '', permiti
         inp.onkeydown = (e) => {
             if (e.key === 'Enter') {
                 e.preventDefault();
-                confirmar();
+                if (btnSiguiente) {
+                    cerrar(makeResult('guardar_siguiente', obtenerValor()));
+                } else {
+                    cerrar(makeResult('guardar', obtenerValor()));
+                }
             } else if (e.key === 'Escape') {
                 e.preventDefault();
                 cerrar(null);
@@ -14064,7 +14098,7 @@ window.modalPedirCalificacion = ({ titulo, subtitulo, valorInicial = '', permiti
                 inp.focus();
                 inp.select();
             }
-        }, 80);
+        }, 60);
     });
 };
 
@@ -14321,6 +14355,12 @@ window.cargarAlumnosLista = async () => {
                 if(evalsData) evals = evalsData;
             }
             
+            window._currentAlumnos = alumnos;
+            window._currentActs = acts;
+            window._currentEvals = evals;
+            window._currentTrim = currentTrim;
+            window._isModoFinal = isModoFinal;
+
             for(let al of alumnos) {
                 const initials = al.nombre.substring(0,2).toUpperCase();
                 let promFinalNum = 0;
@@ -14367,7 +14407,7 @@ window.cargarAlumnosLista = async () => {
                     let badge = promFinalNum >= 6 ? '<span class="badge" style="background:#d1fae5; color:#065f46">Aprobado</span>' : '<span class="badge" style="background:#fee2e2; color:#991b1b">Reprobado</span>';
 
                     htmlRows += `
-                    <tr style="border-bottom:1px solid var(--border)">
+                    <tr id="row_eval_alumno_${al.id}" style="border-bottom:1px solid var(--border)">
                         <td class="col-sticky-alumno" style="padding:10px 12px;">
                            <div style="display:flex; gap:10px; align-items:center; min-width:0;">
                               <div style="width:32px; height:32px; border-radius:50%; background:var(--primary); color:white; display:flex; justify-content:center; align-items:center; font-size:11px; font-weight:bold; flex-shrink:0;">${initials}</div>
@@ -14380,8 +14420,8 @@ window.cargarAlumnosLista = async () => {
                         <td style="text-align:center; padding:12px;">${p1.toFixed(1)}</td>
                         <td style="text-align:center; padding:12px;">${p2.toFixed(1)}</td>
                         <td style="text-align:center; padding:12px;">${p3.toFixed(1)}</td>
-                        <td style="text-align:center; padding:12px; font-weight:bold; background:var(--page-bg); color:var(--primary); font-size:1.1rem;">${promFinalNum.toFixed(2)}</td>
-                        <td style="text-align:center; padding:12px;">${badge}</td>
+                        <td id="prom_alumno_${al.id}" style="text-align:center; padding:12px; font-weight:bold; background:var(--page-bg); color:var(--primary); font-size:1.1rem;">${promFinalNum.toFixed(2)}</td>
+                        <td id="badge_alumno_${al.id}" style="text-align:center; padding:12px;">${badge}</td>
                     </tr>`;
 
                 } else {
@@ -14393,14 +14433,15 @@ window.cargarAlumnosLista = async () => {
                             const cellEval = evals.find(e => e.alumno_id === al.id && e.actividad_id === act.id);
                             let val = 0, isValida = false;
                             const actTituloSafe = act.titulo.replace(/'/g, "\\'");
+                            const alNombreSafe = al.nombre.replace(/'/g, "\\'");
                             
                             if(cellEval && cellEval.calificacion !== undefined && cellEval.calificacion !== null) {
-                                actCells += `<td style="text-align:center; padding:12px; font-weight:bold; color:var(--primary); cursor:pointer;" title="Click para editar" onclick="window.editarCalificacionLista('${al.id}', '${act.id}', '${cellEval.calificacion}', '${actTituloSafe}')">${cellEval.calificacion} <i class="fa-solid fa-pen" style="font-size:0.6em; opacity:0.5;"></i></td>`;
+                                actCells += `<td id="cell_eval_${al.id}_${act.id}" style="text-align:center; padding:12px; font-weight:bold; color:var(--primary); cursor:pointer;" title="Click para editar" onclick="window.editarCalificacionLista('${al.id}', '${act.id}', '${cellEval.calificacion}', '${actTituloSafe}', '${alNombreSafe}', this)">${cellEval.calificacion} <i class="fa-solid fa-pen" style="font-size:0.6em; opacity:0.5;"></i></td>`;
                                 val = parseFloat(cellEval.calificacion) || 0;
                                 isValida = true;
                                 countNotas++;
                             } else {
-                                actCells += `<td style="text-align:center; padding:12px; color:var(--text-muted); cursor:pointer;" title="Click para calificar" onclick="window.editarCalificacionLista('${al.id}', '${act.id}', '', '${actTituloSafe}')">- <i class="fa-solid fa-plus" style="font-size:0.6em; opacity:0.5;"></i></td>`;
+                                actCells += `<td id="cell_eval_${al.id}_${act.id}" style="text-align:center; padding:12px; color:var(--text-muted); cursor:pointer;" title="Click para calificar" onclick="window.editarCalificacionLista('${al.id}', '${act.id}', '', '${actTituloSafe}', '${alNombreSafe}', this)">- <i class="fa-solid fa-plus" style="font-size:0.6em; opacity:0.5;"></i></td>`;
                             }
 
                             if(act.rubro_name) {
@@ -14443,7 +14484,7 @@ window.cargarAlumnosLista = async () => {
                     let badge = countNotas === 0 ? '<span class="badge" style="background:#f3f4f6; color:#4b5563">Sin N/E</span>' : (promFinalNum < 6 ? '<span class="badge" style="background:#fee2e2; color:#991b1b">Reprobado</span>' : '<span class="badge" style="background:#d1fae5; color:#065f46">Aprobado</span>');
                     
                     htmlRows += `
-                    <tr style="border-bottom:1px solid var(--border)">
+                    <tr id="row_eval_alumno_${al.id}" style="border-bottom:1px solid var(--border)">
                         <td class="col-sticky-alumno" style="padding:10px 12px;">
                            <div style="display:flex; gap:10px; align-items:center; min-width:0;">
                               <div style="width:32px; height:32px; border-radius:50%; background:var(--primary); color:white; display:flex; justify-content:center; align-items:center; font-size:11px; font-weight:bold; flex-shrink:0;">${initials}</div>
@@ -14454,8 +14495,8 @@ window.cargarAlumnosLista = async () => {
                            </div>
                         </td>
                         ${actCells}
-                        <td style="text-align:center; padding:12px; font-weight:bold;">${promFinalNum.toFixed(2)}${extraBadge}</td>
-                        <td style="text-align:center; padding:12px;">${badge}</td>
+                        <td id="prom_alumno_${al.id}" style="text-align:center; padding:12px; font-weight:bold;">${promFinalNum.toFixed(2)}${extraBadge}</td>
+                        <td id="badge_alumno_${al.id}" style="text-align:center; padding:12px;">${badge}</td>
                     </tr>`;
                 }
 
@@ -14474,20 +14515,20 @@ window.cargarAlumnosLista = async () => {
                 <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap:16px;">
                     <div class="card" style="padding:16px; border-left:4px solid var(--primary); display:flex; flex-direction:column; gap:4px;">
                         <span style="font-size:0.75rem; color:var(--text-muted); text-transform:uppercase; font-weight:bold;">Promedio Grupal</span>
-                        <span style="font-size:1.5rem; font-weight:bold; color:var(--primary);">${promGrupo}</span>
+                        <span id="stat_promedio_grupal" style="font-size:1.5rem; font-weight:bold; color:var(--primary);">${promGrupo}</span>
                     </div>
                     <div class="card" style="padding:16px; border-left:4px solid var(--success); display:flex; flex-direction:column; gap:4px;">
                         <span style="font-size:0.75rem; color:var(--text-muted); text-transform:uppercase; font-weight:bold;">Aprobados</span>
                         <div style="display:flex; align-items:baseline; gap:8px;">
-                            <span style="font-size:1.5rem; font-weight:bold; color:var(--success);">${stats.aprobados}</span>
-                            <span style="font-size:0.9rem; color:var(--text-muted);">(${pctApr}%)</span>
+                            <span id="stat_aprobados" style="font-size:1.5rem; font-weight:bold; color:var(--success);">${stats.aprobados}</span>
+                            <span id="stat_aprobados_pct" style="font-size:0.9rem; color:var(--text-muted);">(${pctApr}%)</span>
                         </div>
                     </div>
                     <div class="card" style="padding:16px; border-left:4px solid var(--danger); display:flex; flex-direction:column; gap:4px;">
                         <span style="font-size:0.75rem; color:var(--text-muted); text-transform:uppercase; font-weight:bold;">Reprobados</span>
                         <div style="display:flex; align-items:baseline; gap:8px;">
-                            <span style="font-size:1.5rem; font-weight:bold; color:var(--danger);">${stats.reprobados}</span>
-                            <span style="font-size:0.9rem; color:var(--text-muted);">(${pctRep}%)</span>
+                            <span id="stat_reprobados" style="font-size:1.5rem; font-weight:bold; color:var(--danger);">${stats.reprobados}</span>
+                            <span id="stat_reprobados_pct" style="font-size:0.9rem; color:var(--text-muted);">(${pctRep}%)</span>
                         </div>
                     </div>
                 </div>
@@ -14829,8 +14870,216 @@ window.cargarAlumnosLista = async () => {
 };
 
 
+window.recalcularFilaAlumno = (alumnoId) => {
+    const acts = window._currentActs || [];
+    const evals = window._currentEvals || [];
+    const isModoFinal = window._isModoFinal;
+    let promFinalNum = 0;
+
+    if (isModoFinal) {
+        let promsTrim = { 1: 0, 2: 0, 3: 0 };
+        [1, 2, 3].forEach(t => {
+            const actsT = acts.filter(a => a.trimestre === t);
+            if (actsT.length === 0) return;
+            let rubroGroups = {}, hasRubros = false, sumSimple = 0, countSimple = 0, sumPuntosExtra = 0;
+
+            actsT.forEach(act => {
+                const ev = evals.find(e => e.alumno_id === alumnoId && e.actividad_id === act.id);
+                const val = ev ? parseFloat(ev.calificacion) || 0 : 0;
+                const isValida = ev && ev.calificacion !== undefined && ev.calificacion !== null && ev.calificacion !== '';
+                if (act.rubro_name) {
+                    hasRubros = true;
+                    if (!rubroGroups[act.rubro_name]) rubroGroups[act.rubro_name] = { suma: 0, count: 0, peso: parseFloat(act.rubro_peso) || 0 };
+                    rubroGroups[act.rubro_name].count++;
+                    if (isValida) rubroGroups[act.rubro_name].suma += val;
+                } else {
+                    const ptsConfig = parseFloat(act.rubro_peso) || 0;
+                    if (ptsConfig > 0 && isValida && val > 0) {
+                        sumPuntosExtra += (val / 10) * ptsConfig;
+                    } else if (ptsConfig <= 0 && isValida) {
+                        sumSimple += val;
+                        countSimple++;
+                    }
+                }
+            });
+
+            let promBase = 0;
+            if (hasRubros) {
+                Object.values(rubroGroups).forEach(rg => { if (rg.count > 0) promBase += (rg.suma / rg.count) * (rg.peso / 100); });
+            } else {
+                promBase = countSimple > 0 ? (sumSimple / countSimple) : 0;
+            }
+            promsTrim[t] = Math.min(10, promBase + sumPuntosExtra);
+        });
+
+        const p1 = promsTrim[1], p2 = promsTrim[2], p3 = promsTrim[3];
+        promFinalNum = ((p1 + p2 + p3) / 3);
+        const badge = promFinalNum >= 6 ? '<span class="badge" style="background:#d1fae5; color:#065f46">Aprobado</span>' : '<span class="badge" style="background:#fee2e2; color:#991b1b">Reprobado</span>';
+
+        const promEl = document.getElementById(`prom_alumno_${alumnoId}`);
+        if (promEl) promEl.innerHTML = promFinalNum.toFixed(2);
+        const badgeEl = document.getElementById(`badge_alumno_${alumnoId}`);
+        if (badgeEl) badgeEl.innerHTML = badge;
+    } else {
+        let sumNotas = 0, countNotas = 0;
+        let rubroGroups = {}, hasRubros = false, sumPuntosExtra = 0, nonExtraActsCount = 0;
+
+        if (acts && acts.length > 0) {
+            acts.forEach(act => {
+                const ev = evals.find(e => e.alumno_id === alumnoId && e.actividad_id === act.id);
+                let val = 0, isValida = false;
+                if (ev && ev.calificacion !== undefined && ev.calificacion !== null && ev.calificacion !== '') {
+                    val = parseFloat(ev.calificacion) || 0;
+                    isValida = true;
+                    countNotas++;
+                }
+
+                if (act.rubro_name) {
+                    hasRubros = true;
+                    nonExtraActsCount++;
+                    if (!rubroGroups[act.rubro_name]) rubroGroups[act.rubro_name] = { suma: 0, count: 0, peso: parseFloat(act.rubro_peso) || 0 };
+                    rubroGroups[act.rubro_name].count++;
+                    if (isValida) {
+                        rubroGroups[act.rubro_name].suma += val;
+                        sumNotas += val;
+                    }
+                } else {
+                    const ptsConfig = parseFloat(act.rubro_peso) || 0;
+                    if (ptsConfig > 0 && isValida && val > 0) {
+                        sumPuntosExtra += (val / 10) * ptsConfig;
+                    } else if (ptsConfig <= 0) {
+                        nonExtraActsCount++;
+                        if (isValida) sumNotas += val;
+                    }
+                }
+            });
+        }
+
+        let promBase = 0;
+        if (hasRubros) {
+            Object.values(rubroGroups).forEach(rg => { if (rg.count > 0) promBase += (rg.suma / rg.count) * (rg.peso / 100); });
+        } else {
+            promBase = nonExtraActsCount > 0 ? (sumNotas / nonExtraActsCount) : 0;
+        }
+
+        promFinalNum = Math.min(10, promBase + sumPuntosExtra);
+
+        let extraBadge = sumPuntosExtra > 0 
+            ? ` <span title="Base: ${promBase.toFixed(2)} + ${sumPuntosExtra.toFixed(2)} pts extra" style="font-size:0.75rem; color:#16a34a; font-weight:700;">(+${sumPuntosExtra.toFixed(1)})</span>` 
+            : '';
+
+        let badge = countNotas === 0 ? '<span class="badge" style="background:#f3f4f6; color:#4b5563">Sin N/E</span>' : (promFinalNum < 6 ? '<span class="badge" style="background:#fee2e2; color:#991b1b">Reprobado</span>' : '<span class="badge" style="background:#d1fae5; color:#065f46">Aprobado</span>');
+
+        const promEl = document.getElementById(`prom_alumno_${alumnoId}`);
+        if (promEl) promEl.innerHTML = `${promFinalNum.toFixed(2)}${extraBadge}`;
+        const badgeEl = document.getElementById(`badge_alumno_${alumnoId}`);
+        if (badgeEl) badgeEl.innerHTML = badge;
+    }
+
+    return promFinalNum;
+};
+
+window.recalcularEstadisticasLista = () => {
+    const alumnos = window._currentAlumnos || window._currentListaAlumnos || [];
+    if (alumnos.length === 0) return;
+
+    let sumPromedios = 0, aprobados = 0, reprobados = 0;
+
+    alumnos.forEach(al => {
+        const prom = window.recalcularFilaAlumno(al.id);
+        sumPromedios += prom;
+        if (prom >= 6) aprobados++;
+        else reprobados++;
+    });
+
+    const promGrupo = (sumPromedios / alumnos.length).toFixed(2);
+    const pctApr = (aprobados / alumnos.length * 100).toFixed(1);
+    const pctRep = (reprobados / alumnos.length * 100).toFixed(1);
+
+    const elProm = document.getElementById('stat_promedio_grupal');
+    if (elProm) elProm.textContent = promGrupo;
+    const elApr = document.getElementById('stat_aprobados');
+    if (elApr) elApr.textContent = aprobados;
+    const elAprPct = document.getElementById('stat_aprobados_pct');
+    if (elAprPct) elAprPct.textContent = `(${pctApr}%)`;
+    const elRep = document.getElementById('stat_reprobados');
+    if (elRep) elRep.textContent = reprobados;
+    const elRepPct = document.getElementById('stat_reprobados_pct');
+    if (elRepPct) elRepPct.textContent = `(${pctRep}%)`;
+};
+
+window._aplicarCalificacionEnPunto = async (alumnoId, actividadId, nuevoValor, actTitulo, alumnoNombre) => {
+    if (!window._currentEvals) window._currentEvals = [];
+
+    const esBorrado = (nuevoValor === null || nuevoValor === '' || nuevoValor === undefined);
+    const numVal = esBorrado ? null : parseFloat(nuevoValor);
+
+    const evIndex = window._currentEvals.findIndex(e => e.alumno_id === alumnoId && e.actividad_id === actividadId);
+    if (esBorrado) {
+        if (evIndex >= 0) window._currentEvals.splice(evIndex, 1);
+    } else {
+        if (evIndex >= 0) {
+            window._currentEvals[evIndex].calificacion = numVal;
+        } else {
+            window._currentEvals.push({ alumno_id: alumnoId, actividad_id: actividadId, calificacion: numVal });
+        }
+    }
+
+    // Actualizar celda individual en el DOM de inmediato
+    const cellEl = document.getElementById(`cell_eval_${alumnoId}_${actividadId}`);
+    if (cellEl) {
+        const actTituloSafe = (actTitulo || '').replace(/'/g, "\\'");
+        const alNombreSafe = (alumnoNombre || '').replace(/'/g, "\\'");
+        if (!esBorrado) {
+            cellEl.style.color = "var(--primary)";
+            cellEl.style.fontWeight = "bold";
+            cellEl.title = "Click para editar";
+            cellEl.innerHTML = `${numVal} <i class="fa-solid fa-pen" style="font-size:0.6em; opacity:0.5;"></i>`;
+            cellEl.setAttribute('onclick', `window.editarCalificacionLista('${alumnoId}', '${actividadId}', '${numVal}', '${actTituloSafe}', '${alNombreSafe}', this)`);
+        } else {
+            cellEl.style.color = "var(--text-muted)";
+            cellEl.style.fontWeight = "normal";
+            cellEl.title = "Click para calificar";
+            cellEl.innerHTML = `- <i class="fa-solid fa-plus" style="font-size:0.6em; opacity:0.5;"></i>`;
+            cellEl.setAttribute('onclick', `window.editarCalificacionLista('${alumnoId}', '${actividadId}', '', '${actTituloSafe}', '${alNombreSafe}', this)`);
+        }
+        // Micro-animación visual para feedback instantáneo
+        cellEl.style.transition = "background-color 0.25s ease";
+        cellEl.style.backgroundColor = "rgba(16, 185, 129, 0.2)";
+        setTimeout(() => { if (cellEl) cellEl.style.backgroundColor = ""; }, 350);
+    }
+
+    // Actualizar promedio del alumno y estadísticas grupales al instante
+    window.recalcularFilaAlumno(alumnoId);
+    window.recalcularEstadisticasLista();
+
+    // Guardar en Supabase en segundo plano
+    try {
+        if (esBorrado) {
+            const { error } = await supabaseClient.from('evaluaciones_actividades')
+                .delete()
+                .eq('actividad_id', actividadId)
+                .eq('alumno_id', alumnoId);
+            if (error) throw error;
+        } else {
+            const { error } = await supabaseClient.from('evaluaciones_actividades').upsert({
+                actividad_id: actividadId,
+                alumno_id: alumnoId,
+                calificacion: numVal,
+                fecha_evaluacion: new Date().toISOString(),
+                plantel_id: state.plantelId
+            }, { onConflict: 'actividad_id,alumno_id' });
+            if (error) throw error;
+        }
+    } catch(err) {
+        console.error("Error guardando calificación en segundo plano:", err);
+        if (window.showToast) window.showToast("Error al guardar en el servidor: " + err.message, "danger");
+    }
+};
+
 window.evaluarActividadMasiva = async (actividadId, actTitulo) => {
-    if (!window._currentListaAlumnos || window._currentListaAlumnos.length === 0) return alert("No hay alumnos para calificar.");
+    const alumnos = window._currentAlumnos || window._currentListaAlumnos;
+    if (!alumnos || alumnos.length === 0) return alert("No hay alumnos para calificar.");
     
     const rawVal = document.getElementById('listaMaestroGrupo')?.value;
     if (!rawVal) return;
@@ -14851,15 +15100,48 @@ window.evaluarActividadMasiva = async (actividadId, actTitulo) => {
         valorInicial: '10',
         permitirBorrar: false
     });
-    if(newVal === null || newVal === "") return;
+    if (newVal === null) return;
+    const valorStr = (typeof newVal === 'object' && newVal.valor !== undefined) ? newVal.valor : String(newVal);
+    if (valorStr === "") return;
     
-    const num = parseFloat(newVal);
-    if(isNaN(num) || num < 0 || num > 10) return alert('Ingrese una calificación válida entre 0 y 10.');
+    const num = parseFloat(valorStr);
+    if (isNaN(num) || num < 0 || num > 10) return alert('Ingrese una calificación válida entre 0 y 10.');
 
-    if(!confirm(`¿Estás seguro de asignar un ${num} a todos los ${window._currentListaAlumnos.length} alumnos en esta actividad?`)) return;
+    if (!confirm(`¿Estás seguro de asignar un ${num} a todos los ${alumnos.length} alumnos en esta actividad?`)) return;
 
-    // Prepare batch upsert payload
-    const payload = window._currentListaAlumnos.map(al => ({
+    // 1. Actualizar memoria local _currentEvals
+    if (!window._currentEvals) window._currentEvals = [];
+    alumnos.forEach(al => {
+        const ev = window._currentEvals.find(e => e.alumno_id === al.id && e.actividad_id === actividadId);
+        if (ev) {
+            ev.calificacion = num;
+        } else {
+            window._currentEvals.push({ alumno_id: al.id, actividad_id: actividadId, calificacion: num });
+        }
+
+        // Actualizar celda individual en el DOM
+        const cellEl = document.getElementById(`cell_eval_${al.id}_${actividadId}`);
+        if (cellEl) {
+            const actTituloSafe = (actTitulo || '').replace(/'/g, "\\'");
+            const alNombreSafe = (al.nombre || '').replace(/'/g, "\\'");
+            cellEl.style.color = "var(--primary)";
+            cellEl.style.fontWeight = "bold";
+            cellEl.title = "Click para editar";
+            cellEl.innerHTML = `${num} <i class="fa-solid fa-pen" style="font-size:0.6em; opacity:0.5;"></i>`;
+            cellEl.setAttribute('onclick', `window.editarCalificacionLista('${al.id}', '${actividadId}', '${num}', '${actTituloSafe}', '${alNombreSafe}', this)`);
+            cellEl.style.transition = "background-color 0.25s ease";
+            cellEl.style.backgroundColor = "rgba(16, 185, 129, 0.2)";
+            setTimeout(() => { if (cellEl) cellEl.style.backgroundColor = ""; }, 350);
+        }
+    });
+
+    // 2. Recalcular promedios de todas las filas y estadísticas
+    window.recalcularEstadisticasLista();
+
+    if (window.showToast) window.showToast("Calificaciones masivas asignadas", "success");
+
+    // 3. Persistir en Supabase en segundo plano
+    const payload = alumnos.map(al => ({
         alumno_id: al.id,
         actividad_id: actividadId,
         calificacion: num,
@@ -14871,25 +15153,17 @@ window.evaluarActividadMasiva = async (actividadId, actTitulo) => {
         const u = await supabaseClient.auth.getUser();
         if(!u.data.user) throw new Error("Sin sesión");
 
-        // Use upsert to update existing or insert new grades
         const { error } = await supabaseClient.from('evaluaciones_actividades')
             .upsert(payload, { onConflict: 'actividad_id,alumno_id' });
             
         if(error) throw error;
-        
-        // window.showToast might be available, else alert
-        if(window.showToast) window.showToast("Calificaciones masivas asignadas", "success");
-        else alert("Calificaciones asignadas correctamente.");
-        
-        // Refresh the table
-        if(window.cargarAlumnosLista) window.cargarAlumnosLista();
     } catch(err) {
-        console.error(err);
-        alert("Error al guardar calificaciones masivas: " + err.message);
+        console.error("Error en calificación masiva Supabase:", err);
+        alert("Error al guardar en el servidor: " + err.message);
     }
 };
 
-window.editarCalificacionLista = async (alumnoId, actividadId, currentCal, actTitulo) => {
+window.editarCalificacionLista = async (alumnoId, actividadId, currentCal, actTitulo, alumnoNombre, cellEl) => {
     const rawVal = document.getElementById('listaMaestroGrupo')?.value;
     if (!rawVal) return;
     const [idPart, materia] = rawVal.split('|');
@@ -14903,46 +15177,47 @@ window.editarCalificacionLista = async (alumnoId, actividadId, currentCal, actTi
         }
     }
 
-    const newVal = await window.modalPedirCalificacion({
-        titulo: currentCal ? 'Editar Calificación' : 'Asignar Calificación',
-        subtitulo: `Actividad: <b>${actTitulo}</b>${currentCal ? `<br>Calificación actual: <b>${currentCal}</b>` : ''}`,
+    // Buscar si hay siguiente alumno en la lista para flujo ágil continuo
+    const alumnos = window._currentAlumnos || window._currentListaAlumnos || [];
+    const currentIndex = alumnos.findIndex(a => a.id === alumnoId);
+    const siguienteAlu = (currentIndex >= 0 && currentIndex < alumnos.length - 1) ? alumnos[currentIndex + 1] : null;
+
+    const nombreAlumnoMostrado = alumnoNombre || (currentIndex >= 0 ? alumnos[currentIndex].nombre : '');
+
+    const res = await window.modalPedirCalificacion({
+        titulo: (currentCal !== '' && currentCal !== undefined && currentCal !== null) ? 'Editar Calificación' : 'Asignar Calificación',
+        subtitulo: `Alumno: <b style="color:var(--primary); font-size:1.05rem;">${nombreAlumnoMostrado || 'Alumno'}</b><br>Actividad: <b>${actTitulo}</b>${(currentCal !== '' && currentCal !== undefined && currentCal !== null) ? `<br>Calificación actual: <b>${currentCal}</b>` : ''}`,
         valorInicial: currentCal || '',
-        permitirBorrar: true
+        permitirBorrar: true,
+        tieneSiguiente: !!siguienteAlu,
+        textoBotonSiguiente: siguienteAlu ? `Guardar y Siguiente (${siguienteAlu.nombre.split(' ')[0]}) ↓` : 'Guardar y Siguiente ↓'
     });
-    if(newVal === null) return;
-    
-    if(newVal === "") {
-        // Option to delete the grade if empty
-        if(!confirm("¿Deseas eliminar esta calificación y dejarla en blanco?")) return;
-        try {
-            await supabaseClient.from('evaluaciones_actividades').delete().eq('actividad_id', actividadId).eq('alumno_id', alumnoId);
-            window.showToast("Calificación eliminada", "info");
-            window.cargarAlumnosLista();
-        } catch(e) {
-            console.error(e);
-            alert("Error al eliminar: " + e.message);
+
+    if (res === null) return;
+
+    let valorStr = (typeof res === 'object' && res.valor !== undefined) ? res.valor : String(res);
+    valorStr = (valorStr || '').trim();
+    const accion = (typeof res === 'object' && res.accion) ? res.accion : 'guardar';
+
+    if (valorStr === "" || accion === 'borrar' || accion === 'borrar_siguiente') {
+        await window._aplicarCalificacionEnPunto(alumnoId, actividadId, '', actTitulo, nombreAlumnoMostrado);
+        if (window.showToast) window.showToast("Calificación eliminada", "info");
+    } else {
+        const numVal = parseFloat(valorStr);
+        if (isNaN(numVal) || numVal < 0 || numVal > 10) {
+            return alert("Calificación inválida. Debe ser un número entre 0 y 10.");
         }
-        return;
+        await window._aplicarCalificacionEnPunto(alumnoId, actividadId, numVal, actTitulo, nombreAlumnoMostrado);
+        if (window.showToast) window.showToast("Guardado", "success");
     }
-    
-    let numVal = parseFloat(newVal);
-    if(isNaN(numVal) || numVal < 0 || numVal > 10) return alert("Calificación inválida. Debe ser un número entre 0 y 10.");
 
-    try {
-        const { error } = await supabaseClient.from('evaluaciones_actividades').upsert({
-            actividad_id: actividadId,
-            alumno_id: alumnoId,
-            calificacion: numVal,
-            fecha_evaluacion: new Date().toISOString(),
-            plantel_id: state.plantelId
-        }, { onConflict: 'actividad_id,alumno_id' });
-
-        if(error) throw error;
-        window.showToast("Calificación actualizada", "success");
-        window.cargarAlumnosLista();
-    } catch(e) {
-        console.error(e);
-        alert("Error al actualizar: " + e.message);
+    // Si la acción fue avanzar al siguiente y existe siguiente alumno, encadenar sin recarga
+    if ((accion === 'guardar_siguiente' || accion === 'borrar_siguiente') && siguienteAlu) {
+        const nextEval = (window._currentEvals || []).find(e => e.alumno_id === siguienteAlu.id && e.actividad_id === actividadId);
+        const nextCal = (nextEval && nextEval.calificacion !== undefined && nextEval.calificacion !== null) ? String(nextEval.calificacion) : '';
+        setTimeout(() => {
+            window.editarCalificacionLista(siguienteAlu.id, actividadId, nextCal, actTitulo, siguienteAlu.nombre);
+        }, 60);
     }
 };
 
