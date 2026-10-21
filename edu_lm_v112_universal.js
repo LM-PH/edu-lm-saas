@@ -8084,14 +8084,18 @@ window.loadTramitesAdmin = async () => {
             let btnSubir = '';
             
             if (t.estado === 'Pendiente') {
-                btnSubir = `<button class="btn btn-info btn-xs" style="margin-top:8px; display:inline-flex; gap:6px; align-items:center;" onclick="window.marcarTramiteElaborado('${t.id}', '${t.alumno_id}')">
+                btnSubir = `<button class="btn btn-info btn-xs" style="display:inline-flex; gap:6px; align-items:center;" onclick="window.marcarTramiteElaborado('${t.id}', '${t.alumno_id}')">
                     <i class="fa-solid fa-file-signature"></i> Marcar como Elaborada
                 </button>`;
             } else if (t.estado === 'Elaborada') {
-                btnSubir = `<button class="btn btn-success btn-xs" style="margin-top:8px; display:inline-flex; gap:6px; align-items:center;" onclick="window.marcarTramiteEntregado('${t.id}')">
+                btnSubir = `<button class="btn btn-success btn-xs" style="display:inline-flex; gap:6px; align-items:center;" onclick="window.marcarTramiteEntregado('${t.id}')">
                     <i class="fa-solid fa-handshake"></i> Marcar como Entregada
                 </button>`;
             }
+
+            const btnEliminar = `<button class="btn btn-outline btn-xs" style="border-color:var(--danger); color:var(--danger); display:inline-flex; gap:6px; align-items:center;" onclick="window.eliminarTramite('${t.id}')" title="Eliminar solicitud permanentemente">
+                <i class="fa-solid fa-trash-can"></i> Eliminar
+            </button>`;
             
             let detallesExtra = '';
             if (t.motivo) detallesExtra += `<div style="font-size:0.8rem; margin-top:4px;"><b>Motivo:</b> ${t.motivo}</div>`;
@@ -8107,7 +8111,10 @@ window.loadTramitesAdmin = async () => {
                     </div>
                     <span style="font-size:0.75rem; color:${color}; font-weight:600; padding:3px 10px; background:${color}20; border-radius:20px;">${t.estado}</span>
                 </div>
-                ${btnSubir}
+                <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-top:10px;">
+                    ${btnSubir}
+                    ${btnEliminar}
+                </div>
             </div>`;
         }).join('');
     } catch(e) {
@@ -8125,6 +8132,22 @@ window.marcarTramiteEntregado = async (tramiteId) => {
     } catch(e) {
         console.error(e);
         window.showToast("Error al actualizar estado.", "danger");
+    }
+};
+
+window.eliminarTramite = async (tramiteId) => {
+    if(!confirm("¿Estás seguro de que deseas eliminar esta solicitud de trámite? Se eliminará de forma permanente para que no aparezca en pendientes ni en el historial de entregas.")) return;
+    try {
+        const { error } = await supabaseClient.from('tramites').delete().eq('id', tramiteId);
+        if(error) throw error;
+        window.showToast("Solicitud de trámite eliminada correctamente.", "success");
+        if(window.loadTramitesAdmin) window.loadTramitesAdmin();
+        if(window._calTramitesState && window.loadCalendarioTramites) {
+            window.loadCalendarioTramites(window._calTramitesState.year, window._calTramitesState.month);
+        }
+    } catch(e) {
+        console.error("Error al eliminar trámite:", e);
+        window.showToast("Error al eliminar trámite: " + (e.message || e), "danger");
     }
 };
 
