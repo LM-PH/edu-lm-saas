@@ -3155,7 +3155,7 @@ function renderMaestroActividades() {
             <i class="fa-solid fa-star" style="color:#eab308;"></i> Puntuación Extra al Promedio Final
           </label>
           <div style="display:flex; align-items:center; gap:8px;">
-            <input type="number" id="actPuntosExtra" class="form-input" placeholder="Ej. 1.0" min="0" max="10" step="0.1" style="max-width:120px; margin:0; font-weight:bold; color:#166534;">
+            <input type="number" inputmode="decimal" id="actPuntosExtra" class="form-input" placeholder="Ej. 1.0" min="0" max="10" step="0.1" style="max-width:120px; margin:0; font-weight:bold; color:#166534;">
             <span style="font-size:0.8rem; color:#15803d;">pts extra directos</span>
           </div>
           <div style="font-size:0.75rem; color:#166534; margin-top:4px; opacity:0.85;">
@@ -3226,7 +3226,7 @@ function renderMaestroActividades() {
                  <h4 style="color:var(--primary); margin:0 0 8px 0; font-size:1.05rem;" id="qrAlumnoEncontrado">Alumno...</h4>
                  <label class="form-label" style="font-size:0.85rem; font-weight:600; margin-bottom:4px;">Calificación / Nota</label>
                  <div style="display:flex; gap:8px;">
-                   <input type="text" id="inCalificacionQR" class="form-input" style="flex:1" placeholder="Ej. 10, Entregado, Incompleto" value="10" onkeydown="if(event.key === 'Enter'){ event.preventDefault(); window.guardarEvaluacionQR(); }">
+                   <input type="text" inputmode="decimal" pattern="[0-9]*(\.[0-9]+)?" id="inCalificacionQR" class="form-input" style="flex:1" placeholder="Ej. 10, 9.5" value="10" onkeydown="if(event.key === 'Enter'){ event.preventDefault(); window.guardarEvaluacionQR(); }">
                    <button class="btn btn-success" onclick="window.guardarEvaluacionQR()"><i class="fa-solid fa-check"></i> Asentar</button>
                  </div>
               </div>
@@ -13092,7 +13092,7 @@ window._renderOpcionesRubroModal = (encuadre, act) => {
             <i class="fa-solid fa-star" style="color:#eab308;"></i> Puntuación Extra al Promedio Final:
         </label>
         <div style="display:flex; align-items:center; gap:8px;">
-            <input type="number" id="modalPuntosExtra" class="form-input" placeholder="Ej. 1.0 (o 0)" min="0" max="10" step="0.1" value="${isNoneCurrent && act.rubro_peso ? act.rubro_peso : ''}" style="max-width:130px; margin:0; font-weight:bold; color:#166534;">
+            <input type="number" inputmode="decimal" id="modalPuntosExtra" class="form-input" placeholder="Ej. 1.0 (o 0)" min="0" max="10" step="0.1" value="${isNoneCurrent && act.rubro_peso ? act.rubro_peso : ''}" style="max-width:130px; margin:0; font-weight:bold; color:#166534;">
             <span style="font-size:0.8rem; color:#15803d;">pts extra directos</span>
         </div>
         <div style="font-size:0.75rem; color:#166534; margin-top:4px; opacity:0.85;">
@@ -13829,7 +13829,7 @@ window.cerrarQREvaluacion = () => {
 
 window.guardarEvaluacionQR = async () => {
     const inputNota = document.getElementById('inCalificacionQR');
-    const nota = inputNota ? inputNota.value.trim() : '';
+    const nota = inputNota ? inputNota.value.trim().replace(',', '.') : '';
     if(!nota || !targetStudentId || !currentActividadId) return alert("Faltan datos para registrar la calificación.");
 
     try {
@@ -13960,7 +13960,7 @@ window.loadListaEvalManual = async () => {
                     <div style="font-size:0.75rem; color:var(--text-muted);">${al.matricula || 'Sin matrícula'}</div>
                 </div>
                 <div style="display:flex; gap:5px; align-items:center;">
-                    <input type="text" id="in_eval_${al.id}" data-alumnoid="${al.id}" class="form-input eval-manual-input" style="width:70px; margin:0; text-align:center; border-color:${nota ? 'var(--success)' : 'var(--border)'}" placeholder="-" value="${nota}">
+                    <input type="text" inputmode="decimal" pattern="[0-9]*(\.[0-9]+)?" id="in_eval_${al.id}" data-alumnoid="${al.id}" class="form-input eval-manual-input" style="width:70px; margin:0; text-align:center; border-color:${nota ? 'var(--success)' : 'var(--border)'}" placeholder="-" value="${nota}">
                 </div>
             </div>`;
         });
@@ -13981,12 +13981,101 @@ window.loadListaEvalManual = async () => {
     }
 };
 
+window.modalPedirCalificacion = ({ titulo, subtitulo, valorInicial = '', permitirBorrar = true }) => {
+    return new Promise((resolve) => {
+        let modal = document.getElementById('modalCalificacionRapida');
+        if (!modal) {
+            modal = document.createElement('div');
+            modal.id = 'modalCalificacionRapida';
+            modal.style.cssText = 'position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.65); z-index:10000; display:flex; justify-content:center; align-items:center; backdrop-filter:blur(3px); padding:16px; box-sizing:border-box;';
+            document.body.appendChild(modal);
+        }
 
-window.llenarTodaEvaluacionManual = () => {
-    let newVal = prompt('Ingrese la calificación (0-10) que desea asignar a TODOS los alumnos:\n\n(Nota: Aún podrá modificar calificaciones individuales antes de guardar)');
-    if(newVal === null) return;
-    newVal = newVal.trim();
-    if(newVal === "") return;
+        modal.innerHTML = `
+            <div style="background:var(--surface, #ffffff); border-radius:14px; width:100%; max-width:340px; padding:22px 20px; box-shadow:0 12px 30px rgba(0,0,0,0.3); text-align:center; border:1px solid var(--border, #e2e8f0);">
+                <h4 style="margin:0 0 6px 0; color:var(--text-main, #0f172a); font-size:1.15rem; font-weight:700;">${titulo || 'Asignar Calificación'}</h4>
+                ${subtitulo ? `<div style="font-size:0.83rem; color:var(--text-muted, #64748b); margin-bottom:12px; line-height:1.35;">${subtitulo}</div>` : ''}
+                
+                <div style="margin:14px 0;">
+                    <input type="text" inputmode="decimal" pattern="[0-9]*(\.[0-9]+)?" id="inputCalificacionRapida" 
+                           class="form-input" 
+                           style="font-size:2rem; font-weight:800; text-align:center; width:140px; margin:0 auto; padding:8px 12px; border-radius:12px; border:2.5px solid var(--primary, #3b82f6); color:var(--primary, #3b82f6); background:var(--page-bg, #f8fafc);" 
+                           value="${valorInicial !== null && valorInicial !== undefined ? valorInicial : ''}" 
+                           placeholder="0 - 10" 
+                           autocomplete="off">
+                </div>
+
+                <div style="display:flex; flex-direction:column; gap:8px; margin-top:16px;">
+                    <button id="btnGuardarCalRapida" class="btn btn-primary" style="width:100%; padding:10px; font-size:0.95rem; font-weight:600; border-radius:8px;">
+                        <i class="fa-solid fa-check"></i> Guardar Calificación
+                    </button>
+                    ${permitirBorrar ? `
+                    <button id="btnBorrarCalRapida" class="btn btn-outline" style="width:100%; padding:8px; font-size:0.82rem; border-color:var(--danger, #ef4444); color:var(--danger, #ef4444); border-radius:8px;">
+                        <i class="fa-solid fa-trash-can"></i> Dejar en blanco (Eliminar)
+                    </button>` : ''}
+                    <button id="btnCancelarCalRapida" class="btn btn-ghost" style="width:100%; padding:8px; font-size:0.82rem; color:var(--text-muted, #64748b); background:none; border:none; cursor:pointer;">
+                        Cancelar
+                    </button>
+                </div>
+            </div>
+        `;
+        modal.style.display = 'flex';
+
+        const inp = document.getElementById('inputCalificacionRapida');
+        const btnGuardar = document.getElementById('btnGuardarCalRapida');
+        const btnBorrar = document.getElementById('btnBorrarCalRapida');
+        const btnCancelar = document.getElementById('btnCancelarCalRapida');
+
+        let cerrado = false;
+        const cerrar = (val) => {
+            if (cerrado) return;
+            cerrado = true;
+            modal.style.display = 'none';
+            resolve(val);
+        };
+
+        const confirmar = () => {
+            const raw = inp.value.trim().replace(',', '.');
+            cerrar(raw);
+        };
+
+        btnGuardar.onclick = confirmar;
+        if (btnBorrar) {
+            btnBorrar.onclick = () => cerrar('');
+        }
+        btnCancelar.onclick = () => cerrar(null);
+
+        modal.onclick = (e) => {
+            if (e.target === modal) cerrar(null);
+        };
+
+        inp.onkeydown = (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                confirmar();
+            } else if (e.key === 'Escape') {
+                e.preventDefault();
+                cerrar(null);
+            }
+        };
+
+        setTimeout(() => {
+            if (inp) {
+                inp.focus();
+                inp.select();
+            }
+        }, 80);
+    });
+};
+
+window.llenarTodaEvaluacionManual = async () => {
+    let newVal = await window.modalPedirCalificacion({
+        titulo: 'Calificación General',
+        subtitulo: 'Asignar la misma calificación (0-10) a TODOS los alumnos.<br>(Podrás modificar individuales antes de guardar)',
+        valorInicial: '10',
+        permitirBorrar: false
+    });
+    if(newVal === null || newVal === "") return;
     
     const num = parseFloat(newVal);
     if(isNaN(num) || num < 0 || num > 10) return alert('Ingrese una calificación válida entre 0 y 10.');
@@ -14007,7 +14096,7 @@ window.guardarTodasEvaluacionesManual = async () => {
     const inputs = document.querySelectorAll('.eval-manual-input');
     const toSave = [];
     inputs.forEach(input => {
-        const nota = input.value.trim();
+        const nota = input.value.trim().replace(',', '.');
         const alumnoId = input.getAttribute('data-alumnoid');
         
         if(nota !== "") {
@@ -14756,10 +14845,13 @@ window.evaluarActividadMasiva = async (actividadId, actTitulo) => {
         }
     }
 
-    let newVal = prompt(`Asignar la misma calificación a TODOS los alumnos para "\n${actTitulo}":\n(Ingrese un número entre 0 y 10. Deje vacío para cancelar)`);
-    if(newVal === null) return;
-    newVal = newVal.trim();
-    if(newVal === "") return;
+    let newVal = await window.modalPedirCalificacion({
+        titulo: 'Calificación Masiva',
+        subtitulo: `Asignar la misma calificación a TODOS los alumnos para:<br><b>${actTitulo}</b>`,
+        valorInicial: '10',
+        permitirBorrar: false
+    });
+    if(newVal === null || newVal === "") return;
     
     const num = parseFloat(newVal);
     if(isNaN(num) || num < 0 || num > 10) return alert('Ingrese una calificación válida entre 0 y 10.');
@@ -14811,12 +14903,16 @@ window.editarCalificacionLista = async (alumnoId, actividadId, currentCal, actTi
         }
     }
 
-    let promptMsg = currentCal ? `Editar calificación para "${actTitulo}" (Actual: ${currentCal}):` : `Asignar calificación para "${actTitulo}":`;
-    let newVal = prompt(promptMsg, currentCal);
+    const newVal = await window.modalPedirCalificacion({
+        titulo: currentCal ? 'Editar Calificación' : 'Asignar Calificación',
+        subtitulo: `Actividad: <b>${actTitulo}</b>${currentCal ? `<br>Calificación actual: <b>${currentCal}</b>` : ''}`,
+        valorInicial: currentCal || '',
+        permitirBorrar: true
+    });
     if(newVal === null) return;
-    newVal = newVal.trim();
+    
     if(newVal === "") {
-        // Option to delete the grade if empty?
+        // Option to delete the grade if empty
         if(!confirm("¿Deseas eliminar esta calificación y dejarla en blanco?")) return;
         try {
             await supabaseClient.from('evaluaciones_actividades').delete().eq('actividad_id', actividadId).eq('alumno_id', alumnoId);
@@ -15229,7 +15325,7 @@ window.cargarBoletasGrupo = async () => {
                 ${histCells}
                 <td style="background:var(--surface-hover); text-align:center; color:var(--text-muted); font-weight:bold;">${promFinalNum.toFixed(2)}</td>
                 <td style="background:var(--surface-hover); text-align:center; padding:12px;">
-                   <input type="number" class="form-input input-calificacion" 
+                   <input type="number" inputmode="decimal" class="form-input input-calificacion" 
                           data-alumno="${al.id}" 
                           ${inputAttr}
                           value="${displayVal}" step="0.1" min="5" max="10">
