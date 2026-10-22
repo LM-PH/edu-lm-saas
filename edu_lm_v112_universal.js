@@ -5478,12 +5478,54 @@ window.loadCitatoriosApoyo = async () => {
             const esAcumulativo = esAutomated && (motivoLower.includes('acumulaci') || motivoLower.includes('acumulación') || motivoLower.includes('acumulacion'));
             const esGrave = esAutomated && (motivoLower.includes('(grave)') || tipoLower === 'grave');
 
+            // Filtrar únicamente los reportes causales (ocurridos antes o al momento de emitirse este citatorio específico)
+            const citTime = new Date(c.creado_en).getTime();
+            const repsCausales = repsAlumno.filter(r => {
+                const repTime = new Date(r.fecha || r.creado_en || 0).getTime();
+                return repTime <= (citTime + 10 * 60 * 1000); // 10 min de tolerancia por creación concurrente
+            });
+
+            let catFiltro = '';
+            if (tipoLower.includes('acad') || motivoLower.includes('acad')) catFiltro = 'ACAD';
+            else if (tipoLower.includes('conviv') || motivoLower.includes('conviv') || motivoLower.includes('conduct') || tipoLower.includes('conduct')) catFiltro = 'CONVIV';
+            else if (tipoLower.includes('prioritaria') || motivoLower.includes('prioritaria')) catFiltro = 'PRIO';
+
             let htmlDetalleOrigen = '';
             let resumenParaModal = '';
 
             if (esGrave) {
                 // Caso 1: Provocado por Reporte Grave Automático
-                const repGrave = repsAlumno.find(r => r.gravedad === 'Grave') || repsAlumno[0];
+                // Intentar buscar primero el reporte grave causal que coincida con la categoría
+                let repGrave = null;
+                if (catFiltro) {
+                    repGrave = repsCausales.find(r => {
+                        const d = (r.descripcion || '').toUpperCase();
+                        const matchCat = (catFiltro === 'ACAD' && (d.includes('[ACADÉMICO]') || d.includes('[ACADEMICO]'))) ||
+                                         (catFiltro === 'CONVIV' && (d.includes('[CONVIVENCIA]') || d.includes('[CONDUCTA]') || d.includes('[CONDUCTUAL]'))) ||
+                                         (catFiltro === 'PRIO' && (d.includes('[ATENCIÓN PRIORITARIA]') || d.includes('[ATENCION PRIORITARIA]')));
+                        return matchCat && r.gravedad === 'Grave';
+                    });
+                }
+
+                // Si no hay grave de esa categoría específica antes del citatorio, buscar cualquier grave causal de esa fecha
+                if (!repGrave) {
+                    repGrave = repsCausales.find(r => r.gravedad === 'Grave');
+                }
+
+                // Si no hay grave pero hay de la categoría en esa fecha, tomar el más reciente
+                if (!repGrave && catFiltro) {
+                    repGrave = repsCausales.find(r => {
+                        const d = (r.descripcion || '').toUpperCase();
+                        return (catFiltro === 'ACAD' && (d.includes('[ACADÉMICO]') || d.includes('[ACADEMICO]'))) ||
+                               (catFiltro === 'CONVIV' && (d.includes('[CONVIVENCIA]') || d.includes('[CONDUCTA]') || d.includes('[CONDUCTUAL]')));
+                    });
+                }
+
+                // Fallback al reporte más reciente antes del citatorio
+                if (!repGrave && repsCausales.length > 0) {
+                    repGrave = repsCausales[0];
+                }
+
                 const docenteNombre = repGrave?.autor?.nombre || repGrave?.autor_metadata || c.emisor?.nombre || 'Personal Docente';
                 const materiaORol = repGrave?.autor_metadata || (repGrave?.autor?.rol ? repGrave.autor.rol.toUpperCase() : '');
                 const descIncidencia = repGrave ? (repGrave.descripcion || '').replace(/^\[.*?\]\s*/, '') : c.motivo;
@@ -5511,11 +5553,7 @@ window.loadCitatoriosApoyo = async () => {
                 `;
             } else if (esAcumulativo) {
                 // Caso 2: Provocado por Acumulación de Reportes Automática
-                let catFiltro = '';
-                if (tipoLower.includes('acad') || motivoLower.includes('acad')) catFiltro = 'ACAD';
-                else if (tipoLower.includes('conviv') || motivoLower.includes('conviv') || motivoLower.includes('conduct')) catFiltro = 'CONVIV';
-
-                let acumulados = repsAlumno.filter(r => {
+                let acumulados = repsCausales.filter(r => {
                     if (!catFiltro) return true;
                     const d = (r.descripcion || '').toUpperCase();
                     if (catFiltro === 'ACAD') return d.includes('[ACADÉMICO]') || d.includes('[ACADEMICO]');
@@ -5523,7 +5561,7 @@ window.loadCitatoriosApoyo = async () => {
                     return true;
                 });
 
-                if (acumulados.length === 0) acumulados = repsAlumno.slice(0, 5);
+                if (acumulados.length === 0) acumulados = repsCausales.slice(0, 5);
 
                 const countAcum = acumulados.length;
                 resumenParaModal = `ACUMULACIÓN DE ${countAcum} REPORTES: ` + acumulados.map(r => `${r.autor?.nombre || r.autor_metadata || 'Docente'} (${r.gravedad || 'Leve'})`).join(', ');
@@ -5571,7 +5609,7 @@ window.loadCitatoriosApoyo = async () => {
                 `;
             } else if (esPrioritaria) {
                 // Caso 3: Atención Prioritaria
-                const repPrio = repsAlumno.find(r => (r.descripcion || '').toUpperCase().includes('PRIORITARIA')) || repsAlumno[0];
+                const repPrio = repsCausales.find(r => (r.descripcion || '').toUpperCase().includes('PRIORITARIA')) || repsCausales[0];
                 const autorPrio = repPrio?.autor?.nombre || repPrio?.autor_metadata || c.emisor?.nombre || 'Personal escolar';
                 const descPrio = repPrio ? (repPrio.descripcion || '').replace(/^\[.*?\]\s*/, '') : c.motivo;
                 
