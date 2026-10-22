@@ -3861,6 +3861,16 @@ function renderApoyoReportes() {
             </div>
 
             <div style="margin-top:15px;">
+                <label style="display:block; font-size:0.85rem; margin-bottom:5px; font-weight:600;">Tipo de Citatorio:</label>
+                <select id="tipoCitatorio" class="form-input" style="border-radius:10px;">
+                    <option value="General">General / Ordinario</option>
+                    <option value="Conductual">Conductual / Convivencia</option>
+                    <option value="Académico">Académico</option>
+                    <option value="Atención Prioritaria">Atención Prioritaria</option>
+                </select>
+            </div>
+
+            <div style="margin-top:15px;">
                 <label style="display:block; font-size:0.85rem; margin-bottom:5px; font-weight:600;">Fecha y Hora Sugerida (Opcional):</label>
                 <input type="datetime-local" id="fechaCitaCitatorio" class="form-input" style="border-radius:10px;">
             </div>
@@ -4775,24 +4785,30 @@ window.loadFocosRojos = async () => {
             }
         }
 
-        // Ahora asignamos los estados de los citatorios
+        // Ahora asignamos los estados de los citatorios acumulándolos adecuadamente
         cits.forEach(cit => {
             const aid = cit.alumno_id;
             if(!conteo[aid]) return; // por si acaso
             
             let key = 'citNormal';
-            if (cit.tipo === 'Académico') key = 'citAcademico';
-            else if (cit.tipo === 'Convivencia' || cit.tipo === 'Conductual') key = 'citConductual';
-            else if (cit.tipo === 'Atención Prioritaria') key = 'citPrioritaria';
+            const tLower = (cit.tipo || '').toLowerCase();
+            if (tLower.includes('acad')) key = 'citAcademico';
+            else if (tLower.includes('conviv') || tLower.includes('conduct')) key = 'citConductual';
+            else if (tLower.includes('prioritaria')) key = 'citPrioritaria';
             
-            // Priorizamos el estado 'Pendiente' si hay varios
-            if (!conteo[aid][key] || conteo[aid][key] === 'Firmado') {
-                conteo[aid][key] = cit.estado === 'enterado' ? 'Firmado' : 'Pendiente';
+            if (!conteo[aid][key]) {
+                conteo[aid][key] = { pendientes: 0, firmados: 0, total: 0 };
+            }
+            conteo[aid][key].total++;
+            if (cit.estado === 'enterado') {
+                conteo[aid][key].firmados++;
+            } else {
+                conteo[aid][key].pendientes++;
             }
         });
 
         // Mostramos si tiene al menos 1 reporte activo O algún citatorio pendiente/firmado
-        const focos = Object.entries(conteo).map(([id, info]) => ({ id, ...info })).filter(f => f.count >= 1 || f.citNormal || f.citAcademico || f.citConductual || f.citPrioritaria);
+        const focos = Object.entries(conteo).map(([id, info]) => ({ id, ...info })).filter(f => f.count >= 1 || f.citNormal?.total > 0 || f.citAcademico?.total > 0 || f.citConductual?.total > 0 || f.citPrioritaria?.total > 0);
         
         if(focos.length === 0) {
             cont.innerHTML = '<tr><td colspan="7" style="text-align:center; padding:40px; color:var(--text-muted)">No hay alumnos con reportes activos ni citatorios.</td></tr>';
@@ -4801,9 +4817,17 @@ window.loadFocosRojos = async () => {
 
         cont.innerHTML = focos.map(f => {
             const renderBadge = (val) => {
-                if(val === 'Firmado') return '<span class="badge" style="background:#22c55e; color:white; font-size:0.7rem; padding:4px 8px;"><i class="fa-solid fa-check"></i> Enterado</span>';
-                if(val === 'Pendiente') return '<span class="badge" style="background:#f97316; color:white; font-size:0.7rem; padding:4px 8px;"><i class="fa-solid fa-clock"></i> No Enterado</span>';
-                return '<span style="color:var(--text-muted); font-size:0.8rem;">Ninguno</span>';
+                if(!val || val.total === 0) return '<span style="color:var(--text-muted); font-size:0.8rem;">Ninguno</span>';
+                const badges = [];
+                if (val.pendientes > 0) {
+                    const txt = val.pendientes > 1 ? `${val.pendientes} No Enterados` : (val.firmados > 0 ? '1 No Enterado' : 'No Enterado');
+                    badges.push(`<span class="badge" style="background:#f97316; color:white; font-size:0.68rem; padding:3px 7px; display:inline-block; margin:2px 0;"><i class="fa-solid fa-clock"></i> ${txt}</span>`);
+                }
+                if (val.firmados > 0) {
+                    const txt = val.firmados > 1 ? `${val.firmados} Enterados` : (val.pendientes > 0 ? '1 Enterado' : 'Enterado');
+                    badges.push(`<span class="badge" style="background:#22c55e; color:white; font-size:0.68rem; padding:3px 7px; display:inline-block; margin:2px 0;"><i class="fa-solid fa-check"></i> ${txt}</span>`);
+                }
+                return badges.join('<br>') || '<span style="color:var(--text-muted); font-size:0.8rem;">Ninguno</span>';
             };
 
             return `
@@ -5002,14 +5026,17 @@ window.ejecutarVigilanciaAutomatica = async (aid, cat, sev, desc, enviarAvisoMan
         const refReporteTag = reporteId ? `\n\n[REF_REPORTE: ${reporteId}]` : '';
 
         if (cat === 'Atención Prioritaria') {
+            const citId = crypto.randomUUID();
             await supabaseClient.from('citatorios').insert([{
+                id: citId,
                 alumno_id: aid, emisor_id: u.data.user.id,
                 motivo: `Reporte de Atención Prioritaria (Protección). Motivo: ${desc}`,
-                tipo: 'Atención Prioritaria', plantel_id: state.plantelId
+                tipo: 'Atención Prioritaria', plantel_id: state.plantelId,
+                visto_por_alumno: false
             }]);
             await supabaseClient.from('comunicados').insert([{
                 autor_id: u.data.user.id, titulo: '🚨 CITATORIO URGENTE: Atención Prioritaria',
-                mensaje: `Estimado padre de familia/tutor:\n\nPor protocolo de protección, se requiere su presencia INMEDIATA en el área de Trabajo Social debido a un reporte de Atención Prioritaria.\n\nSube a la parte superior de esta pantalla para ver el documento oficial y firmarlo.${refReporteTag}`,
+                mensaje: `Estimado padre de familia/tutor:\n\nPor protocolo de protección, se requiere su presencia INMEDIATA en el área de Trabajo Social debido a un reporte de Atención Prioritaria.\n\nSube a la parte superior de esta pantalla para ver el documento oficial y firmarlo.${refReporteTag}\n\n[REF_CITATORIO: ${citId}]`,
                 audiencia: `Alumno_${aid}`, tipo: 'General', plantel_id: state.plantelId
             }]);
             window.showToast("Citatorio de protección enviado automáticamente.", "warning");
@@ -5065,20 +5092,23 @@ window.ejecutarVigilanciaAutomatica = async (aid, cat, sev, desc, enviarAvisoMan
                         
                         const { count } = await q;
                         actualTriggers = count || 0;
-                    } else if (accionPrincipal.includes('citar') || accionPrincipal.includes('Citatorio')) {
-                        let q = supabaseClient.from('citatorios')
-                            .select('*', { count: 'exact', head: true })
-                            .eq('alumno_id', aid)
-                            .ilike('motivo', `%Acumulación de%Protocolo: ${accionPrincipal}%`);
-                        
-                        if (cat === 'Convivencia') {
-                            q = q.in('tipo', ['Convivencia', 'Conductual', 'Conducta']);
-                        } else {
-                            q = q.eq('tipo', cat);
+                    } else {
+                        const accionLower = (accionPrincipal || '').toLowerCase();
+                        if (accionLower.includes('citar') || accionLower.includes('citatorio')) {
+                            let q = supabaseClient.from('citatorios')
+                                .select('*', { count: 'exact', head: true })
+                                .eq('alumno_id', aid)
+                                .ilike('motivo', `%Acumulación de%Protocolo: ${accionPrincipal}%`);
+                            
+                            if (cat === 'Convivencia') {
+                                q = q.in('tipo', ['Convivencia', 'Conductual', 'Conducta']);
+                            } else {
+                                q = q.in('tipo', [cat, cat.replace('é','e')]);
+                            }
+                            
+                            const { count } = await q;
+                            actualTriggers = count || 0;
                         }
-                        
-                        const { count } = await q;
-                        actualTriggers = count || 0;
                     }
 
                     if (actualTriggers < expectedTriggers) {
@@ -5105,17 +5135,22 @@ window.ejecutarVigilanciaAutomatica = async (aid, cat, sev, desc, enviarAvisoMan
                                 }, 1500);
                             }
 
-                            if (accionPrincipal.includes('citar') || accionPrincipal.includes('Citatorio')) {
+                            const accionTriggerLower = (accionPrincipal || '').toLowerCase();
+                            if (accionTriggerLower.includes('citar') || accionTriggerLower.includes('citatorio')) {
                                 titulo = '🚨 CITATORIO ESCOLAR: ' + accionPrincipal;
                                 msj = `Estimado alumno y padre de familia/tutor:\n\nSe ha emitido un citatorio escolar para seguimiento conductual/académico (${cat} - ${finalGravedad}).` +
                                       `\n\n⏰ HORARIO DE ATENCIÓN: El área de Trabajo Social asignará y confirmará en este mismo portal el día y la hora específica para su cita, con el fin de brindarle una atención personalizada y evitar aglomeraciones. Favor de estar atento a la confirmación de su horario en este portal.` +
                                       (nuevaGravedad ? `\n\n⚠️ Este caso ha sido escalado a Nivel ${nuevaGravedad.toUpperCase()}.` : '');
                                 
+                                const autoCitId = crypto.randomUUID();
                                 await supabaseClient.from('citatorios').insert([{
+                                    id: autoCitId,
                                     alumno_id: aid, emisor_id: u.data.user.id,
                                     motivo: `Acumulación de reportes de tipo ${cat} (${finalGravedad}). Protocolo: ${accionPrincipal}`,
-                                    tipo: cat, plantel_id: state.plantelId
+                                    tipo: cat, plantel_id: state.plantelId,
+                                    visto_por_alumno: false
                                 }]);
+                                msj += `\n\n[REF_CITATORIO: ${autoCitId}]`;
                                 window.showToast("Citatorio automático enviado según protocolo", "warning");
                             }
 
@@ -5235,6 +5270,8 @@ window.abrirModalCitatorio = () => {
     document.getElementById('busquedaAlumnoCitatorio').value = '';
     document.getElementById('motivoCitatorio').value = '';
     document.getElementById('fechaCitaCitatorio').value = '';
+    const selTipo = document.getElementById('tipoCitatorio');
+    if(selTipo) selTipo.value = 'General';
     document.getElementById('alumnoSeleccionadoLabelCitatorio').style.display = 'none';
     document.getElementById('resultadosBusquedaCitatorio').style.display = 'none';
 };
@@ -5243,6 +5280,7 @@ window.guardarCitatorio = async () => {
     const aid = document.getElementById('alumnoIdCitatorio').value;
     const motivo = document.getElementById('motivoCitatorio').value;
     const fecha = document.getElementById('fechaCitaCitatorio').value;
+    const tipo = document.getElementById('tipoCitatorio')?.value || 'General';
     
     if(!aid) return alert("Por favor, selecciona un alumno de la lista.");
     if(!motivo.trim()) return alert("Por favor, describe el motivo del citatorio.");
@@ -5255,12 +5293,16 @@ window.guardarCitatorio = async () => {
         const u = await supabaseClient.auth.getUser();
         if(!u.data.user) throw new Error("Sin sesión activa.");
 
+        const citId = crypto.randomUUID();
         const { error } = await supabaseClient.from('citatorios').insert([{
+            id: citId,
             alumno_id: aid,
             emisor_id: u.data.user.id,
             motivo: motivo.trim(),
+            tipo: tipo,
             fecha_cita: fecha ? new Date(fecha).toISOString() : null,
-            plantel_id: state.plantelId
+            plantel_id: state.plantelId,
+            visto_por_alumno: false
         }]);
 
         if(error) throw error;
@@ -5269,7 +5311,7 @@ window.guardarCitatorio = async () => {
         await supabaseClient.from('comunicados').insert([{
             autor_id: u.data.user.id,
             titulo: '📩 Tienes un Citatorio Pendiente de Firma',
-            mensaje: `El área de Trabajo Social solicita tu presencia y la de tu padre/tutor.\nMotivo: ${motivo.substring(0, 50)}...\n\nSube a la parte superior de esta misma pantalla (Línea de Tiempo) para ver el documento oficial y firmarlo en el recuadro naranja.`,
+            mensaje: `El área de Trabajo Social solicita tu presencia y la de tu padre/tutor.\nMotivo: ${motivo.substring(0, 50)}...\n\nSube a la parte superior de esta misma pantalla (Línea de Tiempo) para ver el documento oficial y firmarlo en el recuadro naranja.\n\n[REF_CITATORIO: ${citId}]`,
             audiencia: `Alumno_${aid}`,
             tipo: 'General',
             plantel_id: state.plantelId
@@ -5278,6 +5320,7 @@ window.guardarCitatorio = async () => {
         window.showToast("Citatorio enviado y notificado", "success");
         document.getElementById('modalNuevoCitatorio').style.display = 'none';
         if(window.loadCitatoriosApoyo) window.loadCitatoriosApoyo();
+        if(window.loadFocosRojos) window.loadFocosRojos();
     } catch(e) {
         console.error(e);
         window.showToast("Error: " + (e.message || JSON.stringify(e)), "error"); alert("Error BD: " + JSON.stringify(e));
@@ -5372,11 +5415,12 @@ window.loadCitatoriosApoyo = async () => {
             }
 
             // Consultar si el alumno ya abrió/visualizó el aviso de citatorio en comunicados
+            const citatoriosVistosPorId = new Set();
             try {
                 const audiencias = studentIds.map(id => `Alumno_${id}`);
                 const { data: comData } = await supabaseClient
                     .from('comunicados')
-                    .select('id, audiencia')
+                    .select('id, audiencia, mensaje')
                     .in('audiencia', audiencias)
                     .ilike('titulo', '%CITATORIO%');
 
@@ -5391,8 +5435,10 @@ window.loadCitatoriosApoyo = async () => {
                         const vistosIds = new Set(vistosData.map(v => v.comunicado_id));
                         comData.forEach(c => {
                             if (vistosIds.has(c.id)) {
-                                const aid = (c.audiencia || '').replace('Alumno_', '');
-                                if (aid) alumnosConVisto.add(aid);
+                                const match = (c.mensaje || '').match(/\[REF_CITATORIO:\s*([a-zA-Z0-9_-]+)\]/);
+                                if (match && match[1]) {
+                                    citatoriosVistosPorId.add(match[1]);
+                                }
                             }
                         });
                     }
@@ -5405,7 +5451,20 @@ window.loadCitatoriosApoyo = async () => {
         window._citatoriosDetallesCache = {};
         window._citatoriosMap = {};
 
+        const citatoriosPorAlumno = {};
+        data.forEach(c => {
+            citatoriosPorAlumno[c.alumno_id] = (citatoriosPorAlumno[c.alumno_id] || 0) + 1;
+        });
+        const contadorAlumnoCit = {};
+
         cont.innerHTML = data.map(c => {
+            contadorAlumnoCit[c.alumno_id] = (contadorAlumnoCit[c.alumno_id] || 0) + 1;
+            const citIndex = contadorAlumnoCit[c.alumno_id];
+            const totalCitsAlumno = citatoriosPorAlumno[c.alumno_id] || 1;
+            const badgeNumeroCit = totalCitsAlumno > 1 
+                ? `<span class="badge" style="background:#e0e7ff; color:#3730a3; font-size:0.7rem; padding:3px 8px; border-radius:6px; font-weight:700;"><i class="fa-solid fa-list-ol"></i> Citatorio #${citIndex} de ${totalCitsAlumno}</span>` 
+                : '';
+
             const isEnterado = c.estado === 'enterado';
             const dateCita = c.fecha_cita ? new Date(c.fecha_cita).toLocaleString('es-MX', { dateStyle: 'medium', timeStyle: 'short' }) : 'Pendiente acordar';
             const motivoLower = (c.motivo || '').toLowerCase();
@@ -5413,16 +5472,17 @@ window.loadCitatoriosApoyo = async () => {
             
             const repsAlumno = reportesPorAlumno[c.alumno_id] || [];
             
-            // Detección de origen del citatorio
-            const esGrave = motivoLower.includes('(grave)') || motivoLower.includes('grave') || tipoLower === 'grave';
-            const esPrioritaria = tipoLower.includes('prioritaria') || motivoLower.includes('prioritaria');
-            const esAcumulativo = motivoLower.includes('acumulaci') || motivoLower.includes('acumulación') || motivoLower.includes('acumulacion');
+            // Detección precisa de origen del citatorio
+            const esAutomated = motivoLower.startsWith('acumulación de') || motivoLower.startsWith('acumulacion de') || motivoLower.includes('(protocolo:') || motivoLower.includes('reporte de atención prioritaria (protección)');
+            const esPrioritaria = tipoLower.includes('prioritaria') || motivoLower.includes('prioritaria (protección)');
+            const esAcumulativo = esAutomated && (motivoLower.includes('acumulaci') || motivoLower.includes('acumulación') || motivoLower.includes('acumulacion'));
+            const esGrave = esAutomated && (motivoLower.includes('(grave)') || tipoLower === 'grave');
 
             let htmlDetalleOrigen = '';
             let resumenParaModal = '';
 
             if (esGrave) {
-                // Caso 1: Provocado por Reporte Grave
+                // Caso 1: Provocado por Reporte Grave Automático
                 const repGrave = repsAlumno.find(r => r.gravedad === 'Grave') || repsAlumno[0];
                 const docenteNombre = repGrave?.autor?.nombre || repGrave?.autor_metadata || c.emisor?.nombre || 'Personal Docente';
                 const materiaORol = repGrave?.autor_metadata || (repGrave?.autor?.rol ? repGrave.autor.rol.toUpperCase() : '');
@@ -5450,7 +5510,7 @@ window.loadCitatoriosApoyo = async () => {
                     </div>
                 `;
             } else if (esAcumulativo) {
-                // Caso 2: Provocado por Acumulación de Reportes
+                // Caso 2: Provocado por Acumulación de Reportes Automática
                 let catFiltro = '';
                 if (tipoLower.includes('acad') || motivoLower.includes('acad')) catFiltro = 'ACAD';
                 else if (tipoLower.includes('conviv') || motivoLower.includes('conviv') || motivoLower.includes('conduct')) catFiltro = 'CONVIV';
@@ -5533,12 +5593,14 @@ window.loadCitatoriosApoyo = async () => {
             } else {
                 // Caso 4: Citatorio Directo / Manual de Trabajo Social
                 const emisorDirecto = c.emisor?.nombre || 'Personal de Trabajo Social';
-                resumenParaModal = `CITATORIO DIRECTO de Trabajo Social por: ${emisorDirecto}`;
+                const tipoCit = c.tipo || 'General';
+                resumenParaModal = `CITATORIO DIRECTO (${tipoCit}) de Trabajo Social por: ${emisorDirecto}`;
 
                 htmlDetalleOrigen = `
                     <div style="background:#f0f9ff; border:1px solid #bae6fd; border-left:4px solid #0284c7; border-radius:8px; padding:8px 10px; margin-bottom:12px; font-size:0.82rem;">
-                        <div style="color:#0369a1; font-weight:700; margin-bottom:2px; display:flex; align-items:center; gap:6px;">
-                            <i class="fa-solid fa-user-pen"></i> CITATORIO DIRECTO
+                        <div style="color:#0369a1; font-weight:700; margin-bottom:2px; display:flex; align-items:center; justify-content:space-between;">
+                            <span><i class="fa-solid fa-user-pen"></i> CITATORIO DIRECTO</span>
+                            <span class="badge" style="background:#0284c7; color:white; font-size:0.65rem; padding:2px 6px;">${tipoCit}</span>
                         </div>
                         <div style="color:#0c4a6e;">
                             <b>Creado por:</b> <span style="font-weight:600;">${emisorDirecto}</span>
@@ -5552,6 +5614,7 @@ window.loadCitatoriosApoyo = async () => {
                 alumnoNombre: c.alumnos?.nombre || 'Alumno',
                 grupo: c.alumnos?.grupos?.nombre || '',
                 motivo: c.motivo,
+                tipo: c.tipo || 'General',
                 resumenOrigen: resumenParaModal,
                 htmlOrigen: htmlDetalleOrigen
             };
@@ -5582,9 +5645,9 @@ window.loadCitatoriosApoyo = async () => {
                 </div>
             `;
 
-            // Sincronizar si fue visto por alumno/notificación/cita
-            const fueVisto = Boolean(c.visto_por_alumno || (c.alumno_id && alumnosConVisto.has(c.alumno_id)) || c.fecha_cita);
-            if (!c.visto_por_alumno && fueVisto) {
+            // Sincronizar si fue visto por alumno en portal o por comunicado específico
+            const fueVisto = Boolean(c.visto_por_alumno || citatoriosVistosPorId.has(c.id));
+            if (!c.visto_por_alumno && citatoriosVistosPorId.has(c.id)) {
                 c.visto_por_alumno = true;
                 supabaseClient.from('citatorios').update({ visto_por_alumno: true }).eq('id', c.id).then(()=>{}).catch(()=>{});
             }
@@ -5613,11 +5676,17 @@ window.loadCitatoriosApoyo = async () => {
             return `
                 <div class="card" style="padding:16px; border:1px solid ${isEnterado ? '#bbf7d0' : '#fed7aa'}; background:white; position:relative; box-shadow:var(--shadow-sm); display:flex; flex-direction:column; justify-content:space-between;">
                     <div>
-                        <div style="display:flex; justify-content:space-between; margin-bottom:10px; align-items:center;">
-                            ${badgeEstadoHtml}
-                            <small style="color:var(--text-muted); font-size:0.75rem;"><i class="fa-regular fa-calendar"></i> ${new Date(c.creado_en).toLocaleDateString('es-MX')}</small>
+                        <div style="display:flex; justify-content:space-between; margin-bottom:10px; align-items:center; flex-wrap:wrap; gap:6px;">
+                            <div style="display:flex; gap:6px; align-items:center; flex-wrap:wrap;">
+                                ${badgeEstadoHtml}
+                                ${badgeNumeroCit}
+                            </div>
+                            <small style="color:var(--text-muted); font-size:0.75rem;"><i class="fa-regular fa-calendar"></i> ${new Date(c.creado_en).toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</small>
                         </div>
-                        <h4 style="margin:0 0 4px 0; font-size:1.05rem; color:var(--primary); font-weight:700;">${c.alumnos?.nombre || '---'}</h4>
+                        <h4 style="margin:0 0 4px 0; font-size:1.05rem; color:var(--primary); font-weight:700;">
+                            ${c.alumnos?.nombre || '---'}
+                            <span class="badge" style="background:#f1f5f9; color:#475569; font-size:0.7rem; padding:2px 6px; border-radius:4px; font-weight:600; margin-left:6px;">Tipo: ${c.tipo || 'General'}</span>
+                        </h4>
                         <p style="font-size:0.8rem; color:var(--text-muted); margin-bottom:12px;"><b>Matrícula:</b> ${c.alumnos?.matricula || '---'}${grupoStr}</p>
                         
                         <!-- BLOQUE DE ORIGEN Y EMISORES -->
@@ -5751,10 +5820,12 @@ window.guardarAtencionFoco = async () => {
         const { error: errRep } = await queryRep;
         if(errRep) console.warn('Advertencia al resolver reportes:', errRep.message);
 
-        // 4. Si viene de un citatorio, actualizarlo y eliminarlo
+        // 4. Si viene de un citatorio específico, marcarlo como atendido (preservando el histórico sin eliminarlo)
         if(cid) {
             await supabaseClient.from('citatorios').update({ estado: 'atendido' }).eq('id', cid);
-            await supabaseClient.from('citatorios').delete().eq('id', cid);
+        } else {
+            // Si se atiende a nivel global del alumno desde Focos Rojos, archivar citatorios activos
+            await supabaseClient.from('citatorios').update({ estado: 'atendido' }).eq('alumno_id', aid).neq('estado', 'atendido');
         }
 
         // 5. Notificar al alumno del cierre
@@ -5996,7 +6067,7 @@ window.guardarHorarioCitatorio = async () => {
         await supabaseClient.from('comunicados').insert([{
             autor_id: emisorUserId,
             titulo: '🗓️ Cita Programada con Trabajo Social',
-            mensaje: `Estimado padre de familia / tutor del alumno(a) ${alumnoNombre}:\n\nSe ha programado formalmente su cita de atención presencial en el plantel:\n📅 Fecha y hora: ${fechaFormateada}\n📍 Lugar: ${lugar}\n\nCon la finalidad de brindarle una atención oportuna y evitar esperas o aglomeraciones, le solicitamos presentarse puntualmente con su identificación oficial. Por favor ingrese a su portal para firmar el acuse de enterado.`,
+            mensaje: `Estimado padre de familia / tutor del alumno(a) ${alumnoNombre}:\n\nSe ha programado formalmente su cita de atención presencial en el plantel:\n📅 Fecha y hora: ${fechaFormateada}\n📍 Lugar: ${lugar}\n\nCon la finalidad de brindarle una atención oportuna y evitar esperas o aglomeraciones, le solicitamos presentarse puntualmente con su identificación oficial. Por favor ingrese a su portal para firmar el acuse de enterado.\n\n[REF_CITATORIO: ${citatorioId}]`,
             audiencia: `Alumno_${alumnoId}`,
             tipo: 'Urgente',
             plantel_id: state.plantelId
@@ -12070,7 +12141,6 @@ window.loadCitatoriosAlumno = async (alumnoId) => {
             .select('*')
             .eq('alumno_id', alumnoId)
             .neq('estado', 'atendido')
-            .neq('estado', 'enterado')
             .order('creado_en', { ascending: false });
 
         if(error) throw error;
@@ -12097,18 +12167,28 @@ window.loadCitatoriosAlumno = async (alumnoId) => {
                     <i class="fa-solid fa-envelope-open-text"></i> Citatorios de Padres
                 </h3>
                 <div style="display:flex; flex-direction:column; gap:12px;">
-                    ${data.map(c => {
+                    ${data.map((c, index) => {
                         const isEnterado = c.estado === 'enterado';
+                        const numCit = data.length > 1 ? `<span class="badge" style="background:#fed7aa; color:#9a3412; font-size:0.65rem; padding:2px 6px; margin-right:6px; font-weight:700;">#${data.length - index}</span>` : '';
+                        let badgeTipo = '';
+                        if (c.tipo === 'Conductual' || c.tipo === 'Convivencia') {
+                            badgeTipo = '<span class="badge" style="background:#ef4444; color:white; font-size:0.6rem; padding:2px 8px; margin-left:5px;"><i class="fa-solid fa-triangle-exclamation"></i> CONDUCTUAL</span>';
+                        } else if (c.tipo === 'Académico' || c.tipo === 'Academico') {
+                            badgeTipo = '<span class="badge" style="background:#0284c7; color:white; font-size:0.6rem; padding:2px 8px; margin-left:5px;"><i class="fa-solid fa-book"></i> ACADÉMICO</span>';
+                        } else if (c.tipo === 'Atención Prioritaria') {
+                            badgeTipo = '<span class="badge" style="background:#7c3aed; color:white; font-size:0.6rem; padding:2px 8px; margin-left:5px;"><i class="fa-solid fa-shield-halved"></i> PRIORITARIO</span>';
+                        }
                         return `
-                            <div style="background:white; border:1px solid #fed7aa; padding:14px; border-radius:12px; box-shadow:var(--shadow-sm);">
+                            <div style="background:white; border:1px solid ${isEnterado ? '#bbf7d0' : '#fed7aa'}; padding:14px; border-radius:12px; box-shadow:var(--shadow-sm);">
                                 <div style="display:flex; justify-content:space-between; margin-bottom:8px; align-items:center;">
                                     <div style="display:flex; align-items:center;">
+                                        ${numCit}
                                         <span class="badge" style="background:${isEnterado ? '#22c55e' : '#f97316'}; color:white; font-size:0.6rem; padding:2px 8px;">
                                             ${isEnterado ? '<i class="fa-solid fa-check"></i> ENTERADO' : '<i class="fa-solid fa-clock"></i> POR FIRMAR'}
                                         </span>
-                                        ${c.tipo === 'Conductual' ? '<span class="badge" style="background:#ef4444; color:white; font-size:0.6rem; padding:2px 8px; margin-left:5px;"><i class="fa-solid fa-triangle-exclamation"></i> CONDUCTUAL URGENTE</span>' : ''}
+                                        ${badgeTipo}
                                     </div>
-                                    <small style="color:var(--text-muted); font-size:0.7rem;">${new Date(c.creado_en).toLocaleDateString()}</small>
+                                    <small style="color:var(--text-muted); font-size:0.7rem;">${new Date(c.creado_en).toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</small>
                                 </div>
                                 <p style="font-size:0.85rem; margin:0 0 10px 0; color:var(--text-main); line-height:1.4;"><b>Motivo:</b> ${c.motivo}</p>
                                 
