@@ -1060,6 +1060,8 @@ function renderSidebar() {
     ],
     biblioteca: [
       { name: 'Préstamos y Control', path: '/biblioteca/dashboard', icon: 'fa-book-bookmark' },
+      { name: 'Escáner Entrada', path: '/biblioteca/prefectura', icon: 'fa-qrcode' },
+      { name: 'Escáner de Salida', path: '/biblioteca/ts_escaner', icon: 'fa-person-walking-arrow-right' },
       { name: 'Historial de Préstamos', path: '/biblioteca/historial', icon: 'fa-calendar-days' },
       { name: 'Reservaciones de Aula', path: '/biblioteca/reservas', icon: 'fa-calendar-plus' },
       { name: 'Bitácora', path: '/biblioteca/bitacora', icon: 'fa-book-journal-whills' },
@@ -6941,9 +6943,9 @@ function renderApoyoPrefectura() {
     <div class="page-header" style="display:flex; justify-content:space-between; align-items:center;">
       <div>
          <h2 class="page-title">Control de Accesos</h2>
-         <p class="page-subtitle">Personal de Apoyo | Escáner y Registro</p>
+         <p class="page-subtitle">${state.role === 'biblioteca' ? 'Biblioteca y Aula de Medios | Escáner y Registro de Entrada' : 'Personal de Apoyo | Escáner y Registro'}</p>
       </div>
-      <button class="btn btn-outline" onclick="window.navigate('/apoyo/dashboard')" style="border-radius:30px; background:white;">
+      <button class="btn btn-outline" onclick="window.navigate(state.role === 'biblioteca' ? '/biblioteca/dashboard' : '/apoyo/dashboard')" style="border-radius:30px; background:white;">
          <i class="fa-solid fa-house"></i> Volver al Inicio
       </button>
     </div>
@@ -7180,9 +7182,10 @@ window.loadAsistenciasApoyo = async () => {
             
         if(pId) query = query.eq('plantel_id', pId);
         
-        if (state.path === '/apoyo/ts_escaner') {
+        const currentPath = (state.path || '').split('?')[0];
+        if (currentPath === '/apoyo/ts_escaner' || currentPath === '/biblioteca/ts_escaner' || currentPath === '/biblioteca/escaner_salida') {
             query = query.eq('estado', 'Salida');
-        } else if (state.path === '/apoyo/prefectura') {
+        } else if (currentPath === '/apoyo/prefectura' || currentPath === '/biblioteca/prefectura' || currentPath === '/biblioteca/escaner_entrada') {
             query = query.in('estado', ['Asistencia', 'Retardo']);
         }
 
@@ -7632,9 +7635,9 @@ function renderApoyoTSEscaner() {
     <div class="page-header" style="display:flex; justify-content:space-between; align-items:center;">
       <div>
          <h2 class="page-title">Control de Salidas</h2>
-         <p class="page-subtitle">Escáner de Salida de Alumnos</p>
+         <p class="page-subtitle">${state.role === 'biblioteca' ? 'Biblioteca y Aula de Medios | Escáner de Salida' : 'Escáner de Salida de Alumnos'}</p>
       </div>
-      <button class="btn btn-outline" onclick="window.navigate('/apoyo/dashboard')" style="border-radius:30px; background:white;">
+      <button class="btn btn-outline" onclick="window.navigate(state.role === 'biblioteca' ? '/biblioteca/dashboard' : '/apoyo/dashboard')" style="border-radius:30px; background:white;">
          <i class="fa-solid fa-house"></i> Volver al Inicio
       </button>
     </div>
@@ -9498,6 +9501,12 @@ async function renderPage(path) {
     case '/biblioteca/comunicados': return renderBibliotecaComunicados();
     case '/biblioteca/bitacora': return renderBibliotecaBitacora();
     case '/biblioteca/reportes': return renderApoyoReportes();
+    case '/biblioteca/prefectura':
+    case '/biblioteca/escaner_entrada':
+       return renderApoyoPrefectura();
+    case '/biblioteca/ts_escaner':
+    case '/biblioteca/escaner_salida':
+       return renderApoyoTSEscaner();
     case '/maestro/listas': return renderMaestroListas();
     case '/maestro/encuadre': return renderMaestroEncuadre();
     case '/maestro/horario': return renderMaestroHorario();
@@ -17937,7 +17946,8 @@ window.registrarAsistenciaEntrada = async (qrText) => {
         const audio = new Audio('https://assets.mixkit.co/active_storage/sfx/766/766-preview.mp3');
         audio.play().catch(()=>{});
 
-        if(state.path === '/apoyo/prefectura') {
+        const currentPath = (state.path || '').split('?')[0];
+        if(currentPath === '/apoyo/prefectura' || currentPath === '/biblioteca/prefectura' || currentPath === '/biblioteca/escaner_entrada') {
             window.loadResumenEntrada();
             window.loadAsistenciasApoyo();
         }
@@ -18231,7 +18241,8 @@ window.registrarAsistenciaTS = async (qrText) => {
         const audio = new Audio('https://assets.mixkit.co/active_storage/sfx/766/766-preview.mp3');
         audio.play().catch(()=>{});
 
-        if(state.path === '/apoyo/ts_escaner') {
+        const currentPath = (state.path || '').split('?')[0];
+        if(currentPath === '/apoyo/ts_escaner' || currentPath === '/biblioteca/ts_escaner' || currentPath === '/biblioteca/escaner_salida') {
             window.loadResumenSalida();
             window.loadAsistenciasApoyo();
         }
@@ -18400,7 +18411,8 @@ window.registrarSalidaAnticipada = async () => {
         if(idInp) idInp.value = '';
         document.getElementById('inSalidaAntRecoge').value = '';
         
-        if(state.path === '/apoyo/ts_escaner') {
+        const currentPath = (state.path || '').split('?')[0];
+        if(currentPath === '/apoyo/ts_escaner' || currentPath === '/biblioteca/ts_escaner' || currentPath === '/biblioteca/escaner_salida') {
             window.loadResumenSalida();
             window.loadAsistenciasApoyo();
         }
@@ -21097,16 +21109,27 @@ async function renderBibliotecaDashboard() {
             const hoy = new Date().toISOString().split('T')[0];
             const { count: cR } = await supabaseClient.from('biblioteca_reservas').select('*', {count: 'exact', head:true}).eq('plantel_id', state.plantelId).eq('fecha', hoy);
             if(document.getElementById('countReservas')) document.getElementById('countReservas').innerText = cR || 0;
+
+            const { data: accesosHoy } = await supabaseClient.from('accesos_plantel')
+                .select('estado')
+                .eq('plantel_id', state.plantelId)
+                .eq('fecha', hoy);
+            if(accesosHoy) {
+                const ent = accesosHoy.filter(a => a.estado === 'Asistencia' || a.estado === 'Retardo').length;
+                const sal = accesosHoy.filter(a => a.estado === 'Salida').length;
+                if(document.getElementById('countEntradasBibHoy')) document.getElementById('countEntradasBibHoy').innerText = ent;
+                if(document.getElementById('countSalidasBibHoy')) document.getElementById('countSalidasBibHoy').innerText = sal;
+            }
         } catch(e) {}
     }, 100);
 
     return `
       <div class="page-header" style="background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%); color:white; padding:32px; border-radius:24px; margin-bottom:32px;">
         <h2 class="page-title" style="color:white; margin:0 0 8px 0;"><i class="fa-solid fa-book-bookmark"></i> Panel de Biblioteca</h2>
-        <p style="margin:0; opacity:0.8;">Gestión de préstamos y aula de medios.</p>
+        <p style="margin:0; opacity:0.8;">Gestión de préstamos, aula de medios y apoyo en control de accesos escolares.</p>
       </div>
       
-      <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap:24px;">
+      <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap:24px;">
          <div class="card stat-card" style="cursor:pointer;" onclick="window.navigate('/biblioteca/prestamos')">
             <div class="stat-icon" style="background:#eff6ff; color:#3b82f6;"><i class="fa-solid fa-laptop-file"></i></div>
             <div class="stat-info">
@@ -21121,6 +21144,22 @@ async function renderBibliotecaDashboard() {
                <div class="stat-label">Reservas de Aula Hoy</div>
                <div class="stat-value" id="countReservas"><i class="fa-solid fa-spinner fa-spin"></i></div>
                <p style="font-size:0.75rem; color:var(--text-muted); margin:0;">Clic para ver calendario</p>
+            </div>
+         </div>
+         <div class="card stat-card" style="cursor:pointer;" onclick="window.navigate('/biblioteca/prefectura')">
+            <div class="stat-icon" style="background:#f0fdf4; color:#16a34a;"><i class="fa-solid fa-qrcode"></i></div>
+            <div class="stat-info">
+               <div class="stat-label">Escáner de Entrada</div>
+               <div class="stat-value" id="countEntradasBibHoy"><i class="fa-solid fa-spinner fa-spin"></i></div>
+               <p style="font-size:0.75rem; color:var(--text-muted); margin:0;">Registro de accesos</p>
+            </div>
+         </div>
+         <div class="card stat-card" style="cursor:pointer;" onclick="window.navigate('/biblioteca/ts_escaner')">
+            <div class="stat-icon" style="background:#fffbeb; color:#d97706;"><i class="fa-solid fa-person-walking-arrow-right"></i></div>
+            <div class="stat-info">
+               <div class="stat-label">Escáner de Salida</div>
+               <div class="stat-value" id="countSalidasBibHoy"><i class="fa-solid fa-spinner fa-spin"></i></div>
+               <p style="font-size:0.75rem; color:var(--text-muted); margin:0;">Registro de salidas</p>
             </div>
          </div>
       </div>
