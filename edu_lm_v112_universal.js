@@ -4719,12 +4719,27 @@ window.loadFocosRojos = async () => {
     const cont = document.getElementById('focosRojosContenedor');
     if(!cont) return;
     try {
+        let pId = state.plantelId || window.currentUserProfile?.plantel_id || state.user?.user_metadata?.plantel_id;
+        if (!pId) {
+            const uid = state.user?.id || (await supabaseClient.auth.getUser())?.data?.user?.id;
+            if (uid) {
+                try {
+                    const { data: prof } = await supabaseClient.from('perfiles').select('plantel_id').eq('id', uid).maybeSingle();
+                    pId = prof?.plantel_id;
+                    if (pId) state.plantelId = pId;
+                } catch(eProf) {
+                    console.warn("Aviso al obtener plantel en focos rojos:", eProf);
+                }
+            }
+        }
+
         // 1. Obtener reportes activos
-        const { data: reportes, error: repErr } = await supabaseClient
+        let repQuery = supabaseClient
             .from('reportes_conducta')
             .select('alumno_id, gravedad, descripcion, alumnos(id, nombre, matricula, grupos(nombre))')
-            .eq('resuelto', false)
-            .eq('plantel_id', state.plantelId);
+            .eq('resuelto', false);
+        if (pId) repQuery = repQuery.eq('plantel_id', pId);
+        const { data: reportes, error: repErr } = await repQuery;
 
         if(repErr) throw repErr;
 
@@ -4762,11 +4777,12 @@ window.loadFocosRojos = async () => {
         });
 
         // 2. Obtener citatorios activos de toda la escuela
-        const { data: citatoriosData, error: citErr } = await supabaseClient
+        let citQuery = supabaseClient
             .from('citatorios')
             .select('alumno_id, estado, tipo')
-            .neq('estado', 'atendido')
-            .eq('plantel_id', state.plantelId);
+            .neq('estado', 'atendido');
+        if (pId) citQuery = citQuery.eq('plantel_id', pId);
+        const { data: citatoriosData, error: citErr } = await citQuery;
 
         if(citErr) throw citErr;
 
@@ -4852,7 +4868,10 @@ window.loadFocosRojos = async () => {
               </td>
             </tr>`;
         }).join('');
-    } catch(e) { console.error("Focos Rojos Error:", e); }
+    } catch(e) {
+        console.error("Focos Rojos Error:", e);
+        cont.innerHTML = `<tr><td colspan="7" style="text-align:center; padding:20px; color:var(--text-muted);"><i class="fa-solid fa-circle-info"></i> No se pudieron cargar los focos rojos en este momento.</td></tr>`;
+    }
 };
 
 window.loadReportesRecientesApoyo = async () => {
@@ -4860,23 +4879,35 @@ window.loadReportesRecientesApoyo = async () => {
     if(!cont) return;
 
     try {
+        let pId = state.plantelId || window.currentUserProfile?.plantel_id || state.user?.user_metadata?.plantel_id;
+        if (!pId) {
+            const uid = state.user?.id || (await supabaseClient.auth.getUser())?.data?.user?.id;
+            if (uid) {
+                try {
+                    const { data: prof } = await supabaseClient.from('perfiles').select('plantel_id').eq('id', uid).maybeSingle();
+                    pId = prof?.plantel_id;
+                    if (pId) state.plantelId = pId;
+                } catch(eProf) {
+                    console.warn("Aviso al obtener plantel en reportes recientes:", eProf);
+                }
+            }
+        }
+
         let finalData = [];
-        const { data, error } = await supabaseClient
+        let repQ = supabaseClient
             .from('reportes_conducta')
-            .select('*, alumnos!alumno_id(nombre, matricula), autor:perfiles!autor_id(nombre, rol)')
-            .eq('plantel_id', state.plantelId)
-            .order('fecha', { ascending: false })
-            .limit(15);
+            .select('*, alumnos!alumno_id(nombre, matricula), autor:perfiles!autor_id(nombre, rol)');
+        if (pId) repQ = repQ.eq('plantel_id', pId);
+        const { data, error } = await repQ.order('fecha', { ascending: false }).limit(15);
 
         if(error) {
             console.error("Error loading recent reports:", error);
             // Fallback sin joins
-            const { data: fallback, error: e2 } = await supabaseClient
+            let fbQ = supabaseClient
                 .from('reportes_conducta')
-                .select('*, alumnos!alumno_id(nombre, matricula)')
-                .eq('plantel_id', state.plantelId)
-                .order('fecha', { ascending: false })
-                .limit(15);
+                .select('*, alumnos!alumno_id(nombre, matricula)');
+            if (pId) fbQ = fbQ.eq('plantel_id', pId);
+            const { data: fallback, error: e2 } = await fbQ.order('fecha', { ascending: false }).limit(15);
             
             if(e2) throw e2;
             finalData = fallback || [];
@@ -5295,6 +5326,17 @@ window.guardarCitatorio = async () => {
         const u = await supabaseClient.auth.getUser();
         if(!u.data.user) throw new Error("Sin sesión activa.");
 
+        let pId = state.plantelId || window.currentUserProfile?.plantel_id || state.user?.user_metadata?.plantel_id;
+        if (!pId && u.data.user?.id) {
+            try {
+                const { data: prof } = await supabaseClient.from('perfiles').select('plantel_id').eq('id', u.data.user.id).maybeSingle();
+                pId = prof?.plantel_id;
+                if (pId) state.plantelId = pId;
+            } catch(eProf) {
+                console.warn("Aviso al obtener plantel en guardar citatorio:", eProf);
+            }
+        }
+
         const citId = crypto.randomUUID();
         const { error } = await supabaseClient.from('citatorios').insert([{
             id: citId,
@@ -5303,7 +5345,7 @@ window.guardarCitatorio = async () => {
             motivo: motivo.trim(),
             tipo: tipo,
             fecha_cita: fecha ? new Date(fecha).toISOString() : null,
-            plantel_id: state.plantelId,
+            plantel_id: pId || null,
             visto_por_alumno: false
         }]);
 
@@ -5316,7 +5358,7 @@ window.guardarCitatorio = async () => {
             mensaje: `El área de Trabajo Social solicita tu presencia y la de tu padre/tutor.\nMotivo: ${motivo.substring(0, 50)}...\n\nSube a la parte superior de esta misma pantalla (Línea de Tiempo) para ver el documento oficial y firmarlo en el recuadro naranja.\n\n[REF_CITATORIO: ${citId}]`,
             audiencia: `Alumno_${aid}`,
             tipo: 'General',
-            plantel_id: state.plantelId
+            plantel_id: pId || null
         }]);
 
         window.showToast("Citatorio enviado y notificado", "success");
@@ -5360,64 +5402,134 @@ window.loadCitatoriosApoyo = async () => {
     const cont = document.getElementById('contenedorCitatoriosApoyo');
     if(!cont) return;
     try {
-        let query = supabaseClient
-            .from('citatorios')
-            .select('*, alumnos(id, nombre, matricula, grupos(nombre)), emisor:perfiles!emisor_id(id, nombre, rol)')
-            .eq('plantel_id', state.plantelId)
-            .neq('estado', 'atendido')
-            .order('creado_en', { ascending: false });
-
-        const selectFiltro = document.getElementById('filtroFirmaCitatorio');
-        if (selectFiltro) {
-            if (selectFiltro.value === 'pendientes') {
-                query = query.neq('estado', 'enterado');
-            } else if (selectFiltro.value === 'enterados') {
-                query = query.eq('estado', 'enterado');
-            } else if (selectFiltro.value === 'sin_horario') {
-                query = query.is('fecha_cita', null);
-            } else if (selectFiltro.value === 'con_horario') {
-                query = query.not('fecha_cita', 'is', null);
-            } else if (selectFiltro.value === 'vistos_sin_firma') {
-                query = query.neq('estado', 'enterado').eq('visto_por_alumno', true);
-            } else if (selectFiltro.value === 'pendientes_vista') {
-                query = query.neq('estado', 'enterado').or('visto_por_alumno.is.null,visto_por_alumno.eq.false');
+        let pId = state.plantelId || window.currentUserProfile?.plantel_id || state.user?.user_metadata?.plantel_id;
+        if (!pId) {
+            const uid = state.user?.id || (await supabaseClient.auth.getUser())?.data?.user?.id;
+            if (uid) {
+                try {
+                    const { data: prof } = await supabaseClient.from('perfiles').select('plantel_id').eq('id', uid).maybeSingle();
+                    pId = prof?.plantel_id;
+                    if (pId) state.plantelId = pId;
+                } catch(eProf) {
+                    console.warn("Aviso al consultar plantel de usuario en citatorios:", eProf);
+                }
             }
         }
 
-        const { data, error } = await query;
-        if(error) throw error;
+        const selectFiltro = document.getElementById('filtroFirmaCitatorio');
+        const applyFiltros = (q) => {
+            if (!selectFiltro) return q;
+            if (selectFiltro.value === 'pendientes') return q.neq('estado', 'enterado');
+            if (selectFiltro.value === 'enterados') return q.eq('estado', 'enterado');
+            if (selectFiltro.value === 'sin_horario') return q.is('fecha_cita', null);
+            if (selectFiltro.value === 'con_horario') return q.not('fecha_cita', 'is', null);
+            if (selectFiltro.value === 'vistos_sin_firma') return q.neq('estado', 'enterado').eq('visto_por_alumno', true);
+            if (selectFiltro.value === 'pendientes_vista') return q.neq('estado', 'enterado').or('visto_por_alumno.is.null,visto_por_alumno.eq.false');
+            return q;
+        };
+
+        // Consulta principal con joins
+        let query = supabaseClient
+            .from('citatorios')
+            .select('*, alumnos(id, nombre, matricula, grupos(nombre)), emisor:perfiles!emisor_id(id, nombre, rol)');
+        if (pId) query = query.eq('plantel_id', pId);
+        query = applyFiltros(query.neq('estado', 'atendido')).order('creado_en', { ascending: false });
+
+        let { data, error } = await query;
+
+        // Fallback 1 si falla el join con emisor o grupos
+        if (error) {
+            console.warn("Intento con join complejo falló, aplicando consulta base:", error);
+            let fbQuery = supabaseClient
+                .from('citatorios')
+                .select('*, alumnos(id, nombre, matricula, grupos(nombre))');
+            if (pId) fbQuery = fbQuery.eq('plantel_id', pId);
+            fbQuery = applyFiltros(fbQuery.neq('estado', 'atendido')).order('creado_en', { ascending: false });
+            const resFb = await fbQuery;
+
+            if (resFb.error) {
+                // Fallback 2: consulta simple a citatorios y posterior enriquecimiento
+                console.warn("Intento con join de alumnos falló, aplicando consulta plana:", resFb.error);
+                let simpleQ = supabaseClient.from('citatorios').select('*');
+                if (pId) simpleQ = simpleQ.eq('plantel_id', pId);
+                simpleQ = applyFiltros(simpleQ.neq('estado', 'atendido')).order('creado_en', { ascending: false });
+                const resSimple = await simpleQ;
+                if (resSimple.error) throw resSimple.error;
+                data = resSimple.data || [];
+
+                const aids = [...new Set(data.map(c => c.alumno_id).filter(Boolean))];
+                if (aids.length > 0) {
+                    try {
+                        const { data: alus } = await supabaseClient.from('alumnos').select('id, nombre, matricula, grupos(nombre)').in('id', aids);
+                        if (alus) {
+                            const aMap = Object.fromEntries(alus.map(a => [a.id, a]));
+                            data.forEach(c => { c.alumnos = aMap[c.alumno_id] || null; });
+                        }
+                    } catch(errA) { console.warn("Aviso al enlazar alumnos:", errA); }
+                }
+            } else {
+                data = resFb.data || [];
+            }
+        }
 
         if(!data || data.length === 0) {
-            cont.innerHTML = '<div style="text-align:center; padding:30px; color:var(--text-muted); grid-column:1/-1;">No hay citatorios vigentes en este momento.</div>';
+            cont.innerHTML = '<div style="text-align:center; padding:30px; color:var(--text-muted); grid-column:1/-1;"><i class="fa-regular fa-folder-open" style="font-size:2rem; margin-bottom:8px; display:block;"></i>No hay citatorios vigentes en este momento.</div>';
             return;
+        }
+
+        // Enlazar emisores faltantes si la consulta vino de fallback
+        const missingEmisorIds = [...new Set(data.map(c => (!c.emisor && c.emisor_id) ? c.emisor_id : null).filter(Boolean))];
+        if (missingEmisorIds.length > 0) {
+            try {
+                const { data: ems } = await supabaseClient.from('perfiles').select('id, nombre, rol').in('id', missingEmisorIds);
+                if (ems) {
+                    const eMap = Object.fromEntries(ems.map(e => [e.id, e]));
+                    data.forEach(c => {
+                        if (!c.emisor && c.emisor_id && eMap[c.emisor_id]) {
+                            c.emisor = eMap[c.emisor_id];
+                        }
+                    });
+                }
+            } catch(errEms) {
+                console.warn("Aviso al cargar perfiles de emisor:", errEms);
+            }
         }
 
         // 1. Obtener IDs únicos de alumnos para consulta en bloque de sus reportes y visualizaciones
         const studentIds = [...new Set(data.map(c => c.alumno_id).filter(Boolean))];
         const reportesPorAlumno = {};
-        const alumnosConVisto = new Set();
 
         if (studentIds.length > 0) {
             try {
-                const { data: repData, error: repErr } = await supabaseClient
+                let repQuery = supabaseClient
                     .from('reportes_conducta')
                     .select('*, autor:perfiles!autor_id(id, nombre, rol)')
-                    .in('alumno_id', studentIds)
-                    .eq('plantel_id', state.plantelId)
-                    .order('fecha', { ascending: false });
+                    .in('alumno_id', studentIds);
+                if (pId) repQuery = repQuery.eq('plantel_id', pId);
+                const { data: repData, error: repErr } = await repQuery.order('fecha', { ascending: false });
 
                 if (!repErr && repData) {
                     repData.forEach(r => {
                         if (!reportesPorAlumno[r.alumno_id]) reportesPorAlumno[r.alumno_id] = [];
                         reportesPorAlumno[r.alumno_id].push(r);
                     });
+                } else if (repErr) {
+                    let fbRep = supabaseClient.from('reportes_conducta').select('*').in('alumno_id', studentIds);
+                    if (pId) fbRep = fbRep.eq('plantel_id', pId);
+                    const { data: fbRepData } = await fbRep.order('fecha', { ascending: false });
+                    if (fbRepData) {
+                        fbRepData.forEach(r => {
+                            if (!reportesPorAlumno[r.alumno_id]) reportesPorAlumno[r.alumno_id] = [];
+                            reportesPorAlumno[r.alumno_id].push(r);
+                        });
+                    }
                 }
             } catch (errRep) {
                 console.warn("Aviso al consultar reportes_conducta vinculados:", errRep);
             }
 
             // Consultar si el alumno ya abrió/visualizó el aviso de citatorio en comunicados
-            const citatoriosVistosPorId = new Set();
+            var citatoriosVistosPorId = new Set();
             try {
                 const audiencias = studentIds.map(id => `Alumno_${id}`);
                 const { data: comData } = await supabaseClient
@@ -5459,6 +5571,13 @@ window.loadCitatoriosApoyo = async () => {
         });
         const contadorAlumnoCit = {};
 
+        // Helper seguro para formateo de fechas
+        const safeFmtDate = (rawDate, options, fallback = '---') => {
+            if (!rawDate) return fallback;
+            const d = new Date(rawDate);
+            return isNaN(d.getTime()) ? fallback : d.toLocaleString('es-MX', options);
+        };
+
         cont.innerHTML = data.map(c => {
             contadorAlumnoCit[c.alumno_id] = (contadorAlumnoCit[c.alumno_id] || 0) + 1;
             const citIndex = contadorAlumnoCit[c.alumno_id];
@@ -5468,7 +5587,6 @@ window.loadCitatoriosApoyo = async () => {
                 : '';
 
             const isEnterado = c.estado === 'enterado';
-            const dateCita = c.fecha_cita ? new Date(c.fecha_cita).toLocaleString('es-MX', { dateStyle: 'medium', timeStyle: 'short' }) : 'Pendiente acordar';
             const motivoLower = (c.motivo || '').toLowerCase();
             const tipoLower = (c.tipo || '').toLowerCase();
             
@@ -5481,10 +5599,10 @@ window.loadCitatoriosApoyo = async () => {
             const esGrave = esAutomated && (motivoLower.includes('(grave)') || tipoLower === 'grave');
 
             // Filtrar únicamente los reportes causales (ocurridos antes o al momento de emitirse este citatorio específico)
-            const citTime = new Date(c.creado_en).getTime();
+            const citTime = c.creado_en ? new Date(c.creado_en).getTime() : Date.now();
             const repsCausales = repsAlumno.filter(r => {
                 const repTime = new Date(r.fecha || r.creado_en || 0).getTime();
-                return repTime <= (citTime + 10 * 60 * 1000); // 10 min de tolerancia por creación concurrente
+                return isNaN(repTime) ? true : (repTime <= (citTime + 10 * 60 * 1000));
             });
 
             let catFiltro = '';
@@ -5497,7 +5615,6 @@ window.loadCitatoriosApoyo = async () => {
 
             if (esGrave) {
                 // Caso 1: Provocado por Reporte Grave Automático
-                // Intentar buscar primero el reporte grave causal que coincida con la categoría
                 let repGrave = null;
                 if (catFiltro) {
                     repGrave = repsCausales.find(r => {
@@ -5509,12 +5626,10 @@ window.loadCitatoriosApoyo = async () => {
                     });
                 }
 
-                // Si no hay grave de esa categoría específica antes del citatorio, buscar cualquier grave causal de esa fecha
                 if (!repGrave) {
                     repGrave = repsCausales.find(r => r.gravedad === 'Grave');
                 }
 
-                // Si no hay grave pero hay de la categoría en esa fecha, tomar el más reciente
                 if (!repGrave && catFiltro) {
                     repGrave = repsCausales.find(r => {
                         const d = (r.descripcion || '').toUpperCase();
@@ -5523,7 +5638,6 @@ window.loadCitatoriosApoyo = async () => {
                     });
                 }
 
-                // Fallback al reporte más reciente antes del citatorio
                 if (!repGrave && repsCausales.length > 0) {
                     repGrave = repsCausales[0];
                 }
@@ -5532,7 +5646,7 @@ window.loadCitatoriosApoyo = async () => {
                 const materiaORol = repGrave?.autor_metadata || (repGrave?.autor?.rol ? repGrave.autor.rol.toUpperCase() : '');
                 const descIncidencia = repGrave ? (repGrave.descripcion || '').replace(/^\[.*?\]\s*/, '') : c.motivo;
                 const fechaRep = repGrave?.fecha || repGrave?.creado_en || c.creado_en;
-                const fechaRepStr = fechaRep ? new Date(fechaRep).toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '';
+                const fechaRepStr = safeFmtDate(fechaRep, { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }, '');
 
                 resumenParaModal = `REPORTE GRAVE emitido por ${docenteNombre} (${materiaORol || 'Docente'}): "${descIncidencia}"`;
 
@@ -5583,7 +5697,7 @@ window.loadCitatoriosApoyo = async () => {
                                 const mat = r.autor_metadata || (r.autor?.rol ? r.autor.rol.toUpperCase() : '');
                                 const cleanDesc = (r.descripcion || '').replace(/^\[.*?\]\s*/, '');
                                 const rFecha = r.fecha || r.creado_en;
-                                const fStr = rFecha ? new Date(rFecha).toLocaleDateString('es-MX', { day: '2-digit', month: 'short' }) : '';
+                                const fStr = safeFmtDate(rFecha, { day: '2-digit', month: 'short' }, '');
                                 const gravColor = (r.gravedad === 'Moderado') ? 'var(--warning)' : (r.gravedad === 'Grave' ? 'var(--danger)' : '#64748b');
                                 return `
                                 <div style="background:white; border:1px solid #fef3c7; border-radius:6px; padding:6px 8px; font-size:0.78rem;">
@@ -5661,7 +5775,7 @@ window.loadCitatoriosApoyo = async () => {
 
             const grupoStr = c.alumnos?.grupos?.nombre ? ` • Grupo: <b>${c.alumnos.grupos.nombre}</b>` : '';
             const hasCita = !!c.fecha_cita;
-            const dateCitaFormatted = hasCita ? new Date(c.fecha_cita).toLocaleString('es-MX', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : null;
+            const dateCitaFormatted = hasCita ? safeFmtDate(c.fecha_cita, { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }, 'Cita programada') : null;
 
             const blockHorarioCita = hasCita ? `
                 <div style="background:#f0fdf4; border:1px solid #86efac; border-radius:8px; padding:10px; margin-bottom:12px; font-size:0.83rem; display:flex; justify-content:space-between; align-items:center;">
@@ -5686,8 +5800,8 @@ window.loadCitatoriosApoyo = async () => {
             `;
 
             // Sincronizar si fue visto por alumno en portal o por comunicado específico
-            const fueVisto = Boolean(c.visto_por_alumno || citatoriosVistosPorId.has(c.id));
-            if (!c.visto_por_alumno && citatoriosVistosPorId.has(c.id)) {
+            const fueVisto = Boolean(c.visto_por_alumno || (citatoriosVistosPorId && citatoriosVistosPorId.has(c.id)));
+            if (!c.visto_por_alumno && citatoriosVistosPorId && citatoriosVistosPorId.has(c.id)) {
                 c.visto_por_alumno = true;
                 supabaseClient.from('citatorios').update({ visto_por_alumno: true }).eq('id', c.id).then(()=>{}).catch(()=>{});
             }
@@ -5713,6 +5827,9 @@ window.loadCitatoriosApoyo = async () => {
                 `;
             }
 
+            const fechaCreadoStr = safeFmtDate(c.creado_en, { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }, 'Reciente');
+            const fechaEnteradoStr = safeFmtDate(c.fecha_enterado, {}, '');
+
             return `
                 <div class="card" style="padding:16px; border:1px solid ${isEnterado ? '#bbf7d0' : '#fed7aa'}; background:white; position:relative; box-shadow:var(--shadow-sm); display:flex; flex-direction:column; justify-content:space-between;">
                     <div>
@@ -5721,7 +5838,7 @@ window.loadCitatoriosApoyo = async () => {
                                 ${badgeEstadoHtml}
                                 ${badgeNumeroCit}
                             </div>
-                            <small style="color:var(--text-muted); font-size:0.75rem;"><i class="fa-regular fa-calendar"></i> ${new Date(c.creado_en).toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</small>
+                            <small style="color:var(--text-muted); font-size:0.75rem;"><i class="fa-regular fa-calendar"></i> ${fechaCreadoStr}</small>
                         </div>
                         <h4 style="margin:0 0 4px 0; font-size:1.05rem; color:var(--primary); font-weight:700;">
                             ${c.alumnos?.nombre || '---'}
@@ -5741,7 +5858,7 @@ window.loadCitatoriosApoyo = async () => {
                         ${c.firma_enterado ? `
                             <div style="font-size:0.8rem; padding:8px 10px; background:#f0fdf4; border-radius:8px; margin-bottom:12px; color:#166534; border:1px solid #bbf7d0;">
                                 <i class="fa-solid fa-signature"></i> Acuse de recibo firmado por: <b>${c.firma_enterado}</b><br>
-                                <small style="color:#15803d;"><i class="fa-regular fa-clock"></i> ${new Date(c.fecha_enterado).toLocaleString('es-MX')}</small>
+                                ${fechaEnteradoStr ? `<small style="color:#15803d;"><i class="fa-regular fa-clock"></i> ${fechaEnteradoStr}</small>` : ''}
                             </div>
                         ` : ''}
                     </div>
@@ -5756,7 +5873,19 @@ window.loadCitatoriosApoyo = async () => {
                 </div>
             `;
         }).join('');
-    } catch(e) { console.error("Error load citatorios:", e); }
+    } catch(e) {
+        console.error("Error load citatorios:", e);
+        cont.innerHTML = `
+            <div style="text-align:center; padding:35px 20px; color:var(--text-muted); grid-column:1/-1;">
+                <i class="fa-solid fa-triangle-exclamation text-danger" style="font-size:2.2rem; margin-bottom:12px; display:block;"></i>
+                <h4 style="color:var(--danger); margin:0 0 6px 0; font-size:1rem;">Ocurrió un error al cargar los citatorios</h4>
+                <p style="font-size:0.82rem; color:var(--text-muted); margin:0 0 16px 0; max-width:500px; margin-inline:auto;">${(e?.message || e || 'Error de conexión').toString().replace(/</g, '&lt;')}</p>
+                <button class="btn btn-primary btn-sm" onclick="window.loadCitatoriosApoyo()" style="padding:6px 16px; border-radius:8px; font-weight:600;">
+                    <i class="fa-solid fa-rotate-right"></i> Reintentar Carga
+                </button>
+            </div>
+        `;
+    }
 };
 
 window.toggleVistoCitatorio = async (citatorioId, nuevoEstado) => {
@@ -5989,10 +6118,12 @@ window.verificarDisponibilidadAgenda = async (valFechaHora) => {
         const startDayISO = `${year}-${month}-${day}T00:00:00.000Z`;
         const endDayISO = `${year}-${month}-${day}T23:59:59.999Z`;
 
-        const { data, error } = await supabaseClient
+        let pId = state.plantelId || window.currentUserProfile?.plantel_id || state.user?.user_metadata?.plantel_id;
+        let citQuery = supabaseClient
             .from('citatorios')
-            .select('id, fecha_cita, motivo, alumnos(nombre, matricula)')
-            .eq('plantel_id', state.plantelId)
+            .select('id, fecha_cita, motivo, alumnos(nombre, matricula)');
+        if (pId) citQuery = citQuery.eq('plantel_id', pId);
+        const { data, error } = await citQuery
             .gte('fecha_cita', startDayISO)
             .lte('fecha_cita', endDayISO)
             .neq('estado', 'atendido')
@@ -6103,6 +6234,16 @@ window.guardarHorarioCitatorio = async () => {
 
         const { data: userData } = await supabaseClient.auth.getUser();
         const emisorUserId = userData?.user?.id || state.user?.id;
+        let pId = state.plantelId || window.currentUserProfile?.plantel_id || state.user?.user_metadata?.plantel_id;
+        if (!pId && emisorUserId) {
+            try {
+                const { data: prof } = await supabaseClient.from('perfiles').select('plantel_id').eq('id', emisorUserId).maybeSingle();
+                pId = prof?.plantel_id;
+                if (pId) state.plantelId = pId;
+            } catch(eProf) {
+                console.warn("Aviso al obtener plantel en guardar horario:", eProf);
+            }
+        }
 
         await supabaseClient.from('comunicados').insert([{
             autor_id: emisorUserId,
@@ -6110,7 +6251,7 @@ window.guardarHorarioCitatorio = async () => {
             mensaje: `Estimado padre de familia / tutor del alumno(a) ${alumnoNombre}:\n\nSe ha programado formalmente su cita de atención presencial en el plantel:\n📅 Fecha y hora: ${fechaFormateada}\n📍 Lugar: ${lugar}\n\nCon la finalidad de brindarle una atención oportuna y evitar esperas o aglomeraciones, le solicitamos presentarse puntualmente con su identificación oficial. Por favor ingrese a su portal para firmar el acuse de enterado.\n\n[REF_CITATORIO: ${citatorioId}]`,
             audiencia: `Alumno_${alumnoId}`,
             tipo: 'Urgente',
-            plantel_id: state.plantelId
+            plantel_id: pId || null
         }]);
 
         window.showToast("Cita programada exitosamente y notificada al padre de familia", "success");
