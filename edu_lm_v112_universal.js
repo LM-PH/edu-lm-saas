@@ -268,6 +268,32 @@ window.logout = async () => {
     renderApp();
 };
 
+window._obtenerPlantelIdActivo = async () => {
+    if (state.plantelId) return state.plantelId;
+    if (window.currentUserProfile && window.currentUserProfile.plantel_id) {
+        state.plantelId = window.currentUserProfile.plantel_id;
+        return state.plantelId;
+    }
+    if (state.user && state.user.user_metadata && state.user.user_metadata.plantel_id) {
+        state.plantelId = state.user.user_metadata.plantel_id;
+        return state.plantelId;
+    }
+    try {
+        const u = await supabaseClient.auth.getUser();
+        const uid = u?.data?.user?.id;
+        if (uid) {
+            const { data: prof } = await supabaseClient.from('perfiles').select('plantel_id').eq('id', uid).maybeSingle();
+            if (prof && prof.plantel_id) {
+                state.plantelId = prof.plantel_id;
+                return state.plantelId;
+            }
+        }
+    } catch(e) {
+        console.warn("No se pudo resolver plantel_id activo:", e);
+    }
+    return state.plantelId || null;
+};
+
 
 window.handleLogin = async (e) => {
   if (e && e.preventDefault) e.preventDefault();
@@ -12992,15 +13018,18 @@ window.loadActividadesMaestro = async () => {
         const currentUser = await supabaseClient.auth.getUser();
         if(!currentUser.data.user) return;
         const email = currentUser.data.user.email;
+        const pId = await window._obtenerPlantelIdActivo();
 
         // Cargar seleccionables (solo si existe el select y está vacío/default)
         const actM = document.getElementById('actMateria');
         if (actM && (actM.innerHTML.includes("Cargando") || actM.options.length <= 1)) {
-            const { data: asigs, error: errAsigs } = await supabaseClient.from('asignaciones_maestros')
+            let qAsigs = supabaseClient.from('asignaciones_maestros')
                .select('materia, grupo_id, target_grado, grupos(id, nombre)')
-               .eq('plantel_id', state.plantelId)
                .eq('docente_email', email)
                .or('grupo_id.not.is.null,target_grado.not.is.null');
+            if (pId) qAsigs = qAsigs.eq('plantel_id', pId);
+            
+            const { data: asigs, error: errAsigs } = await qAsigs;
                
             if(!errAsigs && asigs) {
                 window.globalAsignacionesMaestro = asigs;
@@ -13030,13 +13059,14 @@ window.loadActividadesMaestro = async () => {
         const trimSelected = document.getElementById('filtroTrimestreAct')?.value || 1;
         const filtroGrupoVal = document.getElementById('filtroGrupoAct')?.value;
         
-        const { data: misActividades, error: errAct } = await supabaseClient.from('actividades_maestro')
+        let qMisActs = supabaseClient.from('actividades_maestro')
            .select('*, grupos(nombre), evaluaciones_actividades(id)')
-           .eq('plantel_id', state.plantelId)
            .eq('maestro_id', currentUser.data.user.id)
            .eq('finalizada', isFinalizada)
-           .eq('trimestre', trimSelected)
-           .order('fecha_creacion', { ascending: false });
+           .eq('trimestre', trimSelected);
+        if (pId) qMisActs = qMisActs.eq('plantel_id', pId);
+        
+        const { data: misActividades, error: errAct } = await qMisActs.order('fecha_creacion', { ascending: false });
            
         if(errAct) throw errAct;
 
@@ -14170,6 +14200,7 @@ window.loadListaEvalManual = async () => {
     contenedor.innerHTML = '<div style="padding:20px; text-align:center;"><i class="fa-solid fa-spinner fa-spin"></i> Cargando lista...</div>';
     
     try {
+        const pId = await window._obtenerPlantelIdActivo();
         const [actId, actTitulo, actGrupoId, actTargetGrado, actMateria] = window._lastEvalParams || [];
         const isTec = currentActIsTec || (!actGrupoId && !!actTargetGrado) || 
                       (actGrupoId && String(actGrupoId).startsWith('grado:')) ||
@@ -14177,16 +14208,17 @@ window.loadListaEvalManual = async () => {
         
         let alumnos = [];
         if(isTec) {
-            const { data: rawAlumnos } = await supabaseClient.from('alumnos')
-                .select('id, nombre, matricula, grado, taller')
-                .eq('plantel_id', state.plantelId);
+            let qAl = supabaseClient.from('alumnos')
+                .select('id, nombre, matricula, grado, taller');
+            if (pId) qAl = qAl.eq('plantel_id', pId);
+            const { data: rawAlumnos } = await qAl;
             alumnos = window._filtrarAlumnosPorTallerYGrado 
                 ? window._filtrarAlumnosPorTallerYGrado(rawAlumnos, actTargetGrado, actMateria) 
                 : (rawAlumnos || []);
         } else {
             let q = supabaseClient.from('alumnos')
-                .select('id, nombre, matricula, grado, taller')
-                .eq('plantel_id', state.plantelId);
+                .select('id, nombre, matricula, grado, taller');
+            if (pId) q = q.eq('plantel_id', pId);
             if(actGrupoId) q = q.eq('grupo_id', actGrupoId);
             const { data: rawAlumnos } = await q;
             alumnos = rawAlumnos || [];
@@ -14202,8 +14234,7 @@ window.loadListaEvalManual = async () => {
         // Cargar evaluaciones existentes
         const { data: evals } = await supabaseClient.from('evaluaciones_actividades')
             .select('alumno_id, calificacion')
-            .eq('actividad_id', currentActividadId)
-            .eq('plantel_id', state.plantelId);
+            .eq('actividad_id', currentActividadId);
             
         const evalMap = {};
         (evals || []).forEach(e => { evalMap[e.alumno_id] = e.calificacion; });
@@ -14395,6 +14426,7 @@ window.guardarTodasEvaluacionesManual = async () => {
     const btn = document.getElementById('btn_save_all_evals');
     if(!btn || !currentActividadId) return;
     
+    const pId = await window._obtenerPlantelIdActivo();
     const inputs = document.querySelectorAll('.eval-manual-input');
     const toSave = [];
     inputs.forEach(input => {
@@ -14406,7 +14438,7 @@ window.guardarTodasEvaluacionesManual = async () => {
                 actividad_id: currentActividadId,
                 alumno_id: alumnoId,
                 calificacion: nota,
-                plantel_id: state.plantelId
+                plantel_id: pId
             });
         }
     });
@@ -14449,17 +14481,40 @@ window.guardarTodasEvaluacionesManual = async () => {
     }
 };
 
-window.loadListasMaestro = async () => {
+window.loadListasMaestro = async (retryCount = 0) => {
     const selGrupo = document.getElementById('listaMaestroGrupo');
     if(!selGrupo) return;
     try {
-        const email = (await supabaseClient.auth.getUser()).data.user.email;
-        const { data: asigs } = await supabaseClient.from('asignaciones_maestros')
+        const pId = await window._obtenerPlantelIdActivo();
+        const userRes = await supabaseClient.auth.getUser();
+        const email = userRes?.data?.user?.email;
+        if (!email) {
+            if (retryCount < 3) {
+                setTimeout(() => window.loadListasMaestro(retryCount + 1), 300);
+            }
+            return;
+        }
+
+        let q = supabaseClient.from('asignaciones_maestros')
            .select('materia, grupo_id, target_grado, grupos(id, nombre)')
-           .eq('docente_email', email).eq('plantel_id', state.plantelId)
+           .eq('docente_email', email)
            .or('grupo_id.not.is.null,target_grado.not.is.null');
-           
+        if (pId) q = q.eq('plantel_id', pId);
+        
+        let { data: asigs } = await q;
+
+        if ((!asigs || asigs.length === 0) && pId) {
+            const { data: asigsSinPlantel } = await supabaseClient.from('asignaciones_maestros')
+               .select('materia, grupo_id, target_grado, grupos(id, nombre)')
+               .eq('docente_email', email)
+               .or('grupo_id.not.is.null,target_grado.not.is.null');
+            if (asigsSinPlantel && asigsSinPlantel.length > 0) {
+                asigs = asigsSinPlantel;
+            }
+        }
+
         if(asigs && asigs.length > 0) {
+            const currentSelectedVal = selGrupo.value;
             selGrupo.innerHTML = '<option value="">-- Selecciona Grupo/Materia --</option>' + 
                asigs.map(a => {
                    if(a.grupos) {
@@ -14470,12 +14525,15 @@ window.loadListasMaestro = async () => {
                    return '';
                }).filter(Boolean).join('');
 
-            // AUTO-SELECCIÓN DESDE URL
+            // AUTO-SELECCIÓN: 1) URL Param, 2) SessionStorage de este usuario, 3) Selección previa
             const urlParams = new URLSearchParams(state.path.split('?')[1]);
             const preSelected = urlParams.get('grupo');
-            if(preSelected) {
+            const savedSelected = sessionStorage.getItem(`edu_lm_last_grupo_lista_${email}`) || sessionStorage.getItem('edu_lm_last_grupo_lista');
+            const targetVal = preSelected || currentSelectedVal || savedSelected;
+
+            if(targetVal) {
                 for(let opt of selGrupo.options) {
-                    if(opt.value.includes(preSelected)) {
+                    if(opt.value && (opt.value === targetVal || (preSelected && opt.value.includes(preSelected)))) {
                         selGrupo.value = opt.value;
                         window.cargarAlumnosLista();
                         break;
@@ -14483,10 +14541,14 @@ window.loadListasMaestro = async () => {
                 }
             }
         } else {
+            if (retryCount < 2) {
+                setTimeout(() => window.loadListasMaestro(retryCount + 1), 500);
+                return;
+            }
             selGrupo.innerHTML = '<option value="">No tienes expedientes asignados</option>';
         }
     } catch(err) {
-        console.error(err);
+        console.error("Error en loadListasMaestro:", err);
         selGrupo.innerHTML = '<option value="">Error cargando asignaciones</option>';
     }
 };
@@ -14618,9 +14680,19 @@ window._calcularCalificacionAlumno = ({ alumnoId, acts, evals }) => {
 window.cargarAlumnosLista = async () => {
     const tbody = document.getElementById('listaMaestroAlumnos');
     const cabecera = document.getElementById('listaMaestroCabecera');
-    const rawVal = document.getElementById('listaMaestroGrupo').value;
+    const selG = document.getElementById('listaMaestroGrupo');
+    const rawVal = selG ? selG.value : '';
     const tipo = document.getElementById('listaMaestroTipo') ? document.getElementById('listaMaestroTipo').value : 'evaluaciones';
     
+    // Guardar selección para recuperarla tras actualizar/recargar
+    if (rawVal) {
+        try {
+            const email = (await supabaseClient.auth.getUser())?.data?.user?.email;
+            if (email) sessionStorage.setItem(`edu_lm_last_grupo_lista_${email}`, rawVal);
+            sessionStorage.setItem('edu_lm_last_grupo_lista', rawVal);
+        } catch(e) {}
+    }
+
     // Contenedor para estadísticas (Lo buscamos o creamos arriba del de la tabla)
     let statsCont = document.getElementById('statsListaMaestro');
     if(!statsCont && tbody) {
@@ -14638,6 +14710,7 @@ window.cargarAlumnosLista = async () => {
     
     tbody.innerHTML = '<tr><td colspan="4" style="text-align:center; padding: 20px;"><i class="fa-solid fa-spinner fa-spin"></i> Cargando...</td></tr>';
     
+    const pId = await window._obtenerPlantelIdActivo();
     const isTec = rawVal.startsWith('grado:');
     const [idPart, materia] = rawVal.split('|');
     const gid = isTec ? null : idPart;  
@@ -14646,10 +14719,15 @@ window.cargarAlumnosLista = async () => {
     try {
         let rawAlumnos = [];
         if(isTec) {
-            const { data: todos } = await supabaseClient.from('alumnos').select('id, nombre, matricula, contacto_email, grado, taller').eq('plantel_id', state.plantelId).order('nombre');
+            let qAl = supabaseClient.from('alumnos').select('id, nombre, matricula, contacto_email, grado, taller').order('nombre');
+            if (pId) qAl = qAl.eq('plantel_id', pId);
+            const { data: todos } = await qAl;
             rawAlumnos = window._filtrarAlumnosPorTallerYGrado ? window._filtrarAlumnosPorTallerYGrado(todos, targetGrado, materia) : (todos || []);
         } else {
-            const { data: todos } = await supabaseClient.from('alumnos').select('id, nombre, matricula, contacto_email').eq('plantel_id', state.plantelId).eq('grupo_id', gid).order('nombre');
+            let qAl = supabaseClient.from('alumnos').select('id, nombre, matricula, contacto_email').order('nombre');
+            if (pId) qAl = qAl.eq('plantel_id', pId);
+            if (gid) qAl = qAl.eq('grupo_id', gid);
+            const { data: todos } = await qAl;
             rawAlumnos = todos || [];
         }
         
@@ -14670,7 +14748,8 @@ window.cargarAlumnosLista = async () => {
             const currentTrim = state.selectedMaestroTrimestre || 1;
             const isModoFinal = currentTrim === 'final';
 
-            let actsQuery = supabaseClient.from('actividades_maestro').select('id, titulo, rubro_name, rubro_peso, trimestre, materia').eq('plantel_id', state.plantelId);
+            let actsQuery = supabaseClient.from('actividades_maestro').select('id, titulo, rubro_name, rubro_peso, trimestre, materia');
+            if (pId) actsQuery = actsQuery.eq('plantel_id', pId);
             if(isTec) {
                 actsQuery = actsQuery.eq('target_grado', targetGrado);
             } else {
@@ -14859,7 +14938,8 @@ window.cargarAlumnosLista = async () => {
             const isModoFinal = currentTrim === 'final';
             const materiaLimpia = (materia || '').trim();
 
-            let actsQuery = supabaseClient.from('actividades_maestro').select('id, titulo, rubro_name, rubro_peso, trimestre, materia').eq('plantel_id', state.plantelId);
+            let actsQuery = supabaseClient.from('actividades_maestro').select('id, titulo, rubro_name, rubro_peso, trimestre, materia');
+            if (pId) actsQuery = actsQuery.eq('plantel_id', pId);
             if(isTec) actsQuery = actsQuery.eq('target_grado', targetGrado);
             else actsQuery = actsQuery.eq('grupo_id', gid);
             if (!isModoFinal) actsQuery = actsQuery.eq('trimestre', currentTrim);
@@ -14881,8 +14961,8 @@ window.cargarAlumnosLista = async () => {
             // Fetch Oficial Historial
             let histQuery = supabaseClient.from('calificaciones')
                 .select('alumno_id, calificacion, trimestre, materia_nombre')
-                .eq('plantel_id', state.plantelId)
                 .in('alumno_id', alumnoIds);
+            if (pId) histQuery = histQuery.eq('plantel_id', pId);
             if(isModoFinal) {
                 histQuery = histQuery.in('trimestre', [1, 2, 3, 4]);
             } else {
@@ -14897,16 +14977,16 @@ window.cargarAlumnosLista = async () => {
             let qAsist = supabaseClient.from('asistencias')
                 .select('alumno_id, estado, creado_en')
                 .in('alumno_id', alumnoIds)
-                .eq('materia', materiaLimpia)
-                .eq('plantel_id', state.plantelId);
+                .eq('materia', materiaLimpia);
+            if (pId) qAsist = qAsist.eq('plantel_id', pId);
             if (!isModoFinal) qAsist = qAsist.eq('trimestre', currentTrim);
             const { data: asistenciasRegistradas } = await qAsist;
             
             let qSes = supabaseClient.from('asistencia_sesiones')
                 .select('fecha')
                 .eq('grupo_id', String(rawVal))
-                .eq('materia', materiaLimpia)
-                .eq('plantel_id', state.plantelId);
+                .eq('materia', materiaLimpia);
+            if (pId) qSes = qSes.eq('plantel_id', pId);
             if (!isModoFinal) qSes = qSes.eq('trimestre', currentTrim);
             const { data: sesiones } = await qSes;
             
@@ -15021,16 +15101,16 @@ window.cargarAlumnosLista = async () => {
                 .select('alumno_id, estado, creado_en')
                 .in('alumno_id', alumnoIds)
                 .eq('materia', materiaLimpia)
-                .eq('plantel_id', state.plantelId)
                 .order('creado_en');
+            if (pId) qAsist = qAsist.eq('plantel_id', pId);
             if (currentTrim) qAsist = qAsist.eq('trimestre', currentTrim);
             const { data: asistenciasRegistradas } = await qAsist;
                 
             let qSes = supabaseClient.from('asistencia_sesiones')
                 .select('fecha')
                 .eq('grupo_id', String(rawVal))
-                .eq('materia', materiaLimpia)
-                .eq('plantel_id', state.plantelId);
+                .eq('materia', materiaLimpia);
+            if (pId) qSes = qSes.eq('plantel_id', pId);
             if (currentTrim) qSes = qSes.eq('trimestre', currentTrim);
             const { data: sesiones } = await qSes;
                 
@@ -15178,36 +15258,46 @@ window.recalcularFilaAlumno = (alumnoId) => {
     return promFinalNum;
 };
 
-window.recalcularEstadisticasLista = () => {
-    const alumnos = window._currentAlumnos || window._currentListaAlumnos || [];
-    if (alumnos.length === 0) return;
+let _recalcStatsTimer = null;
+window.recalcularEstadisticasLista = (delay = 80) => {
+    if (_recalcStatsTimer) clearTimeout(_recalcStatsTimer);
+    _recalcStatsTimer = setTimeout(() => {
+        const alumnos = window._currentAlumnos || window._currentListaAlumnos || [];
+        if (alumnos.length === 0) return;
 
-    let sumPromedios = 0, aprobados = 0, reprobados = 0;
+        let sumPromedios = 0, aprobados = 0, reprobados = 0;
 
-    alumnos.forEach(al => {
-        const prom = window.recalcularFilaAlumno(al.id);
-        sumPromedios += prom;
-        if (prom >= 6) aprobados++;
-        else reprobados++;
-    });
+        alumnos.forEach(al => {
+            const promEl = document.getElementById(`prom_alumno_${al.id}`);
+            let prom = 0;
+            if (promEl && promEl.textContent) {
+                prom = parseFloat(promEl.textContent) || 0;
+            } else {
+                prom = window.recalcularFilaAlumno(al.id);
+            }
+            sumPromedios += prom;
+            if (prom >= 6) aprobados++;
+            else reprobados++;
+        });
 
-    const promGrupo = (sumPromedios / alumnos.length).toFixed(2);
-    const pctApr = (aprobados / alumnos.length * 100).toFixed(1);
-    const pctRep = (reprobados / alumnos.length * 100).toFixed(1);
+        const promGrupo = (sumPromedios / alumnos.length).toFixed(2);
+        const pctApr = (aprobados / alumnos.length * 100).toFixed(1);
+        const pctRep = (reprobados / alumnos.length * 100).toFixed(1);
 
-    const elProm = document.getElementById('stat_promedio_grupal');
-    if (elProm) elProm.textContent = promGrupo;
-    const elApr = document.getElementById('stat_aprobados');
-    if (elApr) elApr.textContent = aprobados;
-    const elAprPct = document.getElementById('stat_aprobados_pct');
-    if (elAprPct) elAprPct.textContent = `(${pctApr}%)`;
-    const elRep = document.getElementById('stat_reprobados');
-    if (elRep) elRep.textContent = reprobados;
-    const elRepPct = document.getElementById('stat_reprobados_pct');
-    if (elRepPct) elRepPct.textContent = `(${pctRep}%)`;
+        const elProm = document.getElementById('stat_promedio_grupal');
+        if (elProm) elProm.textContent = promGrupo;
+        const elApr = document.getElementById('stat_aprobados');
+        if (elApr) elApr.textContent = aprobados;
+        const elAprPct = document.getElementById('stat_aprobados_pct');
+        if (elAprPct) elAprPct.textContent = `(${pctApr}%)`;
+        const elRep = document.getElementById('stat_reprobados');
+        if (elRep) elRep.textContent = reprobados;
+        const elRepPct = document.getElementById('stat_reprobados_pct');
+        if (elRepPct) elRepPct.textContent = `(${pctRep}%)`;
+    }, delay);
 };
 
-window._aplicarCalificacionEnPunto = async (alumnoId, actividadId, nuevoValor, actTitulo, alumnoNombre) => {
+window._aplicarCalificacionEnPunto = (alumnoId, actividadId, nuevoValor, actTitulo, alumnoNombre) => {
     if (!window._currentEvals) window._currentEvals = [];
 
     const esBorrado = (nuevoValor === null || nuevoValor === '' || nuevoValor === undefined);
@@ -15252,28 +15342,31 @@ window._aplicarCalificacionEnPunto = async (alumnoId, actividadId, nuevoValor, a
     window.recalcularFilaAlumno(alumnoId);
     window.recalcularEstadisticasLista();
 
-    // Guardar en Supabase en segundo plano
-    try {
-        if (esBorrado) {
-            const { error } = await supabaseClient.from('evaluaciones_actividades')
-                .delete()
-                .eq('actividad_id', actividadId)
-                .eq('alumno_id', alumnoId);
-            if (error) throw error;
-        } else {
-            const { error } = await supabaseClient.from('evaluaciones_actividades').upsert({
-                actividad_id: actividadId,
-                alumno_id: alumnoId,
-                calificacion: numVal,
-                fecha_evaluacion: new Date().toISOString(),
-                plantel_id: state.plantelId
-            }, { onConflict: 'actividad_id,alumno_id' });
-            if (error) throw error;
+    // Guardar en Supabase en segundo plano sin congelar la interfaz ni la navegación ágil
+    (async () => {
+        try {
+            const pId = state.plantelId || (await window._obtenerPlantelIdActivo());
+            if (esBorrado) {
+                const { error } = await supabaseClient.from('evaluaciones_actividades')
+                    .delete()
+                    .eq('actividad_id', actividadId)
+                    .eq('alumno_id', alumnoId);
+                if (error) throw error;
+            } else {
+                const { error } = await supabaseClient.from('evaluaciones_actividades').upsert({
+                    actividad_id: actividadId,
+                    alumno_id: alumnoId,
+                    calificacion: numVal,
+                    fecha_evaluacion: new Date().toISOString(),
+                    plantel_id: pId
+                }, { onConflict: 'actividad_id,alumno_id' });
+                if (error) throw error;
+            }
+        } catch(err) {
+            console.error("Error guardando calificación en segundo plano:", err);
+            if (window.showToast) window.showToast("Error al guardar en el servidor: " + err.message, "danger");
         }
-    } catch(err) {
-        console.error("Error guardando calificación en segundo plano:", err);
-        if (window.showToast) window.showToast("Error al guardar en el servidor: " + err.message, "danger");
-    }
+    })();
 };
 
 window.evaluarActividadMasiva = async (actividadId, actTitulo) => {
@@ -15340,12 +15433,13 @@ window.evaluarActividadMasiva = async (actividadId, actTitulo) => {
     if (window.showToast) window.showToast("Calificaciones masivas asignadas", "success");
 
     // 3. Persistir en Supabase en segundo plano
+    const pId = state.plantelId || (await window._obtenerPlantelIdActivo());
     const payload = alumnos.map(al => ({
         alumno_id: al.id,
         actividad_id: actividadId,
         calificacion: num,
         fecha_evaluacion: new Date().toISOString(),
-        plantel_id: state.plantelId
+        plantel_id: pId
     }));
 
     try {
@@ -15362,13 +15456,17 @@ window.evaluarActividadMasiva = async (actividadId, actTitulo) => {
     }
 };
 
+window._isTransitioningGrade = false;
+
 window.editarCalificacionLista = async (alumnoId, actividadId, currentCal, actTitulo, alumnoNombre, cellEl) => {
+    if (window._isTransitioningGrade) return;
+
     const rawVal = document.getElementById('listaMaestroGrupo')?.value;
     if (!rawVal) return;
     const [idPart, materia] = rawVal.split('|');
     const currentTrim = state.selectedMaestroTrimestre || 1;
 
-    // Verificar si el periodo de evaluación está bloqueado
+    // Verificar si el periodo de evaluación está bloqueado (utiliza cache para 0ms)
     if (window.checkPaseListaBloqueado) {
         const bMsg = await window.checkPaseListaBloqueado(materia, rawVal, currentTrim);
         if (bMsg) {
@@ -15399,24 +15497,26 @@ window.editarCalificacionLista = async (alumnoId, actividadId, currentCal, actTi
     const accion = (typeof res === 'object' && res.accion) ? res.accion : 'guardar';
 
     if (valorStr === "" || accion === 'borrar' || accion === 'borrar_siguiente') {
-        await window._aplicarCalificacionEnPunto(alumnoId, actividadId, '', actTitulo, nombreAlumnoMostrado);
+        window._aplicarCalificacionEnPunto(alumnoId, actividadId, '', actTitulo, nombreAlumnoMostrado);
         if (window.showToast) window.showToast("Calificación eliminada", "info");
     } else {
         const numVal = parseFloat(valorStr);
         if (isNaN(numVal) || numVal < 0 || numVal > 10) {
             return alert("Calificación inválida. Debe ser un número entre 0 y 10.");
         }
-        await window._aplicarCalificacionEnPunto(alumnoId, actividadId, numVal, actTitulo, nombreAlumnoMostrado);
+        window._aplicarCalificacionEnPunto(alumnoId, actividadId, numVal, actTitulo, nombreAlumnoMostrado);
         if (window.showToast) window.showToast("Guardado", "success");
     }
 
-    // Si la acción fue avanzar al siguiente y existe siguiente alumno, encadenar sin recarga
+    // Si la acción fue avanzar al siguiente y existe siguiente alumno, encadenar de inmediato sin trabas
     if ((accion === 'guardar_siguiente' || accion === 'borrar_siguiente') && siguienteAlu) {
+        window._isTransitioningGrade = true;
         const nextEval = (window._currentEvals || []).find(e => e.alumno_id === siguienteAlu.id && e.actividad_id === actividadId);
         const nextCal = (nextEval && nextEval.calificacion !== undefined && nextEval.calificacion !== null) ? String(nextEval.calificacion) : '';
         setTimeout(() => {
+            window._isTransitioningGrade = false;
             window.editarCalificacionLista(siguienteAlu.id, actividadId, nextCal, actTitulo, siguienteAlu.nombre);
-        }, 60);
+        }, 30);
     }
 };
 
@@ -18454,23 +18554,40 @@ window.registrarSalidaAnticipada = async () => {
     }
 };
 
-window.checkPaseListaBloqueado = async (materia, grupoId, trimestre) => {
+window._paseListaBloqueadoCache = window._paseListaBloqueadoCache || {};
+
+window.checkPaseListaBloqueado = async (materia, grupoId, trimestre, forzar = false) => {
     try {
         if (!trimestre || trimestre === 'final') return "Trimestre no válido para pase de lista.";
         
+        const pId = await window._obtenerPlantelIdActivo();
+        const cacheKey = `${materia}_${grupoId}_${trimestre}_${pId || ''}`;
+        const now = Date.now();
+        if (!forzar && window._paseListaBloqueadoCache[cacheKey]) {
+            const cached = window._paseListaBloqueadoCache[cacheKey];
+            if (now - cached.timestamp < 60000) { // Validez por 60 segundos
+                return cached.result;
+            }
+        }
+
+        const guardarEnCache = (res) => {
+            window._paseListaBloqueadoCache[cacheKey] = { result: res, timestamp: Date.now() };
+            return res;
+        };
+
         // 1. Validar Periodos de Calificaciones
-        const { data: periodo } = await supabaseClient
+        let qPeriodo = supabaseClient
             .from('periodos_calificaciones')
             .select('*')
-            .eq('trimestre', trimestre)
-            .eq('plantel_id', state.plantelId)
-            .maybeSingle();
+            .eq('trimestre', trimestre);
+        if (pId) qPeriodo = qPeriodo.eq('plantel_id', pId);
+        const { data: periodo } = await qPeriodo.maybeSingle();
 
         if (periodo) {
-            if (periodo.bloqueado) return "El pase de lista está BLOQUEADO por la Administración.";
+            if (periodo.bloqueado) return guardarEnCache("El pase de lista está BLOQUEADO por la Administración.");
             if (periodo.fecha_limite) {
                 const deadline = new Date(periodo.fecha_limite);
-                if (new Date() > deadline) return `La fecha límite (${deadline.toLocaleString('es-MX', { dateStyle:'short', timeStyle:'short' })}) expiró. Pase de lista cerrado.`;
+                if (new Date() > deadline) return guardarEnCache(`La fecha límite (${deadline.toLocaleString('es-MX', { dateStyle:'short', timeStyle:'short' })}) expiró. Pase de lista cerrado.`);
             }
         }
 
@@ -18484,10 +18601,11 @@ window.checkPaseListaBloqueado = async (materia, grupoId, trimestre) => {
         if (isTec) {
             const gNorm = window._normalizarGradoParaPase ? window._normalizarGradoParaPase(targetGrado) : targetGrado.replace(/[°\s]/g, '');
             const gSin = targetGrado.replace(/[°\s]/g, '');
-            const { data: rawAlumnos } = await supabaseClient.from('alumnos')
+            let qAl = supabaseClient.from('alumnos')
                 .select('id, grado, taller')
-                .eq('plantel_id', state.plantelId)
                 .or(`grado.eq.${gSin},grado.eq.${gSin}°,grado.ilike.%${gSin}%`);
+            if (pId) qAl = qAl.eq('plantel_id', pId);
+            const { data: rawAlumnos } = await qAl;
 
             const cleanTargetT = window._normalizarTextoTaller ? window._normalizarTextoTaller(taller) : '';
             const alms = (rawAlumnos || []).filter(al => {
@@ -18500,21 +18618,23 @@ window.checkPaseListaBloqueado = async (materia, grupoId, trimestre) => {
             });
             alumnoIds = alms.map(a => a.id);
         } else if (gid) {
-            const { data: alms } = await supabaseClient.from('alumnos')
+            let qAl = supabaseClient.from('alumnos')
                 .select('id')
-                .eq('plantel_id', state.plantelId)
                 .eq('grupo_id', gid);
+            if (pId) qAl = qAl.eq('plantel_id', pId);
+            const { data: alms } = await qAl;
             alumnoIds = (alms || []).map(a => a.id);
         }
 
         if (alumnoIds.length > 0) {
             const trimNum = parseInt(trimestre, 10) || 1;
-            const { data: califs, error: errCal } = await supabaseClient
+            let qCal = supabaseClient
                 .from('calificaciones')
                 .select('id, materia_nombre')
-                .eq('plantel_id', state.plantelId)
                 .eq('trimestre', trimNum)
                 .in('alumno_id', alumnoIds);
+            if (pId) qCal = qCal.eq('plantel_id', pId);
+            const { data: califs, error: errCal } = await qCal;
 
             if (!errCal && califs && califs.length > 0) {
                 const rawMat = (materia || '').trim().toLowerCase();
@@ -18527,12 +18647,12 @@ window.checkPaseListaBloqueado = async (materia, grupoId, trimestre) => {
                 });
 
                 if (tieneCalificaciones) {
-                    return "Calificaciones selladas y enviadas. Pase de lista cerrado para este trimestre.";
+                    return guardarEnCache("Calificaciones selladas y enviadas. Pase de lista cerrado para este trimestre.");
                 }
             }
         }
 
-        return false;
+        return guardarEnCache(false);
     } catch(e) {
         console.error("Error en checkPaseListaBloqueado:", e);
         return false;
