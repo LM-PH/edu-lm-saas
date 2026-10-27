@@ -14511,6 +14511,110 @@ window.cambiarTrimestreLista = (trim, btn) => {
     window.cargarAlumnosLista();
 };
 
+window._calcularCalificacionAlumno = ({ alumnoId, acts, evals }) => {
+    const normalizarRubro = (nombre) => {
+        if (!nombre) return '';
+        return String(nombre)
+            .trim()
+            .toLowerCase()
+            .normalize("NFD")
+            .replace(/[\u0300-\u036f]/g, "")
+            .replace(/\s+/g, ' ');
+    };
+
+    const esActividadExtra = (act) => {
+        const rName = (act.rubro_name || '').trim().toLowerCase();
+        if (rName.includes('extra') || rName.includes('no aplica') || rName.includes('sin rubro')) return true;
+        const peso = parseFloat(act.rubro_peso) || 0;
+        // Si no tiene nombre de rubro asignado y el peso configurado es entre 0 y 10, es actividad extra directa
+        if (!act.rubro_name && peso > 0 && peso <= 10) return true;
+        return false;
+    };
+
+    let rubroGroups = {};
+    let sumNotas = 0;
+    let countNotas = 0;
+    let sumPuntosExtra = 0;
+    let nonExtraActsCount = 0;
+    let hasRubros = false;
+
+    if (acts && acts.length > 0) {
+        acts.forEach(act => {
+            const cellEval = evals ? evals.find(e => e.alumno_id === alumnoId && e.actividad_id === act.id) : null;
+            const isValida = (cellEval && cellEval.calificacion !== undefined && cellEval.calificacion !== null && cellEval.calificacion !== '' && !isNaN(parseFloat(cellEval.calificacion)));
+            const val = isValida ? (parseFloat(cellEval.calificacion) || 0) : 0;
+
+            if (isValida) countNotas++;
+
+            if (esActividadExtra(act)) {
+                const ptsConfig = parseFloat(act.rubro_peso) || 0;
+                if (ptsConfig > 0 && isValida && val > 0) {
+                    sumPuntosExtra += (val / 10) * ptsConfig;
+                }
+            } else {
+                const rRawName = (act.rubro_name || '').trim();
+                const pesoNum = parseFloat(act.rubro_peso) || 0;
+
+                // Es rubro oficial o personalizado ponderado si tiene nombre o peso > 10
+                if (rRawName || pesoNum > 10) {
+                    hasRubros = true;
+                    nonExtraActsCount++;
+                    const normKey = normalizarRubro(rRawName || `rubro_${pesoNum}`);
+                    const displayName = rRawName || `Rubro ${pesoNum}%`;
+
+                    if (!rubroGroups[normKey]) {
+                        rubroGroups[normKey] = {
+                            name: displayName,
+                            peso: pesoNum,
+                            suma: 0,
+                            countValidas: 0,
+                            totalActs: 0
+                        };
+                    }
+                    rubroGroups[normKey].totalActs++;
+                    if (pesoNum > 0 && (!rubroGroups[normKey].peso || rubroGroups[normKey].peso <= 0)) {
+                        rubroGroups[normKey].peso = pesoNum;
+                    }
+
+                    if (isValida) {
+                        rubroGroups[normKey].suma += val;
+                        rubroGroups[normKey].countValidas++;
+                        sumNotas += val;
+                    }
+                } else {
+                    nonExtraActsCount++;
+                    if (isValida) sumNotas += val;
+                }
+            }
+        });
+    }
+
+    let promBase = 0;
+    if (hasRubros) {
+        // Se promedian todas las actividades del mismo rubro antes de aplicar su ponderación porcentual
+        Object.values(rubroGroups).forEach(rg => {
+            if (rg.countValidas > 0 && rg.peso > 0) {
+                const promRubro = rg.suma / rg.countValidas;
+                promBase += promRubro * (rg.peso / 100);
+            }
+        });
+    } else {
+        promBase = nonExtraActsCount > 0 ? (sumNotas / nonExtraActsCount) : 0;
+    }
+
+    const promFinalNum = Math.min(10, promBase + sumPuntosExtra);
+
+    return {
+        promFinalNum,
+        promBase,
+        sumPuntosExtra,
+        hasRubros,
+        countNotas,
+        nonExtraActsCount,
+        rubroGroups
+    };
+};
+
 window.cargarAlumnosLista = async () => {
     const tbody = document.getElementById('listaMaestroAlumnos');
     const cabecera = document.getElementById('listaMaestroCabecera');
@@ -14595,15 +14699,17 @@ window.cargarAlumnosLista = async () => {
                 let actHeaders = hasActs 
                     ? acts.map(a => {
                         const actTituloSafe = a.titulo.replace(/'/g, "\\'");
-                        const extraLabel = a.rubro_peso && Number(a.rubro_peso) > 0 ? `+${a.rubro_peso} pts` : 'Extra';
-                        const rubroLabel = a.rubro_name ? `${a.rubro_peso}%` : extraLabel;
-                        const titleRubro = a.rubro_name ? a.rubro_name : (a.rubro_peso && Number(a.rubro_peso) > 0 ? `Extra (+${a.rubro_peso} pts)` : 'Sin Rubro');
-                        return `<th style="padding:12px; text-align:center; max-width:90px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;" title="${a.titulo} - ${titleRubro}">
+                        const extraLabel = a.rubro_peso && Number(a.rubro_peso) > 0 ? `+${a.rubro_peso} pts extra` : 'Extra';
+                        const rubroSubtext = a.rubro_name 
+                            ? `${a.rubro_name} (${a.rubro_peso || 0}%)` 
+                            : (a.rubro_peso && Number(a.rubro_peso) > 10 ? `Rubro (${a.rubro_peso}%)` : extraLabel);
+                        const titleRubro = a.rubro_name ? `${a.rubro_name} (${a.rubro_peso || 0}%)` : (a.rubro_peso && Number(a.rubro_peso) > 0 ? (Number(a.rubro_peso) <= 10 ? `Extra (+${a.rubro_peso} pts directos)` : `Rubro (${a.rubro_peso}%)`) : 'Sin Rubro');
+                        return `<th style="padding:12px; text-align:center; max-width:110px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;" title="${a.titulo} - ${titleRubro}">
                             <button class="btn btn-outline" style="border-color:var(--primary); color:var(--primary); font-size:0.6rem; padding:2px 4px; margin-bottom:4px; width:100%; display:flex; align-items:center; justify-content:center; gap:4px; border-radius:4px;" onclick="window.evaluarActividadMasiva('${a.id}', '${actTituloSafe}')" title="Asignar misma calificación a todos">
                                 <i class="fa-solid fa-bolt"></i> Masivo
                             </button>
-                            ${a.titulo}
-                            <br><span style="font-size:0.7rem; color:var(--text-muted); font-weight:normal">${rubroLabel}</span>
+                            <div style="font-weight:600; overflow:hidden; text-overflow:ellipsis;">${a.titulo}</div>
+                            <span style="font-size:0.7rem; color:var(--text-muted); font-weight:normal; display:block; overflow:hidden; text-overflow:ellipsis;">${rubroSubtext}</span>
                         </th>`;
                     }).join('')
                     : `<th style="padding:12px; text-align:center;">Actividades</th>`;
@@ -14638,35 +14744,8 @@ window.cargarAlumnosLista = async () => {
                     [1, 2, 3].forEach(t => {
                         const actsT = acts.filter(a => a.trimestre === t);
                         if(actsT.length === 0) return;
-                        let rubroGroups = {}, hasRubros = false, sumSimple = 0, countSimple = 0, sumPuntosExtra = 0;
-
-                        actsT.forEach(act => {
-                            const ev = evals.find(e => e.alumno_id === al.id && e.actividad_id === act.id);
-                            const val = ev ? parseFloat(ev.calificacion) || 0 : 0;
-                            const isValida = ev && ev.calificacion !== undefined && ev.calificacion !== null;
-                            if(act.rubro_name) {
-                                hasRubros = true;
-                                if(!rubroGroups[act.rubro_name]) rubroGroups[act.rubro_name] = { suma: 0, count: 0, peso: parseFloat(act.rubro_peso) || 0 };
-                                rubroGroups[act.rubro_name].count++;
-                                if(isValida) rubroGroups[act.rubro_name].suma += val;
-                            } else {
-                                const ptsConfig = parseFloat(act.rubro_peso) || 0;
-                                if(ptsConfig > 0 && isValida && val > 0) {
-                                    sumPuntosExtra += (val / 10) * ptsConfig;
-                                } else if(ptsConfig <= 0 && isValida) {
-                                    sumSimple += val;
-                                    countSimple++;
-                                }
-                            }
-                        });
-
-                        let promBase = 0;
-                        if(hasRubros) {
-                            Object.values(rubroGroups).forEach(rg => { if(rg.count > 0) promBase += (rg.suma / rg.count) * (rg.peso / 100); });
-                        } else {
-                            promBase = countSimple > 0 ? (sumSimple / countSimple) : 0;
-                        }
-                        promsTrim[t] = Math.min(10, promBase + sumPuntosExtra);
+                        const resT = window._calcularCalificacionAlumno({ alumnoId: al.id, acts: actsT, evals });
+                        promsTrim[t] = resT.promFinalNum;
                     });
 
                     const p1 = promsTrim[1], p2 = promsTrim[2], p3 = promsTrim[3];
@@ -14693,57 +14772,29 @@ window.cargarAlumnosLista = async () => {
                     </tr>`;
 
                 } else {
-                    let sumNotas = 0, countNotas = 0, actCells = '';
-                    let rubroGroups = {}, hasRubros = false, sumPuntosExtra = 0, nonExtraActsCount = 0;
+                    let actCells = '';
                     
                     if(hasActs) {
                         acts.forEach(act => {
                             const cellEval = evals.find(e => e.alumno_id === al.id && e.actividad_id === act.id);
-                            let val = 0, isValida = false;
                             const actTituloSafe = act.titulo.replace(/'/g, "\\'");
                             const alNombreSafe = al.nombre.replace(/'/g, "\\'");
                             
-                            if(cellEval && cellEval.calificacion !== undefined && cellEval.calificacion !== null) {
+                            if(cellEval && cellEval.calificacion !== undefined && cellEval.calificacion !== null && cellEval.calificacion !== '' && !isNaN(parseFloat(cellEval.calificacion))) {
                                 actCells += `<td id="cell_eval_${al.id}_${act.id}" style="text-align:center; padding:12px; font-weight:bold; color:var(--primary); cursor:pointer;" title="Click para editar" onclick="window.editarCalificacionLista('${al.id}', '${act.id}', '${cellEval.calificacion}', '${actTituloSafe}', '${alNombreSafe}', this)">${cellEval.calificacion} <i class="fa-solid fa-pen" style="font-size:0.6em; opacity:0.5;"></i></td>`;
-                                val = parseFloat(cellEval.calificacion) || 0;
-                                isValida = true;
-                                countNotas++;
                             } else {
                                 actCells += `<td id="cell_eval_${al.id}_${act.id}" style="text-align:center; padding:12px; color:var(--text-muted); cursor:pointer;" title="Click para calificar" onclick="window.editarCalificacionLista('${al.id}', '${act.id}', '', '${actTituloSafe}', '${alNombreSafe}', this)">- <i class="fa-solid fa-plus" style="font-size:0.6em; opacity:0.5;"></i></td>`;
-                            }
-
-                            if(act.rubro_name) {
-                                hasRubros = true;
-                                nonExtraActsCount++;
-                                if(!rubroGroups[act.rubro_name]) rubroGroups[act.rubro_name] = { suma: 0, count: 0, peso: parseFloat(act.rubro_peso) || 0 };
-                                rubroGroups[act.rubro_name].count++;
-                                if(isValida) {
-                                    rubroGroups[act.rubro_name].suma += val;
-                                    sumNotas += val;
-                                }
-                            } else {
-                                // Actividad Extra
-                                const ptsConfig = parseFloat(act.rubro_peso) || 0;
-                                if(ptsConfig > 0 && isValida && val > 0) {
-                                    sumPuntosExtra += (val / 10) * ptsConfig;
-                                } else if(ptsConfig <= 0) {
-                                    nonExtraActsCount++;
-                                    if(isValida) sumNotas += val;
-                                }
                             }
                         });
                     } else {
                         actCells = `<td style="text-align:center; padding:12px; color:var(--text-muted)">Sin acts.</td>`;
                     }
                     
-                    let promBase = 0;
-                    if (hasRubros) {
-                        Object.values(rubroGroups).forEach(rg => { if (rg.count > 0) promBase += (rg.suma / rg.count) * (rg.peso / 100); });
-                    } else {
-                        promBase = nonExtraActsCount > 0 ? (sumNotas / nonExtraActsCount) : 0;
-                    }
-
-                    promFinalNum = Math.min(10, promBase + sumPuntosExtra);
+                    const resCalc = window._calcularCalificacionAlumno({ alumnoId: al.id, acts, evals });
+                    promFinalNum = resCalc.promFinalNum;
+                    const promBase = resCalc.promBase;
+                    const sumPuntosExtra = resCalc.sumPuntosExtra;
+                    const countNotas = resCalc.countNotas;
                     
                     let extraBadge = sumPuntosExtra > 0 
                         ? ` <span title="Base: ${promBase.toFixed(2)} + ${sumPuntosExtra.toFixed(2)} pts extra" style="font-size:0.75rem; color:#16a34a; font-weight:700;">(+${sumPuntosExtra.toFixed(1)})</span>` 
@@ -14900,30 +14951,8 @@ window.cargarAlumnosLista = async () => {
                         [1, 2, 3].forEach(t => {
                             const actsT = acts.filter(a => a.trimestre === t);
                             if(actsT.length === 0) return;
-                            let rubroGroups = {}, hasRubros = false, sumSimple = 0, countSimple = 0, sumPuntosExtra = 0;
-                            actsT.forEach(act => {
-                                const ev = evals.find(e => e.alumno_id === al.id && e.actividad_id === act.id);
-                                const val = ev ? parseFloat(ev.calificacion) || 0 : 0;
-                                const isValida = ev && ev.calificacion !== undefined && ev.calificacion !== null;
-                                if(act.rubro_name) {
-                                    hasRubros = true;
-                                    if(!rubroGroups[act.rubro_name]) rubroGroups[act.rubro_name] = { suma: 0, count: 0, peso: parseFloat(act.rubro_peso) || 0 };
-                                    rubroGroups[act.rubro_name].count++;
-                                    if(isValida) rubroGroups[act.rubro_name].suma += val;
-                                } else {
-                                    const ptsConfig = parseFloat(act.rubro_peso) || 0;
-                                    if(ptsConfig > 0 && isValida && val > 0) {
-                                        sumPuntosExtra += (val / 10) * ptsConfig;
-                                    } else if(ptsConfig <= 0 && isValida) {
-                                        sumSimple += val; countSimple++;
-                                    }
-                                }
-                            });
-                            let promBase = 0;
-                            if(hasRubros) {
-                                Object.values(rubroGroups).forEach(rg => { if(rg.count > 0) promBase += (rg.suma / rg.count) * (rg.peso / 100); });
-                            } else { promBase = countSimple > 0 ? (sumSimple / countSimple) : 0; }
-                            promsTrim[t] = Math.min(10, promBase + sumPuntosExtra);
+                            const resT = window._calcularCalificacionAlumno({ alumnoId: al.id, acts: actsT, evals });
+                            promsTrim[t] = resT.promFinalNum;
                         });
                         t1 = redondearCalificacionSep(promsTrim[1]);
                         t2 = redondearCalificacionSep(promsTrim[2]);
@@ -14934,42 +14963,8 @@ window.cargarAlumnosLista = async () => {
                     currentSettledVal = historial?.find(h => h.alumno_id === al.id && h.trimestre === 4)?.calificacion;
                 } else {
                     if(hasActs) {
-                        let sumNotas = 0, countNotas = 0;
-                        let rubroGroups = {}, hasRubros = false, sumPuntosExtra = 0, nonExtraActsCount = 0;
-                        acts.forEach(act => {
-                            const ev = evals.find(e => e.alumno_id === al.id && e.actividad_id === act.id);
-                            let val = 0, isValida = false;
-                            if(ev && ev.calificacion !== undefined && ev.calificacion !== null) {
-                                val = parseFloat(ev.calificacion) || 0;
-                                isValida = true;
-                                countNotas++;
-                            }
-                            if(act.rubro_name) {
-                                hasRubros = true;
-                                nonExtraActsCount++;
-                                if(!rubroGroups[act.rubro_name]) rubroGroups[act.rubro_name] = { suma: 0, count: 0, peso: parseFloat(act.rubro_peso) || 0 };
-                                rubroGroups[act.rubro_name].count++;
-                                if(isValida) {
-                                    rubroGroups[act.rubro_name].suma += val;
-                                    sumNotas += val;
-                                }
-                            } else {
-                                const ptsConfig = parseFloat(act.rubro_peso) || 0;
-                                if(ptsConfig > 0 && isValida && val > 0) {
-                                    sumPuntosExtra += (val / 10) * ptsConfig;
-                                } else if(ptsConfig <= 0) {
-                                    nonExtraActsCount++;
-                                    if(isValida) sumNotas += val;
-                                }
-                            }
-                        });
-                        let promBase = 0;
-                        if (hasRubros) {
-                            Object.values(rubroGroups).forEach(rg => { if (rg.count > 0) promBase += (rg.suma / rg.count) * (rg.peso / 100); });
-                        } else {
-                            promBase = nonExtraActsCount > 0 ? (sumNotas / nonExtraActsCount) : 0;
-                        }
-                        promFinalNum = Math.min(10, promBase + sumPuntosExtra);
+                        const resCalc = window._calcularCalificacionAlumno({ alumnoId: al.id, acts, evals });
+                        promFinalNum = resCalc.promFinalNum;
                     }
                     currentSettledVal = historial?.find(h => h.alumno_id === al.id)?.calificacion;
                 }
@@ -15149,35 +15144,8 @@ window.recalcularFilaAlumno = (alumnoId) => {
         [1, 2, 3].forEach(t => {
             const actsT = acts.filter(a => a.trimestre === t);
             if (actsT.length === 0) return;
-            let rubroGroups = {}, hasRubros = false, sumSimple = 0, countSimple = 0, sumPuntosExtra = 0;
-
-            actsT.forEach(act => {
-                const ev = evals.find(e => e.alumno_id === alumnoId && e.actividad_id === act.id);
-                const val = ev ? parseFloat(ev.calificacion) || 0 : 0;
-                const isValida = ev && ev.calificacion !== undefined && ev.calificacion !== null && ev.calificacion !== '';
-                if (act.rubro_name) {
-                    hasRubros = true;
-                    if (!rubroGroups[act.rubro_name]) rubroGroups[act.rubro_name] = { suma: 0, count: 0, peso: parseFloat(act.rubro_peso) || 0 };
-                    rubroGroups[act.rubro_name].count++;
-                    if (isValida) rubroGroups[act.rubro_name].suma += val;
-                } else {
-                    const ptsConfig = parseFloat(act.rubro_peso) || 0;
-                    if (ptsConfig > 0 && isValida && val > 0) {
-                        sumPuntosExtra += (val / 10) * ptsConfig;
-                    } else if (ptsConfig <= 0 && isValida) {
-                        sumSimple += val;
-                        countSimple++;
-                    }
-                }
-            });
-
-            let promBase = 0;
-            if (hasRubros) {
-                Object.values(rubroGroups).forEach(rg => { if (rg.count > 0) promBase += (rg.suma / rg.count) * (rg.peso / 100); });
-            } else {
-                promBase = countSimple > 0 ? (sumSimple / countSimple) : 0;
-            }
-            promsTrim[t] = Math.min(10, promBase + sumPuntosExtra);
+            const resT = window._calcularCalificacionAlumno({ alumnoId, acts: actsT, evals });
+            promsTrim[t] = resT.promFinalNum;
         });
 
         const p1 = promsTrim[1], p2 = promsTrim[2], p3 = promsTrim[3];
@@ -15189,48 +15157,11 @@ window.recalcularFilaAlumno = (alumnoId) => {
         const badgeEl = document.getElementById(`badge_alumno_${alumnoId}`);
         if (badgeEl) badgeEl.innerHTML = badge;
     } else {
-        let sumNotas = 0, countNotas = 0;
-        let rubroGroups = {}, hasRubros = false, sumPuntosExtra = 0, nonExtraActsCount = 0;
-
-        if (acts && acts.length > 0) {
-            acts.forEach(act => {
-                const ev = evals.find(e => e.alumno_id === alumnoId && e.actividad_id === act.id);
-                let val = 0, isValida = false;
-                if (ev && ev.calificacion !== undefined && ev.calificacion !== null && ev.calificacion !== '') {
-                    val = parseFloat(ev.calificacion) || 0;
-                    isValida = true;
-                    countNotas++;
-                }
-
-                if (act.rubro_name) {
-                    hasRubros = true;
-                    nonExtraActsCount++;
-                    if (!rubroGroups[act.rubro_name]) rubroGroups[act.rubro_name] = { suma: 0, count: 0, peso: parseFloat(act.rubro_peso) || 0 };
-                    rubroGroups[act.rubro_name].count++;
-                    if (isValida) {
-                        rubroGroups[act.rubro_name].suma += val;
-                        sumNotas += val;
-                    }
-                } else {
-                    const ptsConfig = parseFloat(act.rubro_peso) || 0;
-                    if (ptsConfig > 0 && isValida && val > 0) {
-                        sumPuntosExtra += (val / 10) * ptsConfig;
-                    } else if (ptsConfig <= 0) {
-                        nonExtraActsCount++;
-                        if (isValida) sumNotas += val;
-                    }
-                }
-            });
-        }
-
-        let promBase = 0;
-        if (hasRubros) {
-            Object.values(rubroGroups).forEach(rg => { if (rg.count > 0) promBase += (rg.suma / rg.count) * (rg.peso / 100); });
-        } else {
-            promBase = nonExtraActsCount > 0 ? (sumNotas / nonExtraActsCount) : 0;
-        }
-
-        promFinalNum = Math.min(10, promBase + sumPuntosExtra);
+        const resCalc = window._calcularCalificacionAlumno({ alumnoId, acts, evals });
+        promFinalNum = resCalc.promFinalNum;
+        const promBase = resCalc.promBase;
+        const sumPuntosExtra = resCalc.sumPuntosExtra;
+        const countNotas = resCalc.countNotas;
 
         let extraBadge = sumPuntosExtra > 0 
             ? ` <span title="Base: ${promBase.toFixed(2)} + ${sumPuntosExtra.toFixed(2)} pts extra" style="font-size:0.75rem; color:#16a34a; font-weight:700;">(+${sumPuntosExtra.toFixed(1)})</span>` 
@@ -15784,51 +15715,8 @@ window.cargarBoletasGrupo = async () => {
             } else {
                 // Cálculo de Seguimiento del trimestre actual
                 if(hasActs) {
-                    let rubroGroups = {};
-                    let hasRubros = false;
-                    let sumNotas = 0;
-                    let sumPuntosExtra = 0;
-                    let nonExtraActsCount = 0;
-                    
-                    acts.forEach(act => {
-                        const cellEval = evals.find(e => e.alumno_id === al.id && e.actividad_id === act.id);
-                        let val = cellEval ? (parseFloat(cellEval.calificacion)||0) : 0;
-                        let isValida = cellEval && cellEval.calificacion !== undefined && cellEval.calificacion !== null;
-                        
-                        if(act.rubro_name) {
-                            hasRubros = true;
-                            nonExtraActsCount++;
-                            let rName = act.rubro_name;
-                            if(!rubroGroups[rName]) rubroGroups[rName] = { suma:0, count:0, peso: parseFloat(act.rubro_peso)||0 };
-                            
-                            rubroGroups[rName].count++;
-                            if(isValida) {
-                                rubroGroups[rName].suma += val;
-                                sumNotas += val;
-                            }
-                        } else {
-                            // Actividad Extra / Sin Rubro
-                            const ptsConfig = parseFloat(act.rubro_peso) || 0;
-                            if(ptsConfig > 0 && isValida && val > 0) {
-                                sumPuntosExtra += (val / 10) * ptsConfig;
-                            } else if(ptsConfig <= 0) {
-                                nonExtraActsCount++;
-                                if(isValida) sumNotas += val;
-                            }
-                        }
-                    });
-
-                    let promBase = 0;
-                    if(hasRubros) {
-                        Object.keys(rubroGroups).forEach(k => {
-                            let rg = rubroGroups[k];
-                            let promRubro = rg.count > 0 ? (rg.suma / rg.count) : 0;
-                            promBase += promRubro * (rg.peso / 100);
-                        });
-                    } else {
-                        promBase = nonExtraActsCount > 0 ? (sumNotas / nonExtraActsCount) : 0;
-                    }
-                    promFinalNum = Math.min(10, promBase + sumPuntosExtra);
+                    const resCalc = window._calcularCalificacionAlumno({ alumnoId: al.id, acts, evals });
+                    promFinalNum = resCalc.promFinalNum;
                 }
                 currentSettledVal = historial?.find(h => h.alumno_id === al.id)?.calificacion;
             }
