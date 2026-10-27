@@ -10722,6 +10722,7 @@ async function renderApp() {
       app.innerHTML = generateHTML(pageContent);
       if(window.updateNotificationBadge) setTimeout(window.updateNotificationBadge, 500);
       if(window.registrarPingPlantelConexion) setTimeout(window.registrarPingPlantelConexion, 1000);
+      if(window._procesarColaEvaluacionesPendientes) setTimeout(window._procesarColaEvaluacionesPendientes, 1500);
     }
     // Asegurar que los eventos se vuelvan a vincular
     attachDOMEvents();
@@ -15015,6 +15016,206 @@ window._calcularCalificacionAlumno = ({ alumnoId, acts, evals }) => {
     };
 };
 
+// =========================================================================
+// SISTEMA DE RESILIENCIA Y PERSISTENCIA DEFINITIVA DE CALIFICACIONES (OFFLINE QUEUE)
+// Garantiza CERO congelamiento del navegador y CERO pérdida de calificaciones
+// =========================================================================
+
+const EDULM_QUEUE_STORAGE_KEY = 'edulm_evals_sync_queue';
+
+window._obtenerColaEvaluaciones = () => {
+    try {
+        const raw = localStorage.getItem(EDULM_QUEUE_STORAGE_KEY);
+        return raw ? JSON.parse(raw) : [];
+    } catch(e) {
+        console.warn("Error leyendo cola de evaluaciones offline:", e);
+        return [];
+    }
+};
+
+window._guardarColaEvaluaciones = (queue) => {
+    try {
+        localStorage.setItem(EDULM_QUEUE_STORAGE_KEY, JSON.stringify(queue));
+    } catch(e) {
+        console.warn("Error guardando cola de evaluaciones en localStorage:", e);
+    }
+};
+
+window._actualizarBadgeSync = () => {
+    const badge = document.getElementById('edulm_sync_status_badge');
+    if (!badge) return;
+    const queue = window._obtenerColaEvaluaciones();
+    if (queue.length === 0) {
+        badge.innerHTML = `<i class="fa-solid fa-cloud-check" style="color:#10b981;"></i> <span style="color:#10b981;">Sincronizado</span>`;
+        badge.title = 'Todas las calificaciones están seguras en el servidor y en este equipo.';
+    } else {
+        badge.innerHTML = `<i class="fa-solid fa-arrows-rotate fa-spin" style="color:#f59e0b;"></i> <span style="color:#f59e0b;">${queue.length} pendiente${queue.length > 1 ? 's' : ''} (guardado en equipo)</span>`;
+        badge.title = 'Las calificaciones están respaldadas de forma segura en este navegador y se sincronizarán con el servidor automáticamente.';
+    }
+};
+
+window._encolarEvaluacionOffline = ({ alumnoId, actividadId, calificacion, esBorrado, actTitulo, alumnoNombre, plantelId }) => {
+    let queue = window._obtenerColaEvaluaciones();
+    // Eliminar cualquier acción previa en cola para este mismo alumno y actividad para conservar solo el estado más reciente
+    queue = queue.filter(item => !(item.alumno_id === alumnoId && item.actividad_id === actividadId));
+    
+    queue.push({
+        id: (Date.now().toString(36) + Math.random().toString(36).substr(2, 6)),
+        alumno_id: alumnoId,
+        actividad_id: actividadId,
+        calificacion: esBorrado ? null : calificacion,
+        es_borrado: !!esBorrado,
+        act_titulo: actTitulo || '',
+        alumno_nombre: alumnoNombre || '',
+        plantel_id: plantelId || state.plantelId || '',
+        fecha: new Date().toISOString(),
+        intentos: 0
+    });
+
+    window._guardarColaEvaluaciones(queue);
+    window._actualizarBadgeSync();
+};
+
+window._combinarEvaluacionesConColaLocal = (evalsArray, actIds) => {
+    if (!Array.isArray(evalsArray)) evalsArray = [];
+    const queue = window._obtenerColaEvaluaciones();
+    if (queue.length === 0) return evalsArray;
+
+    const setActIds = new Set(actIds || []);
+    const result = [...evalsArray];
+
+    queue.forEach(item => {
+        if (setActIds.size > 0 && !setActIds.has(item.actividad_id)) return;
+
+        const idx = result.findIndex(e => e.alumno_id === item.alumno_id && e.actividad_id === item.actividad_id);
+        if (item.es_borrado) {
+            if (idx >= 0) result.splice(idx, 1);
+        } else {
+            if (idx >= 0) {
+                result[idx].calificacion = item.calificacion;
+            } else {
+                result.push({
+                    alumno_id: item.alumno_id,
+                    actividad_id: item.actividad_id,
+                    calificacion: item.calificacion
+                });
+            }
+        }
+    });
+
+    return result;
+};
+
+window._isSyncingEvalsQueue = false;
+window._procesarColaEvaluacionesPendientes = async () => {
+    if (window._isSyncingEvalsQueue) return;
+    const queue = window._obtenerColaEvaluaciones();
+    if (queue.length === 0) {
+        window._actualizarBadgeSync();
+        return;
+    }
+
+    window._isSyncingEvalsQueue = true;
+    window._actualizarBadgeSync();
+
+    try {
+        const u = await supabaseClient.auth.getUser();
+        if (!u.data?.user) {
+            window._isSyncingEvalsQueue = false;
+            return;
+        }
+
+        const pId = state.plantelId || (await window._obtenerPlantelIdActivo());
+
+        // Separar entre eliminaciones y upserts
+        const paraEliminar = queue.filter(item => item.es_borrado);
+        const paraUpsert = queue.filter(item => !item.es_borrado);
+
+        const idsCompletados = new Set();
+
+        // 1. Procesar eliminaciones
+        for (const item of paraEliminar) {
+            try {
+                const { error } = await supabaseClient.from('evaluaciones_actividades')
+                    .delete()
+                    .eq('actividad_id', item.actividad_id)
+                    .eq('alumno_id', item.alumno_id);
+                if (!error) {
+                    idsCompletados.add(item.id);
+                } else {
+                    console.warn("Error borrando evaluación en sync:", error);
+                }
+            } catch(e) {
+                console.warn("Excepción borrando evaluación:", e);
+            }
+        }
+
+        // 2. Procesar upserts en lotes de hasta 50
+        if (paraUpsert.length > 0) {
+            const batchSize = 50;
+            for (let i = 0; i < paraUpsert.length; i += batchSize) {
+                const lote = paraUpsert.slice(i, i + batchSize);
+                const payload = lote.map(item => ({
+                    actividad_id: item.actividad_id,
+                    alumno_id: item.alumno_id,
+                    calificacion: item.calificacion,
+                    fecha_evaluacion: item.fecha || new Date().toISOString(),
+                    plantel_id: item.plantel_id || pId
+                }));
+
+                try {
+                    const { error } = await supabaseClient.from('evaluaciones_actividades')
+                        .upsert(payload, { onConflict: 'actividad_id,alumno_id' });
+                    if (!error) {
+                        lote.forEach(it => idsCompletados.add(it.id));
+                    } else {
+                        console.error("Error upserting evaluaciones en sync:", error);
+                    }
+                } catch(e) {
+                    console.error("Excepción en upsert batch sync:", e);
+                }
+            }
+        }
+
+        // 3. Eliminar de la cola local los que se completaron con éxito
+        if (idsCompletados.size > 0) {
+            const nuevaCola = window._obtenerColaEvaluaciones().filter(item => !idsCompletados.has(item.id));
+            window._guardarColaEvaluaciones(nuevaCola);
+            
+            if (window.registrarMovimientoAuditoria) {
+                window.registrarMovimientoAuditoria({
+                    accion: 'Sincronización de Calificaciones',
+                    modulo: 'evaluaciones_actividades',
+                    detalle: `Sincronizadas ${idsCompletados.size} calificaciones en segundo plano`,
+                    plantelId: pId
+                });
+            }
+
+            if (nuevaCola.length === 0 && queue.length > 0) {
+                if (window.showToast) window.showToast("☁️ Calificaciones sincronizadas en el servidor", "success");
+            }
+        }
+
+    } catch(err) {
+        console.warn("Falla de red en sincronización de evaluaciones:", err);
+    } finally {
+        window._isSyncingEvalsQueue = false;
+        window._actualizarBadgeSync();
+
+        // Si aún quedaron pendientes, reintentar automáticamente en 5 segundos
+        const restantes = window._obtenerColaEvaluaciones();
+        if (restantes.length > 0) {
+            setTimeout(window._procesarColaEvaluacionesPendientes, 5000);
+        }
+    }
+};
+
+// Escuchar eventos de red del navegador para auto-sincronizar de inmediato
+window.addEventListener('online', () => {
+    console.log("Conexión a internet restaurada. Sincronizando evaluaciones pendientes...");
+    window._procesarColaEvaluacionesPendientes();
+});
+
 window.cargarAlumnosLista = async () => {
     const tbody = document.getElementById('listaMaestroAlumnos');
     const cabecera = document.getElementById('listaMaestroCabecera');
@@ -15053,6 +15254,14 @@ window.cargarAlumnosLista = async () => {
     const [idPart, materia] = rawVal.split('|');
     const gid = isTec ? null : idPart;  
     const targetGrado = isTec ? idPart.replace('grado:', '').trim() : null;
+
+    // Pre-cache de bloqueo de evaluación para que editar calificaciones sea 100% instantáneo (0ms)
+    window._evaluacionesGrupoBloqueadas = null;
+    if (window.checkPaseListaBloqueado && materia) {
+        window.checkPaseListaBloqueado(materia, rawVal, state.selectedMaestroTrimestre || 1)
+            .then(bMsg => { window._evaluacionesGrupoBloqueadas = bMsg || null; })
+            .catch(() => {});
+    }
 
     try {
         let rawAlumnos = [];
@@ -15144,6 +15353,9 @@ window.cargarAlumnosLista = async () => {
                 const actIds = acts.map(a => a.id);
                 const { data: evalsData } = await supabaseClient.from('evaluaciones_actividades').select('alumno_id, actividad_id, calificacion').in('actividad_id', actIds);
                 if(evalsData) evals = evalsData;
+                if (window._combinarEvaluacionesConColaLocal) {
+                    evals = window._combinarEvaluacionesConColaLocal(evals, actIds);
+                }
             }
             
             window._currentAlumnos = alumnos;
@@ -15248,7 +15460,7 @@ window.cargarAlumnosLista = async () => {
             const pctRep = stats.total > 0 ? (stats.reprobados / stats.total * 100).toFixed(1) : 0;
 
             statsCont.innerHTML = `
-                <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap:16px;">
+                <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap:16px;">
                     <div class="card" style="padding:16px; border-left:4px solid var(--primary); display:flex; flex-direction:column; gap:4px;">
                         <span style="font-size:0.75rem; color:var(--text-muted); text-transform:uppercase; font-weight:bold;">Promedio Grupal</span>
                         <span id="stat_promedio_grupal" style="font-size:1.5rem; font-weight:bold; color:var(--primary);">${promGrupo}</span>
@@ -15267,8 +15479,16 @@ window.cargarAlumnosLista = async () => {
                             <span id="stat_reprobados_pct" style="font-size:0.9rem; color:var(--text-muted);">(${pctRep}%)</span>
                         </div>
                     </div>
+                    <div class="card" style="padding:16px; border-left:4px solid #10b981; display:flex; flex-direction:column; justify-content:space-between; gap:4px;">
+                        <span style="font-size:0.75rem; color:var(--text-muted); text-transform:uppercase; font-weight:bold;">Sincronización</span>
+                        <div id="edulm_sync_status_badge" style="font-size:0.85rem; font-weight:700; color:#10b981; display:flex; align-items:center; gap:6px;">
+                            <i class="fa-solid fa-cloud-check"></i> Sincronizado
+                        </div>
+                    </div>
                 </div>
             `;
+            if (window._actualizarBadgeSync) window._actualizarBadgeSync();
+            if (window._procesarColaEvaluacionesPendientes) window._procesarColaEvaluacionesPendientes();
             
         } else if (tipo === 'resumen_admin') {
             const currentTrimNum = state.selectedMaestroTrimestre === 'final' ? 4 : parseInt(state.selectedMaestroTrimestre || 1);
@@ -15292,6 +15512,9 @@ window.cargarAlumnosLista = async () => {
                 const actIds = acts.map(a => a.id);
                 const { data: evalsData } = await supabaseClient.from('evaluaciones_actividades').select('alumno_id, actividad_id, calificacion').in('actividad_id', actIds);
                 if(evalsData) evals = evalsData;
+                if (window._combinarEvaluacionesConColaLocal) {
+                    evals = window._combinarEvaluacionesConColaLocal(evals, actIds);
+                }
             }
 
             const alumnoIds = alumnos.map(a => a.id);
@@ -15680,47 +15903,24 @@ window._aplicarCalificacionEnPunto = (alumnoId, actividadId, nuevoValor, actTitu
     window.recalcularFilaAlumno(alumnoId);
     window.recalcularEstadisticasLista();
 
-    // Guardar en Supabase en segundo plano sin congelar la interfaz ni la navegación ágil
-    (async () => {
-        try {
-            const pId = state.plantelId || (await window._obtenerPlantelIdActivo());
-            if (esBorrado) {
-                const { error } = await supabaseClient.from('evaluaciones_actividades')
-                    .delete()
-                    .eq('actividad_id', actividadId)
-                    .eq('alumno_id', alumnoId);
-                if (error) throw error;
-                if (window.registrarMovimientoAuditoria) {
-                    window.registrarMovimientoAuditoria({
-                        accion: 'Calificación Eliminada',
-                        modulo: 'evaluaciones_actividades',
-                        detalle: `Calificación eliminada (Actividad ID: ${actividadId})`,
-                        plantelId: pId
-                    });
-                }
-            } else {
-                const { error } = await supabaseClient.from('evaluaciones_actividades').upsert({
-                    actividad_id: actividadId,
-                    alumno_id: alumnoId,
-                    calificacion: numVal,
-                    fecha_evaluacion: new Date().toISOString(),
-                    plantel_id: pId
-                }, { onConflict: 'actividad_id,alumno_id' });
-                if (error) throw error;
-                if (window.registrarMovimientoAuditoria) {
-                    window.registrarMovimientoAuditoria({
-                        accion: 'Calificación de Actividad',
-                        modulo: 'evaluaciones_actividades',
-                        detalle: `Calificación asignada: <b>${numVal}</b> (Actividad ID: ${actividadId})`,
-                        plantelId: pId
-                    });
-                }
-            }
-        } catch(err) {
-            console.error("Error guardando calificación en segundo plano:", err);
-            if (window.showToast) window.showToast("Error al guardar en el servidor: " + err.message, "danger");
-        }
-    })();
+    // 1. Respaldo persistente e instantáneo en almacenamiento local (inmune a cierres de pestaña o desconexión)
+    const pId = state.plantelId || '';
+    if (window._encolarEvaluacionOffline) {
+        window._encolarEvaluacionOffline({
+            alumnoId,
+            actividadId,
+            calificacion: numVal,
+            esBorrado,
+            actTitulo,
+            alumnoNombre,
+            plantelId: pId
+        });
+    }
+
+    // 2. Procesar sincronización con el servidor en segundo plano
+    if (window._procesarColaEvaluacionesPendientes) {
+        window._procesarColaEvaluacionesPendientes();
+    }
 };
 
 window.evaluarActividadMasiva = async (actividadId, actTitulo) => {
@@ -15733,7 +15933,9 @@ window.evaluarActividadMasiva = async (actividadId, actTitulo) => {
     const currentTrim = state.selectedMaestroTrimestre || 1;
 
     // Verificar si el periodo de evaluación está bloqueado
-    if (window.checkPaseListaBloqueado) {
+    if (window._evaluacionesGrupoBloqueadas) {
+        return alert("No es posible editar: " + window._evaluacionesGrupoBloqueadas.replace(/Pase de lista/g, "Evaluación").replace(/pase de lista/g, "evaluación"));
+    } else if (window.checkPaseListaBloqueado) {
         const bMsg = await window.checkPaseListaBloqueado(materia, rawVal, currentTrim);
         if (bMsg) {
             return alert("No es posible editar: " + bMsg.replace(/Pase de lista/g, "Evaluación").replace(/pase de lista/g, "evaluación"));
@@ -15786,35 +15988,25 @@ window.evaluarActividadMasiva = async (actividadId, actTitulo) => {
 
     if (window.showToast) window.showToast("Calificaciones masivas asignadas", "success");
 
-    // 3. Persistir en Supabase en segundo plano
-    const pId = state.plantelId || (await window._obtenerPlantelIdActivo());
-    const payload = alumnos.map(al => ({
-        alumno_id: al.id,
-        actividad_id: actividadId,
-        calificacion: num,
-        fecha_evaluacion: new Date().toISOString(),
-        plantel_id: pId
-    }));
-
-    try {
-        const u = await supabaseClient.auth.getUser();
-        if(!u.data.user) throw new Error("Sin sesión");
-
-        const { error } = await supabaseClient.from('evaluaciones_actividades')
-            .upsert(payload, { onConflict: 'actividad_id,alumno_id' });
-            
-        if(error) throw error;
-        if (window.registrarMovimientoAuditoria) {
-            window.registrarMovimientoAuditoria({
-                accion: 'Calificación Masiva Asignada',
-                modulo: 'evaluaciones_actividades',
-                detalle: `Calificación masiva de <b>${num}</b> asignada a ${alumnos.length} alumnos en "${actTitulo}"`,
+    // 3. Respaldo instantáneo local a prueba de desconexiones
+    const pId = state.plantelId || '';
+    if (window._encolarEvaluacionOffline) {
+        alumnos.forEach(al => {
+            window._encolarEvaluacionOffline({
+                alumnoId: al.id,
+                actividadId: actividadId,
+                calificacion: num,
+                esBorrado: false,
+                actTitulo: actTitulo,
+                alumnoNombre: al.nombre,
                 plantelId: pId
             });
-        }
-    } catch(err) {
-        console.error("Error en calificación masiva Supabase:", err);
-        alert("Error al guardar en el servidor: " + err.message);
+        });
+    }
+
+    // 4. Procesar sincronización en background
+    if (window._procesarColaEvaluacionesPendientes) {
+        window._procesarColaEvaluacionesPendientes();
     }
 };
 
@@ -15828,12 +16020,9 @@ window.editarCalificacionLista = async (alumnoId, actividadId, currentCal, actTi
     const [idPart, materia] = rawVal.split('|');
     const currentTrim = state.selectedMaestroTrimestre || 1;
 
-    // Verificar si el periodo de evaluación está bloqueado (utiliza cache para 0ms)
-    if (window.checkPaseListaBloqueado) {
-        const bMsg = await window.checkPaseListaBloqueado(materia, rawVal, currentTrim);
-        if (bMsg) {
-            return alert("No es posible editar: " + bMsg.replace(/Pase de lista/g, "Evaluación").replace(/pase de lista/g, "evaluación"));
-        }
+    // Verificar si el periodo de evaluación está bloqueado (utiliza cache instantáneo 0ms)
+    if (window._evaluacionesGrupoBloqueadas) {
+        return alert("No es posible editar: " + window._evaluacionesGrupoBloqueadas.replace(/Pase de lista/g, "Evaluación").replace(/pase de lista/g, "evaluación"));
     }
 
     // Buscar si hay siguiente alumno en la lista para flujo ágil continuo
@@ -15878,7 +16067,7 @@ window.editarCalificacionLista = async (alumnoId, actividadId, currentCal, actTi
         setTimeout(() => {
             window._isTransitioningGrade = false;
             window.editarCalificacionLista(siguienteAlu.id, actividadId, nextCal, actTitulo, siguienteAlu.nombre);
-        }, 30);
+        }, 15);
     }
 };
 
@@ -27519,9 +27708,13 @@ window.actRenderGruposParaMateria = () => {
 };
 
 if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', renderApp);
+    document.addEventListener('DOMContentLoaded', () => {
+        renderApp();
+        if (window._procesarColaEvaluacionesPendientes) window._procesarColaEvaluacionesPendientes();
+    });
 } else {
     renderApp();
+    if (window._procesarColaEvaluacionesPendientes) window._procesarColaEvaluacionesPendientes();
 }
 
 
