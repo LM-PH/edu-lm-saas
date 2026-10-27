@@ -100,6 +100,30 @@ CREATE TRIGGER audit_autorizaciones_trigger
 AFTER INSERT OR UPDATE OR DELETE ON public.autorizaciones_movimientos
 FOR EACH ROW EXECUTE FUNCTION public.audit_trigger_func();
 
+-- E) Evaluaciones de Actividades (Calificaciones de Actividades por Maestros)
+DROP TRIGGER IF EXISTS audit_evaluaciones_actividades_trigger ON public.evaluaciones_actividades;
+CREATE TRIGGER audit_evaluaciones_actividades_trigger
+AFTER INSERT OR UPDATE OR DELETE ON public.evaluaciones_actividades
+FOR EACH ROW EXECUTE FUNCTION public.audit_trigger_func();
+
+-- F) Actividades de Maestro (Tareas creadas por Maestros)
+DROP TRIGGER IF EXISTS audit_actividades_maestro_trigger ON public.actividades_maestro;
+CREATE TRIGGER audit_actividades_maestro_trigger
+AFTER INSERT OR UPDATE OR DELETE ON public.actividades_maestro
+FOR EACH ROW EXECUTE FUNCTION public.audit_trigger_func();
+
+-- G) Comunicados y Avisos Escolares
+DROP TRIGGER IF EXISTS audit_comunicados_trigger ON public.comunicados;
+CREATE TRIGGER audit_comunicados_trigger
+AFTER INSERT OR UPDATE OR DELETE ON public.comunicados
+FOR EACH ROW EXECUTE FUNCTION public.audit_trigger_func();
+
+-- H) Alumnos (Inscripciones y Modificaciones)
+DROP TRIGGER IF EXISTS audit_alumnos_trigger ON public.alumnos;
+CREATE TRIGGER audit_alumnos_trigger
+AFTER INSERT OR UPDATE OR DELETE ON public.alumnos
+FOR EACH ROW EXECUTE FUNCTION public.audit_trigger_func();
+
 -- ==============================================================================
 -- Fin del script
 -- ==============================================================================

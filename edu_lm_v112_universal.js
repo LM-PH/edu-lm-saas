@@ -1018,10 +1018,10 @@ function renderSidebar() {
   const menus = {
     master: [
       { name: 'Administración SaaS', path: '/master/saas', icon: 'fa-globe' },
+      { name: 'Auditoría y Movimientos', path: '/master/auditoria', icon: 'fa-user-shield' },
       ...(state.plantelId ? [
           { type: 'divider', text: `Gestionando: ${CONFIG.schoolName}` },
-          { name: 'Directorio de Gestión', path: '/master/gestion-perfiles', icon: 'fa-address-book' },
-      { name: 'Auditoría de Actividad', path: '/master/auditoria', icon: 'fa-user-secret' }
+          { name: 'Directorio de Gestión', path: '/master/gestion-perfiles', icon: 'fa-address-book' }
       ] : [])
     ],
     admin: [
@@ -9806,6 +9806,8 @@ async function renderMasterSaaS() {
                 .order('fecha_conexion', { ascending: false });
                 
             if (ultimas) {
+                window._ultimasConexionesSaaS = ultimas;
+                window._plantelesSaaSCache = planteles || [];
                 for (const c of ultimas) {
                     if (c.rol === 'ROBOT' || (c.nombre && c.nombre.includes('Robot'))) {
                         if (!ultimoRobotTime) ultimoRobotTime = c.fecha_conexion;
@@ -9848,18 +9850,25 @@ async function renderMasterSaaS() {
             };
         });
 
+        setTimeout(() => {
+            if (window.loadRadarMovimientosMaster) window.loadRadarMovimientosMaster();
+        }, 80);
+
         return `
         <div class="page-header" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:16px;">
           <div>
             <h2 class="page-title"><i class="fa-solid fa-crown" style="color:#eab308; margin-right:8px;"></i> Centro de Mando del Creador</h2>
-            <p class="page-subtitle">Monitoreo global en tiempo real: 1 última conexión registrada por plantel.</p>
+            <p class="page-subtitle">Monitoreo global en tiempo real: Conexiones, Evaluaciones y Movimientos de todos los planteles.</p>
           </div>
           <div style="display:flex; gap:10px; flex-wrap:wrap;">
+            <button class="btn btn-outline" onclick="window.navigate('/master/auditoria')" style="font-weight:600; background:var(--card-bg, #fff);">
+                <i class="fa-solid fa-user-shield" style="color:var(--primary);"></i> Auditoría Forense y Movimientos
+            </button>
             <button class="btn btn-outline" onclick="window.descargarRespaldoCompletoMaster()" style="font-weight:600; background:var(--card-bg, #fff);">
-                <i class="fa-solid fa-download" style="color:var(--primary);"></i> Descargar Respaldo Total
+                <i class="fa-solid fa-download" style="color:var(--primary);"></i> Respaldo Total
             </button>
             <button class="btn btn-primary" onclick="window.probarPingMaster()" style="font-weight:600;">
-                <i class="fa-solid fa-bolt"></i> Probar Ping DB
+                <i class="fa-solid fa-bolt"></i> Ping DB
             </button>
           </div>
         </div>
@@ -9892,75 +9901,125 @@ async function renderMasterSaaS() {
            </div>
         </div>
 
-        <!-- TABLA DE ULTIMA CONEXION REAL POR PLANTEL (1 FILA POR PLANTEL) -->
+        <!-- RADAR DE MOVIMIENTOS EN TIEMPO REAL (TODOS LOS PERFILES) -->
+        <div class="card shadow-md" style="margin-bottom:32px; border-radius:24px;">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; flex-wrap:wrap; gap:12px;">
+                <div>
+                    <h3 style="margin:0; font-size:1.25rem; font-weight:800; color:var(--primary);">
+                        <i class="fa-solid fa-satellite-dish" style="color:var(--primary); margin-right:6px;"></i> Radar de Actividad y Movimientos en Vivo
+                    </h3>
+                    <p style="margin:4px 0 0 0; font-size:0.8rem; color:var(--text-muted);">
+                        Acciones en tiempo real de Maestros, Alumnos, Directivos y Personal de todos los planteles.
+                    </p>
+                </div>
+                <div style="display:flex; gap:8px; flex-wrap:wrap;">
+                    <button class="btn btn-sm btn-outline" onclick="window.loadRadarMovimientosMaster()" title="Actualizar radar">
+                        <i class="fa-solid fa-arrows-rotate"></i> Actualizar
+                    </button>
+                    <button class="btn btn-sm btn-primary" onclick="window.navigate('/master/auditoria')" style="font-weight:700;">
+                        <i class="fa-solid fa-user-shield"></i> Ver Auditoría Forense Completa
+                    </button>
+                </div>
+            </div>
+
+            <!-- FILTROS RAPIDOS DEL RADAR -->
+            <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px; margin-bottom:16px; padding-bottom:14px; border-bottom:1px solid var(--border);">
+                <div style="display:flex; gap:6px; flex-wrap:wrap;" id="radarFilterTabs">
+                    <button class="btn btn-sm btn-primary" onclick="window.filterRadarMovimientos('todos', this)">⚡ Todos</button>
+                    <button class="btn btn-sm btn-outline" onclick="window.filterRadarMovimientos('MAESTRO', this)">👩‍🏫 Maestros y Evaluaciones</button>
+                    <button class="btn btn-sm btn-outline" onclick="window.filterRadarMovimientos('CONEXION', this)">🔑 Inicios de Sesión</button>
+                    <button class="btn btn-sm btn-outline" onclick="window.filterRadarMovimientos('COMUNICADO', this)">📢 Avisos</button>
+                    <button class="btn btn-sm btn-outline" onclick="window.filterRadarMovimientos('ALUMNO', this)">🎓 Alumnos</button>
+                </div>
+                <div style="min-width:240px; flex:1; max-width:320px;">
+                    <input type="text" id="radarSearchInput" class="form-input" style="padding:6px 12px; font-size:0.8rem;" placeholder="Buscar maestra, usuario o plantel..." onkeyup="window.searchRadarMovimientos(this.value)">
+                </div>
+            </div>
+
+            <div id="radarMovimientosFeed" style="max-height:480px; overflow-y:auto; padding-right:6px;">
+                <div style="text-align:center; padding:30px; color:var(--text-muted);">
+                    <i class="fa-solid fa-spinner fa-spin fa-2x" style="color:var(--primary); margin-bottom:8px;"></i>
+                    <div>Sintonizando radar de movimientos del sistema...</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- TABLA DE CONEXIONES REGISTRADAS -->
         <div class="card shadow-md" style="margin-bottom:32px; border-radius:24px;">
             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px; flex-wrap:wrap; gap:10px;">
                 <h3 style="margin:0; font-size:1.2rem; font-weight:800; color:var(--primary);">
-                    <i class="fa-solid fa-clock-rotate-left"></i> Última Conexión Registrada por Plantel
+                    <i class="fa-solid fa-clock-rotate-left"></i> Conexiones al Sistema
                 </h3>
-                <span style="font-size:0.8rem; background:#e0f2fe; color:#0369a1; padding:4px 12px; border-radius:20px; font-weight:700;">
-                    <i class="fa-solid fa-tower-broadcast"></i> Sincronización Global Multidispositivo
-                </span>
+                <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+                    <button class="btn btn-sm btn-outline" id="btnToggleConexionesView" onclick="window.toggleVistaConexionesMaster()">
+                        <i class="fa-solid fa-list-ul"></i> Ver Historial Completo
+                    </button>
+                    <span style="font-size:0.8rem; background:#e0f2fe; color:#0369a1; padding:4px 12px; border-radius:20px; font-weight:700;">
+                        <i class="fa-solid fa-tower-broadcast"></i> Sincronización Global
+                    </span>
+                </div>
             </div>
 
-            <div style="overflow-x:auto;">
-                <table class="table" style="width:100%; border-collapse:collapse;">
-                    <thead>
-                        <tr style="background:#f8fafc; border-bottom:2px solid #e2e8f0; text-align:left; font-size:0.8rem; text-transform:uppercase; color:var(--text-muted);">
-                            <th style="padding:12px;">Escuela / Plantel</th>
-                            <th style="padding:12px;">Última Persona Conectada</th>
-                            <th style="padding:12px;">Rol del Usuario</th>
-                            <th style="padding:12px;">Fecha y Hora de Conexión</th>
-                            <th style="padding:12px; text-align:center;">Estado</th>
-                            <th style="padding:12px; text-align:center;">Acciones</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        ${conexionesPorPlantel.map(c => {
-                            let estadoBadge = '<span style="background:#f1f5f9; color:#64748b; padding:2px 8px; border-radius:12px; font-size:0.7rem; font-weight:bold;">SIN REGISTRO</span>';
-                            let tiempoTexto = 'Pendiente de primer ingreso';
-                            if (c.lastTime) {
-                                const ahora = new Date();
-                                const entonces = new Date(c.lastTime);
-                                const diffMs = ahora - entonces;
-                                const diffMin = Math.floor(diffMs / 60000);
-                                const diffHrs = Math.floor(diffMs / 3600000);
-                                const diffDias = Math.floor(diffMs / 86400000);
-                                if (diffMin < 15) {
-                                    estadoBadge = '<span style="background:#dcfce7; color:#15803d; padding:2px 8px; border-radius:12px; font-size:0.7rem; font-weight:bold;">RECIENTE</span>';
-                                    tiempoTexto = `Hace ${diffMin} min`;
-                                } else if (diffHrs < 24) {
-                                    estadoBadge = '<span style="background:#fef9c3; color:#854d0e; padding:2px 8px; border-radius:12px; font-size:0.7rem; font-weight:bold;">HOY</span>';
-                                    tiempoTexto = diffHrs < 1 ? `Hace ${diffMin} min` : `Hace ${diffHrs} hrs`;
-                                } else {
-                                    estadoBadge = `<span style="background:#f1f5f9; color:#475569; padding:2px 8px; border-radius:12px; font-size:0.7rem; font-weight:bold;">HACE ${diffDias}d</span>`;
-                                    tiempoTexto = entonces.toLocaleString();
+            <div id="contenedorTablaConexiones">
+                <div style="overflow-x:auto;">
+                    <table class="table" style="width:100%; border-collapse:collapse;">
+                        <thead>
+                            <tr style="background:#f8fafc; border-bottom:2px solid #e2e8f0; text-align:left; font-size:0.8rem; text-transform:uppercase; color:var(--text-muted);">
+                                <th style="padding:12px;">Escuela / Plantel</th>
+                                <th style="padding:12px;">Última Persona Conectada</th>
+                                <th style="padding:12px;">Rol del Usuario</th>
+                                <th style="padding:12px;">Fecha y Hora de Conexión</th>
+                                <th style="padding:12px; text-align:center;">Estado</th>
+                                <th style="padding:12px; text-align:center;">Acciones</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${conexionesPorPlantel.map(c => {
+                                let estadoBadge = '<span style="background:#f1f5f9; color:#64748b; padding:2px 8px; border-radius:12px; font-size:0.7rem; font-weight:bold;">SIN REGISTRO</span>';
+                                let tiempoTexto = 'Pendiente de primer ingreso';
+                                if (c.lastTime) {
+                                    const ahora = new Date();
+                                    const entonces = new Date(c.lastTime);
+                                    const diffMs = ahora - entonces;
+                                    const diffMin = Math.floor(diffMs / 60000);
+                                    const diffHrs = Math.floor(diffMs / 3600000);
+                                    const diffDias = Math.floor(diffMs / 86400000);
+                                    if (diffMin < 15) {
+                                        estadoBadge = '<span style="background:#dcfce7; color:#15803d; padding:2px 8px; border-radius:12px; font-size:0.7rem; font-weight:bold;">RECIENTE</span>';
+                                        tiempoTexto = `Hace ${diffMin} min`;
+                                    } else if (diffHrs < 24) {
+                                        estadoBadge = '<span style="background:#fef9c3; color:#854d0e; padding:2px 8px; border-radius:12px; font-size:0.7rem; font-weight:bold;">HOY</span>';
+                                        tiempoTexto = diffHrs < 1 ? `Hace ${diffMin} min` : `Hace ${diffHrs} hrs`;
+                                    } else {
+                                        estadoBadge = `<span style="background:#f1f5f9; color:#475569; padding:2px 8px; border-radius:12px; font-size:0.7rem; font-weight:bold;">HACE ${diffDias}d</span>`;
+                                        tiempoTexto = entonces.toLocaleString();
+                                    }
                                 }
-                            }
-                            return `
-                        <tr style="border-bottom:1px solid #f1f5f9;">
-                            <td style="padding:12px; font-weight:800; color:var(--primary);">${c.plantelNombre}</td>
-                            <td style="padding:12px; font-weight:700;">
-                                ${c.lastUser ? `<i class="fa-solid fa-user-clock" style="color:#6366f1; margin-right:6px;"></i>${c.lastUser}` : '<span style="color:var(--text-muted); font-style:italic;">Sin conexiones aún</span>'}
-                            </td>
-                            <td style="padding:12px;">
-                                ${c.lastRole ? `<span style="background:#e0e7ff; color:#3730a3; padding:2px 8px; border-radius:12px; font-size:0.75rem; font-weight:bold;">${c.lastRole}</span>` : '-'}
-                            </td>
-                            <td style="padding:12px; font-size:0.85rem; color:var(--text-muted); font-weight:600;">
-                                ${tiempoTexto}
-                            </td>
-                            <td style="padding:12px; text-align:center;">
-                                ${estadoBadge}
-                            </td>
-                            <td style="padding:12px; text-align:center;">
-                                <button class="btn btn-outline" style="color:var(--danger); border-color:var(--danger); padding:4px 10px; font-size:0.75rem; font-weight:bold; display:inline-flex; align-items:center; gap:5px;" onclick="window.eliminarPlantelSaaS('${c.id}', '${c.plantelNombre}')" title="Eliminar Plantel Completo">
-                                    <i class="fa-solid fa-trash-can"></i>
-                                </button>
-                            </td>
-                        </tr>`;
-                        }).join('')}
-                    </tbody>
-                </table>
+                                return `
+                            <tr style="border-bottom:1px solid #f1f5f9;">
+                                <td style="padding:12px; font-weight:800; color:var(--primary);">${c.plantelNombre}</td>
+                                <td style="padding:12px; font-weight:700;">
+                                    ${c.lastUser ? `<i class="fa-solid fa-user-clock" style="color:#6366f1; margin-right:6px;"></i>${c.lastUser}` : '<span style="color:var(--text-muted); font-style:italic;">Sin conexiones aún</span>'}
+                                </td>
+                                <td style="padding:12px;">
+                                    ${c.lastRole ? `<span style="background:#e0e7ff; color:#3730a3; padding:2px 8px; border-radius:12px; font-size:0.75rem; font-weight:bold;">${c.lastRole}</span>` : '-'}
+                                </td>
+                                <td style="padding:12px; font-size:0.85rem; color:var(--text-muted); font-weight:600;">
+                                    ${tiempoTexto}
+                                </td>
+                                <td style="padding:12px; text-align:center;">
+                                    ${estadoBadge}
+                                </td>
+                                <td style="padding:12px; text-align:center;">
+                                    <button class="btn btn-outline" style="color:var(--danger); border-color:var(--danger); padding:4px 10px; font-size:0.75rem; font-weight:bold; display:inline-flex; align-items:center; gap:5px;" onclick="window.eliminarPlantelSaaS('${c.id}', '${c.plantelNombre}')" title="Eliminar Plantel Completo">
+                                        <i class="fa-solid fa-trash-can"></i>
+                                    </button>
+                                </td>
+                            </tr>`;
+                            }).join('')}
+                        </tbody>
+                    </table>
+                </div>
             </div>
         </div>
 
@@ -9993,6 +10052,285 @@ async function renderMasterSaaS() {
         `;
     } catch(e) { return `<div class="error-box">Error SaaS: ${e.message}</div>`; }
 }
+
+window._vistaConexionesModo = 'resumen';
+window.toggleVistaConexionesMaster = () => {
+    const cont = document.getElementById('contenedorTablaConexiones');
+    const btn = document.getElementById('btnToggleConexionesView');
+    if (!cont || !btn) return;
+    
+    if (window._vistaConexionesModo === 'resumen') {
+        window._vistaConexionesModo = 'completo';
+        btn.innerHTML = '<i class="fa-solid fa-table-cells-large"></i> Ver Resumen por Plantel';
+        
+        const logs = window._ultimasConexionesSaaS || [];
+        const pMap = {};
+        (window._plantelesSaaSCache || []).forEach(p => { pMap[p.id] = p.nombre; });
+        
+        if (logs.length === 0) {
+            cont.innerHTML = '<div style="padding:24px; text-align:center; color:var(--text-muted)">No hay registros de conexión disponibles.</div>';
+            return;
+        }
+        
+        cont.innerHTML = `
+            <div style="overflow-x:auto;">
+                <table class="table" style="width:100%; border-collapse:collapse; font-size:0.85rem;">
+                    <thead>
+                        <tr style="background:#f8fafc; border-bottom:2px solid #e2e8f0; text-align:left; font-size:0.75rem; text-transform:uppercase; color:var(--text-muted);">
+                            <th style="padding:10px 12px;">Fecha y Hora</th>
+                            <th style="padding:10px 12px;">Plantel</th>
+                            <th style="padding:10px 12px;">Usuario</th>
+                            <th style="padding:10px 12px;">Rol</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${logs.slice(0, 100).map(c => {
+                            const dt = new Date(c.fecha_conexion).toLocaleString('es-MX', { timeZone: 'America/Mexico_City', dateStyle: 'short', timeStyle: 'short' });
+                            let rColor = '#64748b', rBg = '#f1f5f9';
+                            if (c.rol === 'MAESTRO') { rColor = '#6d28d9'; rBg = '#ede9fe'; }
+                            else if (c.rol === 'DIRECTIVO') { rColor = '#b45309'; rBg = '#fef3c7'; }
+                            else if (c.rol === 'ALUMNO') { rColor = '#0369a1'; rBg = '#e0f2fe'; }
+                            else if (c.rol === 'ADMIN') { rColor = '#15803d'; rBg = '#dcfce7'; }
+                            return `
+                                <tr style="border-bottom:1px solid #f1f5f9;">
+                                    <td style="padding:10px 12px; font-weight:600; color:var(--text-muted);">${dt}</td>
+                                    <td style="padding:10px 12px; font-weight:700; color:var(--primary);">${pMap[c.plantel_id] || 'Plantel'}</td>
+                                    <td style="padding:10px 12px; font-weight:700;"><i class="fa-solid fa-user" style="color:var(--text-muted); margin-right:6px;"></i>${c.nombre || 'Desconocido'}</td>
+                                    <td style="padding:10px 12px;"><span style="background:${rBg}; color:${rColor}; padding:2px 8px; border-radius:12px; font-size:0.75rem; font-weight:bold;">${c.rol || 'USUARIO'}</span></td>
+                                </tr>
+                            `;
+                        }).join('')}
+                    </tbody>
+                </table>
+            </div>
+        `;
+    } else {
+        window._vistaConexionesModo = 'resumen';
+        btn.innerHTML = '<i class="fa-solid fa-list-ul"></i> Ver Historial Completo';
+        if (window.renderApp) window.renderApp();
+    }
+};
+
+window._radarMovimientosCache = [];
+window._radarFiltroActivo = 'todos';
+
+window.loadRadarMovimientosMaster = async () => {
+    const feed = document.getElementById('radarMovimientosFeed');
+    if (!feed) return;
+    
+    try {
+        const [plantelesRes, connRes, evalRes, commRes] = await Promise.all([
+            supabaseClient.from('planteles').select('id, nombre'),
+            supabaseClient.from('conexiones_log').select('*').order('fecha_conexion', { ascending: false }).limit(35),
+            supabaseClient.from('evaluaciones_actividades').select('id, actividad_id, alumno_id, calificacion, fecha_evaluacion, plantel_id').order('fecha_evaluacion', { ascending: false }).limit(35),
+            supabaseClient.from('comunicados').select('*').order('creado_en', { ascending: false }).limit(15)
+        ]);
+
+        const pMap = {};
+        (plantelesRes.data || []).forEach(p => { pMap[p.id] = p.nombre; });
+        window._plantelesMap = pMap;
+
+        // Para enriquecer evaluaciones:
+        const evals = evalRes.data || [];
+        const actIds = [...new Set(evals.map(e => e.actividad_id).filter(Boolean))];
+        const aluIds = [...new Set(evals.map(e => e.alumno_id).filter(Boolean))];
+
+        let actsMap = {};
+        let alusMap = {};
+
+        if (actIds.length > 0 || aluIds.length > 0) {
+            const [actsRes, alusRes] = await Promise.all([
+                actIds.length > 0 ? supabaseClient.from('actividades_maestro').select('id, titulo, materia, maestro_id, rubro_name, perfiles(nombre)').in('id', actIds) : { data: [] },
+                aluIds.length > 0 ? supabaseClient.from('alumnos').select('id, nombre').in('id', aluIds) : { data: [] }
+            ]);
+            (actsRes.data || []).forEach(a => { actsMap[a.id] = a; });
+            (alusRes.data || []).forEach(al => { alusMap[al.id] = al.nombre; });
+        }
+
+        let items = [];
+
+        // 1. Agregar conexiones
+        (connRes.data || []).forEach(c => {
+            items.push({
+                tipo: 'CONEXION',
+                rol: (c.rol || 'USUARIO').toUpperCase(),
+                fecha: c.fecha_conexion,
+                plantel_id: c.plantel_id,
+                plantelNombre: pMap[c.plantel_id] || 'Plantel',
+                usuario: c.nombre || 'Usuario',
+                icono: 'fa-right-to-bracket',
+                color: '#2563eb',
+                bg: '#eff6ff',
+                titulo: `Inicio de sesión autenticado`,
+                detalle: `Acceso al sistema desde dispositivo web.`
+            });
+        });
+
+        // 2. Agregar evaluaciones de maestros
+        evals.forEach(ev => {
+            const act = actsMap[ev.actividad_id] || null;
+            const aluNom = alusMap[ev.alumno_id] || 'Alumno';
+            const teacherNom = act?.perfiles?.nombre || 'Docente';
+            const actTitulo = act?.titulo || 'Actividad';
+            const materia = act?.materia || '';
+            const rubro = act?.rubro_name ? ` (${act.rubro_name})` : '';
+
+            items.push({
+                tipo: 'MAESTRO',
+                rol: 'MAESTRO',
+                fecha: ev.fecha_evaluacion,
+                plantel_id: ev.plantel_id,
+                plantelNombre: pMap[ev.plantel_id] || 'Plantel',
+                usuario: teacherNom,
+                icono: 'fa-check-double',
+                color: '#059669',
+                bg: '#ecfdf5',
+                titulo: `Calificación registrada: <span style="font-weight:900; color:#059669; font-size:1.05em;">${ev.calificacion}</span>`,
+                detalle: `Actividad: <b>${actTitulo}</b>${rubro} • Alumno: <b>${aluNom}</b> ${materia ? `• ${materia}` : ''}`
+            });
+        });
+
+        // 3. Agregar comunicados
+        (commRes.data || []).forEach(cm => {
+            items.push({
+                tipo: 'COMUNICADO',
+                rol: (cm.autor_rol || 'PERSONAL').toUpperCase(),
+                fecha: cm.creado_en,
+                plantel_id: cm.plantel_id,
+                plantelNombre: pMap[cm.plantel_id] || 'Plantel',
+                usuario: cm.autor_nombre || 'Personal',
+                icono: 'fa-bullhorn',
+                color: '#d97706',
+                bg: '#fffbeb',
+                titulo: `Aviso escolar: <b>${cm.titulo || 'Comunicado'}</b>`,
+                detalle: (cm.contenido || '').substring(0, 140) + '...'
+            });
+        });
+
+        // 4. Agregar buffer en memoria en tiempo real
+        if (window._auditRealtimeQueue && window._auditRealtimeQueue.length > 0) {
+            window._auditRealtimeQueue.forEach(q => {
+                items.push({
+                    tipo: q.usuario_rol === 'MAESTRO' ? 'MAESTRO' : 'SISTEMA',
+                    rol: q.usuario_rol,
+                    fecha: q.fecha,
+                    plantel_id: q.plantel_id,
+                    plantelNombre: pMap[q.plantel_id] || 'Plantel',
+                    usuario: q.usuario_nombre,
+                    icono: 'fa-bolt',
+                    color: '#7c3aed',
+                    bg: '#f5f3ff',
+                    titulo: q.accion,
+                    detalle: q.detalle
+                });
+            });
+        }
+
+        // Ordenar cronológicamente (más reciente primero)
+        items.sort((a, b) => new Date(b.fecha) - new Date(a.fecha));
+
+        window._radarMovimientosCache = items;
+        window.renderRadarMovimientosFeed();
+
+    } catch(err) {
+        console.error("Error al cargar radar de movimientos:", err);
+        feed.innerHTML = `<div style="padding:20px; text-align:center; color:var(--danger)">
+            <i class="fa-solid fa-triangle-exclamation"></i> Error al conectar con radar: ${err.message}
+        </div>`;
+    }
+};
+
+window.renderRadarMovimientosFeed = (filtro = window._radarFiltroActivo, search = '') => {
+    const feed = document.getElementById('radarMovimientosFeed');
+    if (!feed) return;
+
+    let items = window._radarMovimientosCache || [];
+    
+    // Filtrar por tipo / rol
+    if (filtro && filtro !== 'todos') {
+        if (filtro === 'MAESTRO') items = items.filter(i => i.rol === 'MAESTRO' || i.tipo === 'MAESTRO');
+        else if (filtro === 'CONEXION') items = items.filter(i => i.tipo === 'CONEXION');
+        else if (filtro === 'COMUNICADO') items = items.filter(i => i.tipo === 'COMUNICADO');
+        else if (filtro === 'ALUMNO') items = items.filter(i => i.rol === 'ALUMNO');
+    }
+
+    // Filtrar por búsqueda
+    if (search && search.trim()) {
+        const q = search.trim().toLowerCase();
+        items = items.filter(i => 
+            (i.usuario && i.usuario.toLowerCase().includes(q)) ||
+            (i.plantelNombre && i.plantelNombre.toLowerCase().includes(q)) ||
+            (i.titulo && i.titulo.toLowerCase().includes(q)) ||
+            (i.detalle && i.detalle.toLowerCase().includes(q))
+        );
+    }
+
+    if (items.length === 0) {
+        feed.innerHTML = `<div style="padding:30px; text-align:center; color:var(--text-muted)">
+            <i class="fa-solid fa-inbox fa-2x" style="opacity:0.3; margin-bottom:8px; display:block;"></i>
+            No se encontraron movimientos registrados con los filtros seleccionados.
+        </div>`;
+        return;
+    }
+
+    feed.innerHTML = items.map(it => {
+        const d = new Date(it.fecha);
+        const ahora = new Date();
+        const diffMs = ahora - d;
+        const diffMin = Math.floor(diffMs / 60000);
+        const diffHrs = Math.floor(diffMs / 3600000);
+        let timeLabel = '';
+        if (diffMin < 1) timeLabel = 'Justo ahora';
+        else if (diffMin < 60) timeLabel = `Hace ${diffMin} min`;
+        else if (diffHrs < 24) timeLabel = `Hace ${diffHrs} hr${diffHrs > 1 ? 's' : ''}`;
+        else timeLabel = d.toLocaleString('es-MX', { timeZone: 'America/Mexico_City', dateStyle: 'short', timeStyle: 'short' });
+
+        let rolBadgeColor = '#64748b', rolBadgeBg = '#f1f5f9';
+        if (it.rol === 'MAESTRO') { rolBadgeColor = '#6d28d9'; rolBadgeBg = '#ede9fe'; }
+        else if (it.rol === 'DIRECTIVO') { rolBadgeColor = '#b45309'; rolBadgeBg = '#fef3c7'; }
+        else if (it.rol === 'ALUMNO') { rolBadgeColor = '#0369a1'; rolBadgeBg = '#e0f2fe'; }
+        else if (it.rol === 'ADMIN') { rolBadgeColor = '#15803d'; rolBadgeBg = '#dcfce7'; }
+
+        return `
+            <div style="display:flex; align-items:flex-start; gap:14px; padding:12px 14px; border-bottom:1px solid #f1f5f9; transition:background-color 0.2s;" onmouseover="this.style.backgroundColor='#f8fafc'" onmouseout="this.style.backgroundColor='transparent'">
+                <div style="width:36px; height:36px; border-radius:10px; background:${it.bg}; color:${it.color}; display:flex; align-items:center; justify-content:center; font-size:1rem; flex-shrink:0;">
+                    <i class="fa-solid ${it.icono}"></i>
+                </div>
+                <div style="flex:1; min-width:0;">
+                    <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:6px; margin-bottom:3px;">
+                        <div style="display:flex; align-items:center; gap:8px;">
+                            <span style="font-weight:800; font-size:0.9rem; color:var(--text-main);">${it.usuario}</span>
+                            <span style="background:${rolBadgeBg}; color:${rolBadgeColor}; padding:1px 7px; border-radius:10px; font-size:0.7rem; font-weight:bold;">${it.rol}</span>
+                            <span style="background:#f1f5f9; color:var(--primary); padding:1px 7px; border-radius:10px; font-size:0.7rem; font-weight:bold;"><i class="fa-solid fa-school" style="font-size:0.65em; margin-right:3px;"></i>${it.plantelNombre}</span>
+                        </div>
+                        <span style="font-size:0.75rem; color:var(--text-muted); font-weight:600;" title="${d.toLocaleString('es-MX', { timeZone: 'America/Mexico_City' })}">
+                            <i class="fa-regular fa-clock" style="margin-right:3px;"></i>${timeLabel}
+                        </span>
+                    </div>
+                    <div style="font-size:0.85rem; color:var(--text-main); margin-bottom:2px;">
+                        ${it.titulo}
+                    </div>
+                    <div style="font-size:0.78rem; color:var(--text-muted); line-height:1.3;">
+                        ${it.detalle}
+                    </div>
+                </div>
+            </div>
+        `;
+    }).join('');
+};
+
+window.filterRadarMovimientos = (filtro, btnEl) => {
+    window._radarFiltroActivo = filtro;
+    const tabs = document.querySelectorAll('#radarFilterTabs button');
+    tabs.forEach(b => { b.className = 'btn btn-sm btn-outline'; });
+    if (btnEl) btnEl.className = 'btn btn-sm btn-primary';
+    const searchVal = document.getElementById('radarSearchInput')?.value || '';
+    window.renderRadarMovimientosFeed(filtro, searchVal);
+};
+
+window.searchRadarMovimientos = (val) => {
+    window.renderRadarMovimientosFeed(window._radarFiltroActivo, val);
+};
 
 window.probarPingMaster = async () => {
     try {
@@ -15352,6 +15690,14 @@ window._aplicarCalificacionEnPunto = (alumnoId, actividadId, nuevoValor, actTitu
                     .eq('actividad_id', actividadId)
                     .eq('alumno_id', alumnoId);
                 if (error) throw error;
+                if (window.registrarMovimientoAuditoria) {
+                    window.registrarMovimientoAuditoria({
+                        accion: 'Calificación Eliminada',
+                        modulo: 'evaluaciones_actividades',
+                        detalle: `Calificación eliminada (Actividad ID: ${actividadId})`,
+                        plantelId: pId
+                    });
+                }
             } else {
                 const { error } = await supabaseClient.from('evaluaciones_actividades').upsert({
                     actividad_id: actividadId,
@@ -15361,6 +15707,14 @@ window._aplicarCalificacionEnPunto = (alumnoId, actividadId, nuevoValor, actTitu
                     plantel_id: pId
                 }, { onConflict: 'actividad_id,alumno_id' });
                 if (error) throw error;
+                if (window.registrarMovimientoAuditoria) {
+                    window.registrarMovimientoAuditoria({
+                        accion: 'Calificación de Actividad',
+                        modulo: 'evaluaciones_actividades',
+                        detalle: `Calificación asignada: <b>${numVal}</b> (Actividad ID: ${actividadId})`,
+                        plantelId: pId
+                    });
+                }
             }
         } catch(err) {
             console.error("Error guardando calificación en segundo plano:", err);
@@ -15450,6 +15804,14 @@ window.evaluarActividadMasiva = async (actividadId, actTitulo) => {
             .upsert(payload, { onConflict: 'actividad_id,alumno_id' });
             
         if(error) throw error;
+        if (window.registrarMovimientoAuditoria) {
+            window.registrarMovimientoAuditoria({
+                accion: 'Calificación Masiva Asignada',
+                modulo: 'evaluaciones_actividades',
+                detalle: `Calificación masiva de <b>${num}</b> asignada a ${alumnos.length} alumnos en "${actTitulo}"`,
+                plantelId: pId
+            });
+        }
     } catch(err) {
         console.error("Error en calificación masiva Supabase:", err);
         alert("Error al guardar en el servidor: " + err.message);
@@ -29058,74 +29420,119 @@ window.eliminarPersona = async (idPermitido, email, nombre, rol = '') => {
 
 
 // ==========================================
-// MÓDULO DE AUDITORÍA (SaaS Master)
+// MÓDULO DE AUDITORÍA Y TRAZABILIDAD (SaaS Master)
 // ==========================================
 
 async function renderMasterAuditoria() {
-    setTimeout(() => { 
-        if(window.loadAuditoriaUsuariosPlantel) window.loadAuditoriaUsuariosPlantel();
-        if(window.loadAuditoriaList) window.loadAuditoriaList(); 
-    }, 100);
+    setTimeout(async () => { 
+        if(window.loadAuditoriaPlantelesSelect) await window.loadAuditoriaPlantelesSelect();
+        if(window.loadAuditoriaUsuariosPlantel) await window.loadAuditoriaUsuariosPlantel();
+        if(window.loadAuditoriaList) await window.loadAuditoriaList(); 
+    }, 80);
+
+    const hoyStr = new Date().toISOString().split('T')[0];
+
     return `
-        <div class="page-header" style="margin-bottom: 24px;">
-            <h2 class="page-title"><i class="fa-solid fa-user-secret" style="color:var(--primary)"></i> Auditoría de Actividad del Sistema</h2>
-            <p class="page-subtitle">Registro forense de modificaciones académicas. Solo lectura, infalsificable.</p>
+        <div class="page-header" style="margin-bottom: 24px; display:flex; justify-content:space-between; align-items:flex-start; flex-wrap:wrap; gap:16px;">
+            <div>
+                <h2 class="page-title"><i class="fa-solid fa-user-shield" style="color:var(--primary)"></i> Auditoría y Movimientos del Sistema</h2>
+                <p class="page-subtitle">Registro forense y monitoreo en tiempo real de actividades, evaluaciones, asistencias y accesos de todos los perfiles.</p>
+            </div>
+            <div style="display:flex; gap:10px; flex-wrap:wrap;">
+                <button class="btn btn-outline" onclick="window.loadAuditoriaList()"><i class="fa-solid fa-arrows-rotate"></i> Actualizar</button>
+                <button class="btn btn-primary" onclick="window.exportAuditoriaCSV()"><i class="fa-solid fa-file-csv"></i> Exportar CSV</button>
+            </div>
         </div>
 
         <div class="card shadow-sm" style="margin-bottom: 24px;">
             <div style="display:flex; flex-wrap:wrap; gap:16px; align-items:flex-end;">
+                <!-- PLANTEL -->
                 <div style="flex:1; min-width:200px;">
-                    <label style="font-weight:600; font-size:0.85rem; margin-bottom:4px; display:block; color:var(--text-muted)">Buscar Usuario (Nombre o Email)</label>
-                    
-                    <input type="text" id="auditSearchInput" list="auditUsersDatalist" class="form-input" placeholder="Escribe o selecciona..." onchange="window.loadAuditoriaList()" onkeyup="if(event.key==='Enter') window.loadAuditoriaList()">
-                    <datalist id="auditUsersDatalist"></datalist>
-<div id="auditUsersCount" style="font-size:0.7rem; color:var(--text-muted); margin-top:2px;">Cargando lista predictiva...</div>
-
-                </div>
-                <div style="flex:1; min-width:150px;">
-                    <label style="font-weight:600; font-size:0.85rem; margin-bottom:4px; display:block; color:var(--text-muted)">Operación</label>
-                    <select id="auditOpSelect" class="form-select" onchange="window.loadAuditoriaList()">
-                        <option value="">Todas</option>
-                        <option value="INSERT">Creaciones (INSERT)</option>
-                        <option value="UPDATE">Modificaciones (UPDATE)</option>
-                        <option value="DELETE">Eliminaciones (DELETE)</option>
+                    <label style="font-weight:600; font-size:0.85rem; margin-bottom:4px; display:block; color:var(--text-muted)">Plantel / Escuela</label>
+                    <select id="auditPlantelSelect" class="form-select" onchange="window.onAuditPlantelChanged()">
+                        <option value="">🏢 Todos los Planteles</option>
                     </select>
                 </div>
-                <div style="flex:1; min-width:150px;">
-                    <label style="font-weight:600; font-size:0.85rem; margin-bottom:4px; display:block; color:var(--text-muted)">Tabla / Módulo</label>
+
+                <!-- MODULO / TIPO DE MOVIMIENTO -->
+                <div style="flex:1; min-width:210px;">
+                    <label style="font-weight:600; font-size:0.85rem; margin-bottom:4px; display:block; color:var(--text-muted)">Módulo / Tipo de Movimiento</label>
                     <select id="auditTableSelect" class="form-select" onchange="window.loadAuditoriaList()">
-                        <option value="">Todas las tablas</option>
-                        <option value="asistencias">Asistencias / Faltas</option>
-                        <option value="calificaciones">Calificaciones</option>
-                        <option value="reportes_conducta">Incidencias / Reportes</option>
+                        <option value="todos" selected>⚡ Todos los Movimientos</option>
+                        <option value="evaluaciones_actividades">📝 Calificaciones de Actividades (Maestros)</option>
+                        <option value="conexiones_log">🔑 Inicios de Sesión / Conexiones</option>
+                        <option value="actividades_maestro">📚 Creación de Actividades (Maestros)</option>
+                        <option value="asistencias">📋 Pases de Lista / Asistencias</option>
+                        <option value="comunicados">📢 Comunicados y Avisos</option>
+                        <option value="calificaciones">🎓 Calificaciones Trimestrales</option>
+                        <option value="audit_log">🛡️ Registro Forense DB (audit_log)</option>
                     </select>
                 </div>
-                <div style="flex:1; min-width:150px;">
-                    <label style="font-weight:600; font-size:0.85rem; margin-bottom:4px; display:block; color:var(--text-muted)">Fecha</label>
-                    
-                    <input type="date" id="auditDateInput" class="form-input" value="${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}-${String(new Date().getDate()).padStart(2, '0')}" onchange="window.loadAuditoriaList()"><div style="font-size:0.7rem; color:var(--text-muted); margin-top:4px;">(Por defecto: Solo hoy)</div>
 
+                <!-- ROL -->
+                <div style="flex:1; min-width:140px;">
+                    <label style="font-weight:600; font-size:0.85rem; margin-bottom:4px; display:block; color:var(--text-muted)">Rol de Usuario</label>
+                    <select id="auditRolSelect" class="form-select" onchange="window.loadAuditoriaList()">
+                        <option value="">Todos los Roles</option>
+                        <option value="MAESTRO">Docentes / Maestros</option>
+                        <option value="DIRECTIVO">Directivos</option>
+                        <option value="APOYO">Prefectura / Apoyo</option>
+                        <option value="ADMIN">Administradores</option>
+                        <option value="ALUMNO">Alumnos</option>
+                    </select>
                 </div>
+
+                <!-- RANGO DE FECHA -->
+                <div style="flex:1; min-width:140px;">
+                    <label style="font-weight:600; font-size:0.85rem; margin-bottom:4px; display:block; color:var(--text-muted)">Periodo</label>
+                    <select id="auditRangoFecha" class="form-select" onchange="window.onAuditRangoFechaChange(this.value)">
+                        <option value="hoy" selected>Solo Hoy</option>
+                        <option value="ayer">Ayer</option>
+                        <option value="7dias">Últimos 7 días</option>
+                        <option value="30dias">Últimos 30 días</option>
+                        <option value="todos">Todo el Historial</option>
+                        <option value="custom">Fecha Específica...</option>
+                    </select>
+                </div>
+
+                <!-- FECHA ESPECIFICA -->
+                <div id="divAuditFechaCustom" style="min-width:140px; display:none;">
+                    <label style="font-weight:600; font-size:0.85rem; margin-bottom:4px; display:block; color:var(--text-muted)">Fecha</label>
+                    <input type="date" id="auditDateInput" class="form-input" value="${hoyStr}" onchange="window.loadAuditoriaList()">
+                </div>
+
+                <!-- BUSCAR POR NOMBRE / TEXTO -->
+                <div style="flex:1.5; min-width:220px;">
+                    <label style="font-weight:600; font-size:0.85rem; margin-bottom:4px; display:block; color:var(--text-muted)">Buscar Usuario (Nombre o Detalle)</label>
+                    <input type="text" id="auditSearchInput" list="auditUsersDatalist" class="form-input" placeholder="Ej: Diana, Vanessa, Inglés..." onchange="window.loadAuditoriaList()" onkeyup="if(event.key==='Enter') window.loadAuditoriaList()">
+                    <datalist id="auditUsersDatalist"></datalist>
+                </div>
+
                 <div>
-                    <button class="btn btn-primary" onclick="window.loadAuditoriaList()"><i class="fa-solid fa-search"></i> Buscar</button>
-                    <button class="btn btn-outline" onclick="window.exportAuditoriaCSV()" style="margin-left:8px;"><i class="fa-solid fa-file-csv"></i> Exportar</button>
+                    <button class="btn btn-primary" onclick="window.loadAuditoriaList()"><i class="fa-solid fa-search"></i> Filtrar</button>
                 </div>
             </div>
         </div>
 
+        <!-- RESUMEN METRICO DE AUDITORIA -->
+        <div id="auditSummaryBanner" style="margin-bottom:16px; font-size:0.85rem; color:var(--text-muted); display:flex; justify-content:space-between; align-items:center;">
+            <span>Resultados de la consulta de auditoría</span>
+            <span id="auditCountBadge" style="background:#e2e8f0; padding:3px 10px; border-radius:12px; font-weight:700; color:var(--text-main);">0 registros</span>
+        </div>
+
         <div class="card shadow-sm" style="overflow-x:auto;">
-            <table style="width:100%; min-width:900px; border-collapse:collapse; font-size:0.85rem;">
+            <table style="width:100%; min-width:960px; border-collapse:collapse; font-size:0.85rem;">
                 <thead>
-                    <tr style="border-bottom:2px solid var(--border); color:var(--text-muted); text-align:left;">
-                        <th style="padding:12px;">Fecha y Hora</th>
-                        <th style="padding:12px;">Usuario Responsable</th>
-                        <th style="padding:12px;">Acción y Módulo</th>
-                        <th style="padding:12px;">Dispositivo / IP</th>
-                        <th style="padding:12px;">Detalle del Cambio</th>
+                    <tr style="border-bottom:2px solid var(--border); color:var(--text-muted); text-align:left; background:#f8fafc;">
+                        <th style="padding:12px 14px;">Fecha y Hora</th>
+                        <th style="padding:12px 14px;">Plantel</th>
+                        <th style="padding:12px 14px;">Usuario Responsable</th>
+                        <th style="padding:12px 14px;">Módulo y Acción</th>
+                        <th style="padding:12px 14px;">Detalle del Movimiento</th>
                     </tr>
                 </thead>
                 <tbody id="tbodyAuditoria">
-                    <tr><td colspan="5" style="text-align:center; padding:30px; color:var(--text-muted)"><i class="fa-solid fa-spinner fa-spin"></i> Cargando registros de auditoría...</td></tr>
+                    <tr><td colspan="5" style="text-align:center; padding:30px; color:var(--text-muted)"><i class="fa-solid fa-spinner fa-spin"></i> Cargando movimientos del sistema...</td></tr>
                 </tbody>
             </table>
             <div style="padding: 15px; text-align:center; border-top:1px solid var(--border);">
@@ -29138,189 +29545,50 @@ async function renderMasterAuditoria() {
 window._auditPagination = 0;
 window._auditCurrentData = [];
 
-window.loadAuditoriaList = async (loadMore = false) => {
-    const tbody = document.getElementById('tbodyAuditoria');
-    if(!tbody) return;
-
-    if(!loadMore) {
-        window._auditPagination = 0;
-        window._auditCurrentData = [];
-        tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; padding:30px; color:var(--text-muted)"><i class="fa-solid fa-spinner fa-spin"></i> Buscando en el registro inmutable...</td></tr>';
-    }
-
+window.loadAuditoriaPlantelesSelect = async () => {
+    const sel = document.getElementById('auditPlantelSelect');
+    if (!sel) return;
     try {
-        const search = document.getElementById('auditSearchInput')?.value.trim();
-        const op = document.getElementById('auditOpSelect')?.value;
-        const tbl = document.getElementById('auditTableSelect')?.value;
-        const dateStr = document.getElementById('auditDateInput')?.value;
-
-        // Primero, si hay búsqueda por usuario, necesitamos encontrar su user_id
-        let userIds = [];
-        if (search) {
-            const { data: usersFound } = await supabaseClient.from('perfiles').select('id').ilike(`nombre`, `%${search}%`);
-            if (usersFound && usersFound.length > 0) userIds = usersFound.map(u => u.id);
-            else {
-                tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; padding:30px; color:var(--text-muted)">No se encontró ningún usuario con ese nombre/correo.</td></tr>';
-                return;
-            }
+        const { data: planteles } = await supabaseClient.from('planteles').select('id, nombre').order('nombre');
+        if (planteles && planteles.length > 0) {
+            window._plantelesMap = {};
+            let html = '<option value="">🏢 Todos los Planteles</option>';
+            planteles.forEach(p => {
+                window._plantelesMap[p.id] = p.nombre;
+                const isSel = (state.plantelId === p.id) ? 'selected' : '';
+                html += `<option value="${p.id}" ${isSel}>${p.nombre}</option>`;
+            });
+            sel.innerHTML = html;
         }
-
-        let query = supabaseClient.from('audit_log').select('*, perfiles!usuario_id(nombre, rol)', { count: 'exact' });
-
-        // Filtrar estrictamente por la escuela seleccionada usando los valores JSON registrados
-        if (state.plantelId) {
-            query = query.or(`valores_nuevos->>plantel_id.eq.${state.plantelId},valores_viejos->>plantel_id.eq.${state.plantelId}`);
-        }
-
-        if (op) query = query.eq('operacion', op);
-        if (tbl) query = query.eq('tabla_afectada', tbl);
-        if (userIds.length > 0) query = query.in('usuario_id', userIds);
-        
-        if (dateStr) {
-            const startDate = new Date(`${dateStr}T00:00:00Z`);
-            const endDate = new Date(`${dateStr}T23:59:59Z`);
-            query = query.gte('fecha', startDate.toISOString()).lte('fecha', endDate.toISOString());
-        }
-
-        const pageSize = 50;
-        query = query.order('fecha', { ascending: false })
-                     .range(window._auditPagination * pageSize, (window._auditPagination + 1) * pageSize - 1);
-
-        const { data, count, error } = await query;
-        if(error) throw error;
-
-        if (!loadMore) window._auditCurrentData = data || [];
-        else window._auditCurrentData = [...window._auditCurrentData, ...(data || [])];
-
-        const btnCargarMas = document.getElementById('btnCargarMasAudit');
-        if (btnCargarMas) btnCargarMas.style.display = (window._auditCurrentData.length < count) ? 'inline-block' : 'none';
-
-        if(window._auditCurrentData.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; padding:30px; color:var(--text-muted)">No se encontraron registros de auditoría que coincidan con los filtros.</td></tr>';
-            return;
-        }
-
-        let html = '';
-        window._auditCurrentData.forEach(row => {
-            const dt = new Date(row.fecha).toLocaleString('es-MX', { dateStyle: 'short', timeStyle: 'short' });
-            
-            let opColor = 'gray';
-            let opIcon = 'fa-circle';
-            if(row.operacion === 'INSERT') { opColor = 'var(--success)'; opIcon = 'fa-plus'; }
-            else if(row.operacion === 'UPDATE') { opColor = 'var(--warning)'; opIcon = 'fa-pen'; }
-            else if(row.operacion === 'DELETE') { opColor = 'var(--danger)'; opIcon = 'fa-trash'; }
-
-            // Generar un diff humano
-            let diffHtml = '<div style="font-family:monospace; font-size:0.75rem; background:#f8fafc; padding:8px; border-radius:6px; border:1px solid var(--border); overflow-x:auto; max-width:350px;">';
-            if (row.operacion === 'UPDATE' && row.valores_viejos && row.valores_nuevos) {
-                const changedKeys = Object.keys(row.valores_nuevos).filter(k => row.valores_viejos[k] !== row.valores_nuevos[k]);
-                if(changedKeys.length === 0) diffHtml += '<i>(Actualización sin cambios en valores rastreados)</i>';
-                changedKeys.forEach(k => {
-                    if (k === 'updated_at' || k === 'fecha' || k === 'creado_en') return;
-                    diffHtml += `<div style="margin-bottom:2px;"><strong>${k}:</strong> <span style="color:var(--danger); text-decoration:line-through;">${row.valores_viejos[k] ?? 'null'}</span> &rarr; <span style="color:var(--success); font-weight:bold;">${row.valores_nuevos[k] ?? 'null'}</span></div>`;
-                });
-            } else if (row.operacion === 'INSERT') {
-                const estado = row.valores_nuevos?.estado || row.valores_nuevos?.calificacion || 'Nuevo registro';
-                diffHtml += `<span style="color:var(--success)">${estado}</span> (ID: ${row.valores_nuevos?.id?.substring(0,8) || 'N/A'}) `;
-            } else if (row.operacion === 'DELETE') {
-                diffHtml += `<span style="color:var(--danger)">Registro eliminado</span> (ID: ${row.valores_viejos?.id?.substring(0,8) || 'N/A'})`;
-            }
-            diffHtml += '</div>';
-
-            const userText = row.perfiles ? `<div style="font-weight:bold; color:var(--primary)">${row.perfiles.nombre || 'Sin nombre'}</div><div style="font-size:0.75rem;"></div><div style="font-size:0.7rem; color:var(--text-muted)">Rol: ${row.perfiles.rol}</div>` : `<div style="color:var(--danger)">Usuario Eliminado/Desconocido</div><div style="font-size:0.7rem; color:var(--text-muted)">ID: ${row.usuario_id}</div>`;
-
-            // Detectar sistema desde User Agent
-            const ua = row.user_agent || '';
-            let osIcon = 'fa-desktop';
-            if(ua.includes('Android')) osIcon = 'fa-android';
-            else if(ua.includes('iPhone') || ua.includes('iPad')) osIcon = 'fa-apple';
-            else if(ua.includes('Windows')) osIcon = 'fa-windows';
-            else if(ua.includes('Mac OS')) osIcon = 'fa-apple';
-
-            html += `
-                <tr style="border-bottom:1px solid var(--border); vertical-align:top;">
-                    <td style="padding:12px; white-space:nowrap;">${dt}</td>
-                    <td style="padding:12px;">${userText}</td>
-                    <td style="padding:12px;">
-                        <div style="font-weight:bold; color:${opColor};"><i class="fa-solid ${opIcon}"></i> ${row.operacion}</div>
-                        <div style="font-size:0.75rem; font-family:monospace; margin-top:4px;">Tabla: ${row.tabla_afectada}</div>
-                    </td>
-                    <td style="padding:12px; font-size:0.75rem;">
-                        <div><i class="fa-solid ${osIcon}" style="color:var(--text-muted)"></i> ${row.ip_address || 'IP Desconocida'}</div>
-                        <div style="color:var(--text-muted); margin-top:4px; max-width:150px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;" title="${ua}">${ua || 'N/A'}</div>
-                    </td>
-                    <td style="padding:12px;">${diffHtml}</td>
-                </tr>
-            `;
-        });
-        tbody.innerHTML = html;
-        window._auditPagination++;
-
-    } catch(err) {
-        console.error(err);
-        tbody.innerHTML = `<tr><td colspan="5" style="text-align:center; padding:30px; color:var(--danger)"><i class="fa-solid fa-triangle-exclamation"></i> Error al cargar auditoría: ${err.message}</td></tr>`;
-        // Check if table exists
-        if(err.message.includes('relation "public.audit_log" does not exist')) {
-            tbody.innerHTML += '<tr><td colspan="5" style="text-align:center; color:var(--text-muted);">Debes ejecutar el script SQL "migration_auditoria.sql" en tu base de datos para habilitar este módulo.</td></tr>';
-        }
+    } catch(e) {
+        console.error("Error al cargar planteles para auditoría:", e);
     }
 };
 
-window.exportAuditoriaCSV = () => {
-    if(!window._auditCurrentData || window._auditCurrentData.length === 0) {
-        alert("No hay datos para exportar. Realiza una búsqueda primero.");
-        return;
-    }
-    
-    let csv = "Fecha,Usuario,Email,Operacion,Tabla,IP,Dispositivo,Cambios\n";
-    window._auditCurrentData.forEach(row => {
-        const dt = new Date(row.fecha).toLocaleString('es-MX');
-        const user = row.perfiles?.nombre || 'Desconocido';
-        const email = row.perfiles?.email || row.usuario_id || '';
-        const op = row.operacion;
-        const tabla = row.tabla_afectada;
-        const ip = row.ip_address || '';
-        const ua = (row.user_agent || '').replace(/,/g, ' '); // quitar comas
-        
-        let cambios = '';
-        if(op === 'UPDATE' && row.valores_viejos && row.valores_nuevos) {
-            const changedKeys = Object.keys(row.valores_nuevos).filter(k => row.valores_viejos[k] !== row.valores_nuevos[k]);
-            cambios = changedKeys.map(k => `${k}: ${row.valores_viejos[k]}->${row.valores_nuevos[k]}`).join(' | ');
-        } else if(op === 'INSERT') {
-            cambios = 'NUEVO_REGISTRO_ID:' + (row.valores_nuevos?.id || '');
-        } else if(op === 'DELETE') {
-            cambios = 'ELIMINADO_ID:' + (row.valores_viejos?.id || '');
-        }
-        
-        csv += `"${dt}","${user}","${email}","${op}","${tabla}","${ip}","${ua}","${cambios}"\n`;
-    });
-    
-    const blob = new Blob([csv], { type: 'text/csv' });
-    const url = window.URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `Auditoria_EduLM_${new Date().getTime()}.csv`;
-    a.click();
-    window.URL.revokeObjectURL(url);
+window.onAuditPlantelChanged = () => {
+    if (window.loadAuditoriaUsuariosPlantel) window.loadAuditoriaUsuariosPlantel();
+    window.loadAuditoriaList();
 };
 
+window.onAuditRangoFechaChange = (val) => {
+    const divCustom = document.getElementById('divAuditFechaCustom');
+    if (divCustom) {
+        divCustom.style.display = (val === 'custom') ? 'block' : 'none';
+    }
+    window.loadAuditoriaList();
+};
 
 window.loadAuditoriaUsuariosPlantel = async () => {
     const dl = document.getElementById('auditUsersDatalist');
     if (!dl) return;
-    
     try {
-        let query = supabaseClient.from('perfiles_permitidos')
+        let q = supabaseClient.from('perfiles_permitidos')
             .select('nombre, rol').neq('rol', 'alumno')
             .order('nombre');
-            
-        // Si el master ha seleccionado un plantel en su sesión, filtramos, si no, traemos todos.
-        if (state.plantelId) {
-            query = query.eq('plantel_id', state.plantelId);
-        }
-        
-        const { data: permitidos } = await query;
-            
+        const selP = document.getElementById('auditPlantelSelect')?.value || state.plantelId;
+        if (selP) q = q.eq('plantel_id', selP);
+
+        const { data: permitidos } = await q;
         if (permitidos && permitidos.length > 0) {
             let html = '';
             const namesAdded = new Set();
@@ -29331,13 +29599,450 @@ window.loadAuditoriaUsuariosPlantel = async () => {
                 }
             });
             dl.innerHTML = html;
-            const cnt = document.getElementById('auditUsersCount');
-            if(cnt) cnt.innerText = namesAdded.size + ' usuarios listos para buscar.';
-        } else {
-            const cnt = document.getElementById('auditUsersCount');
-            if(cnt) cnt.innerText = 'No se encontraron usuarios.';
         }
-    } catch(e) {
-        console.error("Error cargando usuarios para auditoría:", e);
+    } catch(e) {}
+};
+
+window.loadAuditoriaList = async (loadMore = false) => {
+    const tbody = document.getElementById('tbodyAuditoria');
+    if (!tbody) return;
+
+    if (!loadMore) {
+        window._auditPagination = 0;
+        window._auditCurrentData = [];
+        tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; padding:30px; color:var(--text-muted)"><i class="fa-solid fa-spinner fa-spin"></i> Consultando registros de actividad...</td></tr>';
     }
+
+    try {
+        const pId = document.getElementById('auditPlantelSelect')?.value || '';
+        const modulo = document.getElementById('auditTableSelect')?.value || 'todos';
+        const rolFiltro = document.getElementById('auditRolSelect')?.value || '';
+        const rangoFecha = document.getElementById('auditRangoFecha')?.value || 'hoy';
+        const customDate = document.getElementById('auditDateInput')?.value || '';
+        const search = (document.getElementById('auditSearchInput')?.value || '').trim().toLowerCase();
+
+        // Calcular límites de fecha UTC
+        let startDate = null, endDate = null;
+        if (rangoFecha === 'hoy') {
+            const todayStr = new Date().toISOString().split('T')[0];
+            startDate = `${todayStr}T00:00:00.000Z`;
+            endDate = `${todayStr}T23:59:59.999Z`;
+        } else if (rangoFecha === 'ayer') {
+            const yStr = new Date(Date.now() - 86400000).toISOString().split('T')[0];
+            startDate = `${yStr}T00:00:00.000Z`;
+            endDate = `${yStr}T23:59:59.999Z`;
+        } else if (rangoFecha === '7dias') {
+            startDate = new Date(Date.now() - 7 * 86400000).toISOString();
+            endDate = new Date().toISOString();
+        } else if (rangoFecha === '30dias') {
+            startDate = new Date(Date.now() - 30 * 86400000).toISOString();
+            endDate = new Date().toISOString();
+        } else if (rangoFecha === 'custom' && customDate) {
+            startDate = `${customDate}T00:00:00.000Z`;
+            endDate = `${customDate}T23:59:59.999Z`;
+        }
+
+        // Asegurar mapa de planteles en memoria
+        if (!window._plantelesMap || Object.keys(window._plantelesMap).length === 0) {
+            try {
+                const { data: pList } = await supabaseClient.from('planteles').select('id, nombre');
+                window._plantelesMap = {};
+                (pList || []).forEach(p => { window._plantelesMap[p.id] = p.nombre; });
+            } catch(e) {}
+        }
+        const pMap = window._plantelesMap || {};
+
+        let collected = [];
+
+        // ==========================================
+        // 1. INICIOS DE SESIÓN (CONEXIONES)
+        // ==========================================
+        if (modulo === 'todos' || modulo === 'conexiones_log') {
+            let q = supabaseClient.from('conexiones_log').select('*');
+            if (pId) q = q.eq('plantel_id', pId);
+            if (rolFiltro) q = q.eq('rol', rolFiltro);
+            if (search) q = q.ilike('nombre', `%${search}%`);
+            if (startDate && endDate) q = q.gte('fecha_conexion', startDate).lte('fecha_conexion', endDate);
+            
+            const limit = (modulo === 'conexiones_log') ? 100 : 40;
+            const { data: connRows } = await q.order('fecha_conexion', { ascending: false }).limit(limit);
+            
+            (connRows || []).forEach(c => {
+                collected.push({
+                    fecha: c.fecha_conexion,
+                    plantel_id: c.plantel_id,
+                    plantel_nombre: pMap[c.plantel_id] || 'Plantel',
+                    usuario_nombre: c.nombre || 'Usuario Desconocido',
+                    usuario_rol: (c.rol || 'USUARIO').toUpperCase(),
+                    modulo: 'Inicio de Sesión',
+                    icono: 'fa-right-to-bracket',
+                    color: '#2563eb',
+                    bg: '#eff6ff',
+                    detalle: `Acceso autenticado al sistema Edu-LM desde dispositivo web.`
+                });
+            });
+        }
+
+        // ==========================================
+        // 2. EVALUACIONES DE ACTIVIDADES (DOCENTES)
+        // ==========================================
+        if (modulo === 'todos' || modulo === 'evaluaciones_actividades') {
+            if (!rolFiltro || rolFiltro === 'MAESTRO') {
+                let q = supabaseClient.from('evaluaciones_actividades')
+                    .select('id, actividad_id, alumno_id, calificacion, fecha_evaluacion, plantel_id');
+                if (pId) q = q.eq('plantel_id', pId);
+                if (startDate && endDate) q = q.gte('fecha_evaluacion', startDate).lte('fecha_evaluacion', endDate);
+
+                const limit = (modulo === 'evaluaciones_actividades') ? 120 : 50;
+                const { data: evalRows } = await q.order('fecha_evaluacion', { ascending: false }).limit(limit);
+
+                if (evalRows && evalRows.length > 0) {
+                    const actIds = [...new Set(evalRows.map(e => e.actividad_id).filter(Boolean))];
+                    const aluIds = [...new Set(evalRows.map(e => e.alumno_id).filter(Boolean))];
+
+                    let actsMap = {}, alusMap = {};
+                    if (actIds.length > 0 || aluIds.length > 0) {
+                        const [actsRes, alusRes] = await Promise.all([
+                            actIds.length > 0 ? supabaseClient.from('actividades_maestro').select('id, titulo, materia, rubro_name, maestro_id, perfiles(nombre)').in('id', actIds) : { data: [] },
+                            aluIds.length > 0 ? supabaseClient.from('alumnos').select('id, nombre').in('id', aluIds) : { data: [] }
+                        ]);
+                        (actsRes.data || []).forEach(a => { actsMap[a.id] = a; });
+                        (alusRes.data || []).forEach(al => { alusMap[al.id] = al.nombre; });
+                    }
+
+                    evalRows.forEach(ev => {
+                        const act = actsMap[ev.actividad_id] || null;
+                        const aluNom = alusMap[ev.alumno_id] || 'Alumno';
+                        const teacherNom = act?.perfiles?.nombre || 'Docente';
+                        const actTitulo = act?.titulo || 'Actividad';
+                        const materia = act?.materia || '';
+                        const rubro = act?.rubro_name ? ` (${act.rubro_name})` : '';
+
+                        // Filtro de búsqueda textual
+                        if (search) {
+                            const matchSearch = teacherNom.toLowerCase().includes(search) || 
+                                                aluNom.toLowerCase().includes(search) || 
+                                                actTitulo.toLowerCase().includes(search) || 
+                                                materia.toLowerCase().includes(search);
+                            if (!matchSearch) return;
+                        }
+
+                        collected.push({
+                            fecha: ev.fecha_evaluacion,
+                            plantel_id: ev.plantel_id,
+                            plantel_nombre: pMap[ev.plantel_id] || 'Plantel',
+                            usuario_nombre: teacherNom,
+                            usuario_rol: 'MAESTRO',
+                            modulo: 'Evaluación de Actividad',
+                            icono: 'fa-check-double',
+                            color: '#059669',
+                            bg: '#ecfdf5',
+                            detalle: `Calificación: <b style="font-size:1.1em; color:#059669;">${ev.calificacion}</b> | Actividad: <b>${actTitulo}</b>${rubro} | Alumno: <b>${aluNom}</b> ${materia ? `| ${materia}` : ''}`
+                        });
+                    });
+                }
+            }
+        }
+
+        // ==========================================
+        // 3. COMUNICADOS Y AVISOS ESCOLARES
+        // ==========================================
+        if (modulo === 'todos' || modulo === 'comunicados') {
+            let q = supabaseClient.from('comunicados').select('*');
+            if (pId) q = q.eq('plantel_id', pId);
+            if (startDate && endDate) q = q.gte('creado_en', startDate).lte('creado_en', endDate);
+            if (search) q = q.or(`titulo.ilike.%${search}%,autor_nombre.ilike.%${search}%`);
+
+            const limit = (modulo === 'comunicados') ? 80 : 30;
+            const { data: comRows } = await q.order('creado_en', { ascending: false }).limit(limit);
+
+            (comRows || []).forEach(cm => {
+                const rol = (cm.autor_rol || 'PERSONAL').toUpperCase();
+                if (rolFiltro && rol !== rolFiltro) return;
+
+                collected.push({
+                    fecha: cm.creado_en,
+                    plantel_id: cm.plantel_id,
+                    plantel_nombre: pMap[cm.plantel_id] || 'Plantel',
+                    usuario_nombre: cm.autor_nombre || 'Personal Escolar',
+                    usuario_rol: rol,
+                    modulo: 'Comunicado Escolar',
+                    icono: 'fa-bullhorn',
+                    color: '#d97706',
+                    bg: '#fffbeb',
+                    detalle: `<b>${cm.titulo || 'Sin título'}</b>: ${(cm.contenido || '').substring(0, 160)}...`
+                });
+            });
+        }
+
+        // ==========================================
+        // 4. CREACIÓN DE ACTIVIDADES DOCENTES
+        // ==========================================
+        if (modulo === 'todos' || modulo === 'actividades_maestro') {
+            if (!rolFiltro || rolFiltro === 'MAESTRO') {
+                let q = supabaseClient.from('actividades_maestro').select('*, perfiles(nombre)');
+                if (pId) q = q.eq('plantel_id', pId);
+                if (startDate && endDate) q = q.gte('creado_en', startDate).lte('creado_en', endDate);
+                if (search) q = q.ilike('titulo', `%${search}%`);
+
+                const limit = (modulo === 'actividades_maestro') ? 80 : 30;
+                const { data: actRows } = await q.order('creado_en', { ascending: false }).limit(limit);
+
+                (actRows || []).forEach(a => {
+                    const teacherNom = a.perfiles?.nombre || 'Docente';
+                    if (search && !teacherNom.toLowerCase().includes(search) && !(a.titulo || '').toLowerCase().includes(search)) return;
+
+                    collected.push({
+                        fecha: a.creado_en,
+                        plantel_id: a.plantel_id,
+                        plantel_nombre: pMap[a.plantel_id] || 'Plantel',
+                        usuario_nombre: teacherNom,
+                        usuario_rol: 'MAESTRO',
+                        modulo: 'Creación de Actividad',
+                        icono: 'fa-book-open',
+                        color: '#7c3aed',
+                        bg: '#f5f3ff',
+                        detalle: `Actividad: <b>${a.titulo}</b> | Materia: <b>${a.materia}</b> | Rubro: <b>${a.rubro_name || 'General'} (${a.rubro_peso || 0}%)</b>`
+                    });
+                });
+            }
+        }
+
+        // ==========================================
+        // 5. ASISTENCIAS / PASES DE LISTA
+        // ==========================================
+        if (modulo === 'todos' || modulo === 'asistencias') {
+            if (!rolFiltro || rolFiltro === 'MAESTRO' || rolFiltro === 'APOYO') {
+                let q = supabaseClient.from('asistencias').select('*');
+                if (pId) q = q.eq('plantel_id', pId);
+                if (startDate && endDate) q = q.gte('creado_en', startDate).lte('creado_en', endDate);
+
+                const limit = (modulo === 'asistencias') ? 80 : 25;
+                const { data: asistRows } = await q.order('creado_en', { ascending: false }).limit(limit);
+
+                (asistRows || []).forEach(as => {
+                    collected.push({
+                        fecha: as.creado_en || as.fecha,
+                        plantel_id: as.plantel_id,
+                        plantel_nombre: pMap[as.plantel_id] || 'Plantel',
+                        usuario_nombre: 'Docente / Prefectura',
+                        usuario_rol: 'MAESTRO',
+                        modulo: 'Pase de Lista / Asistencia',
+                        icono: 'fa-clipboard-user',
+                        color: '#0891b2',
+                        bg: '#ecfeff',
+                        detalle: `Estado: <b>${as.estado}</b> | Materia: <b>${as.materia || 'General'}</b>`
+                    });
+                });
+            }
+        }
+
+        // ==========================================
+        // 6. CALIFICACIONES TRIMESTRALES
+        // ==========================================
+        if (modulo === 'todos' || modulo === 'calificaciones') {
+            let q = supabaseClient.from('calificaciones').select('*, alumnos(nombre)');
+            if (pId) q = q.eq('plantel_id', pId);
+
+            const limit = (modulo === 'calificaciones') ? 80 : 20;
+            const { data: calRows } = await q.order('actualizado_en', { ascending: false }).limit(limit);
+
+            (calRows || []).forEach(cl => {
+                const aluNom = cl.alumnos?.nombre || 'Alumno';
+                if (search && !aluNom.toLowerCase().includes(search) && !(cl.materia_nombre || '').toLowerCase().includes(search)) return;
+
+                collected.push({
+                    fecha: cl.actualizado_en || cl.fecha || new Date().toISOString(),
+                    plantel_id: cl.plantel_id,
+                    plantel_nombre: pMap[cl.plantel_id] || 'Plantel',
+                    usuario_nombre: 'Docente / Calificaciones',
+                    usuario_rol: 'MAESTRO',
+                    modulo: 'Calificación Trimestral',
+                    icono: 'fa-graduation-cap',
+                    color: '#4f46e5',
+                    bg: '#eef2ff',
+                    detalle: `Trimestre ${cl.trimestre}: Calificación <b>${cl.calificacion}</b> | Alumno: <b>${aluNom}</b> | Materia: <b>${cl.materia_nombre || ''}</b>`
+                });
+            });
+        }
+
+        // ==========================================
+        // 7. REGISTRO FORENSE DB (audit_log)
+        // ==========================================
+        if (modulo === 'todos' || modulo === 'audit_log') {
+            try {
+                let q = supabaseClient.from('audit_log').select('*, perfiles!usuario_id(nombre, rol)');
+                if (pId) q = q.or(`valores_nuevos->>plantel_id.eq.${pId},valores_viejos->>plantel_id.eq.${pId}`);
+                if (startDate && endDate) q = q.gte('fecha', startDate).lte('fecha', endDate);
+
+                const limit = (modulo === 'audit_log') ? 80 : 25;
+                const { data: auditRows } = await q.order('fecha', { ascending: false }).limit(limit);
+
+                (auditRows || []).forEach(au => {
+                    collected.push({
+                        fecha: au.fecha,
+                        plantel_id: au.valores_nuevos?.plantel_id || au.valores_viejos?.plantel_id,
+                        plantel_nombre: pMap[au.valores_nuevos?.plantel_id] || 'Plantel',
+                        usuario_nombre: au.perfiles?.nombre || 'Usuario DB',
+                        usuario_rol: (au.perfiles?.rol || 'SISTEMA').toUpperCase(),
+                        modulo: `Forense DB (${au.tabla_afectada})`,
+                        icono: 'fa-database',
+                        color: '#475569',
+                        bg: '#f8fafc',
+                        detalle: `Operación: <b>${au.operacion}</b> en tabla <code>${au.tabla_afectada}</code> (IP: ${au.ip_address || 'N/A'})`
+                    });
+                });
+            } catch(e) {}
+        }
+
+        // ==========================================
+        // 8. COLA EN TIEMPO REAL LOCAL
+        // ==========================================
+        if (window._auditRealtimeQueue && window._auditRealtimeQueue.length > 0) {
+            window._auditRealtimeQueue.forEach(q => {
+                collected.push({
+                    fecha: q.fecha,
+                    plantel_id: q.plantel_id,
+                    plantel_nombre: pMap[q.plantel_id] || 'Plantel',
+                    usuario_nombre: q.usuario_nombre,
+                    usuario_rol: q.usuario_rol,
+                    modulo: q.modulo,
+                    icono: 'fa-bolt',
+                    color: '#7c3aed',
+                    bg: '#f5f3ff',
+                    detalle: q.detalle
+                });
+            });
+        }
+
+        // Ordenar todos los registros cronológicamente
+        collected.sort((a, b) => new Date(b.fecha) - new Date(a.fecha));
+
+        if (!loadMore) {
+            window._auditCurrentData = collected;
+        } else {
+            window._auditCurrentData = [...window._auditCurrentData, ...collected];
+        }
+
+        const countBadge = document.getElementById('auditCountBadge');
+        if (countBadge) countBadge.innerText = `${window._auditCurrentData.length} registros cargados`;
+
+        const btnMas = document.getElementById('btnCargarMasAudit');
+        if (btnMas) btnMas.style.display = (collected.length >= 40) ? 'inline-block' : 'none';
+
+        if (window._auditCurrentData.length === 0) {
+            tbody.innerHTML = `<tr><td colspan="5" style="text-align:center; padding:40px; color:var(--text-muted)">
+                <i class="fa-solid fa-folder-open fa-2x" style="opacity:0.3; margin-bottom:10px; display:block;"></i>
+                No se encontraron movimientos registrados con los filtros seleccionados.<br>
+                <span style="font-size:0.8rem;">Prueba ampliando el periodo a "Últimos 7 días" o seleccionando "Todos los Planteles".</span>
+            </td></tr>`;
+            return;
+        }
+
+        let html = '';
+        window._auditCurrentData.forEach(row => {
+            const dt = new Date(row.fecha).toLocaleString('es-MX', { 
+                timeZone: 'America/Mexico_City',
+                dateStyle: 'short',
+                timeStyle: 'medium'
+            });
+
+            let rolBadgeColor = '#64748b', rolBadgeBg = '#f1f5f9';
+            if (row.usuario_rol === 'MAESTRO') { rolBadgeColor = '#6d28d9'; rolBadgeBg = '#ede9fe'; }
+            else if (row.usuario_rol === 'DIRECTIVO') { rolBadgeColor = '#b45309'; rolBadgeBg = '#fef3c7'; }
+            else if (row.usuario_rol === 'ALUMNO') { rolBadgeColor = '#0369a1'; rolBadgeBg = '#e0f2fe'; }
+            else if (row.usuario_rol === 'ADMIN') { rolBadgeColor = '#15803d'; rolBadgeBg = '#dcfce7'; }
+            else if (row.usuario_rol === 'APOYO') { rolBadgeColor = '#0891b2'; rolBadgeBg = '#ecfeff'; }
+
+            html += `
+                <tr style="border-bottom:1px solid #f1f5f9; vertical-align:middle; transition:background-color 0.15s;" onmouseover="this.style.backgroundColor='#f8fafc'" onmouseout="this.style.backgroundColor='transparent'">
+                    <td style="padding:12px 14px; white-space:nowrap; font-weight:600; color:var(--text-muted); font-size:0.8rem;">
+                        <i class="fa-regular fa-clock" style="margin-right:4px;"></i>${dt}
+                    </td>
+                    <td style="padding:12px 14px; white-space:nowrap;">
+                        <span style="background:#f1f5f9; color:var(--primary); padding:3px 9px; border-radius:12px; font-weight:700; font-size:0.75rem;">
+                            <i class="fa-solid fa-school" style="font-size:0.7em; margin-right:4px;"></i>${row.plantel_nombre || 'General'}
+                        </span>
+                    </td>
+                    <td style="padding:12px 14px;">
+                        <div style="font-weight:700; color:var(--text-main); font-size:0.85rem;">
+                            <i class="fa-solid fa-user" style="color:var(--text-muted); margin-right:5px;"></i>${row.usuario_nombre}
+                        </div>
+                        <span style="background:${rolBadgeBg}; color:${rolBadgeColor}; padding:1px 7px; border-radius:10px; font-size:0.7rem; font-weight:bold; display:inline-block; margin-top:2px;">
+                            ${row.usuario_rol}
+                        </span>
+                    </td>
+                    <td style="padding:12px 14px; white-space:nowrap;">
+                        <div style="font-weight:700; color:${row.color}; font-size:0.85rem; display:flex; align-items:center; gap:6px;">
+                            <div style="width:24px; height:24px; border-radius:6px; background:${row.bg}; display:flex; align-items:center; justify-content:center; font-size:0.8rem;">
+                                <i class="fa-solid ${row.icono}"></i>
+                            </div>
+                            <span>${row.modulo}</span>
+                        </div>
+                    </td>
+                    <td style="padding:12px 14px; font-size:0.82rem; color:var(--text-main); line-height:1.4;">
+                        ${row.detalle}
+                    </td>
+                </tr>
+            `;
+        });
+
+        tbody.innerHTML = html;
+        window._auditPagination++;
+
+    } catch(err) {
+        console.error("Error cargando registros de auditoría:", err);
+        tbody.innerHTML = `<tr><td colspan="5" style="text-align:center; padding:30px; color:var(--danger)">
+            <i class="fa-solid fa-triangle-exclamation"></i> Error al consultar auditoría: ${err.message}
+        </td></tr>`;
+    }
+};
+
+window.exportAuditoriaCSV = () => {
+    if (!window._auditCurrentData || window._auditCurrentData.length === 0) {
+        alert("No hay registros cargados para exportar. Realiza una búsqueda primero.");
+        return;
+    }
+    
+    let csv = "Fecha y Hora,Plantel,Usuario Responsable,Rol,Modulo,Detalle del Movimiento\n";
+    window._auditCurrentData.forEach(row => {
+        const dt = new Date(row.fecha).toLocaleString('es-MX', { timeZone: 'America/Mexico_City' });
+        const p = (row.plantel_nombre || '').replace(/"/g, '""');
+        const u = (row.usuario_nombre || '').replace(/"/g, '""');
+        const r = (row.usuario_rol || '').replace(/"/g, '""');
+        const m = (row.modulo || '').replace(/"/g, '""');
+        const d = (row.detalle || '').replace(/<[^>]*>/g, '').replace(/"/g, '""');
+        
+        csv += `"${dt}","${p}","${u}","${r}","${m}","${d}"\n`;
+    });
+    
+    const blob = new Blob(["\uFEFF" + csv], { type: 'text/csv;charset=utf-8;' });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `Auditoria_Movimientos_EduLM_${new Date().toISOString().split('T')[0]}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    window.URL.revokeObjectURL(url);
+};
+
+// Registrador universal de movimientos en tiempo real para clientes activos
+window._auditRealtimeQueue = [];
+window.registrarMovimientoAuditoria = async (item) => {
+    try {
+        const pId = item?.plantelId || state.plantelId || (await window._obtenerPlantelIdActivo && await window._obtenerPlantelIdActivo());
+        const entry = {
+            fecha: new Date().toISOString(),
+            plantel_id: pId,
+            usuario_nombre: state.userName || 'Usuario',
+            usuario_rol: (state.role || 'USUARIO').toUpperCase(),
+            modulo: item?.modulo || 'Actividad',
+            accion: item?.accion || 'Movimiento',
+            detalle: item?.detalle || ''
+        };
+        if (!window._auditRealtimeQueue) window._auditRealtimeQueue = [];
+        window._auditRealtimeQueue.unshift(entry);
+        if (window._auditRealtimeQueue.length > 50) window._auditRealtimeQueue.pop();
+    } catch(e) {}
 };
