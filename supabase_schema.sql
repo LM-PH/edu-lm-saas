@@ -765,7 +765,7 @@ DECLARE
     tables_list text[] := ARRAY[
         'alumnos', 'asistencias', 'autorizaciones_movimientos', 'calificaciones', 
         'comunicados', 'encuadres', 'evaluaciones_actividades', 'firmas_encuadre', 
-        'actividades_docente', 'asignaciones_docentes', 'grupos', 'materias', 
+        'actividades_docente', 'actividades_maestro', 'asignaciones_docentes', 'grupos', 'materias', 
         'perfiles_permitidos', 'reportes_conducta', 'estudios_psicosociales', 
         'cuestionarios_psicosociales', 'horarios_maestros', 'asistencia_sesiones', 
         'bitacora_docente'
@@ -1127,10 +1127,22 @@ CREATE TABLE IF NOT EXISTS public.actividades_maestro (
     rubro_peso numeric,
     trimestre integer,
     plantel_id uuid REFERENCES public.planteles(id) ON DELETE CASCADE,
-    creado_en timestamp with time zone DEFAULT now()
+    creado_en timestamp with time zone DEFAULT now(),
+    fecha_creacion timestamp with time zone DEFAULT now()
 );
 ALTER TABLE public.actividades_maestro ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "Lectura y escritura actividades maestro" ON public.actividades_maestro FOR ALL TO authenticated USING (plantel_id = (SELECT p.plantel_id FROM public.perfiles p WHERE p.id = auth.uid()));
+CREATE POLICY "Permitir lectura y gestion actividades maestro" ON public.actividades_maestro FOR ALL TO authenticated USING (
+    maestro_id = auth.uid()
+    OR plantel_id = (SELECT p.plantel_id FROM public.perfiles p WHERE p.id = auth.uid())
+    OR (SELECT p.plantel_id FROM public.perfiles p WHERE p.id = auth.uid()) IS NULL
+    OR (SELECT (p.es_master = true OR p.rol = 'master' OR p.rol = 'admin') FROM public.perfiles p WHERE p.id = auth.uid()) = TRUE
+    OR (current_setting('request.jwt.claims', true)::json ->> 'email') = 'zlagustin10@gmail.com'
+) WITH CHECK (
+    maestro_id = auth.uid()
+    OR plantel_id = (SELECT p.plantel_id FROM public.perfiles p WHERE p.id = auth.uid())
+    OR (SELECT (p.es_master = true OR p.rol = 'master' OR p.rol = 'admin') FROM public.perfiles p WHERE p.id = auth.uid()) = TRUE
+    OR (current_setting('request.jwt.claims', true)::json ->> 'email') = 'zlagustin10@gmail.com'
+);
 
 CREATE TABLE IF NOT EXISTS public.horarios (
     id uuid DEFAULT gen_random_uuid() PRIMARY KEY,

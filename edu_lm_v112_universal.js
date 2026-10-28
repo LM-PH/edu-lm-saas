@@ -13137,7 +13137,7 @@ window.loadActividadesMaestro = async () => {
            .eq('maestro_id', currentUser.data.user.id)
            .eq('finalizada', isFinalizada)
            .eq('trimestre', trimSelected);
-        if (pId) qMisActs = qMisActs.eq('plantel_id', pId);
+        if (pId) qMisActs = qMisActs.or(`plantel_id.eq.${pId},plantel_id.is.null`);
         
         const { data: misActividades, error: errAct } = await qMisActs.order('fecha_creacion', { ascending: false });
            
@@ -13833,6 +13833,7 @@ window.confirmarCopiarActividad = async (actId) => {
         const { data: act, error: errFetch } = await supabaseClient.from('actividades_maestro').select('*').eq('id', actId).single();
         if(errFetch || !act) throw errFetch;
 
+        const activePlantelId = act.plantel_id || state.plantelId || (window._obtenerPlantelIdActivo ? await window._obtenerPlantelIdActivo() : null);
         const itemsToInsert = Array.from(checkboxes).map(cb => {
             const val = cb.value;
             const isTec = val.startsWith('grado:');
@@ -13849,7 +13850,8 @@ window.confirmarCopiarActividad = async (actId) => {
                 rubro_name: act.rubro_name,
                 rubro_peso: act.rubro_peso,
                 trimestre: act.trimestre,
-                plantel_id: act.plantel_id,
+                plantel_id: activePlantelId,
+                fecha_creacion: new Date().toISOString(),
                 finalizada: false
             };
         });
@@ -13929,6 +13931,7 @@ window.agregarActividad = async () => {
        }
        
        const trimVal = document.getElementById('actTrimestre').value || 1;
+       const activePlantelId = state.plantelId || (window._obtenerPlantelIdActivo ? await window._obtenerPlantelIdActivo() : null);
        
        // Soportar múltiples grupos si seleccionó "Todos mis grupos"
        const itemsToInsert = valMulti.split(',').map(val => {
@@ -13947,7 +13950,8 @@ window.agregarActividad = async () => {
                rubro_name: rubroName,
                rubro_peso: rubroPeso,
                trimestre: parseInt(trimVal),
-               plantel_id: state.plantelId
+               plantel_id: activePlantelId,
+               fecha_creacion: new Date().toISOString()
            };
        });
        
@@ -14204,13 +14208,15 @@ window.guardarEvaluacionQR = async () => {
     if(!nota || !targetStudentId || !currentActividadId) return alert("Faltan datos para registrar la calificación.");
 
     try {
+        const pIdActivo = state.plantelId || (window._obtenerPlantelIdActivo ? await window._obtenerPlantelIdActivo() : null);
         const { error } = await supabaseClient.from('evaluaciones_actividades')
           .upsert({ 
               actividad_id: currentActividadId, 
               alumno_id: targetStudentId, 
               calificacion: nota, 
-              plantel_id: state.plantelId 
-          }, { onConflict: 'actividad_id, alumno_id' });
+              fecha_evaluacion: new Date().toISOString(),
+              plantel_id: pIdActivo 
+          }, { onConflict: 'actividad_id,alumno_id' });
         
         if(error) throw error;
 
@@ -14511,6 +14517,7 @@ window.guardarTodasEvaluacionesManual = async () => {
                 actividad_id: currentActividadId,
                 alumno_id: alumnoId,
                 calificacion: nota,
+                fecha_evaluacion: new Date().toISOString(),
                 plantel_id: pId
             });
         }
@@ -14528,7 +14535,7 @@ window.guardarTodasEvaluacionesManual = async () => {
     
     try {
         const { error } = await supabaseClient.from('evaluaciones_actividades')
-          .upsert(toSave, { onConflict: 'actividad_id, alumno_id' });
+          .upsert(toSave, { onConflict: 'actividad_id,alumno_id' });
         
         if(error) throw error;
         
@@ -15030,7 +15037,7 @@ window.cargarAlumnosLista = async () => {
             const isModoFinal = currentTrim === 'final';
 
             let actsQuery = supabaseClient.from('actividades_maestro').select('id, titulo, rubro_name, rubro_peso, trimestre, materia');
-            if (pId) actsQuery = actsQuery.eq('plantel_id', pId);
+            if (pId) actsQuery = actsQuery.or(`plantel_id.eq.${pId},plantel_id.is.null`);
             if(isTec) {
                 actsQuery = actsQuery.eq('target_grado', targetGrado);
             } else {
@@ -15231,7 +15238,7 @@ window.cargarAlumnosLista = async () => {
             const materiaLimpia = (materia || '').trim();
 
             let actsQuery = supabaseClient.from('actividades_maestro').select('id, titulo, rubro_name, rubro_peso, trimestre, materia');
-            if (pId) actsQuery = actsQuery.eq('plantel_id', pId);
+            if (pId) actsQuery = actsQuery.or(`plantel_id.eq.${pId},plantel_id.is.null`);
             if(isTec) actsQuery = actsQuery.eq('target_grado', targetGrado);
             else actsQuery = actsQuery.eq('grupo_id', gid);
             if (!isModoFinal) actsQuery = actsQuery.eq('trimestre', currentTrim);
@@ -16034,7 +16041,7 @@ window.cargarBoletasGrupo = async () => {
         if(!isModoFinal) {
             let actsQuery = supabaseClient.from('actividades_maestro')
                 .select('id, titulo, rubro_name, rubro_peso, materia')
-                .eq('plantel_id', state.plantelId)
+                .or(`plantel_id.eq.${state.plantelId},plantel_id.is.null`)
                 .eq('trimestre', currentTrim);
                 
             if(isTec) {
@@ -19989,7 +19996,7 @@ window.sincronizarAsistenciaActividad = async ({ grupoId, materia, trimestre, ta
         const tituloAct = `Asistencia Continua (Pase de Lista - Trimestre ${trim})`;
         let qAct = supabaseClient.from('actividades_maestro')
             .select('id, rubro_peso, rubro_name')
-            .eq('plantel_id', state.plantelId)
+            .or(`plantel_id.eq.${state.plantelId},plantel_id.is.null`)
             .eq('maestro_id', uid)
             .ilike('materia', mat)
             .eq('trimestre', trim)
@@ -20020,7 +20027,8 @@ window.sincronizarAsistenciaActividad = async ({ grupoId, materia, trimestre, ta
                 rubro_name: nombreRubro,
                 rubro_peso: pesoRubro,
                 trimestre: trim,
-                plantel_id: state.plantelId
+                plantel_id: state.plantelId,
+                fecha_creacion: new Date().toISOString()
             };
             const { data: newAct, error: errAct } = await supabaseClient.from('actividades_maestro').insert([newActPayload]).select('id').maybeSingle();
             if (errAct) {
@@ -29395,9 +29403,10 @@ async function renderMasterAuditoria() {
                     <select id="auditTableSelect" class="form-select" onchange="window.loadAuditoriaList()">
                         <option value="todos" selected>⚡ Todos los Movimientos</option>
                         <option value="evaluaciones_actividades">📝 Calificaciones de Actividades (Maestros)</option>
-                        <option value="conexiones_log">🔑 Inicios de Sesión / Conexiones</option>
                         <option value="actividades_maestro">📚 Creación de Actividades (Maestros)</option>
+                        <option value="encuadres">⚖️ Encuadres y Criterios (Maestros)</option>
                         <option value="asistencias">📋 Pases de Lista / Asistencias</option>
+                        <option value="conexiones_log">🔑 Inicios de Sesión / Conexiones</option>
                         <option value="comunicados">📢 Comunicados y Avisos</option>
                         <option value="calificaciones">🎓 Calificaciones Trimestrales</option>
                         <option value="audit_log">🛡️ Registro Forense DB (audit_log)</option>
@@ -29487,11 +29496,10 @@ window.loadAuditoriaPlantelesSelect = async () => {
         const { data: planteles } = await supabaseClient.from('planteles').select('id, nombre').order('nombre');
         if (planteles && planteles.length > 0) {
             window._plantelesMap = {};
-            let html = '<option value="">🏢 Todos los Planteles</option>';
+            let html = '<option value="" selected>🏢 Todos los Planteles</option>';
             planteles.forEach(p => {
                 window._plantelesMap[p.id] = p.nombre;
-                const isSel = (state.plantelId === p.id) ? 'selected' : '';
-                html += `<option value="${p.id}" ${isSel}>${p.nombre}</option>`;
+                html += `<option value="${p.id}">${p.nombre}</option>`;
             });
             sel.innerHTML = html;
         }
@@ -29553,31 +29561,43 @@ window.loadAuditoriaUsuariosPlantel = async () => {
         const [permRes, profRes] = await Promise.all([qPerm, qProf]);
 
         const mapUsuarios = new Map();
+        if (!window._auditoriaUsuariosById) window._auditoriaUsuariosById = new Map();
 
-        // 1. Agregar de perfiles_permitidos
-        (permRes.data || []).forEach(p => {
-            if (!p.nombre || p.nombre === 'Nuevo Usuario') return;
-            const normKey = p.nombre.trim().toLowerCase();
-            if (!mapUsuarios.has(normKey)) {
-                mapUsuarios.set(normKey, {
-                    id: p.id,
-                    nombre: p.nombre.trim(),
-                    email: (p.email || '').trim().toLowerCase(),
-                    rol: (p.rol || 'MAESTRO').toUpperCase(),
-                    plantel_id: p.plantel_id,
-                    plantel_nombre: pMap[p.plantel_id] || ''
-                });
-            }
-        });
-
-        // 2. Agregar de perfiles
+        // 1. Agregar perfiles reales autenticados (clave auth UUID -> nombre)
         (profRes.data || []).forEach(p => {
             if (!p.nombre || p.rol === 'master') return;
-            const normKey = p.nombre.trim().toLowerCase();
+            const cleanNom = p.nombre.trim();
+            if (p.id) window._auditoriaUsuariosById.set(p.id, cleanNom);
+            if (p.email) window._auditoriaUsuariosById.set(p.email.trim().toLowerCase(), cleanNom);
+
+            const normKey = cleanNom.toLowerCase();
+            mapUsuarios.set(normKey, {
+                id: p.id,
+                nombre: cleanNom,
+                email: (p.email || '').trim().toLowerCase(),
+                rol: (p.rol || 'MAESTRO').toUpperCase(),
+                plantel_id: p.plantel_id,
+                plantel_nombre: pMap[p.plantel_id] || ''
+            });
+        });
+
+        // 2. Complementar con perfiles_permitidos si algún maestro no está en perfiles
+        (permRes.data || []).forEach(p => {
+            if (!p.nombre || p.nombre === 'Nuevo Usuario') return;
+            const cleanNom = p.nombre.trim();
+            const normKey = cleanNom.toLowerCase();
+
+            if (p.id && !window._auditoriaUsuariosById.has(p.id)) {
+                window._auditoriaUsuariosById.set(p.id, cleanNom);
+            }
+            if (p.email && !window._auditoriaUsuariosById.has(p.email.trim().toLowerCase())) {
+                window._auditoriaUsuariosById.set(p.email.trim().toLowerCase(), cleanNom);
+            }
+
             if (!mapUsuarios.has(normKey)) {
                 mapUsuarios.set(normKey, {
                     id: p.id,
-                    nombre: p.nombre.trim(),
+                    nombre: cleanNom,
                     email: (p.email || '').trim().toLowerCase(),
                     rol: (p.rol || 'MAESTRO').toUpperCase(),
                     plantel_id: p.plantel_id,
@@ -29585,7 +29605,10 @@ window.loadAuditoriaUsuariosPlantel = async () => {
                 });
             } else {
                 const existing = mapUsuarios.get(normKey);
-                if (p.id) existing.id = p.id;
+                if (!existing.plantel_id && p.plantel_id) {
+                    existing.plantel_id = p.plantel_id;
+                    existing.plantel_nombre = pMap[p.plantel_id] || '';
+                }
             }
         });
 
@@ -29681,6 +29704,9 @@ window.loadAuditoriaList = async (loadMore = false) => {
         const teachersMap = window._auditoriaUsuariosMap || new Map();
         const getTeacherNameById = (id, fallback = 'Docente') => {
             if (!id) return fallback;
+            if (window._auditoriaUsuariosById && window._auditoriaUsuariosById.has(id)) {
+                return window._auditoriaUsuariosById.get(id);
+            }
             for (const item of teachersMap.values()) {
                 if (item.id === id) return item.nombre;
             }
@@ -29711,10 +29737,10 @@ window.loadAuditoriaList = async (loadMore = false) => {
         if (modulo === 'todos' || modulo === 'conexiones_log') {
             let q = supabaseClient.from('conexiones_log').select('*');
             if (pId) q = q.eq('plantel_id', pId);
-            if (rolFiltro) q = q.eq('rol', rolFiltro);
+            if (rolFiltro) q = q.ilike('rol', rolFiltro);
             if (startDate && endDate) q = q.gte('fecha_conexion', startDate).lte('fecha_conexion', endDate);
             
-            const limit = (modulo === 'conexiones_log') ? 200 : 80;
+            const limit = (modulo === 'conexiones_log') ? 250 : 100;
             const { data: connRows } = await q.order('fecha_conexion', { ascending: false }).limit(limit);
             
             (connRows || []).forEach(c => {
@@ -29751,10 +29777,10 @@ window.loadAuditoriaList = async (loadMore = false) => {
             if (!rolFiltro || rolFiltro === 'MAESTRO') {
                 let q = supabaseClient.from('evaluaciones_actividades')
                     .select('id, actividad_id, alumno_id, calificacion, fecha_evaluacion, plantel_id');
-                if (pId) q = q.eq('plantel_id', pId);
+                if (pId) q = q.or(`plantel_id.eq.${pId},plantel_id.is.null`);
                 if (startDate && endDate) q = q.gte('fecha_evaluacion', startDate).lte('fecha_evaluacion', endDate);
 
-                const limit = (modulo === 'evaluaciones_actividades') ? 350 : 150;
+                const limit = (modulo === 'evaluaciones_actividades') ? 450 : 200;
                 const { data: evalRows } = await q.order('fecha_evaluacion', { ascending: false }).limit(limit);
 
                 if (evalRows && evalRows.length > 0) {
@@ -29764,20 +29790,38 @@ window.loadAuditoriaList = async (loadMore = false) => {
                     let actsMap = {}, alusMap = {};
                     if (actIds.length > 0 || aluIds.length > 0) {
                         const [actsRes, alusRes] = await Promise.all([
-                            actIds.length > 0 ? supabaseClient.from('actividades_maestro').select('id, titulo, materia, rubro_name, maestro_id, perfiles(nombre)').in('id', actIds) : { data: [] },
-                            aluIds.length > 0 ? supabaseClient.from('alumnos').select('id, nombre').in('id', aluIds) : { data: [] }
+                            actIds.length > 0 ? supabaseClient.from('actividades_maestro').select('id, titulo, materia, rubro_name, maestro_id, plantel_id').in('id', actIds) : { data: [] },
+                            aluIds.length > 0 ? supabaseClient.from('alumnos').select('id, nombre, plantel_id').in('id', aluIds) : { data: [] }
                         ]);
                         (actsRes.data || []).forEach(a => { actsMap[a.id] = a; });
-                        (alusRes.data || []).forEach(al => { alusMap[al.id] = al.nombre; });
+                        (alusRes.data || []).forEach(al => { alusMap[al.id] = al; });
+                    }
+
+                    // Resolver nombres de docentes desconocidos
+                    const missingMaestroIds = [...new Set(Object.values(actsMap).map(a => a.maestro_id).filter(id => id && !window._auditoriaUsuariosById?.has(id)))];
+                    if (missingMaestroIds.length > 0) {
+                        try {
+                            const { data: profs } = await supabaseClient.from('perfiles').select('id, nombre').in('id', missingMaestroIds);
+                            (profs || []).forEach(p => {
+                                if (p.id && p.nombre) {
+                                    if (!window._auditoriaUsuariosById) window._auditoriaUsuariosById = new Map();
+                                    window._auditoriaUsuariosById.set(p.id, p.nombre);
+                                }
+                            });
+                        } catch(e) {}
                     }
 
                     evalRows.forEach(ev => {
                         const act = actsMap[ev.actividad_id] || null;
-                        const aluNom = alusMap[ev.alumno_id] || 'Alumno';
-                        let teacherNom = act?.perfiles?.nombre || getTeacherNameById(act?.maestro_id, 'Docente');
+                        const alu = alusMap[ev.alumno_id] || null;
+                        const aluNom = alu?.nombre || 'Alumno';
+                        let teacherNom = getTeacherNameById(act?.maestro_id, 'Docente');
                         const actTitulo = act?.titulo || 'Actividad';
                         const materia = act?.materia || '';
                         const rubro = act?.rubro_name ? ` (${act.rubro_name})` : '';
+
+                        let effectivePlantelId = ev.plantel_id || act?.plantel_id || alu?.plantel_id;
+                        if (pId && effectivePlantelId && effectivePlantelId !== pId) return;
 
                         if (!matchesTeacher(teacherNom, `${actTitulo} ${materia}`)) return;
 
@@ -29786,14 +29830,14 @@ window.loadAuditoriaList = async (loadMore = false) => {
                                           aluNom.toLowerCase().includes(search) || 
                                           actTitulo.toLowerCase().includes(search) || 
                                           materia.toLowerCase().includes(search) ||
-                                          (pMap[ev.plantel_id] || '').toLowerCase().includes(search);
+                                          (pMap[effectivePlantelId] || '').toLowerCase().includes(search);
                             if (!match) return;
                         }
 
                         collected.push({
-                            fecha: ev.fecha_evaluacion,
-                            plantel_id: ev.plantel_id,
-                            plantel_nombre: pMap[ev.plantel_id] || 'Plantel',
+                            fecha: ev.fecha_evaluacion || new Date().toISOString(),
+                            plantel_id: effectivePlantelId,
+                            plantel_nombre: pMap[effectivePlantelId] || 'Plantel',
                             usuario_nombre: teacherNom,
                             usuario_rol: 'MAESTRO',
                             modulo: 'Evaluación de Actividad',
@@ -29812,38 +29856,170 @@ window.loadAuditoriaList = async (loadMore = false) => {
         // ==========================================
         if (modulo === 'todos' || modulo === 'actividades_maestro') {
             if (!rolFiltro || rolFiltro === 'MAESTRO') {
-                let q = supabaseClient.from('actividades_maestro').select('*, perfiles(nombre)');
-                if (pId) q = q.eq('plantel_id', pId);
-                if (startDate && endDate) q = q.gte('creado_en', startDate).lte('creado_en', endDate);
+                const limit = (modulo === 'actividades_maestro') ? 300 : 120;
+                let actRows = null;
 
-                const limit = (modulo === 'actividades_maestro') ? 200 : 80;
-                const { data: actRows } = await q.order('creado_en', { ascending: false }).limit(limit);
+                // Intento 1: Consultar con fecha_creacion (columna estándar)
+                try {
+                    let q = supabaseClient.from('actividades_maestro')
+                        .select('id, titulo, descripcion, materia, grupo_id, target_grado, rubro_name, rubro_peso, trimestre, maestro_id, plantel_id, fecha_creacion, finalizada');
+                    if (pId) q = q.or(`plantel_id.eq.${pId},plantel_id.is.null`);
+                    if (startDate && endDate) q = q.gte('fecha_creacion', startDate).lte('fecha_creacion', endDate);
+                    
+                    const res = await q.order('fecha_creacion', { ascending: false }).limit(limit);
+                    if (!res.error && res.data) {
+                        actRows = res.data;
+                    }
+                } catch(e) {}
 
-                (actRows || []).forEach(a => {
-                    const teacherNom = a.perfiles?.nombre || getTeacherNameById(a.maestro_id, 'Docente');
-                    if (!matchesTeacher(teacherNom, `${a.titulo} ${a.materia}`)) return;
+                // Intento 2 (Fallback): si la base de datos tuviera creado_en
+                if (actRows === null) {
+                    try {
+                        let q = supabaseClient.from('actividades_maestro').select('*');
+                        if (pId) q = q.or(`plantel_id.eq.${pId},plantel_id.is.null`);
+                        if (startDate && endDate) q = q.gte('creado_en', startDate).lte('creado_en', endDate);
+                        
+                        const res = await q.order('creado_en', { ascending: false }).limit(limit);
+                        if (!res.error && res.data) {
+                            actRows = res.data;
+                        }
+                    } catch(e) {}
+                }
 
-                    if (search) {
-                        const match = teacherNom.toLowerCase().includes(search) || 
-                                      (a.titulo || '').toLowerCase().includes(search) || 
-                                      (a.materia || '').toLowerCase().includes(search) || 
-                                      (pMap[a.plantel_id] || '').toLowerCase().includes(search);
-                        if (!match) return;
+                // Intento 3 (Fallback sin filtro de orden):
+                if (actRows === null) {
+                    try {
+                        let q = supabaseClient.from('actividades_maestro').select('*');
+                        if (pId) q = q.or(`plantel_id.eq.${pId},plantel_id.is.null`);
+                        const res = await q.limit(limit);
+                        if (!res.error && res.data) {
+                            actRows = res.data;
+                        }
+                    } catch(e) {}
+                }
+
+                if (actRows && actRows.length > 0) {
+                    const missingMaestroIds = [...new Set(actRows.map(a => a.maestro_id).filter(id => id && !window._auditoriaUsuariosById?.has(id)))];
+                    if (missingMaestroIds.length > 0) {
+                        try {
+                            const { data: profs } = await supabaseClient.from('perfiles').select('id, nombre').in('id', missingMaestroIds);
+                            (profs || []).forEach(p => {
+                                if (p.id && p.nombre) {
+                                    if (!window._auditoriaUsuariosById) window._auditoriaUsuariosById = new Map();
+                                    window._auditoriaUsuariosById.set(p.id, p.nombre);
+                                }
+                            });
+                        } catch(e) {}
                     }
 
-                    collected.push({
-                        fecha: a.creado_en,
-                        plantel_id: a.plantel_id,
-                        plantel_nombre: pMap[a.plantel_id] || 'Plantel',
-                        usuario_nombre: teacherNom,
-                        usuario_rol: 'MAESTRO',
-                        modulo: 'Creación de Actividad',
-                        icono: 'fa-book-open',
-                        color: '#7c3aed',
-                        bg: '#f5f3ff',
-                        detalle: `Actividad: <b>${a.titulo}</b> | Materia: <b>${a.materia}</b> | Rubro: <b>${a.rubro_name || 'General'} (${a.rubro_peso || 0}%)</b> ${a.target_grado ? `| Grado: <b>${a.target_grado}</b>` : ''}`
+                    actRows.forEach(a => {
+                        const teacherNom = getTeacherNameById(a.maestro_id, 'Docente');
+
+                        let effectivePlantelId = a.plantel_id;
+                        if (!effectivePlantelId && a.maestro_id) {
+                            for (const u of (window._auditoriaUsuariosMap || new Map()).values()) {
+                                if (u.id === a.maestro_id && u.plantel_id) {
+                                    effectivePlantelId = u.plantel_id;
+                                    break;
+                                }
+                            }
+                        }
+
+                        if (pId && effectivePlantelId && effectivePlantelId !== pId) return;
+
+                        if (!matchesTeacher(teacherNom, `${a.titulo} ${a.materia}`)) return;
+
+                        if (search) {
+                            const match = teacherNom.toLowerCase().includes(search) || 
+                                          (a.titulo || '').toLowerCase().includes(search) || 
+                                          (a.materia || '').toLowerCase().includes(search) || 
+                                          (pMap[effectivePlantelId] || '').toLowerCase().includes(search);
+                            if (!match) return;
+                        }
+
+                        const fechaAct = a.fecha_creacion || a.creado_en || a.created_at || new Date().toISOString();
+
+                        collected.push({
+                            fecha: fechaAct,
+                            plantel_id: effectivePlantelId,
+                            plantel_nombre: pMap[effectivePlantelId] || 'Plantel',
+                            usuario_nombre: teacherNom,
+                            usuario_rol: 'MAESTRO',
+                            modulo: 'Creación de Actividad',
+                            icono: 'fa-book-open',
+                            color: '#7c3aed',
+                            bg: '#f5f3ff',
+                            detalle: `Actividad: <b>${a.titulo}</b> | Materia: <b>${a.materia}</b> | Rubro: <b>${a.rubro_name || 'General'} (${a.rubro_peso || 0}%)</b> ${a.target_grado ? `| Grado: <b>${a.target_grado}°</b>` : ''} ${a.trimestre ? `| Trimestre: <b>${a.trimestre}</b>` : ''}`
+                        });
                     });
-                });
+                }
+            }
+        }
+
+        // ==========================================
+        // 3.5 CONFIGURACIÓN DE ENCUADRES (DOCENTES)
+        // ==========================================
+        if (modulo === 'todos' || modulo === 'encuadres') {
+            if (!rolFiltro || rolFiltro === 'MAESTRO') {
+                try {
+                    let q = supabaseClient.from('encuadres').select('id, materia, trimestre, rubros, maestro_id, plantel_id, fecha_creacion');
+                    if (pId) q = q.or(`plantel_id.eq.${pId},plantel_id.is.null`);
+                    if (startDate && endDate) q = q.gte('fecha_creacion', startDate).lte('fecha_creacion', endDate);
+
+                    const limit = (modulo === 'encuadres') ? 150 : 50;
+                    const { data: encRows } = await q.order('fecha_creacion', { ascending: false }).limit(limit);
+
+                    if (encRows && encRows.length > 0) {
+                        const missingMaestroIds = [...new Set(encRows.map(e => e.maestro_id).filter(id => id && !window._auditoriaUsuariosById?.has(id)))];
+                        if (missingMaestroIds.length > 0) {
+                            try {
+                                const { data: profs } = await supabaseClient.from('perfiles').select('id, nombre').in('id', missingMaestroIds);
+                                (profs || []).forEach(p => {
+                                    if (p.id && p.nombre) {
+                                        if (!window._auditoriaUsuariosById) window._auditoriaUsuariosById = new Map();
+                                        window._auditoriaUsuariosById.set(p.id, p.nombre);
+                                    }
+                                });
+                            } catch(e) {}
+                        }
+
+                        encRows.forEach(enc => {
+                            const teacherNom = getTeacherNameById(enc.maestro_id, 'Docente');
+                            let effectivePlantelId = enc.plantel_id;
+                            if (pId && effectivePlantelId && effectivePlantelId !== pId) return;
+
+                            if (!matchesTeacher(teacherNom, enc.materia)) return;
+
+                            let rubrosTexto = '';
+                            if (Array.isArray(enc.rubros)) {
+                                rubrosTexto = enc.rubros.map(r => `${r.name || r.nombre || 'Rubro'}: ${r.val || r.peso || 0}%`).join(', ');
+                            }
+
+                            if (search) {
+                                const match = teacherNom.toLowerCase().includes(search) || 
+                                              (enc.materia || '').toLowerCase().includes(search) || 
+                                              rubrosTexto.toLowerCase().includes(search) ||
+                                              (pMap[effectivePlantelId] || '').toLowerCase().includes(search);
+                                if (!match) return;
+                            }
+
+                            collected.push({
+                                fecha: enc.fecha_creacion || new Date().toISOString(),
+                                plantel_id: effectivePlantelId,
+                                plantel_nombre: pMap[effectivePlantelId] || 'Plantel',
+                                usuario_nombre: teacherNom,
+                                usuario_rol: 'MAESTRO',
+                                modulo: 'Encuadre de Evaluación',
+                                icono: 'fa-sliders',
+                                color: '#d97706',
+                                bg: '#fffbeb',
+                                detalle: `Materia: <b>${enc.materia}</b> | Trimestre: <b>${enc.trimestre || 1}</b> | Criterios: <i>${rubrosTexto || 'Configurados'}</i>`
+                            });
+                        });
+                    }
+                } catch(e) {
+                    console.warn("Fallo consulta de encuadres en auditoría:", e);
+                }
             }
         }
 
@@ -29853,10 +30029,10 @@ window.loadAuditoriaList = async (loadMore = false) => {
         if (modulo === 'todos' || modulo === 'asistencias') {
             if (!rolFiltro || rolFiltro === 'MAESTRO' || rolFiltro === 'APOYO') {
                 let q = supabaseClient.from('asistencias').select('*');
-                if (pId) q = q.eq('plantel_id', pId);
+                if (pId) q = q.or(`plantel_id.eq.${pId},plantel_id.is.null`);
                 if (startDate && endDate) q = q.gte('creado_en', startDate).lte('creado_en', endDate);
 
-                const limit = (modulo === 'asistencias') ? 200 : 80;
+                const limit = (modulo === 'asistencias') ? 250 : 100;
                 const { data: asistRows } = await q.order('creado_en', { ascending: false }).limit(limit);
 
                 if (asistRows && asistRows.length > 0) {
@@ -29867,7 +30043,11 @@ window.loadAuditoriaList = async (loadMore = false) => {
                     const promises = [];
                     if (regIds.length > 0) {
                         promises.push(supabaseClient.from('perfiles').select('id, nombre').in('id', regIds).then(r => {
-                            (r.data || []).forEach(p => { regMap[p.id] = p.nombre; });
+                            (r.data || []).forEach(p => { 
+                                regMap[p.id] = p.nombre;
+                                if (!window._auditoriaUsuariosById) window._auditoriaUsuariosById = new Map();
+                                window._auditoriaUsuariosById.set(p.id, p.nombre);
+                            });
                         }));
                     }
                     if (aluIds.length > 0) {
