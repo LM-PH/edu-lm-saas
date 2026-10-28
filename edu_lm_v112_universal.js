@@ -9758,20 +9758,22 @@ window.registrarPingPlantelConexion = async () => {
             realName = state.user?.user_metadata?.nombre || uEmail;
         }
 
-        const nowIso = new Date().toISOString();
-
-        const metaObj = {
-            lastUser: realName,
-            lastEmail: uEmail,
-            lastRole: realRole,
-            lastTime: nowIso
-        };
-
-        // Eliminado: Este código sobrescribía la URL del logo real con datos de telemetría, rompiendo las imágenes en toda la app.
-        // Si se necesita guardar la última conexión (ping), se debe crear una columna específica (ej. 'last_login_meta') en la BD.
-        // await supabaseClient.from('planteles').update({
-        //     logo_url: JSON.stringify(metaObj)
-        // }).eq('id', targetPlantelId);
+        // Registrar en conexiones_log si no se ha registrado en los últimos 30 min para esta sesión
+        const lastPingKey = `edulm_last_ping_${uEmail}`;
+        const lastPing = parseInt(sessionStorage.getItem(lastPingKey) || '0', 10);
+        if (Date.now() - lastPing > 30 * 60 * 1000) {
+            try {
+                await supabaseClient.from('conexiones_log').insert([{
+                    plantel_id: targetPlantelId,
+                    usuario_id: state.user.id,
+                    nombre: realName,
+                    rol: realRole
+                }]);
+                sessionStorage.setItem(lastPingKey, String(Date.now()));
+            } catch(errPing) {
+                console.warn("Ping conexion log:", errPing);
+            }
+        }
     } catch(e) {}
 };
 
@@ -9850,10 +9852,6 @@ async function renderMasterSaaS() {
             };
         });
 
-        setTimeout(() => {
-            if (window.loadRadarMovimientosMaster) window.loadRadarMovimientosMaster();
-        }, 80);
-
         return `
         <div class="page-header" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:16px;">
           <div>
@@ -9899,49 +9897,6 @@ async function renderMasterSaaS() {
                  ${ultimoRobotTime ? 'Registrado: ' + new Date(ultimoRobotTime).toLocaleString('es-MX', { timeZone: 'America/Mexico_City' }) : 'GitHub Action Activa (6:00 AM CDMX)'}
               </div>
            </div>
-        </div>
-
-        <!-- RADAR DE MOVIMIENTOS EN TIEMPO REAL (TODOS LOS PERFILES) -->
-        <div class="card shadow-md" style="margin-bottom:32px; border-radius:24px;">
-            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; flex-wrap:wrap; gap:12px;">
-                <div>
-                    <h3 style="margin:0; font-size:1.25rem; font-weight:800; color:var(--primary);">
-                        <i class="fa-solid fa-satellite-dish" style="color:var(--primary); margin-right:6px;"></i> Radar de Actividad y Movimientos en Vivo
-                    </h3>
-                    <p style="margin:4px 0 0 0; font-size:0.8rem; color:var(--text-muted);">
-                        Acciones en tiempo real de Maestros, Alumnos, Directivos y Personal de todos los planteles.
-                    </p>
-                </div>
-                <div style="display:flex; gap:8px; flex-wrap:wrap;">
-                    <button class="btn btn-sm btn-outline" onclick="window.loadRadarMovimientosMaster()" title="Actualizar radar">
-                        <i class="fa-solid fa-arrows-rotate"></i> Actualizar
-                    </button>
-                    <button class="btn btn-sm btn-primary" onclick="window.navigate('/master/auditoria')" style="font-weight:700;">
-                        <i class="fa-solid fa-user-shield"></i> Ver Auditoría Forense Completa
-                    </button>
-                </div>
-            </div>
-
-            <!-- FILTROS RAPIDOS DEL RADAR -->
-            <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px; margin-bottom:16px; padding-bottom:14px; border-bottom:1px solid var(--border);">
-                <div style="display:flex; gap:6px; flex-wrap:wrap;" id="radarFilterTabs">
-                    <button class="btn btn-sm btn-primary" onclick="window.filterRadarMovimientos('todos', this)">⚡ Todos</button>
-                    <button class="btn btn-sm btn-outline" onclick="window.filterRadarMovimientos('MAESTRO', this)">👩‍🏫 Maestros y Evaluaciones</button>
-                    <button class="btn btn-sm btn-outline" onclick="window.filterRadarMovimientos('CONEXION', this)">🔑 Inicios de Sesión</button>
-                    <button class="btn btn-sm btn-outline" onclick="window.filterRadarMovimientos('COMUNICADO', this)">📢 Avisos</button>
-                    <button class="btn btn-sm btn-outline" onclick="window.filterRadarMovimientos('ALUMNO', this)">🎓 Alumnos</button>
-                </div>
-                <div style="min-width:240px; flex:1; max-width:320px;">
-                    <input type="text" id="radarSearchInput" class="form-input" style="padding:6px 12px; font-size:0.8rem;" placeholder="Buscar maestra, usuario o plantel..." onkeyup="window.searchRadarMovimientos(this.value)">
-                </div>
-            </div>
-
-            <div id="radarMovimientosFeed" style="max-height:480px; overflow-y:auto; padding-right:6px;">
-                <div style="text-align:center; padding:30px; color:var(--text-muted);">
-                    <i class="fa-solid fa-spinner fa-spin fa-2x" style="color:var(--primary); margin-bottom:8px;"></i>
-                    <div>Sintonizando radar de movimientos del sistema...</div>
-                </div>
-            </div>
         </div>
 
         <!-- TABLA DE CONEXIONES REGISTRADAS -->
@@ -10109,227 +10064,6 @@ window.toggleVistaConexionesMaster = () => {
         btn.innerHTML = '<i class="fa-solid fa-list-ul"></i> Ver Historial Completo';
         if (window.renderApp) window.renderApp();
     }
-};
-
-window._radarMovimientosCache = [];
-window._radarFiltroActivo = 'todos';
-
-window.loadRadarMovimientosMaster = async () => {
-    const feed = document.getElementById('radarMovimientosFeed');
-    if (!feed) return;
-    
-    try {
-        const [plantelesRes, connRes, evalRes, commRes] = await Promise.all([
-            supabaseClient.from('planteles').select('id, nombre'),
-            supabaseClient.from('conexiones_log').select('*').order('fecha_conexion', { ascending: false }).limit(35),
-            supabaseClient.from('evaluaciones_actividades').select('id, actividad_id, alumno_id, calificacion, fecha_evaluacion, plantel_id').order('fecha_evaluacion', { ascending: false }).limit(35),
-            supabaseClient.from('comunicados').select('*').order('creado_en', { ascending: false }).limit(15)
-        ]);
-
-        const pMap = {};
-        (plantelesRes.data || []).forEach(p => { pMap[p.id] = p.nombre; });
-        window._plantelesMap = pMap;
-
-        // Para enriquecer evaluaciones:
-        const evals = evalRes.data || [];
-        const actIds = [...new Set(evals.map(e => e.actividad_id).filter(Boolean))];
-        const aluIds = [...new Set(evals.map(e => e.alumno_id).filter(Boolean))];
-
-        let actsMap = {};
-        let alusMap = {};
-
-        if (actIds.length > 0 || aluIds.length > 0) {
-            const [actsRes, alusRes] = await Promise.all([
-                actIds.length > 0 ? supabaseClient.from('actividades_maestro').select('id, titulo, materia, maestro_id, rubro_name, perfiles(nombre)').in('id', actIds) : { data: [] },
-                aluIds.length > 0 ? supabaseClient.from('alumnos').select('id, nombre').in('id', aluIds) : { data: [] }
-            ]);
-            (actsRes.data || []).forEach(a => { actsMap[a.id] = a; });
-            (alusRes.data || []).forEach(al => { alusMap[al.id] = al.nombre; });
-        }
-
-        let items = [];
-
-        // 1. Agregar conexiones
-        (connRes.data || []).forEach(c => {
-            items.push({
-                tipo: 'CONEXION',
-                rol: (c.rol || 'USUARIO').toUpperCase(),
-                fecha: c.fecha_conexion,
-                plantel_id: c.plantel_id,
-                plantelNombre: pMap[c.plantel_id] || 'Plantel',
-                usuario: c.nombre || 'Usuario',
-                icono: 'fa-right-to-bracket',
-                color: '#2563eb',
-                bg: '#eff6ff',
-                titulo: `Inicio de sesión autenticado`,
-                detalle: `Acceso al sistema desde dispositivo web.`
-            });
-        });
-
-        // 2. Agregar evaluaciones de maestros
-        evals.forEach(ev => {
-            const act = actsMap[ev.actividad_id] || null;
-            const aluNom = alusMap[ev.alumno_id] || 'Alumno';
-            const teacherNom = act?.perfiles?.nombre || 'Docente';
-            const actTitulo = act?.titulo || 'Actividad';
-            const materia = act?.materia || '';
-            const rubro = act?.rubro_name ? ` (${act.rubro_name})` : '';
-
-            items.push({
-                tipo: 'MAESTRO',
-                rol: 'MAESTRO',
-                fecha: ev.fecha_evaluacion,
-                plantel_id: ev.plantel_id,
-                plantelNombre: pMap[ev.plantel_id] || 'Plantel',
-                usuario: teacherNom,
-                icono: 'fa-check-double',
-                color: '#059669',
-                bg: '#ecfdf5',
-                titulo: `Calificación registrada: <span style="font-weight:900; color:#059669; font-size:1.05em;">${ev.calificacion}</span>`,
-                detalle: `Actividad: <b>${actTitulo}</b>${rubro} • Alumno: <b>${aluNom}</b> ${materia ? `• ${materia}` : ''}`
-            });
-        });
-
-        // 3. Agregar comunicados
-        (commRes.data || []).forEach(cm => {
-            items.push({
-                tipo: 'COMUNICADO',
-                rol: (cm.autor_rol || 'PERSONAL').toUpperCase(),
-                fecha: cm.creado_en,
-                plantel_id: cm.plantel_id,
-                plantelNombre: pMap[cm.plantel_id] || 'Plantel',
-                usuario: cm.autor_nombre || 'Personal',
-                icono: 'fa-bullhorn',
-                color: '#d97706',
-                bg: '#fffbeb',
-                titulo: `Aviso escolar: <b>${cm.titulo || 'Comunicado'}</b>`,
-                detalle: (cm.contenido || '').substring(0, 140) + '...'
-            });
-        });
-
-        // 4. Agregar buffer en memoria en tiempo real
-        if (window._auditRealtimeQueue && window._auditRealtimeQueue.length > 0) {
-            window._auditRealtimeQueue.forEach(q => {
-                items.push({
-                    tipo: q.usuario_rol === 'MAESTRO' ? 'MAESTRO' : 'SISTEMA',
-                    rol: q.usuario_rol,
-                    fecha: q.fecha,
-                    plantel_id: q.plantel_id,
-                    plantelNombre: pMap[q.plantel_id] || 'Plantel',
-                    usuario: q.usuario_nombre,
-                    icono: 'fa-bolt',
-                    color: '#7c3aed',
-                    bg: '#f5f3ff',
-                    titulo: q.accion,
-                    detalle: q.detalle
-                });
-            });
-        }
-
-        // Ordenar cronológicamente (más reciente primero)
-        items.sort((a, b) => new Date(b.fecha) - new Date(a.fecha));
-
-        window._radarMovimientosCache = items;
-        window.renderRadarMovimientosFeed();
-
-    } catch(err) {
-        console.error("Error al cargar radar de movimientos:", err);
-        feed.innerHTML = `<div style="padding:20px; text-align:center; color:var(--danger)">
-            <i class="fa-solid fa-triangle-exclamation"></i> Error al conectar con radar: ${err.message}
-        </div>`;
-    }
-};
-
-window.renderRadarMovimientosFeed = (filtro = window._radarFiltroActivo, search = '') => {
-    const feed = document.getElementById('radarMovimientosFeed');
-    if (!feed) return;
-
-    let items = window._radarMovimientosCache || [];
-    
-    // Filtrar por tipo / rol
-    if (filtro && filtro !== 'todos') {
-        if (filtro === 'MAESTRO') items = items.filter(i => i.rol === 'MAESTRO' || i.tipo === 'MAESTRO');
-        else if (filtro === 'CONEXION') items = items.filter(i => i.tipo === 'CONEXION');
-        else if (filtro === 'COMUNICADO') items = items.filter(i => i.tipo === 'COMUNICADO');
-        else if (filtro === 'ALUMNO') items = items.filter(i => i.rol === 'ALUMNO');
-    }
-
-    // Filtrar por búsqueda
-    if (search && search.trim()) {
-        const q = search.trim().toLowerCase();
-        items = items.filter(i => 
-            (i.usuario && i.usuario.toLowerCase().includes(q)) ||
-            (i.plantelNombre && i.plantelNombre.toLowerCase().includes(q)) ||
-            (i.titulo && i.titulo.toLowerCase().includes(q)) ||
-            (i.detalle && i.detalle.toLowerCase().includes(q))
-        );
-    }
-
-    if (items.length === 0) {
-        feed.innerHTML = `<div style="padding:30px; text-align:center; color:var(--text-muted)">
-            <i class="fa-solid fa-inbox fa-2x" style="opacity:0.3; margin-bottom:8px; display:block;"></i>
-            No se encontraron movimientos registrados con los filtros seleccionados.
-        </div>`;
-        return;
-    }
-
-    feed.innerHTML = items.map(it => {
-        const d = new Date(it.fecha);
-        const ahora = new Date();
-        const diffMs = ahora - d;
-        const diffMin = Math.floor(diffMs / 60000);
-        const diffHrs = Math.floor(diffMs / 3600000);
-        let timeLabel = '';
-        if (diffMin < 1) timeLabel = 'Justo ahora';
-        else if (diffMin < 60) timeLabel = `Hace ${diffMin} min`;
-        else if (diffHrs < 24) timeLabel = `Hace ${diffHrs} hr${diffHrs > 1 ? 's' : ''}`;
-        else timeLabel = d.toLocaleString('es-MX', { timeZone: 'America/Mexico_City', dateStyle: 'short', timeStyle: 'short' });
-
-        let rolBadgeColor = '#64748b', rolBadgeBg = '#f1f5f9';
-        if (it.rol === 'MAESTRO') { rolBadgeColor = '#6d28d9'; rolBadgeBg = '#ede9fe'; }
-        else if (it.rol === 'DIRECTIVO') { rolBadgeColor = '#b45309'; rolBadgeBg = '#fef3c7'; }
-        else if (it.rol === 'ALUMNO') { rolBadgeColor = '#0369a1'; rolBadgeBg = '#e0f2fe'; }
-        else if (it.rol === 'ADMIN') { rolBadgeColor = '#15803d'; rolBadgeBg = '#dcfce7'; }
-
-        return `
-            <div style="display:flex; align-items:flex-start; gap:14px; padding:12px 14px; border-bottom:1px solid #f1f5f9; transition:background-color 0.2s;" onmouseover="this.style.backgroundColor='#f8fafc'" onmouseout="this.style.backgroundColor='transparent'">
-                <div style="width:36px; height:36px; border-radius:10px; background:${it.bg}; color:${it.color}; display:flex; align-items:center; justify-content:center; font-size:1rem; flex-shrink:0;">
-                    <i class="fa-solid ${it.icono}"></i>
-                </div>
-                <div style="flex:1; min-width:0;">
-                    <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:6px; margin-bottom:3px;">
-                        <div style="display:flex; align-items:center; gap:8px;">
-                            <span style="font-weight:800; font-size:0.9rem; color:var(--text-main);">${it.usuario}</span>
-                            <span style="background:${rolBadgeBg}; color:${rolBadgeColor}; padding:1px 7px; border-radius:10px; font-size:0.7rem; font-weight:bold;">${it.rol}</span>
-                            <span style="background:#f1f5f9; color:var(--primary); padding:1px 7px; border-radius:10px; font-size:0.7rem; font-weight:bold;"><i class="fa-solid fa-school" style="font-size:0.65em; margin-right:3px;"></i>${it.plantelNombre}</span>
-                        </div>
-                        <span style="font-size:0.75rem; color:var(--text-muted); font-weight:600;" title="${d.toLocaleString('es-MX', { timeZone: 'America/Mexico_City' })}">
-                            <i class="fa-regular fa-clock" style="margin-right:3px;"></i>${timeLabel}
-                        </span>
-                    </div>
-                    <div style="font-size:0.85rem; color:var(--text-main); margin-bottom:2px;">
-                        ${it.titulo}
-                    </div>
-                    <div style="font-size:0.78rem; color:var(--text-muted); line-height:1.3;">
-                        ${it.detalle}
-                    </div>
-                </div>
-            </div>
-        `;
-    }).join('');
-};
-
-window.filterRadarMovimientos = (filtro, btnEl) => {
-    window._radarFiltroActivo = filtro;
-    const tabs = document.querySelectorAll('#radarFilterTabs button');
-    tabs.forEach(b => { b.className = 'btn btn-sm btn-outline'; });
-    if (btnEl) btnEl.className = 'btn btn-sm btn-primary';
-    const searchVal = document.getElementById('radarSearchInput')?.value || '';
-    window.renderRadarMovimientosFeed(filtro, searchVal);
-};
-
-window.searchRadarMovimientos = (val) => {
-    window.renderRadarMovimientosFeed(window._radarFiltroActivo, val);
 };
 
 window.probarPingMaster = async () => {
@@ -29640,15 +29374,23 @@ async function renderMasterAuditoria() {
         <div class="card shadow-sm" style="margin-bottom: 24px;">
             <div style="display:flex; flex-wrap:wrap; gap:16px; align-items:flex-end;">
                 <!-- PLANTEL -->
-                <div style="flex:1; min-width:200px;">
+                <div style="flex:1; min-width:190px;">
                     <label style="font-weight:600; font-size:0.85rem; margin-bottom:4px; display:block; color:var(--text-muted)">Plantel / Escuela</label>
                     <select id="auditPlantelSelect" class="form-select" onchange="window.onAuditPlantelChanged()">
                         <option value="">🏢 Todos los Planteles</option>
                     </select>
                 </div>
 
+                <!-- MAESTRO / PERSONAL ESPECIFICO (SELECTOR DEDICADO) -->
+                <div style="flex:1.5; min-width:220px;">
+                    <label style="font-weight:600; font-size:0.85rem; margin-bottom:4px; display:block; color:var(--text-muted)">Docente / Maestro</label>
+                    <select id="auditUsuarioSelect" class="form-select" onchange="window.loadAuditoriaList()">
+                        <option value="">👨‍🏫 Todos los Maestros y Personal</option>
+                    </select>
+                </div>
+
                 <!-- MODULO / TIPO DE MOVIMIENTO -->
-                <div style="flex:1; min-width:210px;">
+                <div style="flex:1.2; min-width:200px;">
                     <label style="font-weight:600; font-size:0.85rem; margin-bottom:4px; display:block; color:var(--text-muted)">Módulo / Tipo de Movimiento</label>
                     <select id="auditTableSelect" class="form-select" onchange="window.loadAuditoriaList()">
                         <option value="todos" selected>⚡ Todos los Movimientos</option>
@@ -29663,11 +29405,11 @@ async function renderMasterAuditoria() {
                 </div>
 
                 <!-- ROL -->
-                <div style="flex:1; min-width:140px;">
+                <div style="flex:1; min-width:130px;">
                     <label style="font-weight:600; font-size:0.85rem; margin-bottom:4px; display:block; color:var(--text-muted)">Rol de Usuario</label>
-                    <select id="auditRolSelect" class="form-select" onchange="window.loadAuditoriaList()">
+                    <select id="auditRolSelect" class="form-select" onchange="window.onAuditRolChanged()">
                         <option value="">Todos los Roles</option>
-                        <option value="MAESTRO">Docentes / Maestros</option>
+                        <option value="MAESTRO" selected>Docentes / Maestros</option>
                         <option value="DIRECTIVO">Directivos</option>
                         <option value="APOYO">Prefectura / Apoyo</option>
                         <option value="ADMIN">Administradores</option>
@@ -29679,9 +29421,9 @@ async function renderMasterAuditoria() {
                 <div style="flex:1; min-width:140px;">
                     <label style="font-weight:600; font-size:0.85rem; margin-bottom:4px; display:block; color:var(--text-muted)">Periodo</label>
                     <select id="auditRangoFecha" class="form-select" onchange="window.onAuditRangoFechaChange(this.value)">
-                        <option value="hoy" selected>Solo Hoy</option>
+                        <option value="7dias" selected>Últimos 7 días</option>
+                        <option value="hoy">Solo Hoy</option>
                         <option value="ayer">Ayer</option>
-                        <option value="7dias">Últimos 7 días</option>
                         <option value="30dias">Últimos 30 días</option>
                         <option value="todos">Todo el Historial</option>
                         <option value="custom">Fecha Específica...</option>
@@ -29695,9 +29437,9 @@ async function renderMasterAuditoria() {
                 </div>
 
                 <!-- BUSCAR POR NOMBRE / TEXTO -->
-                <div style="flex:1.5; min-width:220px;">
-                    <label style="font-weight:600; font-size:0.85rem; margin-bottom:4px; display:block; color:var(--text-muted)">Buscar Usuario (Nombre o Detalle)</label>
-                    <input type="text" id="auditSearchInput" list="auditUsersDatalist" class="form-input" placeholder="Ej: Diana, Vanessa, Inglés..." onchange="window.loadAuditoriaList()" onkeyup="if(event.key==='Enter') window.loadAuditoriaList()">
+                <div style="flex:1.2; min-width:180px;">
+                    <label style="font-weight:600; font-size:0.85rem; margin-bottom:4px; display:block; color:var(--text-muted)">Buscar Texto</label>
+                    <input type="text" id="auditSearchInput" list="auditUsersDatalist" class="form-input" placeholder="Materia, actividad, detalle..." onchange="window.loadAuditoriaList()" onkeyup="if(event.key==='Enter') window.loadAuditoriaList()">
                     <datalist id="auditUsersDatalist"></datalist>
                 </div>
 
@@ -29763,6 +29505,11 @@ window.onAuditPlantelChanged = () => {
     window.loadAuditoriaList();
 };
 
+window.onAuditRolChanged = () => {
+    if (window.loadAuditoriaUsuariosPlantel) window.loadAuditoriaUsuariosPlantel();
+    window.loadAuditoriaList();
+};
+
 window.onAuditRangoFechaChange = (val) => {
     const divCustom = document.getElementById('divAuditFechaCustom');
     if (divCustom) {
@@ -29772,68 +29519,13 @@ window.onAuditRangoFechaChange = (val) => {
 };
 
 window.loadAuditoriaUsuariosPlantel = async () => {
+    const sel = document.getElementById('auditUsuarioSelect');
     const dl = document.getElementById('auditUsersDatalist');
-    if (!dl) return;
-    try {
-        let q = supabaseClient.from('perfiles_permitidos')
-            .select('nombre, rol').neq('rol', 'alumno')
-            .order('nombre');
-        const selP = document.getElementById('auditPlantelSelect')?.value || state.plantelId;
-        if (selP) q = q.eq('plantel_id', selP);
-
-        const { data: permitidos } = await q;
-        if (permitidos && permitidos.length > 0) {
-            let html = '';
-            const namesAdded = new Set();
-            permitidos.forEach(p => {
-                if(p.nombre && !namesAdded.has(p.nombre)) {
-                    html += `<option value="${p.nombre}">${p.rol || ''}</option>`;
-                    namesAdded.add(p.nombre);
-                }
-            });
-            dl.innerHTML = html;
-        }
-    } catch(e) {}
-};
-
-window.loadAuditoriaList = async (loadMore = false) => {
-    const tbody = document.getElementById('tbodyAuditoria');
-    if (!tbody) return;
-
-    if (!loadMore) {
-        window._auditPagination = 0;
-        window._auditCurrentData = [];
-        tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; padding:30px; color:var(--text-muted)"><i class="fa-solid fa-spinner fa-spin"></i> Consultando registros de actividad...</td></tr>';
-    }
+    if (!sel && !dl) return;
 
     try {
-        const pId = document.getElementById('auditPlantelSelect')?.value || '';
-        const modulo = document.getElementById('auditTableSelect')?.value || 'todos';
+        const selP = document.getElementById('auditPlantelSelect')?.value || '';
         const rolFiltro = document.getElementById('auditRolSelect')?.value || '';
-        const rangoFecha = document.getElementById('auditRangoFecha')?.value || 'hoy';
-        const customDate = document.getElementById('auditDateInput')?.value || '';
-        const search = (document.getElementById('auditSearchInput')?.value || '').trim().toLowerCase();
-
-        // Calcular límites de fecha UTC
-        let startDate = null, endDate = null;
-        if (rangoFecha === 'hoy') {
-            const todayStr = new Date().toISOString().split('T')[0];
-            startDate = `${todayStr}T00:00:00.000Z`;
-            endDate = `${todayStr}T23:59:59.999Z`;
-        } else if (rangoFecha === 'ayer') {
-            const yStr = new Date(Date.now() - 86400000).toISOString().split('T')[0];
-            startDate = `${yStr}T00:00:00.000Z`;
-            endDate = `${yStr}T23:59:59.999Z`;
-        } else if (rangoFecha === '7dias') {
-            startDate = new Date(Date.now() - 7 * 86400000).toISOString();
-            endDate = new Date().toISOString();
-        } else if (rangoFecha === '30dias') {
-            startDate = new Date(Date.now() - 30 * 86400000).toISOString();
-            endDate = new Date().toISOString();
-        } else if (rangoFecha === 'custom' && customDate) {
-            startDate = `${customDate}T00:00:00.000Z`;
-            endDate = `${customDate}T23:59:59.999Z`;
-        }
 
         // Asegurar mapa de planteles en memoria
         if (!window._plantelesMap || Object.keys(window._plantelesMap).length === 0) {
@@ -29845,7 +29537,173 @@ window.loadAuditoriaList = async (loadMore = false) => {
         }
         const pMap = window._plantelesMap || {};
 
+        // Consultar perfiles_permitidos y perfiles
+        let qPerm = supabaseClient.from('perfiles_permitidos')
+            .select('id, nombre, email, rol, plantel_id')
+            .neq('rol', 'alumno')
+            .order('nombre');
+        if (selP) qPerm = qPerm.eq('plantel_id', selP);
+
+        let qProf = supabaseClient.from('perfiles')
+            .select('id, nombre, email, rol, plantel_id')
+            .neq('rol', 'alumno')
+            .order('nombre');
+        if (selP) qProf = qProf.eq('plantel_id', selP);
+
+        const [permRes, profRes] = await Promise.all([qPerm, qProf]);
+
+        const mapUsuarios = new Map();
+
+        // 1. Agregar de perfiles_permitidos
+        (permRes.data || []).forEach(p => {
+            if (!p.nombre || p.nombre === 'Nuevo Usuario') return;
+            const normKey = p.nombre.trim().toLowerCase();
+            if (!mapUsuarios.has(normKey)) {
+                mapUsuarios.set(normKey, {
+                    id: p.id,
+                    nombre: p.nombre.trim(),
+                    email: (p.email || '').trim().toLowerCase(),
+                    rol: (p.rol || 'MAESTRO').toUpperCase(),
+                    plantel_id: p.plantel_id,
+                    plantel_nombre: pMap[p.plantel_id] || ''
+                });
+            }
+        });
+
+        // 2. Agregar de perfiles
+        (profRes.data || []).forEach(p => {
+            if (!p.nombre || p.rol === 'master') return;
+            const normKey = p.nombre.trim().toLowerCase();
+            if (!mapUsuarios.has(normKey)) {
+                mapUsuarios.set(normKey, {
+                    id: p.id,
+                    nombre: p.nombre.trim(),
+                    email: (p.email || '').trim().toLowerCase(),
+                    rol: (p.rol || 'MAESTRO').toUpperCase(),
+                    plantel_id: p.plantel_id,
+                    plantel_nombre: pMap[p.plantel_id] || ''
+                });
+            } else {
+                const existing = mapUsuarios.get(normKey);
+                if (p.id) existing.id = p.id;
+            }
+        });
+
+        // Guardar mapa global de docentes/usuarios para búsqueda instantánea en auditoría
+        window._auditoriaUsuariosMap = mapUsuarios;
+
+        let list = Array.from(mapUsuarios.values());
+
+        // Filtrar por rol si hay filtro de rol
+        if (rolFiltro) {
+            list = list.filter(u => u.rol === rolFiltro.toUpperCase() || (rolFiltro === 'MAESTRO' && ['MAESTRO', 'DOCENTE', 'PROFESOR'].includes(u.rol)));
+        }
+
+        // Ordenar alfabéticamente
+        list.sort((a, b) => a.nombre.localeCompare(b.nombre));
+
+        if (sel) {
+            const currentSelected = sel.value;
+            let html = '<option value="">👨‍🏫 Todos los Maestros y Personal</option>';
+            list.forEach(u => {
+                const pInfo = u.plantel_nombre && !selP ? ` (${u.plantel_nombre})` : '';
+                const isSelected = (currentSelected === u.nombre) ? 'selected' : '';
+                html += `<option value="${u.nombre}" ${isSelected}>${u.nombre}${pInfo}</option>`;
+            });
+            sel.innerHTML = html;
+        }
+
+        if (dl) {
+            let dlHtml = '';
+            list.forEach(u => {
+                dlHtml += `<option value="${u.nombre}">${u.rol} ${u.plantel_nombre ? `(${u.plantel_nombre})` : ''}</option>`;
+            });
+            dl.innerHTML = dlHtml;
+        }
+
+    } catch(e) {
+        console.error("Error cargando usuarios/maestros para auditoría:", e);
+    }
+};
+
+window.loadAuditoriaList = async (loadMore = false) => {
+    const tbody = document.getElementById('tbodyAuditoria');
+    if (!tbody) return;
+
+    if (!loadMore) {
+        window._auditPagination = 0;
+        window._auditCurrentData = [];
+        tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; padding:30px; color:var(--text-muted)"><i class="fa-solid fa-spinner fa-spin"></i> Consultando registros de actividad de todos los maestros...</td></tr>';
+    }
+
+    try {
+        const pId = document.getElementById('auditPlantelSelect')?.value || '';
+        const selectedTeacher = (document.getElementById('auditUsuarioSelect')?.value || '').trim();
+        const modulo = document.getElementById('auditTableSelect')?.value || 'todos';
+        const rolFiltro = document.getElementById('auditRolSelect')?.value || '';
+        const rangoFecha = document.getElementById('auditRangoFecha')?.value || '7dias';
+        const customDate = document.getElementById('auditDateInput')?.value || '';
+        const search = (document.getElementById('auditSearchInput')?.value || '').trim().toLowerCase();
+
+        // Calcular límites de fecha considerando zona horaria de México (CDMX GMT-6)
+        let startDate = null, endDate = null;
+        const now = new Date();
+        if (rangoFecha === 'hoy') {
+            const hoyCDMX = new Date(now.getTime() - 6 * 3600000).toISOString().split('T')[0];
+            startDate = `${hoyCDMX}T00:00:00-06:00`;
+            endDate = `${hoyCDMX}T23:59:59-06:00`;
+        } else if (rangoFecha === 'ayer') {
+            const ayerCDMX = new Date(now.getTime() - 30 * 3600000).toISOString().split('T')[0];
+            startDate = `${ayerCDMX}T00:00:00-06:00`;
+            endDate = `${ayerCDMX}T23:59:59-06:00`;
+        } else if (rangoFecha === '7dias') {
+            startDate = new Date(Date.now() - 7 * 86400000).toISOString();
+            endDate = new Date().toISOString();
+        } else if (rangoFecha === '30dias') {
+            startDate = new Date(Date.now() - 30 * 86400000).toISOString();
+            endDate = new Date().toISOString();
+        } else if (rangoFecha === 'custom' && customDate) {
+            startDate = `${customDate}T00:00:00-06:00`;
+            endDate = `${customDate}T23:59:59-06:00`;
+        }
+
+        // Asegurar mapas en memoria
+        if (!window._plantelesMap || Object.keys(window._plantelesMap).length === 0) {
+            try {
+                const { data: pList } = await supabaseClient.from('planteles').select('id, nombre');
+                window._plantelesMap = {};
+                (pList || []).forEach(p => { window._plantelesMap[p.id] = p.nombre; });
+            } catch(e) {}
+        }
+        const pMap = window._plantelesMap || {};
+
+        // Mapa de docentes/usuarios por ID y nombre
+        const teachersMap = window._auditoriaUsuariosMap || new Map();
+        const getTeacherNameById = (id, fallback = 'Docente') => {
+            if (!id) return fallback;
+            for (const item of teachersMap.values()) {
+                if (item.id === id) return item.nombre;
+            }
+            return fallback;
+        };
+
         let collected = [];
+
+        // Helper para comprobar si un registro coincide con el maestro seleccionado
+        const matchesTeacher = (nombre, extraTexto = '') => {
+            if (!selectedTeacher) return true;
+            const target = selectedTeacher.toLowerCase();
+            if ((nombre || '').toLowerCase().includes(target)) return true;
+            if (extraTexto && extraTexto.toLowerCase().includes(target)) return true;
+            return false;
+        };
+
+        // Helper para filtro de rol
+        const matchesRol = (rol) => {
+            if (!rolFiltro) return true;
+            if (rolFiltro === 'MAESTRO') return ['MAESTRO', 'DOCENTE', 'PROFESOR'].includes((rol || '').toUpperCase());
+            return (rol || '').toUpperCase() === rolFiltro.toUpperCase();
+        };
 
         // ==========================================
         // 1. INICIOS DE SESIÓN (CONEXIONES)
@@ -29854,18 +29712,28 @@ window.loadAuditoriaList = async (loadMore = false) => {
             let q = supabaseClient.from('conexiones_log').select('*');
             if (pId) q = q.eq('plantel_id', pId);
             if (rolFiltro) q = q.eq('rol', rolFiltro);
-            if (search) q = q.ilike('nombre', `%${search}%`);
             if (startDate && endDate) q = q.gte('fecha_conexion', startDate).lte('fecha_conexion', endDate);
             
-            const limit = (modulo === 'conexiones_log') ? 100 : 40;
+            const limit = (modulo === 'conexiones_log') ? 200 : 80;
             const { data: connRows } = await q.order('fecha_conexion', { ascending: false }).limit(limit);
             
             (connRows || []).forEach(c => {
+                const userNom = c.nombre || 'Usuario Desconocido';
+                if (!matchesTeacher(userNom)) return;
+                if (!matchesRol(c.rol)) return;
+
+                if (search) {
+                    const match = userNom.toLowerCase().includes(search) || 
+                                  (pMap[c.plantel_id] || '').toLowerCase().includes(search) ||
+                                  (c.rol || '').toLowerCase().includes(search);
+                    if (!match) return;
+                }
+
                 collected.push({
                     fecha: c.fecha_conexion,
                     plantel_id: c.plantel_id,
                     plantel_nombre: pMap[c.plantel_id] || 'Plantel',
-                    usuario_nombre: c.nombre || 'Usuario Desconocido',
+                    usuario_nombre: userNom,
                     usuario_rol: (c.rol || 'USUARIO').toUpperCase(),
                     modulo: 'Inicio de Sesión',
                     icono: 'fa-right-to-bracket',
@@ -29886,7 +29754,7 @@ window.loadAuditoriaList = async (loadMore = false) => {
                 if (pId) q = q.eq('plantel_id', pId);
                 if (startDate && endDate) q = q.gte('fecha_evaluacion', startDate).lte('fecha_evaluacion', endDate);
 
-                const limit = (modulo === 'evaluaciones_actividades') ? 120 : 50;
+                const limit = (modulo === 'evaluaciones_actividades') ? 350 : 150;
                 const { data: evalRows } = await q.order('fecha_evaluacion', { ascending: false }).limit(limit);
 
                 if (evalRows && evalRows.length > 0) {
@@ -29906,18 +29774,20 @@ window.loadAuditoriaList = async (loadMore = false) => {
                     evalRows.forEach(ev => {
                         const act = actsMap[ev.actividad_id] || null;
                         const aluNom = alusMap[ev.alumno_id] || 'Alumno';
-                        const teacherNom = act?.perfiles?.nombre || 'Docente';
+                        let teacherNom = act?.perfiles?.nombre || getTeacherNameById(act?.maestro_id, 'Docente');
                         const actTitulo = act?.titulo || 'Actividad';
                         const materia = act?.materia || '';
                         const rubro = act?.rubro_name ? ` (${act.rubro_name})` : '';
 
-                        // Filtro de búsqueda textual
+                        if (!matchesTeacher(teacherNom, `${actTitulo} ${materia}`)) return;
+
                         if (search) {
-                            const matchSearch = teacherNom.toLowerCase().includes(search) || 
-                                                aluNom.toLowerCase().includes(search) || 
-                                                actTitulo.toLowerCase().includes(search) || 
-                                                materia.toLowerCase().includes(search);
-                            if (!matchSearch) return;
+                            const match = teacherNom.toLowerCase().includes(search) || 
+                                          aluNom.toLowerCase().includes(search) || 
+                                          actTitulo.toLowerCase().includes(search) || 
+                                          materia.toLowerCase().includes(search) ||
+                                          (pMap[ev.plantel_id] || '').toLowerCase().includes(search);
+                            if (!match) return;
                         }
 
                         collected.push({
@@ -29930,7 +29800,7 @@ window.loadAuditoriaList = async (loadMore = false) => {
                             icono: 'fa-check-double',
                             color: '#059669',
                             bg: '#ecfdf5',
-                            detalle: `Calificación: <b style="font-size:1.1em; color:#059669;">${ev.calificacion}</b> | Actividad: <b>${actTitulo}</b>${rubro} | Alumno: <b>${aluNom}</b> ${materia ? `| ${materia}` : ''}`
+                            detalle: `Calificación: <b style="font-size:1.1em; color:#059669;">${ev.calificacion}</b> | Actividad: <b>${actTitulo}</b>${rubro} | Alumno: <b>${aluNom}</b> ${materia ? `| Materia: <b>${materia}</b>` : ''}`
                         });
                     });
                 }
@@ -29938,52 +29808,28 @@ window.loadAuditoriaList = async (loadMore = false) => {
         }
 
         // ==========================================
-        // 3. COMUNICADOS Y AVISOS ESCOLARES
-        // ==========================================
-        if (modulo === 'todos' || modulo === 'comunicados') {
-            let q = supabaseClient.from('comunicados').select('*');
-            if (pId) q = q.eq('plantel_id', pId);
-            if (startDate && endDate) q = q.gte('creado_en', startDate).lte('creado_en', endDate);
-            if (search) q = q.or(`titulo.ilike.%${search}%,autor_nombre.ilike.%${search}%`);
-
-            const limit = (modulo === 'comunicados') ? 80 : 30;
-            const { data: comRows } = await q.order('creado_en', { ascending: false }).limit(limit);
-
-            (comRows || []).forEach(cm => {
-                const rol = (cm.autor_rol || 'PERSONAL').toUpperCase();
-                if (rolFiltro && rol !== rolFiltro) return;
-
-                collected.push({
-                    fecha: cm.creado_en,
-                    plantel_id: cm.plantel_id,
-                    plantel_nombre: pMap[cm.plantel_id] || 'Plantel',
-                    usuario_nombre: cm.autor_nombre || 'Personal Escolar',
-                    usuario_rol: rol,
-                    modulo: 'Comunicado Escolar',
-                    icono: 'fa-bullhorn',
-                    color: '#d97706',
-                    bg: '#fffbeb',
-                    detalle: `<b>${cm.titulo || 'Sin título'}</b>: ${(cm.contenido || '').substring(0, 160)}...`
-                });
-            });
-        }
-
-        // ==========================================
-        // 4. CREACIÓN DE ACTIVIDADES DOCENTES
+        // 3. CREACIÓN DE ACTIVIDADES DOCENTES
         // ==========================================
         if (modulo === 'todos' || modulo === 'actividades_maestro') {
             if (!rolFiltro || rolFiltro === 'MAESTRO') {
                 let q = supabaseClient.from('actividades_maestro').select('*, perfiles(nombre)');
                 if (pId) q = q.eq('plantel_id', pId);
                 if (startDate && endDate) q = q.gte('creado_en', startDate).lte('creado_en', endDate);
-                if (search) q = q.ilike('titulo', `%${search}%`);
 
-                const limit = (modulo === 'actividades_maestro') ? 80 : 30;
+                const limit = (modulo === 'actividades_maestro') ? 200 : 80;
                 const { data: actRows } = await q.order('creado_en', { ascending: false }).limit(limit);
 
                 (actRows || []).forEach(a => {
-                    const teacherNom = a.perfiles?.nombre || 'Docente';
-                    if (search && !teacherNom.toLowerCase().includes(search) && !(a.titulo || '').toLowerCase().includes(search)) return;
+                    const teacherNom = a.perfiles?.nombre || getTeacherNameById(a.maestro_id, 'Docente');
+                    if (!matchesTeacher(teacherNom, `${a.titulo} ${a.materia}`)) return;
+
+                    if (search) {
+                        const match = teacherNom.toLowerCase().includes(search) || 
+                                      (a.titulo || '').toLowerCase().includes(search) || 
+                                      (a.materia || '').toLowerCase().includes(search) || 
+                                      (pMap[a.plantel_id] || '').toLowerCase().includes(search);
+                        if (!match) return;
+                    }
 
                     collected.push({
                         fecha: a.creado_en,
@@ -29995,14 +29841,14 @@ window.loadAuditoriaList = async (loadMore = false) => {
                         icono: 'fa-book-open',
                         color: '#7c3aed',
                         bg: '#f5f3ff',
-                        detalle: `Actividad: <b>${a.titulo}</b> | Materia: <b>${a.materia}</b> | Rubro: <b>${a.rubro_name || 'General'} (${a.rubro_peso || 0}%)</b>`
+                        detalle: `Actividad: <b>${a.titulo}</b> | Materia: <b>${a.materia}</b> | Rubro: <b>${a.rubro_name || 'General'} (${a.rubro_peso || 0}%)</b> ${a.target_grado ? `| Grado: <b>${a.target_grado}</b>` : ''}`
                     });
                 });
             }
         }
 
         // ==========================================
-        // 5. ASISTENCIAS / PASES DE LISTA
+        // 4. ASISTENCIAS / PASES DE LISTA
         // ==========================================
         if (modulo === 'todos' || modulo === 'asistencias') {
             if (!rolFiltro || rolFiltro === 'MAESTRO' || rolFiltro === 'APOYO') {
@@ -30010,51 +29856,127 @@ window.loadAuditoriaList = async (loadMore = false) => {
                 if (pId) q = q.eq('plantel_id', pId);
                 if (startDate && endDate) q = q.gte('creado_en', startDate).lte('creado_en', endDate);
 
-                const limit = (modulo === 'asistencias') ? 80 : 25;
+                const limit = (modulo === 'asistencias') ? 200 : 80;
                 const { data: asistRows } = await q.order('creado_en', { ascending: false }).limit(limit);
 
-                (asistRows || []).forEach(as => {
-                    collected.push({
-                        fecha: as.creado_en || as.fecha,
-                        plantel_id: as.plantel_id,
-                        plantel_nombre: pMap[as.plantel_id] || 'Plantel',
-                        usuario_nombre: 'Docente / Prefectura',
-                        usuario_rol: 'MAESTRO',
-                        modulo: 'Pase de Lista / Asistencia',
-                        icono: 'fa-clipboard-user',
-                        color: '#0891b2',
-                        bg: '#ecfeff',
-                        detalle: `Estado: <b>${as.estado}</b> | Materia: <b>${as.materia || 'General'}</b>`
+                if (asistRows && asistRows.length > 0) {
+                    const regIds = [...new Set(asistRows.map(a => a.registrador_id).filter(Boolean))];
+                    const aluIds = [...new Set(asistRows.map(a => a.alumno_id).filter(Boolean))];
+
+                    let regMap = {}, aluMap = {};
+                    const promises = [];
+                    if (regIds.length > 0) {
+                        promises.push(supabaseClient.from('perfiles').select('id, nombre').in('id', regIds).then(r => {
+                            (r.data || []).forEach(p => { regMap[p.id] = p.nombre; });
+                        }));
+                    }
+                    if (aluIds.length > 0) {
+                        promises.push(supabaseClient.from('alumnos').select('id, nombre').in('id', aluIds).then(r => {
+                            (r.data || []).forEach(al => { aluMap[al.id] = al.nombre; });
+                        }));
+                    }
+                    if (promises.length > 0) await Promise.all(promises);
+
+                    asistRows.forEach(as => {
+                        const teacherNom = regMap[as.registrador_id] || getTeacherNameById(as.registrador_id, as.materia ? `Docente (${as.materia})` : 'Docente / Prefectura');
+                        const aluNom = aluMap[as.alumno_id] || 'Alumno';
+
+                        if (!matchesTeacher(teacherNom, `${as.materia} ${aluNom}`)) return;
+
+                        if (search) {
+                            const match = teacherNom.toLowerCase().includes(search) || 
+                                          aluNom.toLowerCase().includes(search) || 
+                                          (as.materia || '').toLowerCase().includes(search) || 
+                                          (as.estado || '').toLowerCase().includes(search);
+                            if (!match) return;
+                        }
+
+                        collected.push({
+                            fecha: as.creado_en || as.fecha,
+                            plantel_id: as.plantel_id,
+                            plantel_nombre: pMap[as.plantel_id] || 'Plantel',
+                            usuario_nombre: teacherNom,
+                            usuario_rol: 'MAESTRO',
+                            modulo: 'Pase de Lista / Asistencia',
+                            icono: 'fa-clipboard-user',
+                            color: '#0891b2',
+                            bg: '#ecfeff',
+                            detalle: `Estado: <b>${as.estado}</b> | Alumno: <b>${aluNom}</b> | Materia: <b>${as.materia || 'General'}</b> | Fecha: ${as.fecha || ''}`
+                        });
                     });
-                });
+                }
             }
         }
 
         // ==========================================
-        // 6. CALIFICACIONES TRIMESTRALES
+        // 5. COMUNICADOS Y AVISOS ESCOLARES
+        // ==========================================
+        if (modulo === 'todos' || modulo === 'comunicados') {
+            let q = supabaseClient.from('comunicados').select('*');
+            if (pId) q = q.eq('plantel_id', pId);
+            if (startDate && endDate) q = q.gte('creado_en', startDate).lte('creado_en', endDate);
+
+            const limit = (modulo === 'comunicados') ? 100 : 40;
+            const { data: comRows } = await q.order('creado_en', { ascending: false }).limit(limit);
+
+            (comRows || []).forEach(cm => {
+                const rol = (cm.autor_rol || 'PERSONAL').toUpperCase();
+                const autorNom = cm.autor_nombre || 'Personal Escolar';
+                if (!matchesTeacher(autorNom, cm.titulo)) return;
+                if (!matchesRol(rol)) return;
+
+                if (search) {
+                    const match = autorNom.toLowerCase().includes(search) || 
+                                  (cm.titulo || '').toLowerCase().includes(search) || 
+                                  (cm.contenido || '').toLowerCase().includes(search);
+                    if (!match) return;
+                }
+
+                collected.push({
+                    fecha: cm.creado_en,
+                    plantel_id: cm.plantel_id,
+                    plantel_nombre: pMap[cm.plantel_id] || 'Plantel',
+                    usuario_nombre: autorNom,
+                    usuario_rol: rol,
+                    modulo: 'Comunicado Escolar',
+                    icono: 'fa-bullhorn',
+                    color: '#d97706',
+                    bg: '#fffbeb',
+                    detalle: `<b>${cm.titulo || 'Sin título'}</b>: ${(cm.contenido || '').substring(0, 160)}...`
+                });
+            });
+        }
+
+        // ==========================================
+        // 6. CALIFICACIONES TRIMESTRALES ASENTADAS
         // ==========================================
         if (modulo === 'todos' || modulo === 'calificaciones') {
             let q = supabaseClient.from('calificaciones').select('*, alumnos(nombre)');
             if (pId) q = q.eq('plantel_id', pId);
 
-            const limit = (modulo === 'calificaciones') ? 80 : 20;
+            const limit = (modulo === 'calificaciones') ? 120 : 30;
             const { data: calRows } = await q.order('actualizado_en', { ascending: false }).limit(limit);
 
             (calRows || []).forEach(cl => {
                 const aluNom = cl.alumnos?.nombre || 'Alumno';
-                if (search && !aluNom.toLowerCase().includes(search) && !(cl.materia_nombre || '').toLowerCase().includes(search)) return;
+                const matNom = cl.materia_nombre || 'Materia';
+
+                if (search) {
+                    const match = aluNom.toLowerCase().includes(search) || matNom.toLowerCase().includes(search);
+                    if (!match) return;
+                }
 
                 collected.push({
                     fecha: cl.actualizado_en || cl.fecha || new Date().toISOString(),
                     plantel_id: cl.plantel_id,
                     plantel_nombre: pMap[cl.plantel_id] || 'Plantel',
-                    usuario_nombre: 'Docente / Calificaciones',
+                    usuario_nombre: `Docente de ${matNom}`,
                     usuario_rol: 'MAESTRO',
-                    modulo: 'Calificación Trimestral',
+                    modulo: 'Calificación Trimestral Asentada',
                     icono: 'fa-graduation-cap',
                     color: '#4f46e5',
                     bg: '#eef2ff',
-                    detalle: `Trimestre ${cl.trimestre}: Calificación <b>${cl.calificacion}</b> | Alumno: <b>${aluNom}</b> | Materia: <b>${cl.materia_nombre || ''}</b>`
+                    detalle: `Trimestre ${cl.trimestre}: Calificación <b>${cl.calificacion}</b> | Alumno: <b>${aluNom}</b> | Materia: <b>${matNom}</b>`
                 });
             });
         }
@@ -30068,16 +29990,21 @@ window.loadAuditoriaList = async (loadMore = false) => {
                 if (pId) q = q.or(`valores_nuevos->>plantel_id.eq.${pId},valores_viejos->>plantel_id.eq.${pId}`);
                 if (startDate && endDate) q = q.gte('fecha', startDate).lte('fecha', endDate);
 
-                const limit = (modulo === 'audit_log') ? 80 : 25;
+                const limit = (modulo === 'audit_log') ? 120 : 30;
                 const { data: auditRows } = await q.order('fecha', { ascending: false }).limit(limit);
 
                 (auditRows || []).forEach(au => {
+                    const userNom = au.perfiles?.nombre || 'Usuario DB';
+                    const userRol = (au.perfiles?.rol || 'SISTEMA').toUpperCase();
+                    if (!matchesTeacher(userNom)) return;
+                    if (!matchesRol(userRol)) return;
+
                     collected.push({
                         fecha: au.fecha,
                         plantel_id: au.valores_nuevos?.plantel_id || au.valores_viejos?.plantel_id,
                         plantel_nombre: pMap[au.valores_nuevos?.plantel_id] || 'Plantel',
-                        usuario_nombre: au.perfiles?.nombre || 'Usuario DB',
-                        usuario_rol: (au.perfiles?.rol || 'SISTEMA').toUpperCase(),
+                        usuario_nombre: userNom,
+                        usuario_rol: userRol,
                         modulo: `Forense DB (${au.tabla_afectada})`,
                         icono: 'fa-database',
                         color: '#475569',
@@ -30093,6 +30020,9 @@ window.loadAuditoriaList = async (loadMore = false) => {
         // ==========================================
         if (window._auditRealtimeQueue && window._auditRealtimeQueue.length > 0) {
             window._auditRealtimeQueue.forEach(q => {
+                if (!matchesTeacher(q.usuario_nombre, q.detalle)) return;
+                if (!matchesRol(q.usuario_rol)) return;
+
                 collected.push({
                     fecha: q.fecha,
                     plantel_id: q.plantel_id,
@@ -30118,7 +30048,10 @@ window.loadAuditoriaList = async (loadMore = false) => {
         }
 
         const countBadge = document.getElementById('auditCountBadge');
-        if (countBadge) countBadge.innerText = `${window._auditCurrentData.length} registros cargados`;
+        if (countBadge) {
+            const filterLabel = selectedTeacher ? ` para "${selectedTeacher}"` : '';
+            countBadge.innerText = `${window._auditCurrentData.length} registros cargados${filterLabel}`;
+        }
 
         const btnMas = document.getElementById('btnCargarMasAudit');
         if (btnMas) btnMas.style.display = (collected.length >= 40) ? 'inline-block' : 'none';
