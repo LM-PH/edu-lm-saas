@@ -1050,7 +1050,7 @@ function renderSidebar() {
     ],
     apoyo: [
       { name: 'Focos Rojos', path: '/apoyo/dashboard', icon: 'fa-triangle-exclamation' },
-      { name: 'Riesgo Académico', path: '/apoyo/riesgo', icon: 'fa-user-graduate' },
+      { name: 'Riesgo Académico y Actitudinal', path: '/apoyo/riesgo', icon: 'fa-user-graduate' },
       { name: 'Horarios de Profesores', path: '/apoyo/horarios', icon: 'fa-calendar-days' },
       { name: 'Reportes Escolares', path: '/apoyo/reportes', icon: 'fa-file-signature' },
       { name: 'Expediente Salud', path: '/apoyo/salud', icon: 'fa-notes-medical' },
@@ -3499,14 +3499,26 @@ function renderMaestroBitacora() {
 // APOYO PAGES
 // ========================
 function renderApoyoRiesgoAcademico() {
+  window._riesgoActitudinalLoadedOnce = false;
   setTimeout(() => { if(window.loadApoyoRiesgoFiltros) window.loadApoyoRiesgoFiltros(); }, 100);
   return `
     <div class="page-header">
-      <h2 class="page-title">Riesgo Académico</h2>
-      <p class="page-subtitle">Identificación automática de alumnos con 3 o más materias reprobadas.</p>
+      <h2 class="page-title"><i class="fa-solid fa-chart-line" style="color:var(--primary); margin-right:8px;"></i>Riesgo Académico y Riesgo Actitudinal</h2>
+      <p class="page-subtitle">Detección y seguimiento integral: materias reprobadas, reportes conductuales y atención prioritaria.</p>
     </div>
 
-    <div style="display:flex; gap:24px; flex-wrap:wrap;">
+    <!-- Pestañas de Navegación -->
+    <div style="display:flex; gap:8px; margin-bottom:20px; border-bottom:2px solid var(--border); padding-bottom:8px; flex-wrap:wrap;">
+      <button id="tabBtnRiesgoAcademico" class="btn" onclick="window.cambiarTabRiesgo('academico')" style="font-weight:700; background:white; color:var(--primary); border:1px solid var(--border); border-bottom:3px solid var(--primary); border-radius:8px 8px 0 0; padding:10px 18px; display:flex; align-items:center; gap:8px; cursor:pointer;">
+        <i class="fa-solid fa-user-graduate"></i> Riesgo Académico (Calificaciones)
+      </button>
+      <button id="tabBtnRiesgoActitudinal" class="btn" onclick="window.cambiarTabRiesgo('actitudinal')" style="font-weight:700; background:transparent; color:var(--text-muted); border:1px solid transparent; border-bottom:3px solid transparent; border-radius:8px 8px 0 0; padding:10px 18px; display:flex; align-items:center; gap:8px; cursor:pointer;">
+        <i class="fa-solid fa-triangle-exclamation" style="color:var(--warning);"></i> Riesgo Actitudinal (Reportes e Incidencias)
+      </button>
+    </div>
+
+    <!-- Pestaña 1: RIESGO ACADÉMICO (Existente sin modificar) -->
+    <div id="panelRiesgoAcademico" style="display:flex; gap:24px; flex-wrap:wrap;">
       <div class="card" style="flex:1; min-width:320px; align-self:flex-start;">
          <h3 style="margin-bottom:12px"><i class="fa-solid fa-filter"></i> Filtros de Búsqueda</h3>
          
@@ -3553,7 +3565,7 @@ function renderApoyoRiesgoAcademico() {
 
       <div class="card" style="flex:3; min-width:400px; width:100%;">
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
-          <h3 style="margin:0;"><i class="fa-solid fa-triangle-exclamation" style="color:var(--danger);"></i> Alumnos en Riesgo</h3>
+          <h3 style="margin:0;"><i class="fa-solid fa-triangle-exclamation" style="color:var(--danger);"></i> Alumnos en Riesgo Académico</h3>
           <span id="riesgoTotalBadge" class="badge" style="background:var(--danger); color:white; display:none;">0 detectados</span>
         </div>
         
@@ -3562,6 +3574,78 @@ function renderApoyoRiesgoAcademico() {
              <i class="fa-solid fa-user-graduate" style="font-size:3rem; margin-bottom:15px; color:var(--border);"></i>
              <p>Ajusta los filtros y haz clic en "Detectar Alumnos".</p>
            </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Pestaña 2: RIESGO ACTITUDINAL (Nuevo análisis estadístico por Trimestre, Grado y Umbral) -->
+    <div id="panelRiesgoActitudinal" style="display:none;">
+      <div style="display:flex; gap:24px; flex-wrap:wrap; align-items:flex-start;">
+        <div class="card" style="flex:1; min-width:320px; align-self:flex-start;">
+           <h3 style="margin-bottom:12px"><i class="fa-solid fa-filter"></i> Filtros de Riesgo Actitudinal</h3>
+           
+           <div class="form-group">
+              <label class="form-label">Trimestre</label>
+              <select class="form-select" id="riesgoActTrimestreSel">
+                  <option value="Todos">Todos los Trimestres (Ciclo Completo)</option>
+                  <option value="1">Trimestre 1 (Ago - Nov)</option>
+                  <option value="2">Trimestre 2 (Dic - Mar)</option>
+                  <option value="3">Trimestre 3 (Abr - Jul)</option>
+              </select>
+           </div>
+
+           <div class="form-group">
+              <label class="form-label">Grado</label>
+              <select class="form-select" id="riesgoActGradoSel" onchange="window.handleRiesgoActGradoChange()">
+                  <option value="Todos">Toda la Escuela</option>
+                  <option value="1°">1° Grado</option>
+                  <option value="2°">2° Grado</option>
+                  <option value="3°">3° Grado</option>
+              </select>
+           </div>
+
+           <div class="form-group" id="riesgoActGrupoContainer" style="display:none;">
+              <label class="form-label">Grupo</label>
+              <select class="form-select" id="riesgoActGrupoSel">
+                 <option value="Todos">Todos los grupos del grado</option>
+              </select>
+           </div>
+
+           <div class="form-group">
+              <label class="form-label">Umbral de Alerta Actitudinal</label>
+              <select class="form-select" id="riesgoActUmbralSel">
+                  <option value="1+">Todos los Alumnos con Reportes (1 o más)</option>
+                  <option value="2+">Riesgo Moderado (2 o más reportes)</option>
+                  <option value="3+">Riesgo Crítico / Reincidencia (3 o más reportes)</option>
+                  <option value="prioritaria">Atención Prioritaria / Casos Graves</option>
+              </select>
+           </div>
+
+           <button class="btn btn-primary" style="width:100%; margin-top:10px;" onclick="window.loadApoyoRiesgoActitudinalData()">
+              <i class="fa-solid fa-magnifying-glass-chart"></i> Analizar Reportes
+           </button>
+        </div>
+
+        <div class="card" style="flex:3; min-width:400px; width:100%;">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; flex-wrap:wrap; gap:10px;">
+            <div>
+              <h3 style="margin:0;"><i class="fa-solid fa-shield-halved" style="color:var(--danger);"></i> Análisis Estadístico y Alumnos en Alerta</h3>
+              <p style="margin:4px 0 0 0; font-size:0.8rem; color:var(--text-muted);">Estadísticas de reportes de conducta, académicos y de atención prioritaria.</p>
+            </div>
+            <div style="display:flex; gap:8px; align-items:center;">
+              <span id="riesgoActTotalBadge" class="badge" style="background:var(--danger); color:white; display:none;">0 detectados</span>
+              <button class="btn btn-outline btn-sm" id="btnImprimirRiesgoAct" style="display:none;" onclick="window.imprimirReporteRiesgoActitudinal()">
+                <i class="fa-solid fa-print"></i> Imprimir Reporte
+              </button>
+            </div>
+          </div>
+          
+          <div id="riesgoActDataContainer" style="min-height:300px;">
+             <div style="text-align:center; padding:40px; color:var(--text-muted);">
+               <i class="fa-solid fa-clipboard-user" style="font-size:3rem; margin-bottom:15px; color:var(--border);"></i>
+               <p>Ajusta los filtros y haz clic en "Analizar Reportes" para ver las estadísticas de incidencias y los alumnos detectados.</p>
+             </div>
+          </div>
         </div>
       </div>
     </div>
@@ -4572,6 +4656,7 @@ window.loadApoyoRiesgoFiltros = async () => {
             .order('nombre');
         
         window._riesgoGruposCacheados = grupos || [];
+        if (window.handleRiesgoActGradoChange) window.handleRiesgoActGradoChange();
     } catch(e) { console.error("Error cargando grupos riesgo", e); }
 };
 
@@ -4738,6 +4823,564 @@ window.loadApoyoRiesgoData = async () => {
         console.error("Error en loadApoyoRiesgoData:", err);
         hold.innerHTML = `<p style="text-align:center; color:var(--danger); padding:20px;"><i class="fa-solid fa-triangle-exclamation"></i> Error al calcular el riesgo académico: ${err.message || err}</p>`;
     }
+};
+
+window.cambiarTabRiesgo = (tab) => {
+    window._activeRiesgoTab = tab;
+    const tabAcad = document.getElementById('tabBtnRiesgoAcademico');
+    const tabAct = document.getElementById('tabBtnRiesgoActitudinal');
+    const panelAcad = document.getElementById('panelRiesgoAcademico');
+    const panelAct = document.getElementById('panelRiesgoActitudinal');
+
+    if(tab === 'academico') {
+        if(tabAcad) {
+            tabAcad.style.background = 'white';
+            tabAcad.style.color = 'var(--primary)';
+            tabAcad.style.borderBottom = '3px solid var(--primary)';
+            tabAcad.style.borderColor = 'var(--border) var(--border) var(--primary) var(--border)';
+        }
+        if(tabAct) {
+            tabAct.style.background = 'transparent';
+            tabAct.style.color = 'var(--text-muted)';
+            tabAct.style.borderBottom = '3px solid transparent';
+            tabAct.style.borderColor = 'transparent';
+        }
+        if(panelAcad) panelAcad.style.display = 'flex';
+        if(panelAct) panelAct.style.display = 'none';
+    } else {
+        if(tabAct) {
+            tabAct.style.background = 'white';
+            tabAct.style.color = 'var(--primary)';
+            tabAct.style.borderBottom = '3px solid var(--primary)';
+            tabAct.style.borderColor = 'var(--border) var(--border) var(--primary) var(--border)';
+        }
+        if(tabAcad) {
+            tabAcad.style.background = 'transparent';
+            tabAcad.style.color = 'var(--text-muted)';
+            tabAcad.style.borderBottom = '3px solid transparent';
+            tabAcad.style.borderColor = 'transparent';
+        }
+        if(panelAcad) panelAcad.style.display = 'none';
+        if(panelAct) panelAct.style.display = 'block';
+
+        // Inicializar filtros si no se ha hecho
+        if(window.handleRiesgoActGradoChange) window.handleRiesgoActGradoChange();
+
+        // Auto-ejecutar análisis la primera vez que se entra a la pestaña
+        if(!window._riesgoActitudinalLoadedOnce) {
+            window._riesgoActitudinalLoadedOnce = true;
+            if(window.loadApoyoRiesgoActitudinalData) {
+                window.loadApoyoRiesgoActitudinalData();
+            }
+        }
+    }
+};
+
+window.handleRiesgoActGradoChange = () => {
+    const grado = document.getElementById('riesgoActGradoSel') ? document.getElementById('riesgoActGradoSel').value : 'Todos';
+    const container = document.getElementById('riesgoActGrupoContainer');
+    const selGrupo = document.getElementById('riesgoActGrupoSel');
+    if (!container || !selGrupo) return;
+    
+    if(grado === 'Todos') {
+        container.style.display = 'none';
+        selGrupo.value = 'Todos';
+    } else {
+        container.style.display = 'block';
+        const numGrado = (grado + '').replace(/[^0-9]/g, '');
+        const filtrados = (window._riesgoGruposCacheados || []).filter(g => {
+            const numG = (g.nombre + '').replace(/[^0-9]/g, '');
+            return numGrado ? (numG === numGrado) : g.nombre.startsWith(grado);
+        });
+        let html = '<option value="Todos">Todos los grupos del grado</option>';
+        filtrados.forEach(g => {
+            html += `<option value="${g.id}">${g.nombre}</option>`;
+        });
+        selGrupo.innerHTML = html;
+    }
+};
+
+window.loadApoyoRiesgoActitudinalData = async () => {
+    const hold = document.getElementById('riesgoActDataContainer');
+    const badge = document.getElementById('riesgoActTotalBadge');
+    const btnPrint = document.getElementById('btnImprimirRiesgoAct');
+    if (!hold) return;
+
+    const trim = document.getElementById('riesgoActTrimestreSel')?.value || 'Todos';
+    const gradoSel = document.getElementById('riesgoActGradoSel')?.value || 'Todos';
+    const grupoSel = document.getElementById('riesgoActGrupoSel') ? document.getElementById('riesgoActGrupoSel').value : 'Todos';
+    const umbral = document.getElementById('riesgoActUmbralSel')?.value || '1+';
+
+    hold.innerHTML = '<p style="text-align:center; padding:40px;"><i class="fa-solid fa-spinner fa-spin" style="font-size:1.8rem; color:var(--primary); margin-bottom:10px; display:block;"></i> Analizando reportes escolares y evaluando umbrales de alerta...</p>';
+    if (badge) badge.style.display = 'none';
+    if (btnPrint) btnPrint.style.display = 'none';
+
+    try {
+        let pId = state.plantelId || window.currentUserProfile?.plantel_id || state.user?.user_metadata?.plantel_id;
+        if (!pId) {
+            const uid = state.user?.id || (await supabaseClient.auth.getUser())?.data?.user?.id;
+            if (uid) {
+                try {
+                    const { data: prof } = await supabaseClient.from('perfiles').select('plantel_id').eq('id', uid).maybeSingle();
+                    if (prof?.plantel_id) pId = prof.plantel_id;
+                } catch(e) {}
+            }
+        }
+
+        // 1. Cargar alumnos según Grado y Grupo seleccionados
+        let alumnosQuery = supabaseClient.from('alumnos')
+            .select('id, nombre, matricula, grado, grupo_id, grupos(id, nombre)')
+            .limit(10000);
+        if (pId) alumnosQuery = alumnosQuery.eq('plantel_id', pId);
+
+        if (grupoSel && grupoSel !== 'Todos') {
+            alumnosQuery = alumnosQuery.eq('grupo_id', grupoSel);
+        } else if (gradoSel && gradoSel !== 'Todos') {
+            const numGrado = (gradoSel + '').replace(/[^0-9]/g, '');
+            const grpsDel = (window._riesgoGruposCacheados || []).filter(g => (g.nombre + '').replace(/[^0-9]/g, '') === numGrado);
+            if (grpsDel.length > 0) alumnosQuery = alumnosQuery.in('grupo_id', grpsDel.map(g => g.id));
+        }
+
+        const { data: alumnosData, error: errAl } = await alumnosQuery;
+        if (errAl) throw errAl;
+
+        if (!alumnosData || alumnosData.length === 0) {
+            hold.innerHTML = '<p style="text-align:center; padding:30px; color:var(--text-muted);"><i class="fa-solid fa-user-slash" style="font-size:2rem; display:block; margin-bottom:10px;"></i>No se encontraron alumnos para los filtros de grado/grupo seleccionados.</p>';
+            return;
+        }
+
+        const mapAlumnosById = {};
+        alumnosData.forEach(al => {
+            mapAlumnosById[al.id] = {
+                id: al.id,
+                nombre: al.nombre || 'Alumno',
+                matricula: al.matricula || '---',
+                grado: al.grado || '',
+                grupo: al.grupos ? al.grupos.nombre : 'Sin grupo',
+                grupo_id: al.grupo_id,
+                repAcademicos: 0,
+                repConductuales: 0,
+                repPrioritaria: 0,
+                repGraves: 0,
+                activos: 0,
+                resueltos: 0,
+                totalReportes: 0,
+                reportes: []
+            };
+        });
+
+        // 2. Cargar periodos para delimitación de trimestres si existen
+        let periodosMap = {};
+        try {
+            let pq = supabaseClient.from('periodos_calificaciones').select('*');
+            if (pId) pq = pq.eq('plantel_id', pId);
+            const { data: pData } = await pq;
+            if (pData) pData.forEach(p => { periodosMap[p.trimestre] = p; });
+        } catch(e) { console.warn("No se pudieron cargar periodos_calificaciones:", e); }
+
+        // Helper para determinar trimestre de un reporte
+        const obtenerTrimestreReporte = (dateStr) => {
+            if (!dateStr) return 1;
+            const d = new Date(dateStr);
+            if (isNaN(d.getTime())) return 1;
+
+            const p1 = periodosMap[1]?.fecha_limite ? new Date(periodosMap[1].fecha_limite) : null;
+            const p2 = periodosMap[2]?.fecha_limite ? new Date(periodosMap[2].fecha_limite) : null;
+            const p3 = periodosMap[3]?.fecha_limite ? new Date(periodosMap[3].fecha_limite) : null;
+
+            if (p1 && !isNaN(p1.getTime()) && d <= p1) return 1;
+            if (p2 && !isNaN(p2.getTime()) && p1 && d > p1 && d <= p2) return 2;
+            if (p3 && !isNaN(p3.getTime()) && p2 && d > p2 && d <= p3) return 3;
+
+            // Calendario SEP oficial (mes 0-indexado)
+            const m = d.getMonth();
+            if (m >= 7 && m <= 10) return 1; // Ago - Nov
+            if (m === 11 || m <= 2) return 2; // Dic - Mar
+            return 3; // Abr - Jul
+        };
+
+        // 3. Consultar todos los reportes de conducta del plantel
+        let repQuery = supabaseClient.from('reportes_conducta')
+            .select('*')
+            .limit(25000);
+        if (pId) repQuery = repQuery.eq('plantel_id', pId);
+        
+        const { data: reportesData, error: errRep } = await repQuery;
+        if (errRep) throw errRep;
+
+        let totalAcademicos = 0;
+        let totalConductuales = 0;
+        let totalPrioritarios = 0;
+        let totalGeneralReportes = 0;
+
+        (reportesData || []).forEach(r => {
+            const al = mapAlumnosById[r.alumno_id];
+            if (!al) return; // Fuera del filtro de alumnos
+
+            const rawFecha = r.fecha || r.creado_en || null;
+            const rTrim = obtenerTrimestreReporte(rawFecha);
+
+            // Filtrar por Trimestre si no es "Todos"
+            if (trim !== 'Todos' && parseInt(trim) !== rTrim) return;
+
+            // Clasificación precisa de reporte
+            const descUpper = (r.descripcion || '').toUpperCase();
+            const tipoUpper = (r.tipo || '').toUpperCase();
+            let cat = 'conductual';
+
+            if (descUpper.includes('[ATENCIÓN PRIORITARIA]') || descUpper.includes('[ATENCION PRIORITARIA]') || tipoUpper.includes('PRIORITARIA') || (r.gravedad === 'N/A' && descUpper.includes('PRIORITARIA'))) {
+                cat = 'prioritaria';
+            } else if (descUpper.includes('[ACADÉMICO]') || descUpper.includes('[ACADEMICO]') || tipoUpper.includes('ACAD') || r.tipo === 'reporte_academico_automatico') {
+                cat = 'academico';
+            } else {
+                cat = 'conductual';
+            }
+
+            // Acumular estadísticas de la cohorte
+            if (cat === 'academico') {
+                totalAcademicos++;
+                al.repAcademicos++;
+            } else if (cat === 'conductual') {
+                totalConductuales++;
+                al.repConductuales++;
+            } else if (cat === 'prioritaria') {
+                totalPrioritarios++;
+                al.repPrioritaria++;
+            }
+
+            if (r.gravedad === 'Grave') al.repGraves++;
+            if (r.resuelto) al.resueltos++; else al.activos++;
+            
+            al.totalReportes++;
+            totalGeneralReportes++;
+
+            let cleanDesc = (r.descripcion || '').replace(/^\[.*?\]\s*/g, '');
+            al.reportes.push({
+                id: r.id,
+                cat,
+                gravedad: r.gravedad || 'Leve',
+                descripcion: cleanDesc,
+                resuelto: !!r.resuelto,
+                trimestre: rTrim,
+                fecha: rawFecha ? new Date(rawFecha).toLocaleDateString('es-MX', { day:'2-digit', month:'short' }) : '---'
+            });
+        });
+
+        // 4. Filtrar alumnos según Umbral de Alerta
+        const alumnosEnRiesgo = Object.values(mapAlumnosById).filter(al => {
+            if (umbral === '1+') return al.totalReportes >= 1;
+            if (umbral === '2+') return al.totalReportes >= 2;
+            if (umbral === '3+') return al.totalReportes >= 3;
+            if (umbral === 'prioritaria') return (al.repPrioritaria > 0 || al.repGraves > 0);
+            return al.totalReportes >= 1;
+        });
+
+        // Ordenar: casos prioritarios primero, luego más reportes a menos
+        alumnosEnRiesgo.sort((a, b) => {
+            if (b.repPrioritaria !== a.repPrioritaria) return b.repPrioritaria - a.repPrioritaria;
+            if (b.repGraves !== a.repGraves) return b.repGraves - a.repGraves;
+            return b.totalReportes - a.totalReportes;
+        });
+
+        window._riesgoActitudinalCacheados = {
+            alumnos: alumnosEnRiesgo,
+            trim, gradoSel, grupoSel, umbral,
+            totalAcademicos, totalConductuales, totalPrioritarios, totalGeneralReportes
+        };
+
+        if (badge) {
+            badge.style.display = 'inline-block';
+            badge.innerText = `${alumnosEnRiesgo.length} detectados`;
+        }
+        if (btnPrint && alumnosEnRiesgo.length > 0) {
+            btnPrint.style.display = 'inline-flex';
+        }
+
+        // 5. Construir HTML de Estadísticas + Tabla
+        let html = `
+            <!-- Panel Estadístico de Reportes -->
+            <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap:14px; margin-bottom:24px;">
+                <!-- Académicos -->
+                <div style="background:white; border:1px solid #bfdbfe; border-left:5px solid #2563eb; border-radius:12px; padding:14px 16px; box-shadow:var(--shadow-sm);">
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+                        <span style="font-size:0.75rem; font-weight:700; color:#1e40af; text-transform:uppercase; letter-spacing:0.5px;">Reportes Académicos</span>
+                        <div style="background:#eff6ff; width:32px; height:32px; border-radius:8px; display:flex; align-items:center; justify-content:center;">
+                            <i class="fa-solid fa-book-bookmark" style="color:#2563eb;"></i>
+                        </div>
+                    </div>
+                    <div style="display:flex; align-items:baseline; gap:8px;">
+                        <span style="font-size:1.9rem; font-weight:800; color:#1e3a8a;">${totalAcademicos}</span>
+                        <span style="font-size:0.75rem; color:var(--text-muted);">registrados</span>
+                    </div>
+                </div>
+
+                <!-- Conductuales -->
+                <div style="background:white; border:1px solid #fed7aa; border-left:5px solid #f97316; border-radius:12px; padding:14px 16px; box-shadow:var(--shadow-sm);">
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+                        <span style="font-size:0.75rem; font-weight:700; color:#c2410c; text-transform:uppercase; letter-spacing:0.5px;">Reportes Conductuales</span>
+                        <div style="background:#fff7ed; width:32px; height:32px; border-radius:8px; display:flex; align-items:center; justify-content:center;">
+                            <i class="fa-solid fa-triangle-exclamation" style="color:#f97316;"></i>
+                        </div>
+                    </div>
+                    <div style="display:flex; align-items:baseline; gap:8px;">
+                        <span style="font-size:1.9rem; font-weight:800; color:#9a3412;">${totalConductuales}</span>
+                        <span style="font-size:0.75rem; color:var(--text-muted);">convivencia</span>
+                    </div>
+                </div>
+
+                <!-- Atención Prioritaria -->
+                <div style="background:white; border:1px solid #fecaca; border-left:5px solid #dc2626; border-radius:12px; padding:14px 16px; box-shadow:var(--shadow-sm);">
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+                        <span style="font-size:0.75rem; font-weight:700; color:#b91c1c; text-transform:uppercase; letter-spacing:0.5px;">Atención Prioritaria</span>
+                        <div style="background:#fef2f2; width:32px; height:32px; border-radius:8px; display:flex; align-items:center; justify-content:center;">
+                            <i class="fa-solid fa-shield-halved" style="color:#dc2626;"></i>
+                        </div>
+                    </div>
+                    <div style="display:flex; align-items:baseline; gap:8px;">
+                        <span style="font-size:1.9rem; font-weight:800; color:#991b1b;">${totalPrioritarios}</span>
+                        <span style="font-size:0.75rem; color:var(--text-muted);">urgentes</span>
+                    </div>
+                </div>
+
+                <!-- Alumnos en Alerta -->
+                <div style="background:white; border:1px solid #e0e7ff; border-left:5px solid #4f46e5; border-radius:12px; padding:14px 16px; box-shadow:var(--shadow-sm);">
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+                        <span style="font-size:0.75rem; font-weight:700; color:#3730a3; text-transform:uppercase; letter-spacing:0.5px;">Alumnos en Alerta</span>
+                        <div style="background:#eef2ff; width:32px; height:32px; border-radius:8px; display:flex; align-items:center; justify-content:center;">
+                            <i class="fa-solid fa-user-shield" style="color:#4f46e5;"></i>
+                        </div>
+                    </div>
+                    <div style="display:flex; align-items:baseline; gap:8px;">
+                        <span style="font-size:1.9rem; font-weight:800; color:#312e81;">${alumnosEnRiesgo.length}</span>
+                        <span style="font-size:0.75rem; color:var(--text-muted);">según umbral</span>
+                    </div>
+                </div>
+
+                <!-- Total Reportes -->
+                <div style="background:white; border:1px solid #e2e8f0; border-left:5px solid #64748b; border-radius:12px; padding:14px 16px; box-shadow:var(--shadow-sm);">
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+                        <span style="font-size:0.75rem; font-weight:700; color:#475569; text-transform:uppercase; letter-spacing:0.5px;">Total Incidencias</span>
+                        <div style="background:#f8fafc; width:32px; height:32px; border-radius:8px; display:flex; align-items:center; justify-content:center;">
+                            <i class="fa-solid fa-chart-pie" style="color:#64748b;"></i>
+                        </div>
+                    </div>
+                    <div style="display:flex; align-items:baseline; gap:8px;">
+                        <span style="font-size:1.9rem; font-weight:800; color:#1e293b;">${totalGeneralReportes}</span>
+                        <span style="font-size:0.75rem; color:var(--text-muted);">global</span>
+                    </div>
+                </div>
+            </div>
+        `;
+
+        if (alumnosEnRiesgo.length === 0) {
+            html += `
+                <div style="text-align:center; padding:40px 20px; background:var(--page-bg); border-radius:12px; border:1px dashed var(--border);">
+                    <i class="fa-solid fa-circle-check" style="font-size:3rem; color:var(--success); margin-bottom:12px; display:block;"></i>
+                    <h4 style="margin:0 0 6px 0; color:var(--text-main);">Sin alumnos bajo el umbral de alerta seleccionado</h4>
+                    <p style="margin:0; font-size:0.85rem; color:var(--text-muted);">No se registraron alumnos con reportes que cumplan este criterio en el periodo seleccionado.</p>
+                </div>
+            `;
+            hold.innerHTML = html;
+            return;
+        }
+
+        // 6. Tabla de alumnos detectados
+        html += `
+            <div style="overflow-x:auto;">
+                <table class="risk-table" style="width:100%; border-collapse:collapse;">
+                    <thead>
+                        <tr style="border-bottom:2px solid var(--border);">
+                            <th style="padding:10px 12px; text-align:left;">Alumno</th>
+                            <th style="padding:10px 12px; text-align:left;">Grado / Grupo</th>
+                            <th style="padding:10px 12px; text-align:center;">Nivel Alerta</th>
+                            <th style="padding:10px 12px; text-align:center;" title="Reportes Académicos">Académicos</th>
+                            <th style="padding:10px 12px; text-align:center;" title="Reportes Conductuales">Conductuales</th>
+                            <th style="padding:10px 12px; text-align:center;" title="Reportes de Atención Prioritaria">Atención Prio.</th>
+                            <th style="padding:10px 12px; text-align:center;">Total</th>
+                            <th style="padding:10px 12px; text-align:left;">Incidencias Registradas</th>
+                            <th style="padding:10px 12px; text-align:center;">Acciones</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+        `;
+
+        alumnosEnRiesgo.forEach(al => {
+            // Nivel de alerta badge
+            let nivelBadge = '';
+            if (al.repPrioritaria > 0) {
+                nivelBadge = `<span class="badge" style="background:#fee2e2; color:#991b1b; font-weight:700; border:1px solid #f87171; font-size:0.75rem;"><i class="fa-solid fa-shield-halved"></i> Prioritario</span>`;
+            } else if (al.repGraves > 0 || al.totalReportes >= 3) {
+                nivelBadge = `<span class="badge" style="background:#ffedd5; color:#9a3412; font-weight:700; border:1px solid #fdba74; font-size:0.75rem;"><i class="fa-solid fa-triangle-exclamation"></i> Crítico (${al.totalReportes})</span>`;
+            } else if (al.totalReportes >= 2) {
+                nivelBadge = `<span class="badge" style="background:#fef3c7; color:#92400e; font-weight:700; border:1px solid #fcd34d; font-size:0.75rem;"><i class="fa-solid fa-circle-exclamation"></i> Moderado (2)</span>`;
+            } else {
+                nivelBadge = `<span class="badge" style="background:#e0f2fe; color:#0369a1; font-weight:700; border:1px solid #7dd3fc; font-size:0.75rem;"><i class="fa-solid fa-info-circle"></i> Leve (1)</span>`;
+            }
+
+            // Resumen de las últimas incidencias
+            const incidenciasHtml = al.reportes.slice(0, 3).map(rep => {
+                let badgeColor = rep.cat === 'prioritaria' ? '#dc2626' : (rep.cat === 'academico' ? '#2563eb' : '#f97316');
+                let tag = rep.cat === 'prioritaria' ? 'Prio' : (rep.cat === 'academico' ? 'Acad' : 'Cond');
+                let descSnippet = rep.descripcion.length > 55 ? rep.descripcion.substring(0, 52) + '...' : rep.descripcion;
+                return `
+                    <div style="margin-bottom:3px; font-size:0.78rem; display:flex; align-items:center; gap:6px;">
+                        <span style="font-size:0.65rem; background:${badgeColor}; color:white; padding:1px 5px; border-radius:4px; font-weight:bold;">${tag}</span>
+                        <span style="color:var(--text-muted); font-size:0.7rem;">${rep.fecha}:</span>
+                        <span style="color:var(--text-main); font-weight:500;" title="${rep.descripcion.replace(/"/g, '&quot;')}">${descSnippet || 'Sin descripción'}</span>
+                    </div>
+                `;
+            }).join('');
+
+            const extraCount = al.reportes.length > 3 ? `<span style="font-size:0.7rem; color:var(--primary); font-weight:600;">+${al.reportes.length - 3} incidencia(s) más</span>` : '';
+
+            html += `
+                <tr style="border-bottom:1px solid var(--border);">
+                    <td style="padding:10px 12px; font-weight:600;">
+                        <div>${al.nombre}</div>
+                        <div style="font-size:0.72rem; color:var(--text-muted); font-weight:normal;">Matrícula: ${al.matricula}</div>
+                    </td>
+                    <td style="padding:10px 12px; white-space:nowrap;">
+                        <span class="badge" style="background:var(--page-bg); border:1px solid var(--border); color:var(--text-main);">${al.grado} - ${al.grupo}</span>
+                    </td>
+                    <td style="padding:10px 12px; text-align:center; white-space:nowrap;">
+                        ${nivelBadge}
+                    </td>
+                    <td style="padding:10px 12px; text-align:center;">
+                        <span class="badge" style="background:${al.repAcademicos > 0 ? '#dbeafe' : '#f1f5f9'}; color:${al.repAcademicos > 0 ? '#1e40af' : '#94a3b8'}; font-weight:bold; font-size:0.85rem;">
+                            ${al.repAcademicos}
+                        </span>
+                    </td>
+                    <td style="padding:10px 12px; text-align:center;">
+                        <span class="badge" style="background:${al.repConductuales > 0 ? '#fed7aa' : '#f1f5f9'}; color:${al.repConductuales > 0 ? '#9a3412' : '#94a3b8'}; font-weight:bold; font-size:0.85rem;">
+                            ${al.repConductuales}
+                        </span>
+                    </td>
+                    <td style="padding:10px 12px; text-align:center;">
+                        <span class="badge" style="background:${al.repPrioritaria > 0 ? '#fecaca' : '#f1f5f9'}; color:${al.repPrioritaria > 0 ? '#991b1b' : '#94a3b8'}; font-weight:bold; font-size:0.85rem;">
+                            ${al.repPrioritaria}
+                        </span>
+                    </td>
+                    <td style="padding:10px 12px; text-align:center;">
+                        <span style="font-size:1.15rem; font-weight:800; color:${al.totalReportes >= 3 ? 'var(--danger)' : 'var(--text-main)'};">
+                            ${al.totalReportes}
+                        </span>
+                    </td>
+                    <td style="padding:10px 12px; max-width:280px;">
+                        ${incidenciasHtml}
+                        ${extraCount}
+                    </td>
+                    <td style="padding:10px 12px; text-align:center; white-space:nowrap;">
+                        <div style="display:flex; flex-direction:column; gap:4px; align-items:center;">
+                            <button class="btn btn-outline btn-xs" style="border-color:var(--primary); color:var(--primary); width:100%;" onclick="window.showAlumnoExpediente('${al.id}', 'conducta')">
+                                <i class="fa-solid fa-folder-open"></i> Expediente
+                            </button>
+                            <button class="btn btn-primary btn-xs" style="width:100%;" onclick="window.navigate('/apoyo/reportes'); setTimeout(()=>{ const el=document.getElementById('searchAlumnoFoco'); if(el){el.value='${al.nombre.replace(/'/g, "\\'")}'; window.searchAlumnoParaReporte();} }, 500);">
+                                <i class="fa-solid fa-calendar-check"></i> Citar / Reportar
+                            </button>
+                        </div>
+                    </td>
+                </tr>
+            `;
+        });
+
+        html += `
+                    </tbody>
+                </table>
+            </div>
+        `;
+
+        hold.innerHTML = html;
+
+    } catch(err) {
+        console.error("Error en loadApoyoRiesgoActitudinalData:", err);
+        hold.innerHTML = `<p style="text-align:center; color:var(--danger); padding:20px;"><i class="fa-solid fa-triangle-exclamation"></i> Error al calcular el riesgo actitudinal: ${err.message || err}</p>`;
+    }
+};
+
+window.imprimirReporteRiesgoActitudinal = () => {
+    const data = window._riesgoActitudinalCacheados;
+    if (!data || !data.alumnos || data.alumnos.length === 0) return alert("No hay datos para imprimir.");
+
+    const printWin = window.open('', '_blank');
+    if (!printWin) return alert("Por favor permite las ventanas emergentes en tu navegador.");
+
+    const plantNom = state.plantelNombre || window.currentUserProfile?.planteles?.nombre || 'Escuela Secundaria';
+    const fechaImp = new Date().toLocaleDateString('es-MX', { year:'numeric', month:'long', day:'numeric' });
+    const trimLabel = data.trim === 'Todos' ? 'Todos los Trimestres' : `Trimestre ${data.trim}`;
+    const gradoLabel = data.gradoSel === 'Todos' ? 'Toda la Escuela' : `${data.gradoSel}`;
+
+    let filasHtml = data.alumnos.map(al => `
+        <tr>
+            <td style="padding:8px; border:1px solid #ccc; font-weight:bold;">${al.nombre}<br><small style="color:#666;">Mat: ${al.matricula}</small></td>
+            <td style="padding:8px; border:1px solid #ccc; text-align:center;">${al.grado} - ${al.grupo}</td>
+            <td style="padding:8px; border:1px solid #ccc; text-align:center; font-weight:bold;">${al.totalReportes}</td>
+            <td style="padding:8px; border:1px solid #ccc; text-align:center;">${al.repAcademicos}</td>
+            <td style="padding:8px; border:1px solid #ccc; text-align:center;">${al.repConductuales}</td>
+            <td style="padding:8px; border:1px solid #ccc; text-align:center; color:#b91c1c; font-weight:bold;">${al.repPrioritaria}</td>
+            <td style="padding:8px; border:1px solid #ccc; font-size:11px;">
+                ${al.reportes.map(r => `• [${r.cat.toUpperCase()}] ${r.fecha}: ${r.descripcion}`).slice(0, 3).join('<br>')}
+            </td>
+        </tr>
+    `).join('');
+
+    printWin.document.write(`
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <title>Reporte de Riesgo Actitudinal - ${plantNom}</title>
+            <style>
+                body { font-family: Arial, sans-serif; font-size: 12px; margin: 25px; color: #111; }
+                h2, h3 { margin: 4px 0; }
+                table { width: 100%; border-collapse: collapse; margin-top: 15px; }
+                th { background: #f3f4f6; padding: 8px; border: 1px solid #ccc; font-size: 11px; text-transform: uppercase; }
+                .kpi-box { display: inline-block; padding: 10px 16px; border: 1px solid #ccc; border-radius: 6px; margin-right: 10px; margin-bottom: 10px; text-align: center; }
+                .kpi-box strong { font-size: 18px; display: block; }
+                @media print { button { display: none; } }
+            </style>
+        </head>
+        <body>
+            <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:2px solid #333; padding-bottom:10px; margin-bottom:15px;">
+                <div>
+                    <h2>${plantNom}</h2>
+                    <h3>Informe Estadístico de Riesgo Actitudinal e Incidencias</h3>
+                    <p style="margin:2px 0; color:#555;">Filtro: ${trimLabel} | Grado: ${gradoLabel} | Fecha de Emisión: ${fechaImp}</p>
+                </div>
+            </div>
+
+            <div style="margin-bottom:15px;">
+                <div class="kpi-box"><strong>${data.totalAcademicos}</strong>Académicos</div>
+                <div class="kpi-box"><strong>${data.totalConductuales}</strong>Conductuales</div>
+                <div class="kpi-box"><strong style="color:#b91c1c;">${data.totalPrioritarios}</strong>Atención Prioritaria</div>
+                <div class="kpi-box"><strong>${data.alumnos.length}</strong>Alumnos en Alerta</div>
+                <div class="kpi-box"><strong>${data.totalGeneralReportes}</strong>Total Incidencias</div>
+            </div>
+
+            <table>
+                <thead>
+                    <tr>
+                        <th>Alumno</th>
+                        <th>Grado/Gpo</th>
+                        <th>Total</th>
+                        <th>Acad.</th>
+                        <th>Cond.</th>
+                        <th>Prio.</th>
+                        <th>Incidencias Recientes</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${filasHtml}
+                </tbody>
+            </table>
+
+            <div style="margin-top:40px; display:flex; justify-content:space-around; text-align:center;">
+                <div style="width:220px; border-top:1px solid #333; padding-top:5px;">Trabajo Social / Prefectura</div>
+                <div style="width:220px; border-top:1px solid #333; padding-top:5px;">Dirección Escolar</div>
+            </div>
+            <script>window.onload = () => { window.print(); };<\/script>
+        </body>
+        </html>
+    `);
+    printWin.document.close();
 };
 
 
