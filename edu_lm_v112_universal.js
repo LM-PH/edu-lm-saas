@@ -2279,6 +2279,202 @@ function renderAdminCalificaciones() {
   `;
 }
 
+// ==========================================
+// CALENDARIO DE EVALUACIÓN (ADMIN)
+// ==========================================
+function renderAdminCalendario() {
+    setTimeout(() => { if(window.loadAdminCalendario) window.loadAdminCalendario(); }, 100);
+    return `
+        <div class="page-header">
+            <h2 class="page-title"><i class="fa-solid fa-calendar-days text-primary"></i> Calendario de Evaluación</h2>
+            <p class="page-subtitle">Establece fechas límite y controles de bloqueo para la captura de calificaciones por parte de los docentes.</p>
+        </div>
+
+        <div class="grid" style="grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 24px;">
+            ${[1, 2, 3, 4].map(trim => `
+                <div class="card shadow-md" style="border-top: 4px solid var(--primary); background:white; border-radius:14px; padding:20px;">
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px;">
+                        <h3 style="margin:0; font-size:1.15rem; color:var(--text-main);">
+                            ${trim === 4 ? '<i class="fa-solid fa-flag-checkered text-primary"></i> Calificación Final' : '<i class="fa-solid fa-calendar-check text-primary"></i> Trimestre ' + trim}
+                        </h3>
+                        <span id="badge-trim-${trim}" class="badge" style="background:#e0f2fe; color:#0369a1; font-weight:700;">Habilitado</span>
+                    </div>
+                    
+                    <div class="form-group" style="margin-bottom:15px;">
+                        <label class="form-label" style="font-weight:600; font-size:0.85rem; margin-bottom:6px;">Fecha Límite de Envío</label>
+                        <input type="datetime-local" id="deadline-trim-${trim}" class="form-input" style="border-radius:8px;">
+                        <small style="color:var(--text-muted); font-size:0.75rem; display:block; margin-top:4px;">Límite en el que los maestros pueden enviar calificaciones.</small>
+                    </div>
+
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-top:15px; padding-top:15px; border-top:1px solid var(--border);">
+                        <div style="display:flex; align-items:center; gap:10px;">
+                            <label class="switch">
+                                <input type="checkbox" id="block-trim-${trim}" onchange="window.toggleAdminDeadlineBlock(${trim})">
+                                <span class="slider round"></span>
+                            </label>
+                            <span style="font-size:0.85rem; font-weight:600; color:var(--text-muted);">Bloquear Envíos</span>
+                        </div>
+                        <button class="btn btn-primary btn-sm" onclick="window.saveAdminDeadline(${trim})">
+                            <i class="fa-solid fa-floppy-disk"></i> Guardar
+                        </button>
+                    </div>
+                </div>
+            `).join('')}
+        </div>
+
+        <div class="card" style="margin-top: 28px; background: #f8fafc; border: 1px dashed var(--primary-light); border-radius:12px; padding:18px;">
+            <div style="display:flex; gap:16px; align-items:center;">
+                <div style="font-size:2rem; color:var(--primary);"><i class="fa-solid fa-circle-info"></i></div>
+                <div style="font-size:0.9rem; color:var(--text-muted); line-height:1.5;">
+                    <strong>Instrucciones de Administración:</strong> El bloqueo manual impide cualquier envío sin importar la fecha establecida. Si el bloqueo está desactivado, el sistema solo permitirá envíos antes de la fecha límite establecida. Para permitir <strong>envíos extemporáneos</strong> o prórrogas individuales/grupales, amplía la fecha límite o desactiva temporalmente el bloqueo manual.
+                </div>
+            </div>
+        </div>
+    `;
+}
+window.renderAdminCalendario = renderAdminCalendario;
+
+window.loadAdminCalendario = async () => {
+    try {
+        let pId = state.plantelId || window.currentUserProfile?.plantel_id || state.user?.user_metadata?.plantel_id;
+        let q = supabaseClient.from('periodos_calificaciones').select('*').order('trimestre');
+        if (pId) q = q.eq('plantel_id', pId);
+        const { data, error } = await q;
+        if(error) throw error;
+
+        (data || []).forEach(p => {
+            const dateInput = document.getElementById(`deadline-trim-${p.trimestre}`);
+            const blockInput = document.getElementById(`block-trim-${p.trimestre}`);
+            const badge = document.getElementById(`badge-trim-${p.trimestre}`);
+            
+            if(dateInput && p.fecha_limite) {
+                const d = new Date(p.fecha_limite);
+                if (!isNaN(d.getTime())) {
+                    const pad = n => String(n).padStart(2, '0');
+                    dateInput.value = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+                }
+            }
+            if(blockInput) {
+                blockInput.checked = !!p.bloqueado;
+            }
+            if(badge) {
+                if(p.bloqueado) {
+                    badge.innerText = 'Bloqueado';
+                    badge.style.background = '#fee2e2';
+                    badge.style.color = '#991b1b';
+                } else if(p.fecha_limite && new Date() > new Date(p.fecha_limite)) {
+                    badge.innerText = 'Expirado';
+                    badge.style.background = '#fef3c7';
+                    badge.style.color = '#92400e';
+                } else {
+                    badge.innerText = 'Abierto';
+                    badge.style.background = '#d1fae5';
+                    badge.style.color = '#065f46';
+                }
+            }
+        });
+    } catch(e) { console.error("Error cargando calendario:", e); }
+};
+
+window.saveAdminDeadline = async (trim) => {
+    const dateInput = document.getElementById(`deadline-trim-${trim}`);
+    const dateVal = dateInput ? dateInput.value : '';
+    if(!dateVal) return alert("Por favor selecciona una fecha límite.");
+
+    try {
+        let pId = state.plantelId || window.currentUserProfile?.plantel_id || state.user?.user_metadata?.plantel_id;
+        const isoDate = new Date(dateVal).toISOString();
+
+        let q = supabaseClient.from('periodos_calificaciones').select('*').eq('trimestre', trim);
+        if (pId) q = q.eq('plantel_id', pId);
+        const { data: exist } = await q.maybeSingle();
+
+        const payload = {
+            trimestre: trim,
+            fecha_limite: isoDate,
+            ultima_modificacion: new Date().toISOString()
+        };
+        if (pId) payload.plantel_id = pId;
+        if (exist) payload.bloqueado = !!exist.bloqueado;
+
+        const onConflict = pId ? 'trimestre, plantel_id' : 'trimestre';
+        const { error } = await supabaseClient.from('periodos_calificaciones').upsert(payload, { onConflict });
+
+        if(error) throw error;
+        window.showToast("Fecha límite actualizada con éxito", "success");
+        if(window.loadAdminCalendario) window.loadAdminCalendario();
+    } catch(e) { 
+        console.error("Error al guardar deadline:", e);
+        alert("Error al guardar: " + e.message); 
+    }
+};
+
+window.toggleAdminDeadlineBlock = async (trim) => {
+    const blockInput = document.getElementById(`block-trim-${trim}`);
+    const isBlocked = blockInput ? blockInput.checked : false;
+    try {
+        let pId = state.plantelId || window.currentUserProfile?.plantel_id || state.user?.user_metadata?.plantel_id;
+        let q = supabaseClient.from('periodos_calificaciones').select('*').eq('trimestre', trim);
+        if (pId) q = q.eq('plantel_id', pId);
+        const { data: exist } = await q.maybeSingle();
+
+        const payload = {
+            trimestre: trim,
+            bloqueado: isBlocked,
+            ultima_modificacion: new Date().toISOString()
+        };
+        if (pId) payload.plantel_id = pId;
+        if (exist && exist.fecha_limite) payload.fecha_limite = exist.fecha_limite;
+
+        const onConflict = pId ? 'trimestre, plantel_id' : 'trimestre';
+        const { error } = await supabaseClient.from('periodos_calificaciones').upsert(payload, { onConflict });
+
+        if(error) throw error;
+        window.showToast(`Trimestre ${trim} ${isBlocked ? 'bloqueado' : 'desbloqueado'}`, "info");
+        if(window.loadAdminCalendario) window.loadAdminCalendario();
+    } catch(e) { 
+        console.error("Error al actualizar bloqueo:", e);
+        alert("Error al actualizar bloqueo: " + e.message); 
+    }
+};
+
+window.updateMaestroDeadlineStatus = async () => {
+    const trim = document.getElementById('capturaTrimestre')?.value;
+    const statusSpan = document.getElementById('maestroDeadlineStatus');
+    if(!trim || !statusSpan) return;
+
+    try {
+        let pId = state.plantelId || window.currentUserProfile?.plantel_id || state.user?.user_metadata?.plantel_id;
+        let q = supabaseClient.from('periodos_calificaciones').select('*').eq('trimestre', trim);
+        if (pId) q = q.eq('plantel_id', pId);
+        const { data: periodo } = await q.maybeSingle();
+
+        if(!periodo) {
+            statusSpan.innerHTML = "PERIODO ABIERTO";
+            statusSpan.style.color = "var(--success)";
+            return;
+        }
+
+        if(periodo.bloqueado) {
+            statusSpan.innerHTML = "SISTEMA BLOQUEADO";
+            statusSpan.style.color = "var(--danger)";
+        } else if(periodo.fecha_limite) {
+            const deadline = new Date(periodo.fecha_limite);
+            const now = new Date();
+            if(now > deadline) {
+                statusSpan.innerHTML = `FECHA LÍMITE PASADA (${deadline.toLocaleString('es-MX')})`;
+                statusSpan.style.color = "var(--danger)";
+            } else {
+                statusSpan.innerHTML = `LÍMITE DE ENVÍO: ${deadline.toLocaleString('es-MX')}`;
+                statusSpan.style.color = "var(--warning)";
+            }
+        } else {
+            statusSpan.innerHTML = "PERIODO ABIERTO";
+            statusSpan.style.color = "var(--success)";
+        }
+    } catch(e) { console.error("Error al checar deadline de maestro:", e); }
+};
+
 function renderAdminTramites() {
   setTimeout(() => { 
     if(window.loadTramitesAdmin) window.loadTramitesAdmin(); 
@@ -22391,6 +22587,121 @@ window.loadHistorialFirmas = async () => {
             cont.innerHTML = '<p style="text-align:center; color:var(--text-muted); padding:20px 0;"><i class="fa-solid fa-signature" style="font-size:2.5rem; display:block; margin-bottom:10px; opacity:0.3;"></i>No hay firmas registradas ni pendientes.</p>';
             return;
         }
+
+        // Agrupar por trimestre
+        const porTrimestre = {};
+        firmasFiltradas.forEach(f => {
+            if(!porTrimestre[f.trimestre]) porTrimestre[f.trimestre] = [];
+            porTrimestre[f.trimestre].push(f);
+        });
+
+        let html = '';
+        
+        // Agregar barra de estadísticas si hay grupo seleccionado y al menos 1 alumno
+        if (filtroGrupoId && totalAlumnosGrupo > 0) {
+            const firmasRecientes = firmasFiltradas.length; // Todas las firmas de este grupo
+            const pct = Math.min(100, Math.round((firmasRecientes / totalAlumnosGrupo) * 100)) || 0;
+            const color = pct >= 80 ? '#10b981' : pct >= 50 ? '#f59e0b' : '#ef4444';
+            
+            html += `
+            <div style="margin-bottom:20px; padding:16px; background:white; border-radius:10px; border:1px solid var(--border); box-shadow:0 2px 4px rgba(0,0,0,0.05);">
+                <div style="display:flex; justify-content:space-between; margin-bottom:8px;">
+                    <span style="font-weight:bold; color:var(--text-color);"><i class="fa-solid fa-chart-pie" style="color:var(--primary);"></i> Progreso de Firmas del Grupo</span>
+                    <span style="font-weight:bold; color:${color};">${pct}%</span>
+                </div>
+                <div style="width:100%; height:12px; background:#e2e8f0; border-radius:6px; overflow:hidden;">
+                    <div style="width:${pct}%; height:100%; background:${color}; transition:width 0.5s;"></div>
+                </div>
+                <div style="margin-top:8px; font-size:0.8rem; color:var(--text-muted); text-align:right;">
+                    <strong>${firmasRecientes}</strong> firmas de <strong>${totalAlumnosGrupo}</strong> alumnos registrados
+                </div>
+            </div>`;
+        }
+
+        // Mostrar pendientes al inicio si hay
+        if(pendientesFiltrados.length > 0) {
+            const firmaIds = new Set(firmasFiltradas.map(f => f.alumno_id + f.trimestre));
+            const realPend = pendientesFiltrados.filter(p => {
+                const alumnoIdM = (p.audiencia||'').match(/^Alumno_([a-f0-9-]{36})$/i);
+                const trim = (p.titulo||'').match(/Trimestre\s+\d+/i)?.[0]||'';
+                if(!alumnoIdM) return false;
+                return !firmaIds.has(alumnoIdM[1] + trim);
+            });
+            if(realPend.length > 0) {
+                html += `
+                <div style="margin-bottom:20px; padding:12px 16px; background:#fef3c7; border-radius:10px; border:1px solid #fde68a;">
+                    <p style="margin:0 0 8px 0; font-weight:700; font-size:0.85rem; color:#92400e;"><i class="fa-solid fa-hourglass-half"></i> Avisos en Espera de Firma (${realPend.length})</p>
+                    <p style="font-size:0.78rem; color:#78350f; margin:0;">Estos alumnos recibieron el aviso pero aún no han firmado desde su dispositivo.</p>
+                </div>`;
+            }
+        }
+
+        Object.keys(porTrimestre).sort().forEach(trim => {
+            const firmas = porTrimestre[trim];
+            html += `
+            <div style="margin-bottom:20px;">
+              <div style="display:flex; align-items:center; gap:8px; margin-bottom:10px; padding-bottom:8px; border-bottom:2px solid var(--primary);">
+                <i class="fa-solid fa-layer-group" style="color:var(--primary);"></i>
+                <strong style="color:var(--primary);">${trim}</strong>
+                <span style="background:var(--primary); color:white; border-radius:20px; padding:2px 10px; font-size:0.8rem; margin-left:auto;">${firmas.length} firma(s)</span>
+              </div>
+              <div style="display:grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap:10px;">
+            `;
+            firmas.forEach(f => {
+                const alumno = f.alumnos;
+                const fecha = new Date(f.fecha_firma).toLocaleString('es-MX', { day:'2-digit', month:'short', year:'numeric', hour:'2-digit', minute:'2-digit' });
+                html += `
+                <div style="background:var(--surface); border:1px solid #d1fae5; border-radius:10px; padding:12px; display:flex; gap:10px; align-items:flex-start;">
+                  <i class="fa-solid fa-signature" style="color:#059669; margin-top:3px; flex-shrink:0;"></i>
+                  <div>
+                    <div style="font-weight:600; font-size:0.9rem;">${alumno?.nombre || 'Desconocido'}</div>
+                    <div style="font-size:0.78rem; color:var(--text-muted);">Grupo: ${alumno?.grupos?.nombre || 'N/A'} | Mat: ${alumno?.matricula || 'N/A'}</div>
+                    <div style="font-size:0.82rem; margin-top:4px;"><i class="fa-solid fa-pen-nib" style="color:var(--primary);"></i> <strong>${f.nombre_tutor}</strong></div>
+                    <div style="font-size:0.75rem; color:var(--text-muted); margin-top:2px;"><i class="fa-regular fa-clock"></i> ${fecha}</div>
+                  </div>
+                </div>`;
+            });
+            html += `</div></div>`;
+        });
+
+        cont.innerHTML = html;
+
+    } catch(e) {
+        console.error('[FirmaQR] Error al cargar historial:', e);
+        cont.innerHTML = '<p style="text-align:center; color:var(--danger); padding:20px;">Error al cargar el historial. Verifica la conexión.</p>';
+    }
+};
+
+window.liveSearchAlumnoCalificaciones = async (q) => {
+    const res = document.getElementById('resSearchAlumnoDownload');
+    if(!res) return;
+    if(q.length < 2) { res.style.display='none'; return; }
+    try {
+        const { data } = await supabaseClient.from('alumnos').select('id, nombre, matricula, grupos(nombre)').eq('plantel_id', state.plantelId).or(`nombre.ilike.%${q}%,matricula.ilike.%${q}%`).limit(10);
+        if(!data || data.length === 0) { res.innerHTML='<p style="padding:10px; color:var(--text-muted)">Sin resultados</p>'; res.style.display='block'; return; }
+        res.style.display='block';
+        res.innerHTML = data.map(a => `
+            <div style="padding:10px; border-bottom:1px solid var(--border); cursor:pointer; display:flex; justify-content:space-between; align-items:center;" onclick="window.descargarBoletaAdminPDF('${a.id}', '${a.nombre.replace(/'/g, "\\'")}', '${a.matricula || ''}')">
+               <div>
+                  <div style="font-weight:600; font-size:0.85rem;">${a.nombre}</div>
+                  <div style="font-size:0.75rem; color:var(--text-muted)">${a.grupos ? a.grupos.nombre : 'Sin Grupo'}</div>
+               </div>
+               <i class="fa-solid fa-file-pdf" style="color:var(--danger)"></i>
+            </div>
+        `).join('');
+    } catch(e) { console.error(e); }
+};
+
+window.descargarBoletaAdminPDF = async (alumnoId, nombre, matricula) => {
+    try {
+        // Obtenemos todas las calificaciones del alumno
+        const { data: califs, error } = await supabaseClient.from('calificaciones')
+            .select('calificacion, trimestre, materia_nombre, materia_id(nombre)')
+            .eq('alumno_id', alumnoId)
+            .order('trimestre', { ascending: true });
+        
+        if(error) throw error;
+        if(!califs || califs.length === 0) return alert("Este alumno no tiene calificaciones registradas aún.");
 
         // Agrupar por materia (Concentrado)
         const byMateria = {};
