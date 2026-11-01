@@ -13085,8 +13085,17 @@ window.loadBoletasAlumno = async () => {
                 
                 trims.forEach(t => {
                     const cal = byMateria[mat][t];
-                    const calStr = cal !== undefined ? cal : '-';
-                    rowsHtml += `<td style="padding:14px; text-align:center; font-weight:800; color:var(--primary); font-size:1.1rem;">${calStr}</td>`;
+                    let boletaCal = '-';
+                    if (cal !== undefined) {
+                        const num = parseFloat(cal);
+                        if (!isNaN(num) && num > 0) {
+                            // En concentrado de calificaciones se muestra el 5 oficial como en la boleta
+                            boletaCal = num < 6.0 ? 5 : Math.round(num);
+                        } else {
+                            boletaCal = cal;
+                        }
+                    }
+                    rowsHtml += `<td style="padding:14px; text-align:center; font-weight:800; color:var(--primary); font-size:1.1rem;">${boletaCal}</td>`;
                 });
                 
                 rowsHtml += `</tr>`;
@@ -13101,8 +13110,12 @@ window.loadBoletasAlumno = async () => {
                 materiasKeys.forEach(mat => {
                     const cal = byMateria[mat][t];
                     if(cal !== undefined) {
-                        sum += parseFloat(cal);
-                        count++;
+                        const num = parseFloat(cal);
+                        if (!isNaN(num) && num > 0) {
+                            const boletaVal = num < 6.0 ? 5 : Math.round(num);
+                            sum += boletaVal;
+                            count++;
+                        }
                     }
                 });
                 const prom = count > 0 ? (sum / count).toFixed(1) : '-';
@@ -21921,7 +21934,10 @@ window.cargarSabanaGrupo = async () => {
                 if (isFinal) {
                     const getGrade = (t) => {
                         const cx = subjectCalifs.find(x => x.trimestre === t);
-                        return cx ? Number(cx.calificacion) : null;
+                        if (!cx) return null;
+                        const num = Number(cx.calificacion);
+                        // En concentrado y boleta oficial la calificación mínima es 5
+                        return (!isNaN(num) && num > 0 && num < 6.0) ? 5 : (num >= 6.0 ? Math.round(num) : num);
                     };
                     const t1 = getGrade(1);
                     const t2 = getGrade(2);
@@ -21940,8 +21956,11 @@ window.cargarSabanaGrupo = async () => {
                 } else {
                     const cx = subjectCalifs.find(x => x.trimestre === trim);
                     if(cx) {
-                        cols += `<td style="color:var(--text-main)">${cx.calificacion}</td>`;
-                        generalSum += Number(cx.calificacion);
+                        const num = Number(cx.calificacion);
+                        // En concentrado y boleta oficial la calificación mínima reprobatoria es 5
+                        const boletaCal = (!isNaN(num) && num > 0 && num < 6.0) ? 5 : (num >= 6.0 ? Math.round(num) : cx.calificacion);
+                        cols += `<td style="color:var(--text-main)" data-real-calif="${cx.calificacion}">${boletaCal}</td>`;
+                        generalSum += Number(boletaCal);
                         generalCount++;
                     } else {
                         cols += `<td style="color:var(--text-muted)">-</td>`;
@@ -22304,7 +22323,7 @@ window.notificarRevisionSabana = async () => {
             let materiasReprobadas = 0;
             for(let i = 1; i < row.cells.length - 1; i++) {
                 let materiaNombre = row.cells[i].getAttribute('data-full-materia') || headers[i] || `Materia ${i}`;
-                const calif = row.cells[i].innerText.trim();
+                const calif = row.cells[i].getAttribute('data-real-calif') || row.cells[i].innerText.trim();
                 const califNum = parseFloat(calif) || 0;
                 
                 // v122: Agregar alias corto si es tecnología
