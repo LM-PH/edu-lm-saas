@@ -12742,6 +12742,70 @@ window.loadHistorialSalud = async () => {
     } catch(e) { console.error(e); }
 };
 
+window._reconciliarMensajeBoleta = (mensajeTexto, byMateria = {}, realGradesFromActs = {}, repTrim = null) => {
+    if (!mensajeTexto || !mensajeTexto.includes('•')) return mensajeTexto || '';
+    const norm = (s) => (s||'').normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim().toLowerCase();
+    
+    if (!repTrim) {
+        const matchTrim = mensajeTexto.match(/Trimestre\s*(\d)/i);
+        if (matchTrim) repTrim = parseInt(matchTrim[1]);
+    }
+    
+    const lines = mensajeTexto.split('\n');
+    let newLines = [];
+    let sumNotas = 0;
+    let countNotas = 0;
+    
+    lines.forEach(line => {
+        const mMatch = line.match(/^(\s*•\s*)([^:]+)(\s*:\s*)([\d\.]+)(.*)$/);
+        if (mMatch) {
+            const prefix = mMatch[1];
+            const matName = mMatch[2].trim();
+            const sepColon = mMatch[3];
+            let calVal = parseFloat(mMatch[4]);
+            const suffix = mMatch[5];
+            
+            const matNorm = norm(matName);
+            let realVal = null;
+            
+            // 1. Probar en realGradesFromActs (actividades continuas)
+            if (repTrim && realGradesFromActs[`${matNorm}_${repTrim}`]) {
+                realVal = realGradesFromActs[`${matNorm}_${repTrim}`].promFinalNum;
+            } else {
+                const matchActKey = Object.keys(realGradesFromActs).find(k => k.startsWith(matNorm + '_'));
+                if (matchActKey) realVal = realGradesFromActs[matchActKey].promFinalNum;
+            }
+            
+            // 2. Probar en byMateria
+            if (realVal === null && byMateria) {
+                const foundMat = Object.keys(byMateria).find(m => norm(m) === matNorm || norm(m).includes(matNorm) || matNorm.includes(norm(m)));
+                if (foundMat) {
+                    if (repTrim && byMateria[foundMat][repTrim] !== undefined) {
+                        realVal = parseFloat(byMateria[foundMat][repTrim]);
+                    } else {
+                        const tKeys = Object.keys(byMateria[foundMat]);
+                        if (tKeys.length > 0) realVal = parseFloat(byMateria[foundMat][tKeys[0]]);
+                    }
+                }
+            }
+            
+            if (realVal !== null && !isNaN(realVal)) {
+                calVal = realVal;
+            }
+            
+            sumNotas += calVal;
+            countNotas++;
+            newLines.push(`${prefix}${matName}${sepColon}${calVal}${suffix}`);
+        } else if (line.includes('PROMEDIO GENERAL:') && countNotas > 0) {
+            const newProm = (sumNotas / countNotas).toFixed(1);
+            newLines.push(line.replace(/PROMEDIO GENERAL:\s*[\d\.]+/, `PROMEDIO GENERAL: ${newProm}`));
+        } else {
+            newLines.push(line);
+        }
+    });
+    return newLines.join('\n');
+};
+
 window.loadBoletasAlumno = async () => {
     const cont = document.getElementById('boletasContainer');
     if(!cont) return;
@@ -12854,8 +12918,67 @@ window.loadBoletasAlumno = async () => {
            .eq('alumno_id', alu.id)
            .order('trimestre', { ascending: false });
 
+        // 4c. Obtener evaluaciones continuas y actividades para calcular calificaciones reales si existen
+        let realGradesFromActs = {};
+        try {
+            const { data: evalsData } = await supabaseClient
+                .from('evaluaciones_actividades')
+                .select('actividad_id, calificacion')
+                .eq('alumno_id', alu.id);
 
-        if((!califs || califs.length === 0) && (!reportes || reportes.length === 0) && !storageHtml && !firmasHtml) {
+            if (evalsData && evalsData.length > 0) {
+                const actIds = [...new Set(evalsData.map(e => e.actividad_id).filter(Boolean))];
+                if (actIds.length > 0) {
+                    let actsData = null;
+                    const resActsM = await supabaseClient
+                        .from('actividades_maestro')
+                        .select('id, materia, trimestre, rubro_name, rubro_peso')
+                        .in('id', actIds);
+                    if (resActsM.data && resActsM.data.length > 0) {
+                        actsData = resActsM.data;
+                    } else {
+                        const resActsD = await supabaseClient
+                            .from('actividades_docente')
+                            .select('id, materia, trimestre, rubro_name, rubro_peso')
+                            .in('id', actIds);
+                        if (resActsD.data) actsData = resActsD.data;
+                    }
+
+                    if (actsData && actsData.length > 0) {
+                        const norm = (s) => (s||'').normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim().toLowerCase();
+                        const matTrimGroups = {};
+                        actsData.forEach(act => {
+                            const mNorm = norm(act.materia);
+                            const t = parseInt(act.trimestre) || 1;
+                            const key = `${mNorm}_${t}`;
+                            if (!matTrimGroups[key]) matTrimGroups[key] = { materia: act.materia, trimestre: t, acts: [] };
+                            matTrimGroups[key].acts.push(act);
+                        });
+
+                        Object.entries(matTrimGroups).forEach(([key, grp]) => {
+                            if (grp.acts.length > 0 && window._calcularCalificacionAlumno) {
+                                const resCalc = window._calcularCalificacionAlumno({
+                                    alumnoId: alu.id,
+                                    acts: grp.acts,
+                                    evals: evalsData
+                                });
+                                if (resCalc && resCalc.countNotas > 0) {
+                                    realGradesFromActs[key] = {
+                                        materia: grp.materia,
+                                        trimestre: grp.trimestre,
+                                        promFinalNum: parseFloat(resCalc.promFinalNum.toFixed(1))
+                                    };
+                                }
+                            }
+                        });
+                    }
+                }
+            }
+        } catch(eEval) {
+            console.warn("No se pudieron cargar actividades detalladas del alumno:", eEval);
+        }
+
+        if((!califs || califs.length === 0) && (!reportes || reportes.length === 0) && !storageHtml && !firmasHtml && Object.keys(realGradesFromActs).length === 0) {
             cont.innerHTML = `
                 <div class="card" style="text-align:center; padding:40px; border: 2px dashed var(--border); border-radius: 20px;">
                     <i class="fa-solid fa-graduation-cap fa-3x" style="color:var(--primary); opacity:0.1; margin-bottom:15px;"></i>
@@ -12864,6 +12987,45 @@ window.loadBoletasAlumno = async () => {
                 </div>`;
             return;
         }
+
+        // Construir tabla consolidada por materia
+        const byMateria = {};
+        const trimestresDetectados = new Set();
+        const norm = (s) => (s||'').normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim().toLowerCase();
+
+        (califs || []).forEach(c => {
+            const nom = c.materia_nombre || (c.materia_id && c.materia_id.nombre) || 'Materia';
+            const t = parseInt(c.trimestre);
+            if (!isNaN(t)) {
+                trimestresDetectados.add(t);
+                if(!byMateria[nom]) byMateria[nom] = {};
+                let gradeVal = c.calificacion;
+                const key = `${norm(nom)}_${t}`;
+                if (realGradesFromActs[key]) {
+                    const rGrade = realGradesFromActs[key].promFinalNum;
+                    if ((parseFloat(gradeVal) === 5 && rGrade > 0 && rGrade < 6.0) || (rGrade > 0 && Math.abs(parseFloat(gradeVal) - rGrade) > 0.05)) {
+                        gradeVal = rGrade;
+                    }
+                }
+                byMateria[nom][t] = gradeVal;
+            }
+        });
+
+        // Incluir materias de actividades continuas si no estaban en calificaciones
+        Object.values(realGradesFromActs).forEach(rg => {
+            if (rg.promFinalNum > 0) {
+                const nom = rg.materia;
+                const t = rg.trimestre;
+                trimestresDetectados.add(t);
+                if (!byMateria[nom]) byMateria[nom] = {};
+                if (byMateria[nom][t] === undefined) {
+                    byMateria[nom][t] = rg.promFinalNum;
+                }
+            }
+        });
+
+        window._alumnoByMateriaCache = byMateria;
+        window._alumnoRealGradesCache = realGradesFromActs;
 
         let reportHtml = '';
         if(reportes && reportes.length > 0) {
@@ -12875,6 +13037,18 @@ window.loadBoletasAlumno = async () => {
                 const accentColor = isAlert ? 'var(--danger)' : (isExcelence ? '#10b981' : (isMejora ? '#f59e0b' : 'var(--primary)'));
                 const icon = isAlert ? 'fa-triangle-exclamation' : (isExcelence ? 'fa-trophy' : (isMejora ? 'fa-chart-line' : 'fa-clipboard-check'));
                 
+                // Reconciliar desglose del comunicado con las calificaciones reales del alumno (ej. 3.3 en vez de 5)
+                let mensajeTexto = rep.mensaje || '';
+                
+                // Detectar trimestre del comunicado
+                let repTrim = null;
+                const matchTrim = ((rep.titulo || '') + ' ' + mensajeTexto).match(/Trimestre\s*(\d)/i);
+                if (matchTrim) repTrim = parseInt(matchTrim[1]);
+                
+                if (window._reconciliarMensajeBoleta) {
+                    mensajeTexto = window._reconciliarMensajeBoleta(mensajeTexto, byMateria, realGradesFromActs, repTrim);
+                }
+
                 return `
                     <div class="card" style="border-left: 8px solid ${accentColor}; margin-bottom:20px; background:white; box-shadow: 0 4px 15px rgba(0,0,0,0.05); padding: 24px; border-radius: 18px;">
                         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
@@ -12884,27 +13058,15 @@ window.loadBoletasAlumno = async () => {
                             <span style="font-size:0.7rem; color:var(--text-muted);">${new Date(rep.fecha_envio).toLocaleDateString()}</span>
                         </div>
                         <h4 style="margin:0 0 12px 0; color:var(--text-main); font-size:1.2rem; font-weight:900;">${rep.titulo}</h4>
-                        <div style="font-size:0.95rem; white-space:pre-wrap; margin:0; line-height:1.6; color:#334155; font-weight:500;">${rep.mensaje}</div>
+                        <div style="font-size:0.95rem; white-space:pre-wrap; margin:0; line-height:1.6; color:#334155; font-weight:500;">${mensajeTexto}</div>
                     </div>
                 `;
             }).join('');
         }
 
-// Generar vista consolidada en columnas
+        // Generar vista consolidada en columnas
         let tablesHtml = '';
-        if (califs && califs.length > 0) {
-            const byMateria = {};
-            const trimestresDetectados = new Set();
-            
-            califs.forEach(c => {
-                const nom = c.materia_nombre || (c.materia_id && c.materia_id.nombre) || 'Materia';
-                const t = parseInt(c.trimestre);
-                if (!isNaN(t)) {
-                    trimestresDetectados.add(t);
-                    if(!byMateria[nom]) byMateria[nom] = {};
-                    byMateria[nom][t] = c.calificacion;
-                }
-            });
+        if (Object.keys(byMateria).length > 0) {
             
             const trims = Array.from(trimestresDetectados).sort((a,b) => a - b);
             
@@ -13059,6 +13221,41 @@ window.descargarBoletaPDF = async (aluId, nombre, matricula) => {
             t.style.borderCollapse = "collapse";
             t.style.marginBottom = "30px";
             
+            // Normativa oficial SEP: En boleta oficial la calificación mínima reprobatoria es 5
+            const rows = Array.from(t.querySelectorAll('tbody tr'));
+            const colSums = {};
+            const colCounts = {};
+            
+            rows.forEach(tr => {
+                const cells = Array.from(tr.querySelectorAll('td'));
+                const firstCellText = (cells[0]?.innerText || '').trim().toUpperCase();
+                const isPromRow = firstCellText.includes('PROMEDIO');
+                
+                if (!isPromRow) {
+                    cells.forEach((cell, idx) => {
+                        if (idx > 0) {
+                            const rawText = cell.innerText.trim();
+                            const val = parseFloat(rawText);
+                            if (!isNaN(val) && val > 0) {
+                                // Normativa SEP: en boleta oficial si es < 6.0 se asienta 5 (mínima SEP). Si es >= 6.0 se redondea a entero.
+                                const sepVal = val < 6.0 ? 5 : Math.round(val);
+                                cell.innerText = sepVal.toString();
+                                if (!colSums[idx]) { colSums[idx] = 0; colCounts[idx] = 0; }
+                                colSums[idx] += sepVal;
+                                colCounts[idx]++;
+                            }
+                        }
+                    });
+                } else {
+                    // Recalcular promedios oficiales en la fila de PROMEDIO
+                    cells.forEach((cell, idx) => {
+                        if (idx > 0 && colCounts[idx] > 0) {
+                            cell.innerText = (colSums[idx] / colCounts[idx]).toFixed(1);
+                        }
+                    });
+                }
+            });
+
             // Forzar estilos de tabla institucionales
             t.querySelectorAll('th, td').forEach(cell => {
                 cell.style.border = "1px solid #000";
@@ -13578,13 +13775,18 @@ window.loadTimelineAlumno = async (mostrarHistorial = false, selectedDateStr = n
                }
            }
            
+           let msgLimpio = (c.mensaje || '').replace(/\[REF_ID:.*?\]/gi, '').replace(/\[REF_REPORTE:.*?\]/gi, '').trim();
+           if (window._reconciliarMensajeBoleta && (c.tipo === 'reporte_academico_automatico' || (c.titulo || '').includes('BOLETA') || (c.titulo || '').includes('MEJORA') || (c.titulo || '').includes('ADVERTENCIA') || (c.titulo || '').includes('EXCELENCIA'))) {
+               msgLimpio = window._reconciliarMensajeBoleta(msgLimpio, window._alumnoByMateriaCache || {}, window._alumnoRealGradesCache || {});
+           }
+
            return `
            <div class="timeline-item" id="aviso-${c.id}" style="animation: fadeInUp 0.5s ease backwards; animation-delay: ${delay}s; ${esVisto ? 'opacity: 0.7; background:#f8fafc; border:1px solid #e2e8f0;' : 'background:white; border:1px solid #e2e8f0;'} border-radius:10px; transition:all 0.3s ease;">
              <div class="timeline-icon" style="border-color: ${tipoColor}; background:white;"><i class="fa-solid ${icon}" style="color: ${tipoColor};"></i></div>
              <div class="timeline-content" style="position:relative">
                <div style="font-size:0.75rem; color: var(--text-muted); float:right;">${date}</div>
                <h4 style="color: ${tipoColor}; margin:0 0 4px 0;">${(c.titulo || '').replace(/\s*\[TALLER:.*?\]/gi, '')}</h4>
-               <p style="font-size: 0.85rem; white-space:pre-wrap; margin-bottom:10px;">${(c.mensaje || '').replace(/\[REF_ID:.*?\]/gi, '').replace(/\[REF_REPORTE:.*?\]/gi, '').trim()}</p>
+               <p style="font-size: 0.85rem; white-space:pre-wrap; margin-bottom:10px;">${msgLimpio}</p>
                
                <div style="display:flex; justify-content:space-between; align-items:center; gap:10px;">
                   ${btnAdjunto}
@@ -16572,7 +16774,7 @@ window.cargarAlumnosLista = async () => {
                 if (val === null || val === undefined || isNaN(val)) return 0;
                 const num = parseFloat(val);
                 if (num <= 0) return 0;
-                if (num < 6.0) return Math.floor(num); 
+                if (num < 6.0) return parseFloat(num.toFixed(1)); // Calificación real reprobatoria sin forzar a 5 (ej. 3.3)
                 return Math.round(num); 
             };
 
@@ -17378,7 +17580,7 @@ window.cargarBoletasGrupo = async () => {
                 const num = parseFloat(val);
                 if (num <= 0) return 0;
                 if (num < 6.0) {
-                    return Math.floor(num); // Ej. 5.9 -> 5 (Reprobatorio)
+                    return parseFloat(num.toFixed(1)); // Calificación real reprobatoria sin forzar a 5 (ej. 3.3)
                 }
                 return Math.round(num); // Ej. 6.5 -> 7, 7.5 -> 8 (Aprobatorio)
             };
@@ -17410,7 +17612,7 @@ window.cargarBoletasGrupo = async () => {
                    <input type="number" inputmode="decimal" class="form-input input-calificacion" 
                           data-alumno="${al.id}" 
                           ${inputAttr}
-                          value="${displayVal}" step="0.1" min="5" max="10">
+                          value="${displayVal}" step="0.1" min="0" max="10">
                 </td>
              </tr>`;
         }
@@ -17533,10 +17735,8 @@ window.sellarYEnviarCalificaciones = async () => {
         inputs.forEach(inp => {
             let calif = parseFloat(inp.value) || 0;
             
-            // Regla de negocio: calificación mínima reprobatoria es 5
-            if (calif < 5.0) {
-                calif = 5.0;
-            }
+            // Calificación real asignada por el docente (ej. 3.3). En boletas oficiales SEP se reflejará el 5 reglamentario.
+            calif = parseFloat(calif.toFixed(1));
             
             const alId = inp.getAttribute('data-alumno');
             
@@ -22749,8 +22949,13 @@ window.descargarBoletaAdminPDF = async (alumnoId, nombre, matricula) => {
             gradesHtml += `<tr><td style="border: 1px solid #000; padding: 8px 10px; font-size: 12px; text-align: left;">${mat}</td>`;
             trims.forEach(t => {
                 const cal = byMateria[mat][t];
-                const calStr = cal !== undefined ? cal : '-';
-                gradesHtml += `<td style="border: 1px solid #000; padding: 8px 10px; font-size: 12px; text-align: center;">${calStr}</td>`;
+                let calNum = parseFloat(cal);
+                // Normativa oficial SEP: En boleta oficial la calificación mínima reprobatoria es 5
+                let boletaCal = '-';
+                if (cal !== undefined && !isNaN(calNum) && calNum > 0) {
+                    boletaCal = calNum < 6.0 ? 5 : Math.round(calNum);
+                }
+                gradesHtml += `<td style="border: 1px solid #000; padding: 8px 10px; font-size: 12px; text-align: center;">${boletaCal}</td>`;
             });
             gradesHtml += `</tr>`;
         });
@@ -22760,8 +22965,12 @@ window.descargarBoletaAdminPDF = async (alumnoId, nombre, matricula) => {
             let sum = 0, count = 0;
             materiasKeys.forEach(mat => {
                 if(byMateria[mat][t] !== undefined) {
-                    sum += parseFloat(byMateria[mat][t]);
-                    count++;
+                    let calNum = parseFloat(byMateria[mat][t]);
+                    if (!isNaN(calNum) && calNum > 0) {
+                        let boletaVal = calNum < 6.0 ? 5 : Math.round(calNum);
+                        sum += boletaVal;
+                        count++;
+                    }
                 }
             });
             const prom = count > 0 ? (sum/count).toFixed(1) : '-';
