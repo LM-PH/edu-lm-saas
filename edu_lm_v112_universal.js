@@ -16535,6 +16535,205 @@ window.addEventListener('online', () => {
     window._procesarColaEvaluacionesPendientes();
 });
 
+window._resolverActividadesYEvaluacionesGrupo = async ({
+    gid,
+    targetGrado,
+    materia,
+    isTec,
+    currentTrim,
+    isModoFinal,
+    pId,
+    alumnos
+}) => {
+    const alumnoIds = (alumnos || []).map(a => a.id);
+    const norm = (s) => (s || '').normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim().toLowerCase();
+
+    // Coincidencia flexible de asignaturas (soporta abreviaturas como "Edu. Física" vs "Educación Física")
+    const matchMateria = (actMat, targetMat) => {
+        const nA = norm(actMat);
+        const nB = norm(targetMat);
+        if (!nA || !nB) return false;
+        if (nA === nB) return true;
+        if (nA.includes(nB) || nB.includes(nA)) return true;
+        const wordsA = nA.split(/[^a-z0-9]+/).filter(w => w.length > 2);
+        const wordsB = nB.split(/[^a-z0-9]+/).filter(w => w.length > 2);
+        if (wordsA.length > 0 && wordsB.length > 0) {
+            const common = wordsA.filter(w => wordsB.some(wb => wb.startsWith(w) || w.startsWith(wb)));
+            if (common.length >= 1 && (common.length >= wordsA.length * 0.5 || common.length >= wordsB.length * 0.5)) return true;
+        }
+        return false;
+    };
+
+    // 1. Fetch actividades candidatas en base a grupo y materia en supabase
+    let actsQuery = supabaseClient.from('actividades_maestro').select('id, titulo, rubro_name, rubro_peso, trimestre, materia, grupo_id, maestro_id');
+    if (pId) actsQuery = actsQuery.or(`plantel_id.eq.${pId},plantel_id.is.null`);
+    if (isTec) {
+        actsQuery = actsQuery.or(`target_grado.eq.${targetGrado},and(target_grado.is.null,grupo_id.is.null)`);
+    } else {
+        actsQuery = actsQuery.or(`grupo_id.eq.${gid},grupo_id.is.null`);
+    }
+    if (!isModoFinal && currentTrim) {
+        actsQuery = actsQuery.or(`trimestre.eq.${currentTrim},trimestre.is.null`);
+    }
+
+    let rawActs = [];
+    try {
+        const { data } = await actsQuery.order('fecha_creacion');
+        if (data) rawActs = data;
+    } catch(e) {
+        console.warn("Error en actsQuery de _resolverActividadesYEvaluacionesGrupo:", e);
+    }
+
+    // 2. BUSCAR EVALUACIONES DE ESTOS ALUMNOS (Directo en evaluaciones_actividades para descubrir cualquier actividad calificada)
+    let studentEvals = [];
+    if (alumnoIds.length > 0) {
+        try {
+            const chunkSize = 100;
+            for (let i = 0; i < alumnoIds.length; i += chunkSize) {
+                const chunk = alumnoIds.slice(i, i + chunkSize);
+                const { data: sEvals } = await supabaseClient
+                    .from('evaluaciones_actividades')
+                    .select('actividad_id, alumno_id, calificacion, fecha_evaluacion')
+                    .in('alumno_id', chunk)
+                    .limit(10000);
+                if (sEvals && sEvals.length > 0) {
+                    studentEvals.push(...sEvals);
+                }
+            }
+        } catch(eEvals) {
+            console.warn("Error buscando evaluaciones de alumnos:", eEvals);
+        }
+    }
+
+    // 3. IDENTIFICAR ACTIVIDADES CON CALIFICACIONES QUE FALTABAN EN rawActs
+    const evaluatedActIds = [...new Set(studentEvals.map(e => e.actividad_id).filter(Boolean))];
+    const knownActIds = new Set(rawActs.map(a => a.id));
+    const missingActIds = evaluatedActIds.filter(id => !knownActIds.has(id));
+
+    if (missingActIds.length > 0) {
+        try {
+            const chunkSize = 60;
+            for (let i = 0; i < missingActIds.length; i += chunkSize) {
+                const chunk = missingActIds.slice(i, i + chunkSize);
+                const { data: missingActs } = await supabaseClient
+                    .from('actividades_maestro')
+                    .select('id, titulo, rubro_name, rubro_peso, trimestre, materia, grupo_id, maestro_id')
+                    .in('id', chunk);
+                if (missingActs && missingActs.length > 0) {
+                    rawActs.push(...missingActs);
+                    
+                    // Auto-reparar grupo_id en segundo plano si era nulo
+                    if (gid && !isTec) {
+                        const orphanIds = missingActs.filter(a => !a.grupo_id).map(a => a.id);
+                        if (orphanIds.length > 0) {
+                            supabaseClient.from('actividades_maestro')
+                                .update({ grupo_id: gid })
+                                .in('id', orphanIds)
+                                .then(() => {})
+                                .catch(() => {});
+                        }
+                    }
+                }
+            }
+        } catch(eMiss) {
+            console.warn("Error recuperando actividades faltantes:", eMiss);
+        }
+    }
+
+    // 4. FILTRAR ACTIVIDADES PARA ESTA MATERIA Y TRIMESTRE
+    let filteredActs = rawActs.filter(a => {
+        const mMatch = matchMateria(a.materia, materia);
+        if (!mMatch) return false;
+
+        const hasEvalsInThisGroup = studentEvals.some(e => e.actividad_id === a.id);
+        const tMatch = isModoFinal || !a.trimestre || String(a.trimestre) === String(currentTrim) || hasEvalsInThisGroup;
+        return tMatch;
+    });
+
+    // 5. DEDUPLICAR Y CONSOLIDAR ACTIVIDADES HOMÓLOGAS
+    const actsByKey = {};
+    filteredActs.forEach(a => {
+        const cleanTitle = norm(a.titulo).replace(/[^a-z0-9]/g, '');
+        const key = cleanTitle || a.id;
+        if (!actsByKey[key]) actsByKey[key] = [];
+        actsByKey[key].push(a);
+    });
+
+    const consolidatedActs = [];
+    const seenActKeys = new Set();
+
+    filteredActs.forEach(a => {
+        const cleanTitle = norm(a.titulo).replace(/[^a-z0-9]/g, '');
+        const key = cleanTitle || a.id;
+        if (seenActKeys.has(key)) return;
+        seenActKeys.add(key);
+
+        const group = actsByKey[key];
+        if (group.length === 1) {
+            consolidatedActs.push(group[0]);
+        } else {
+            let best = group[0];
+            let maxCount = -1;
+            group.forEach(candidate => {
+                const count = studentEvals.filter(e => e.actividad_id === candidate.id).length;
+                if (count > maxCount) {
+                    maxCount = count;
+                    best = candidate;
+                }
+            });
+
+            group.forEach(sibling => {
+                if (sibling.id !== best.id) {
+                    studentEvals.forEach(e => {
+                        if (e.actividad_id === sibling.id) {
+                            const alreadyInBest = studentEvals.some(b => b.actividad_id === best.id && b.alumno_id === e.alumno_id);
+                            if (!alreadyInBest) {
+                                e.actividad_id = best.id;
+                            }
+                        }
+                    });
+                }
+            });
+
+            consolidatedActs.push(best);
+        }
+    });
+
+    const acts = consolidatedActs;
+    const actIds = acts.map(a => a.id);
+
+    // 6. PREPARAR LISTA FINAL DE EVALUACIONES
+    let evals = studentEvals.filter(e => actIds.includes(e.actividad_id));
+
+    if (actIds.length > 0) {
+        try {
+            const { data: directEvals } = await supabaseClient
+                .from('evaluaciones_actividades')
+                .select('alumno_id, actividad_id, calificacion')
+                .in('actividad_id', actIds)
+                .limit(5000);
+            if (directEvals && directEvals.length > 0) {
+                directEvals.forEach(de => {
+                    const exists = evals.some(e => e.actividad_id === de.actividad_id && e.alumno_id === de.alumno_id);
+                    if (!exists) evals.push(de);
+                });
+            }
+        } catch(eDir) {
+            console.warn("Error en directEvals:", eDir);
+        }
+    }
+
+    if (window._combinarEvaluacionesConColaLocal) {
+        evals = window._combinarEvaluacionesConColaLocal(evals, actIds);
+    }
+
+    return {
+        acts,
+        evals,
+        hasActs: acts.length > 0
+    };
+};
+
 window.cargarAlumnosLista = async () => {
     const tbody = document.getElementById('listaMaestroAlumnos');
     const cabecera = document.getElementById('listaMaestroCabecera');
@@ -16614,26 +16813,13 @@ window.cargarAlumnosLista = async () => {
             const currentTrim = state.selectedMaestroTrimestre || 1;
             const isModoFinal = currentTrim === 'final';
 
-            let actsQuery = supabaseClient.from('actividades_maestro').select('id, titulo, rubro_name, rubro_peso, trimestre, materia, grupo_id, maestro_id');
-            if (pId) actsQuery = actsQuery.or(`plantel_id.eq.${pId},plantel_id.is.null`);
-            if(isTec) {
-                actsQuery = actsQuery.or(`target_grado.eq.${targetGrado},and(target_grado.is.null,grupo_id.is.null)`);
-            } else {
-                actsQuery = actsQuery.or(`grupo_id.eq.${gid},grupo_id.is.null`);
-            }
-
-            if (!isModoFinal) {
-                actsQuery = actsQuery.or(`trimestre.eq.${currentTrim},trimestre.is.null`);
-            }
-            
-            const { data: rawActs } = await actsQuery.order('fecha_creacion');
-            const norm = (s) => (s||'').normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim().toLowerCase();
-            const acts = (rawActs || []).filter(a => {
-                const mMatch = norm(a.materia) === norm(materia) || norm(a.materia).includes(norm(materia)) || norm(materia).includes(norm(a.materia));
-                const tMatch = isModoFinal || !a.trimestre || String(a.trimestre) === String(currentTrim);
-                return mMatch && tMatch;
+            const resResolved = await window._resolverActividadesYEvaluacionesGrupo({
+                gid, targetGrado, materia, isTec, currentTrim, isModoFinal, pId, alumnos
             });
-            const hasActs = acts && acts.length > 0;
+
+            const acts = resResolved.acts;
+            let evals = resResolved.evals;
+            const hasActs = resResolved.hasActs;
             
             if(isModoFinal) {
                 cabecera.innerHTML = `<tr>
@@ -16671,82 +16857,6 @@ window.cargarAlumnosLista = async () => {
                  </tr>`;
             }
 
-            let evals = [];
-            const alumnoIds = alumnos.map(a => a.id);
-            if(hasActs) {
-                const actIds = acts.map(a => a.id);
-                const { data: evalsData } = await supabaseClient.from('evaluaciones_actividades')
-                    .select('alumno_id, actividad_id, calificacion')
-                    .in('actividad_id', actIds)
-                    .limit(5000);
-                if(evalsData) evals = evalsData;
-
-                // Reconciliación automática: si alguna actividad en pantalla no tiene evaluaciones,
-                // buscar si existen evaluaciones para este grupo bajo actividades homólogas (ej. erratas como "Discipli a" -> "Disciplina" o mismo rubro)
-                for (let act of acts) {
-                    const countEvals = evals.filter(e => e.actividad_id === act.id).length;
-                    if (countEvals === 0) {
-                        const normTit = norm(act.titulo);
-                        const candidateAct = (rawActs || []).find(other => {
-                            if (other.id === act.id) return false;
-                            const normOther = norm(other.titulo);
-                            const matchTitle = normOther === normTit || 
-                                               (normTit.startsWith(normOther.substring(0, 6)) && normOther.length >= 6) ||
-                                               (normOther.startsWith(normTit.substring(0, 6)) && normTit.length >= 6);
-                            const matchRubro = act.rubro_name && other.rubro_name && norm(act.rubro_name) === norm(other.rubro_name);
-                            return matchTitle || matchRubro;
-                        });
-
-                        const targetCandidateId = candidateAct ? candidateAct.id : (normTit.includes('discipli') ? 'b7f24be8-16f2-4759-8ad1-85129360bc16' : null);
-                        if (targetCandidateId) {
-                            try {
-                                const { data: candidateEvals } = await supabaseClient.from('evaluaciones_actividades')
-                                    .select('alumno_id, actividad_id, calificacion')
-                                    .eq('actividad_id', targetCandidateId)
-                                    .in('alumno_id', alumnoIds)
-                                    .limit(500);
-
-                                if (candidateEvals && candidateEvals.length > 0) {
-                                    console.log(`Auto-reconciliando evaluaciones de ${targetCandidateId} hacia ${act.id} (${act.titulo})`);
-                                    candidateEvals.forEach(ce => {
-                                        evals.push({
-                                            alumno_id: ce.alumno_id,
-                                            actividad_id: act.id,
-                                            calificacion: ce.calificacion
-                                        });
-                                    });
-
-                                    // Vincular permanentemente en Supabase
-                                    const toUpsert = candidateEvals.map(ce => ({
-                                        actividad_id: act.id,
-                                        alumno_id: ce.alumno_id,
-                                        calificacion: ce.calificacion,
-                                        fecha_evaluacion: new Date().toISOString(),
-                                        plantel_id: pId
-                                    }));
-                                    supabaseClient.from('evaluaciones_actividades')
-                                        .upsert(toUpsert, { onConflict: 'actividad_id,alumno_id' })
-                                        .catch(err => console.warn("Error en auto-vinculación:", err));
-
-                                    if (candidateAct && !candidateAct.grupo_id && gid) {
-                                        supabaseClient.from('actividades_maestro')
-                                            .update({ grupo_id: gid })
-                                            .eq('id', targetCandidateId)
-                                            .catch(() => {});
-                                    }
-                                }
-                            } catch(eRec) {
-                                console.warn("Excepción en reconciliación automática:", eRec);
-                            }
-                        }
-                    }
-                }
-
-                if (window._combinarEvaluacionesConColaLocal) {
-                    evals = window._combinarEvaluacionesConColaLocal(evals, actIds);
-                }
-            }
-            
             window._currentAlumnos = alumnos;
             window._currentActs = acts;
             window._currentEvals = evals;
@@ -16885,96 +16995,13 @@ window.cargarAlumnosLista = async () => {
             const isModoFinal = currentTrim === 'final';
             const materiaLimpia = (materia || '').trim();
 
-            let actsQuery = supabaseClient.from('actividades_maestro').select('id, titulo, rubro_name, rubro_peso, trimestre, materia, grupo_id');
-            if (pId) actsQuery = actsQuery.or(`plantel_id.eq.${pId},plantel_id.is.null`);
-            if(isTec) actsQuery = actsQuery.or(`target_grado.eq.${targetGrado},and(target_grado.is.null,grupo_id.is.null)`);
-            else actsQuery = actsQuery.or(`grupo_id.eq.${gid},grupo_id.is.null`);
-            if (!isModoFinal) actsQuery = actsQuery.or(`trimestre.eq.${currentTrim},trimestre.is.null`);
-            
-            const { data: rawActs } = await actsQuery;
-            const norm = (s) => (s||'').normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim().toLowerCase();
-            const acts = (rawActs || []).filter(a => {
-                const mMatch = norm(a.materia) === norm(materia) || norm(a.materia).includes(norm(materia)) || norm(materia).includes(norm(a.materia));
-                const tMatch = isModoFinal || !a.trimestre || String(a.trimestre) === String(currentTrim);
-                return mMatch && tMatch;
+            const resResolved = await window._resolverActividadesYEvaluacionesGrupo({
+                gid, targetGrado, materia: materiaLimpia, isTec, currentTrim, isModoFinal, pId, alumnos
             });
-            const hasActs = acts && acts.length > 0;
 
-            let evals = [];
-            const alumnoIds = alumnos.map(a => a.id);
-            if(hasActs) {
-                const actIds = acts.map(a => a.id);
-                const { data: evalsData } = await supabaseClient.from('evaluaciones_actividades')
-                    .select('alumno_id, actividad_id, calificacion')
-                    .in('actividad_id', actIds)
-                    .limit(5000);
-                if(evalsData) evals = evalsData;
-
-                // Reconciliación automática: si alguna actividad en pantalla no tiene evaluaciones,
-                // buscar si existen evaluaciones para este grupo bajo actividades homólogas (ej. erratas como "Discipli a" -> "Disciplina" o mismo rubro)
-                for (let act of acts) {
-                    const countEvals = evals.filter(e => e.actividad_id === act.id).length;
-                    if (countEvals === 0) {
-                        const normTit = norm(act.titulo);
-                        const candidateAct = (rawActs || []).find(other => {
-                            if (other.id === act.id) return false;
-                            const normOther = norm(other.titulo);
-                            const matchTitle = normOther === normTit || 
-                                               (normTit.startsWith(normOther.substring(0, 6)) && normOther.length >= 6) ||
-                                               (normOther.startsWith(normTit.substring(0, 6)) && normTit.length >= 6);
-                            const matchRubro = act.rubro_name && other.rubro_name && norm(act.rubro_name) === norm(other.rubro_name);
-                            return matchTitle || matchRubro;
-                        });
-
-                        const targetCandidateId = candidateAct ? candidateAct.id : (normTit.includes('discipli') ? 'b7f24be8-16f2-4759-8ad1-85129360bc16' : null);
-                        if (targetCandidateId) {
-                            try {
-                                const { data: candidateEvals } = await supabaseClient.from('evaluaciones_actividades')
-                                    .select('alumno_id, actividad_id, calificacion')
-                                    .eq('actividad_id', targetCandidateId)
-                                    .in('alumno_id', alumnoIds)
-                                    .limit(500);
-
-                                if (candidateEvals && candidateEvals.length > 0) {
-                                    console.log(`Auto-reconciliando evaluaciones de ${targetCandidateId} hacia ${act.id} (${act.titulo})`);
-                                    candidateEvals.forEach(ce => {
-                                        evals.push({
-                                            alumno_id: ce.alumno_id,
-                                            actividad_id: act.id,
-                                            calificacion: ce.calificacion
-                                        });
-                                    });
-
-                                    // Vincular permanentemente en Supabase
-                                    const toUpsert = candidateEvals.map(ce => ({
-                                        actividad_id: act.id,
-                                        alumno_id: ce.alumno_id,
-                                        calificacion: ce.calificacion,
-                                        fecha_evaluacion: new Date().toISOString(),
-                                        plantel_id: pId
-                                    }));
-                                    supabaseClient.from('evaluaciones_actividades')
-                                        .upsert(toUpsert, { onConflict: 'actividad_id,alumno_id' })
-                                        .catch(err => console.warn("Error en auto-vinculación:", err));
-
-                                    if (candidateAct && !candidateAct.grupo_id && gid) {
-                                        supabaseClient.from('actividades_maestro')
-                                            .update({ grupo_id: gid })
-                                            .eq('id', targetCandidateId)
-                                            .catch(() => {});
-                                    }
-                                }
-                            } catch(eRec) {
-                                console.warn("Excepción en reconciliación automática:", eRec);
-                            }
-                        }
-                    }
-                }
-
-                if (window._combinarEvaluacionesConColaLocal) {
-                    evals = window._combinarEvaluacionesConColaLocal(evals, actIds);
-                }
-            }
+            const acts = resResolved.acts;
+            let evals = resResolved.evals;
+            const hasActs = resResolved.hasActs;
 
             // Fetch Oficial Historial
             let histQuery = supabaseClient.from('calificaciones')
@@ -17751,29 +17778,24 @@ window.cargarBoletasGrupo = async () => {
             );
         }
         
-        // 4. Fetch Actividades (SOLO si no es modo final, ya que en final promediamos T1,T2,T3)
+        // 4. Fetch Actividades y Evaluaciones
         let acts = [];
         let hasActs = false;
+        let evals = [];
         if(!isModoFinal) {
-            let actsQuery = supabaseClient.from('actividades_maestro')
-                .select('id, titulo, rubro_name, rubro_peso, materia, grupo_id')
-                .or(`plantel_id.eq.${state.plantelId},plantel_id.is.null`)
-                .or(`trimestre.eq.${currentTrim},trimestre.is.null`);
-                
-            if(isTec) {
-                actsQuery = actsQuery.or(`target_grado.eq.${targetGrado},and(target_grado.is.null,grupo_id.is.null)`);
-            } else {
-                actsQuery = actsQuery.or(`grupo_id.eq.${gid},grupo_id.is.null`);
-            }
-            const { data: resActs } = await actsQuery;
-            if(resActs) {
-                const norm = (s) => (s||'').normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim().toLowerCase();
-                acts = resActs.filter(a => {
-                    const mMatch = norm(a.materia) === norm(materiaClean) || norm(a.materia).includes(norm(materiaClean)) || norm(materiaClean).includes(norm(a.materia));
-                    return mMatch;
-                });
-            }
-            hasActs = acts.length > 0;
+            const resResolved = await window._resolverActividadesYEvaluacionesGrupo({
+                gid,
+                targetGrado,
+                materia: materiaClean,
+                isTec,
+                currentTrim,
+                isModoFinal,
+                pId: state.plantelId,
+                alumnos
+            });
+            acts = resResolved.acts;
+            hasActs = resResolved.hasActs;
+            evals = resResolved.evals;
         }
         
         // 5. Preparar Cabecera
@@ -17792,14 +17814,6 @@ window.cargarBoletasGrupo = async () => {
                 <th style="padding:12px; text-align:center; background:var(--surface-hover);">Propuesta (Seguimiento T${currentTrim})</th>
                 <th style="padding:12px; text-align:center; background:var(--surface-hover);">Calificación Final T${currentTrim}</th>
              </tr>`;
-        }
-         
-        // 6. Fetch Evaluaciones (Solo para modo seguimiento)
-        let evals = [];
-        if(hasActs && !isModoFinal) {
-            const actIds = acts.map(a => a.id);
-            const { data: evalsData } = await supabaseClient.from('evaluaciones_actividades').select('alumno_id, actividad_id, calificacion').in('actividad_id', actIds);
-            if(evalsData) evals = evalsData;
         }
         
         let htmlRows = '';
