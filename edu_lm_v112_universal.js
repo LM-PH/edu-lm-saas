@@ -106,6 +106,7 @@ window._esMateriaTecnologia = (materia) => {
         .normalize("NFD")
         .replace(/[\u0300-\u036f]/g, "")
         .toLowerCase();
+    if (norm.includes('ciencia')) return false; // Ciencias y Tecnología no es taller/tecnología técnica
     return norm.includes('tecnolog') || norm.includes('taller') || norm.includes('enfasis');
 };
 
@@ -14629,7 +14630,10 @@ window.loadActividadesMaestro = async () => {
                  } else {
                      matchGroup = ((act.grupo_id || '').trim() === targetGrupo);
                  }
-                 return matchGroup && (act.materia || '').trim() === targetMateria;
+                 const matchMat = window._matchMateriaEducativa 
+                     ? window._matchMateriaEducativa(act.materia, targetMateria) 
+                     : (act.materia || '').trim().toLowerCase() === targetMateria.toLowerCase();
+                 return matchGroup && matchMat;
              });
         }
 
@@ -16535,6 +16539,59 @@ window.addEventListener('online', () => {
     window._procesarColaEvaluacionesPendientes();
 });
 
+window._matchMateriaEducativa = (actMat, targetMat) => {
+    const norm = (s) => (s || '').normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim().toLowerCase();
+    const nA = norm(actMat);
+    const nB = norm(targetMat);
+    if (!nA || !nB) return false;
+    if (nA === nB) return true;
+
+    // 1. Si ambas o alguna es de Tecnología / Taller (excluyendo "Ciencias y Tecnología"):
+    const esTecA = window._esMateriaTecnologia ? window._esMateriaTecnologia(actMat) : ((nA.includes('tecnolog') || nA.includes('taller')) && !nA.includes('ciencia'));
+    const esTecB = window._esMateriaTecnologia ? window._esMateriaTecnologia(targetMat) : ((nB.includes('tecnolog') || nB.includes('taller')) && !nB.includes('ciencia'));
+
+    if (esTecA || esTecB) {
+        if (window._coincidenTalleres) {
+            return window._coincidenTalleres(actMat, targetMat);
+        }
+        const cleanA = window._normalizarTextoTaller ? window._normalizarTextoTaller(actMat).trim() : nA;
+        const cleanB = window._normalizarTextoTaller ? window._normalizarTextoTaller(targetMat).trim() : nB;
+        if (!cleanA || !cleanB) return false;
+        return cleanA === cleanB || cleanA.includes(cleanB) || cleanB.includes(cleanA);
+    }
+
+    // 2. Para materias regulares (Español, Matemáticas, Ciencias, Inglés, etc.):
+    const stopWords = new Set([
+        'educacion', 'lengua', 'materna', 'extranjera', 'ciencias', 'ciencia',
+        'curricular', 'primer', 'segundo', 'tercer', 'grado', 'secundaria',
+        'general', 'tecnica', 'materia', 'asignatura', 'fase', 'campo',
+        'tecnologia', 'tecnologias',
+        'de', 'del', 'la', 'el', 'los', 'las', 'y', 'en', 'para', 'con'
+    ]);
+
+    const getKeywords = (str) => {
+        return str.split(/[^a-z0-9]+/).filter(w => w.length > 2 && !stopWords.has(w));
+    };
+
+    const kwA = getKeywords(nA);
+    const kwB = getKeywords(nB);
+
+    if (kwA.length > 0 && kwB.length > 0) {
+        const commonKw = kwA.filter(wA => kwB.some(wB => {
+            if (wA === wB) return true;
+            if (wA.length >= 4 && wB.length >= 4) {
+                return wA.startsWith(wB) || wB.startsWith(wA) || wA.includes(wB) || wB.includes(wA);
+            }
+            return false;
+        }));
+        return commonKw.length > 0;
+    }
+
+    const cleanA = nA.replace(/[^a-z0-9]/g, '');
+    const cleanB = nB.replace(/[^a-z0-9]/g, '');
+    return cleanA === cleanB;
+};
+
 window._resolverActividadesYEvaluacionesGrupo = async ({
     gid,
     targetGrado,
@@ -16548,43 +16605,55 @@ window._resolverActividadesYEvaluacionesGrupo = async ({
     const alumnoIds = (alumnos || []).map(a => a.id);
     const norm = (s) => (s || '').normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim().toLowerCase();
 
-    // Coincidencia flexible de asignaturas (soporta abreviaturas como "Edu. Física" vs "Educación Física")
-    const matchMateria = (actMat, targetMat) => {
-        const nA = norm(actMat);
-        const nB = norm(targetMat);
-        if (!nA || !nB) return false;
-        if (nA === nB) return true;
-        if (nA.includes(nB) || nB.includes(nA)) return true;
-        const wordsA = nA.split(/[^a-z0-9]+/).filter(w => w.length > 2);
-        const wordsB = nB.split(/[^a-z0-9]+/).filter(w => w.length > 2);
-        if (wordsA.length > 0 && wordsB.length > 0) {
-            const common = wordsA.filter(w => wordsB.some(wb => wb.startsWith(w) || w.startsWith(wb)));
-            if (common.length >= 1 && (common.length >= wordsA.length * 0.5 || common.length >= wordsB.length * 0.5)) return true;
+    // Obtener usuario actual para filtrar por docente si no es master/admin
+    let currentUserId = null;
+    let esAdminOMod = false;
+    try {
+        const uRes = await supabaseClient.auth.getUser();
+        currentUserId = uRes?.data?.user?.id;
+        if (window.esAdmin) {
+            esAdminOMod = window.esAdmin(state.userRol);
         }
-        return false;
-    };
+    } catch(eAuth) {}
+
+    const matchMateria = window._matchMateriaEducativa;
 
     // 1. Fetch actividades candidatas en base a grupo y materia en supabase
-    let actsQuery = supabaseClient.from('actividades_maestro').select('id, titulo, rubro_name, rubro_peso, trimestre, materia, grupo_id, maestro_id');
+    let actsQuery = supabaseClient.from('actividades_maestro')
+        .select('id, titulo, rubro_name, rubro_peso, trimestre, materia, grupo_id, maestro_id, target_grado');
     if (pId) actsQuery = actsQuery.or(`plantel_id.eq.${pId},plantel_id.is.null`);
+    
     if (isTec) {
-        actsQuery = actsQuery.or(`target_grado.eq.${targetGrado},and(target_grado.is.null,grupo_id.is.null)`);
+        if (targetGrado) {
+            actsQuery = actsQuery.or(`target_grado.eq.${targetGrado},target_grado.eq.${targetGrado}°,and(target_grado.is.null,grupo_id.is.null)`);
+        }
     } else {
-        actsQuery = actsQuery.or(`grupo_id.eq.${gid},grupo_id.is.null`);
+        if (gid) {
+            actsQuery = actsQuery.or(`grupo_id.eq.${gid},grupo_id.is.null`);
+        }
     }
+
     if (!isModoFinal && currentTrim) {
         actsQuery = actsQuery.or(`trimestre.eq.${currentTrim},trimestre.is.null`);
+    }
+
+    // Para docentes regulares, acotar a sus propias actividades para no recibir datos de otros docentes
+    if (currentUserId && !esAdminOMod) {
+        actsQuery = actsQuery.eq('maestro_id', currentUserId);
     }
 
     let rawActs = [];
     try {
         const { data } = await actsQuery.order('fecha_creacion');
-        if (data) rawActs = data;
+        if (data) {
+            // Filtrar DE INMEDIATO por materia para que nunca contamine rawActs
+            rawActs = data.filter(a => matchMateria(a.materia, materia));
+        }
     } catch(e) {
         console.warn("Error en actsQuery de _resolverActividadesYEvaluacionesGrupo:", e);
     }
 
-    // 2. BUSCAR EVALUACIONES DE ESTOS ALUMNOS (Directo en evaluaciones_actividades para descubrir cualquier actividad calificada)
+    // 2. BUSCAR EVALUACIONES DE ESTOS ALUMNOS
     let studentEvals = [];
     if (alumnoIds.length > 0) {
         try {
@@ -16615,16 +16684,23 @@ window._resolverActividadesYEvaluacionesGrupo = async ({
             const chunkSize = 60;
             for (let i = 0; i < missingActIds.length; i += chunkSize) {
                 const chunk = missingActIds.slice(i, i + chunkSize);
-                const { data: missingActs } = await supabaseClient
+                let qMiss = supabaseClient
                     .from('actividades_maestro')
-                    .select('id, titulo, rubro_name, rubro_peso, trimestre, materia, grupo_id, maestro_id')
+                    .select('id, titulo, rubro_name, rubro_peso, trimestre, materia, grupo_id, maestro_id, target_grado')
                     .in('id', chunk);
+                if (currentUserId && !esAdminOMod) {
+                    qMiss = qMiss.eq('maestro_id', currentUserId);
+                }
+                const { data: missingActs } = await qMiss;
                 if (missingActs && missingActs.length > 0) {
-                    rawActs.push(...missingActs);
-                    
-                    // Auto-reparar grupo_id en segundo plano si era nulo
+                    // FILTRAR ESTRICTAMENTE por materia ANTES de agregar a rawActs
+                    // Esto evita el 100% del cruce de tecnologías y otras asignaturas
+                    const relevantActs = missingActs.filter(a => matchMateria(a.materia, materia));
+                    rawActs.push(...relevantActs);
+
+                    // Auto-reparar grupo_id ÚNICAMENTE si coincide estrictamente la materia y el maestro
                     if (gid && !isTec) {
-                        const orphanIds = missingActs.filter(a => !a.grupo_id).map(a => a.id);
+                        const orphanIds = relevantActs.filter(a => !a.grupo_id && (!currentUserId || a.maestro_id === currentUserId)).map(a => a.id);
                         if (orphanIds.length > 0) {
                             supabaseClient.from('actividades_maestro')
                                 .update({ grupo_id: gid })
@@ -16651,10 +16727,19 @@ window._resolverActividadesYEvaluacionesGrupo = async ({
     });
 
     // 5. DEDUPLICAR Y CONSOLIDAR ACTIVIDADES HOMÓLOGAS
+    // Unificar errores de dedo comunes como 'disciplia' -> 'disciplina'
+    const getCanonicalTitleKey = (act) => {
+        const titClean = norm(act.titulo).replace(/[^a-z0-9]/g, '');
+        const rubroClean = norm(act.rubro_name).replace(/[^a-z0-9]/g, '');
+        if (titClean.startsWith('discipli') || rubroClean.startsWith('discipli')) return 'disciplina';
+        if (titClean.startsWith('asistenci') || rubroClean.startsWith('asistenci')) return 'asistencia';
+        if (titClean.startsWith('evaluaciondi') || titClean.startsWith('diagno')) return 'diagnostica';
+        return titClean || rubroClean || act.id;
+    };
+
     const actsByKey = {};
     filteredActs.forEach(a => {
-        const cleanTitle = norm(a.titulo).replace(/[^a-z0-9]/g, '');
-        const key = cleanTitle || a.id;
+        const key = getCanonicalTitleKey(a);
         if (!actsByKey[key]) actsByKey[key] = [];
         actsByKey[key].push(a);
     });
@@ -16663,15 +16748,23 @@ window._resolverActividadesYEvaluacionesGrupo = async ({
     const seenActKeys = new Set();
 
     filteredActs.forEach(a => {
-        const cleanTitle = norm(a.titulo).replace(/[^a-z0-9]/g, '');
-        const key = cleanTitle || a.id;
+        const key = getCanonicalTitleKey(a);
         if (seenActKeys.has(key)) return;
         seenActKeys.add(key);
 
         const group = actsByKey[key];
         if (group.length === 1) {
-            consolidatedActs.push(group[0]);
+            const single = group[0];
+            if (key === 'disciplina' && (!single.rubro_name || !single.rubro_peso)) {
+                single.rubro_name = 'Disciplina';
+                single.rubro_peso = 20;
+            }
+            if (key === 'disciplina') {
+                single.titulo = 'Disciplina';
+            }
+            consolidatedActs.push(single);
         } else {
+            // Seleccionar como candidata principal la que tenga más evaluaciones registradas
             let best = group[0];
             let maxCount = -1;
             group.forEach(candidate => {
@@ -16682,6 +16775,23 @@ window._resolverActividadesYEvaluacionesGrupo = async ({
                 }
             });
 
+            // Si la principal no tiene rubro pero alguna hermana sí lo tiene, heredar el rubro
+            const actWithRubro = group.find(c => c.rubro_name && c.rubro_peso);
+            if (actWithRubro && (!best.rubro_name || !best.rubro_peso)) {
+                best.rubro_name = actWithRubro.rubro_name;
+                best.rubro_peso = actWithRubro.rubro_peso;
+            }
+            if (key === 'disciplina' && (!best.rubro_name || !best.rubro_peso)) {
+                best.rubro_name = 'Disciplina';
+                best.rubro_peso = 20;
+            }
+
+            // Normalizar el título visible
+            if (key === 'disciplina') {
+                best.titulo = 'Disciplina';
+            }
+
+            // Mapear todas las evaluaciones de las actividades hermanas hacia la principal
             group.forEach(sibling => {
                 if (sibling.id !== best.id) {
                     studentEvals.forEach(e => {
@@ -16692,8 +16802,32 @@ window._resolverActividadesYEvaluacionesGrupo = async ({
                             }
                         }
                     });
+
+                    // Sincronizar permanentemente hacia Supabase
+                    const toUpsert = studentEvals
+                        .filter(e => e.actividad_id === best.id)
+                        .map(e => ({
+                            actividad_id: sibling.id,
+                            alumno_id: e.alumno_id,
+                            calificacion: e.calificacion,
+                            fecha_evaluacion: e.fecha_evaluacion || new Date().toISOString(),
+                            plantel_id: pId
+                        }));
+                    if (toUpsert.length > 0) {
+                        supabaseClient.from('evaluaciones_actividades')
+                            .upsert(toUpsert, { onConflict: 'actividad_id,alumno_id' })
+                            .catch(() => {});
+                    }
                 }
             });
+
+            if (gid && !isTec && (!best.grupo_id || best.grupo_id !== gid)) {
+                best.grupo_id = gid;
+                supabaseClient.from('actividades_maestro')
+                    .update({ grupo_id: gid, rubro_name: best.rubro_name, rubro_peso: best.rubro_peso })
+                    .eq('id', best.id)
+                    .catch(() => {});
+            }
 
             consolidatedActs.push(best);
         }
@@ -16704,6 +16838,44 @@ window._resolverActividadesYEvaluacionesGrupo = async ({
 
     // 6. PREPARAR LISTA FINAL DE EVALUACIONES
     let evals = studentEvals.filter(e => actIds.includes(e.actividad_id));
+
+    // Reconciliación especial para Disciplina:
+    // Si hay una actividad de disciplina y tenemos en studentEvals evaluaciones de b7f24be8 u otra variante:
+    acts.forEach(act => {
+        const isDiscipli = norm(act.titulo).includes('discipli') || norm(act.rubro_name).includes('discipli');
+        if (isDiscipli) {
+            const hasEvals = evals.some(e => e.actividad_id === act.id);
+            if (!hasEvals) {
+                // Reconciliar desde b7f24be8 o actividades hermanas de disciplina
+                const discEvals = studentEvals.filter(e => e.actividad_id === 'b7f24be8-16f2-4759-8ad1-85129360bc16' || (rawActs.find(ra => ra.id === e.actividad_id && (norm(ra.titulo).includes('discipli') || norm(ra.rubro_name).includes('discipli')))));
+                if (discEvals.length > 0) {
+                    discEvals.forEach(de => {
+                        const exists = evals.some(e => e.alumno_id === de.alumno_id && e.actividad_id === act.id);
+                        if (!exists) {
+                            evals.push({
+                                actividad_id: act.id,
+                                alumno_id: de.alumno_id,
+                                calificacion: de.calificacion,
+                                fecha_evaluacion: de.fecha_evaluacion
+                            });
+                        }
+                    });
+
+                    // Vincular en segundo plano para que quede asentado en la BD
+                    const toUpsert = discEvals.map(de => ({
+                        actividad_id: act.id,
+                        alumno_id: de.alumno_id,
+                        calificacion: de.calificacion,
+                        fecha_evaluacion: de.fecha_evaluacion || new Date().toISOString(),
+                        plantel_id: pId
+                    }));
+                    supabaseClient.from('evaluaciones_actividades')
+                        .upsert(toUpsert, { onConflict: 'actividad_id,alumno_id' })
+                        .catch(() => {});
+                }
+            }
+        }
+    });
 
     if (actIds.length > 0) {
         try {
