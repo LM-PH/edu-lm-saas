@@ -18800,7 +18800,7 @@ window.imprimirLista = async (esVacia = false) => {
             }
         });
 
-        // En el reporte impreso, las calificaciones menores a 5 aparecen como 5, conservando todo lo demás intacto
+        // En el reporte impreso, las calificaciones menores a 6.0 (reprobatorias SEP como 5.4, 4.6, etc.) aparecen como 5
         cloneTable.querySelectorAll('tbody tr').forEach(r => {
             Array.from(r.cells).forEach((td, cellIdx) => {
                 if (cellIdx === 0) return; // Omitir columna de Alumno
@@ -18817,7 +18817,7 @@ window.imprimirLista = async (esVacia = false) => {
                 }
 
                 const num = parseFloat(txt);
-                if (!isNaN(num) && num > 0 && num < 5.0) {
+                if (!isNaN(num) && num > 0 && num < 6.0) {
                     td.textContent = '5';
                 }
             });
