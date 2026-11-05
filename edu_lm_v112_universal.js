@@ -14729,7 +14729,8 @@ window.loadActividadesMaestro = async () => {
 
         constLista.innerHTML = actividadesMostrar.map(act => {
             const count = act.evaluaciones_actividades ? act.evaluaciones_actividades.length : 0;
-            const isAutoAsistencia = (act.titulo || '').includes('Asistencia Continua');
+            const isAutoAsistencia = (act.titulo || '').includes('Asistencia Continua') || 
+                (window.esRubroAsistencia && (window.esRubroAsistencia(act.titulo) || window.esRubroAsistencia(act.rubro_name)));
             const autoBadge = isAutoAsistencia ? `<span class="badge" style="background:#e0f2fe; color:#0369a1; border: 1px solid #7dd3fc; font-size:0.75rem; font-weight:600;"><i class="fa-solid fa-bolt"></i> Auto (Pase de Lista)</span>` : '';
             const fechaTxt = isFinalizada ? 
                 `<span style="font-size:0.75rem; color:var(--text-muted); background:var(--page-bg); padding:2px 8px; border-radius:4px;">Cerrada el: ${new Date(act.fecha_finalizacion).toLocaleDateString()}</span>` : 
@@ -14758,7 +14759,7 @@ window.loadActividadesMaestro = async () => {
                 </div>` :
                 `<div style="display:flex; gap:8px; flex-wrap:wrap;">
                     ${isAutoAsistencia ? `
-                        <button class="btn btn-outline" style="border-color:#0284c7; color:#0284c7; background:#f0f9ff; font-size:0.8rem; padding:6px 12px; font-weight:600;" onclick="window.sincronizarAsistenciaActividadManual('${act.grupo_id || ''}', '${(act.materia || '').replace(/'/g, "\\'")}', ${act.trimestre || 1}, '${act.target_grado || ''}')" title="Recalcular calificaciones desde el pase de lista">
+                        <button class="btn btn-outline" style="border-color:#0284c7; color:#0284c7; background:#f0f9ff; font-size:0.8rem; padding:6px 12px; font-weight:600;" onclick="window.sincronizarAsistenciaActividadManual('${act.grupo_id || ''}', '${(act.materia || '').replace(/'/g, "\\'")}', ${act.trimestre || 1}, '${act.target_grado || ''}', '${act.id}')" title="Recalcular calificaciones desde el pase de lista">
                             <i class="fa-solid fa-rotate"></i> Sincronizar Asistencias
                         </button>
                     ` : `
@@ -16875,7 +16876,7 @@ window._resolverActividadesYEvaluacionesGrupo = async ({
             const titClean = norm(act.titulo).replace(/[^a-z0-9]/g, '');
             const rubroClean = norm(act.rubro_name).replace(/[^a-z0-9]/g, '');
             if (titClean.startsWith('discipli') || rubroClean.startsWith('discipli')) return 'disciplina';
-            if (titClean.startsWith('asistenci') || rubroClean.startsWith('asistenci')) return 'asistencia';
+            if (titClean.startsWith('asistenci') || rubroClean.startsWith('asistenci') || titClean.startsWith('attend') || rubroClean.startsWith('attend') || titClean.includes('pasedelista')) return 'asistencia';
             if (titClean.startsWith('evaluaciondi') || titClean.startsWith('diagno')) return 'diagnostica';
             return titClean || rubroClean || act.id;
         };
@@ -22161,7 +22162,7 @@ window.cargarEncuadreActivo = async () => {
     }
 };
 
-window.sincronizarAsistenciaActividad = async ({ grupoId, materia, trimestre, targetGrado, maestroId }) => {
+window.sincronizarAsistenciaActividad = async ({ grupoId, materia, trimestre, targetGrado, maestroId, targetActId }) => {
     try {
         const uRes = await supabaseClient.auth.getUser();
         const user = uRes?.data?.user;
@@ -22177,6 +22178,10 @@ window.sincronizarAsistenciaActividad = async ({ grupoId, materia, trimestre, ta
         }
         const isTec = !gid && !!tGrado;
 
+        let pesoRubro = 10;
+        let nombreRubro = 'Asistencia';
+        let configRetardo = { tipo: 'mitad', cada_cuantos: 3 };
+
         // 1. Buscar si en el Encuadre de este maestro/materia/trimestre hay un rubro de Asistencia
         let qEnc = supabaseClient.from('encuadres')
             .select('id, rubros')
@@ -22190,59 +22195,91 @@ window.sincronizarAsistenciaActividad = async ({ grupoId, materia, trimestre, ta
 
         const { data: encArr } = await qEnc.order('fecha_creacion', { ascending: false }).limit(1);
         const encuadre = encArr && encArr.length > 0 ? encArr[0] : null;
-        if (!encuadre || !encuadre.rubros) return;
 
-        const rubroAsist = (encuadre.rubros || []).find(r => window.esRubroAsistencia && window.esRubroAsistencia(r.name) && Number(r.val) > 0);
-        if (!rubroAsist) return; // No tiene rubro de asistencia en el encuadre
+        const rubroAsist = encuadre && encuadre.rubros ? (encuadre.rubros || []).find(r => window.esRubroAsistencia && window.esRubroAsistencia(r.name) && Number(r.val) > 0) : null;
+        if (rubroAsist) {
+            pesoRubro = Number(rubroAsist.val) || 10;
+            nombreRubro = rubroAsist.name;
+            configRetardo = rubroAsist.config_retardo || configRetardo;
+        } else if (!targetActId) {
+            // Si no hay targetActId ni rubro en el encuadre, revisar si ya existe alguna actividad de asistencia creada
+            let qCheck = supabaseClient.from('actividades_maestro')
+                .select('id, rubro_peso, rubro_name, titulo')
+                .or(`plantel_id.eq.${state.plantelId},plantel_id.is.null`)
+                .eq('maestro_id', uid)
+                .ilike('materia', mat)
+                .eq('trimestre', trim);
+            if (isTec) qCheck = qCheck.is('grupo_id', null).eq('target_grado', tGrado);
+            else qCheck = qCheck.eq('grupo_id', gid);
+            const { data: actsPre } = await qCheck;
+            const tieneActCompat = (actsPre || []).some(a => 
+                (a.titulo || '').includes('Asistencia Continua') || 
+                (window.esRubroAsistencia && (window.esRubroAsistencia(a.titulo) || window.esRubroAsistencia(a.rubro_name)))
+            );
+            if (!tieneActCompat) return; // No tiene rubro ni actividad de asistencia
+        }
 
-        const pesoRubro = Number(rubroAsist.val) || 10;
-        const nombreRubro = rubroAsist.name;
-        const configRetardo = rubroAsist.config_retardo || { tipo: 'mitad', cada_cuantos: 3 };
+        let actId = targetActId || null;
 
-        // 2. Buscar o crear la actividad oficial del sistema para Asistencia
-        const tituloAct = `Asistencia Continua (Pase de Lista - Trimestre ${trim})`;
-        let qAct = supabaseClient.from('actividades_maestro')
-            .select('id, rubro_peso, rubro_name')
-            .or(`plantel_id.eq.${state.plantelId},plantel_id.is.null`)
-            .eq('maestro_id', uid)
-            .ilike('materia', mat)
-            .eq('trimestre', trim)
-            .eq('titulo', tituloAct);
+        // Si se especificó targetActId, obtener o actualizar sus datos si es necesario
+        if (targetActId) {
+            const { data: actTarget } = await supabaseClient.from('actividades_maestro').select('rubro_name, rubro_peso').eq('id', targetActId).maybeSingle();
+            if (actTarget) {
+                if (actTarget.rubro_name) nombreRubro = actTarget.rubro_name;
+                if (actTarget.rubro_peso) pesoRubro = Number(actTarget.rubro_peso) || pesoRubro;
+            }
+        }
 
-        if (isTec) qAct = qAct.is('grupo_id', null).eq('target_grado', tGrado);
-        else qAct = qAct.eq('grupo_id', gid);
+        // 2. Buscar o crear la actividad oficial del sistema para Asistencia si no se proveyó targetActId
+        if (!actId) {
+            let qAct = supabaseClient.from('actividades_maestro')
+                .select('id, rubro_peso, rubro_name, titulo')
+                .or(`plantel_id.eq.${state.plantelId},plantel_id.is.null`)
+                .eq('maestro_id', uid)
+                .ilike('materia', mat)
+                .eq('trimestre', trim);
 
-        const { data: actExistenteArr } = await qAct.limit(1);
-        let actId = null;
+            if (isTec) qAct = qAct.is('grupo_id', null).eq('target_grado', tGrado);
+            else qAct = qAct.eq('grupo_id', gid);
 
-        if (actExistenteArr && actExistenteArr.length > 0) {
-            actId = actExistenteArr[0].id;
-            if (actExistenteArr[0].rubro_peso !== pesoRubro || actExistenteArr[0].rubro_name !== nombreRubro) {
-                await supabaseClient.from('actividades_maestro').update({
+            const { data: actExistenteArr } = await qAct;
+            const tituloAct = `Asistencia Continua (Pase de Lista - Trimestre ${trim})`;
+            
+            // Priorizar actividad oficial o una actividad existente que coincida con Attendance o Asistencia
+            const actExistente = (actExistenteArr || []).find(a => 
+                (a.titulo || '').includes('Asistencia Continua') || 
+                (window.esRubroAsistencia && (window.esRubroAsistencia(a.titulo) || window.esRubroAsistencia(a.rubro_name)))
+            );
+
+            if (actExistente) {
+                actId = actExistente.id;
+                if ((!actExistente.rubro_peso || !actExistente.rubro_name) && rubroAsist) {
+                    await supabaseClient.from('actividades_maestro').update({
+                        rubro_peso: pesoRubro,
+                        rubro_name: nombreRubro
+                    }).eq('id', actId);
+                }
+            } else {
+                const newActPayload = {
+                    maestro_id: uid,
+                    titulo: tituloAct,
+                    descripcion: "Cálculo automático de calificación de asistencia a partir del registro diario del aula y sus justificaciones.",
+                    materia: mat,
+                    grupo_id: gid,
+                    target_grado: tGrado,
+                    rubro_name: nombreRubro,
                     rubro_peso: pesoRubro,
-                    rubro_name: nombreRubro
-                }).eq('id', actId);
+                    trimestre: trim,
+                    plantel_id: state.plantelId,
+                    fecha_creacion: new Date().toISOString()
+                };
+                const { data: newAct, error: errAct } = await supabaseClient.from('actividades_maestro').insert([newActPayload]).select('id').maybeSingle();
+                if (errAct) {
+                    console.error("Error al crear actividad de asistencia automática:", errAct);
+                    return;
+                }
+                actId = newAct?.id;
             }
-        } else {
-            const newActPayload = {
-                maestro_id: uid,
-                titulo: tituloAct,
-                descripcion: "Cálculo automático de calificación de asistencia a partir del registro diario del aula y sus justificaciones.",
-                materia: mat,
-                grupo_id: gid,
-                target_grado: tGrado,
-                rubro_name: nombreRubro,
-                rubro_peso: pesoRubro,
-                trimestre: trim,
-                plantel_id: state.plantelId,
-                fecha_creacion: new Date().toISOString()
-            };
-            const { data: newAct, error: errAct } = await supabaseClient.from('actividades_maestro').insert([newActPayload]).select('id').maybeSingle();
-            if (errAct) {
-                console.error("Error al crear actividad de asistencia automática:", errAct);
-                return;
-            }
-            actId = newAct?.id;
         }
 
         if (!actId) return;
@@ -22353,9 +22390,9 @@ window.sincronizarAsistenciaActividad = async ({ grupoId, materia, trimestre, ta
     }
 };
 
-window.sincronizarAsistenciaActividadManual = async (grupoId, materia, trimestre, targetGrado) => {
+window.sincronizarAsistenciaActividadManual = async (grupoId, materia, trimestre, targetGrado, actividadId) => {
     window.showToast("Sincronizando asistencias del pase de lista...", "info");
-    await window.sincronizarAsistenciaActividad({ grupoId, materia, trimestre, targetGrado });
+    await window.sincronizarAsistenciaActividad({ grupoId, materia, trimestre, targetGrado, targetActId: actividadId });
     window.showToast("✅ Calificaciones de asistencia actualizadas con éxito.", "success");
     if (window.loadActividadesMaestro) window.loadActividadesMaestro();
 };
