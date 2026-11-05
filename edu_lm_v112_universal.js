@@ -2329,9 +2329,14 @@ function renderAdminCalificaciones() {
                <option value="resumen_admin">Resumen (Calif. Final y Asistencias)</option>
             </select>
          </div>
-         <button class="btn btn-outline" style="width:100%; margin-top:10px; border-color:var(--primary); color:var(--primary)" onclick="window.imprimirLista(false)">
-            <i class="fa-solid fa-print"></i> Imprimir Reporte Generado
-         </button>
+         <div style="display:flex; gap:8px; margin-top:10px; flex-wrap:wrap;">
+            <button class="btn btn-outline" style="flex:1; min-width:130px; border-color:#6366f1; color:#6366f1;" onclick="window.imprimirLista(true)" title="Imprimir plantilla oficial en blanco (20 casillas de asistencia) con membrete">
+               <i class="fa-solid fa-print"></i> Imprimir Vacía
+            </button>
+            <button class="btn btn-primary" style="flex:1; min-width:130px;" onclick="window.imprimirLista(false)" title="Imprimir lista con calificaciones y asistencias">
+               <i class="fa-solid fa-print"></i> Imprimir Lista
+            </button>
+         </div>
       </div>
       
       <!-- Bloque: Revisión Detallada por Maestro -->
@@ -3583,7 +3588,7 @@ function renderMaestroListas() {
           </div>
           <div style="display:flex; gap:8px; flex-wrap:wrap;">
              <button class="btn btn-outline" style="border-color:var(--text-muted); color:var(--text-main)" onclick="window.exportarRejillaBlancoCSV()" title="Descargar plantilla CSV en blanco (20 columnas)"><i class="fa-solid fa-file-csv"></i> CSV Vacío</button>
-             <button class="btn btn-outline" style="border-color:#6366f1; color:#6366f1" onclick="window.imprimirLista(true)" title="Imprimir plantilla oficial en blanco (15 columnas) con membrete"><i class="fa-solid fa-print"></i> Imprimir Vacía</button>
+             <button class="btn btn-outline" style="border-color:#6366f1; color:#6366f1" onclick="window.imprimirLista(true)" title="Imprimir plantilla oficial en blanco (20 columnas) con membrete"><i class="fa-solid fa-print"></i> Imprimir Vacía</button>
              <button class="btn btn-outline" style="border-color:var(--success); color:var(--success)" onclick="window.exportarListasCSV()"><i class="fa-solid fa-file-csv"></i> Excel de Datos</button>
              <button class="btn btn-outline" style="border-color:var(--primary); color:var(--primary)" onclick="window.imprimirLista(false)"><i class="fa-solid fa-print"></i> Imprimir Lista</button>
           </div>
@@ -8784,6 +8789,14 @@ window.imprimirRegistroAccesos = async (fechaInputId = 'fechaAsistenciaApoyo', g
         const countSalida = data.filter(d => d.estado === 'Salida').length;
         const countInasistencia = data.filter(d => d.estado === 'Inasistencia').length;
 
+        // Escalado dinámico si es un grupo (<= 50 alumnos) para que encaje exactamente en 1 sola hoja
+        const nAcc = Math.max(data.length, 1);
+        const rowHeightAcc = Math.max(12, Math.min(26, Math.floor(620 / (nAcc + 1))));
+        const calcFontAcc = Math.max(8.0, Math.min(12.0, rowHeightAcc * 0.60));
+        const fontSizeTable = calcFontAcc.toFixed(1) + 'px';
+        const padVAcc = Math.max(0.5, Math.min(5, (rowHeightAcc - calcFontAcc) / 2)).toFixed(1) + 'px';
+        const padTable = `${padVAcc} 6px`;
+
         const filasTable = data.map((d, index) => {
             let badgeStyle = "background:#f0fdf4; color:#166534; font-weight:bold;";
             if(d.estado === 'Retardo') badgeStyle = "background:#fffbeb; color:#92400e; font-weight:bold;";
@@ -8791,15 +8804,15 @@ window.imprimirRegistroAccesos = async (fechaInputId = 'fechaAsistenciaApoyo', g
             if(d.estado === 'Inasistencia') badgeStyle = "background:#fef2f2; color:#991b1b; font-weight:bold;";
 
             return `
-                <tr>
-                    <td style="text-align:center; padding:8px; border-bottom:1px solid #e2e8f0;">${index + 1}</td>
-                    <td style="padding:8px; border-bottom:1px solid #e2e8f0; font-weight:600;">${d.alumnos?.nombre || 'S/D'}</td>
-                    <td style="text-align:center; padding:8px; border-bottom:1px solid #e2e8f0;">${d.alumnos?.matricula || 'N/A'}</td>
-                    <td style="text-align:center; padding:8px; border-bottom:1px solid #e2e8f0;">${d.alumnos?.grupos?.nombre || 'S/G'}</td>
-                    <td style="text-align:center; padding:8px; border-bottom:1px solid #e2e8f0;">
-                        <span style="${badgeStyle} padding:3px 8px; border-radius:4px; font-size:11px;">${d.estado}</span>
+                <tr style="height:${rowHeightAcc}px;">
+                    <td style="text-align:center; padding:${padTable}; border-bottom:1px solid #e2e8f0; font-weight:bold;">${index + 1}</td>
+                    <td style="padding:${padTable}; border-bottom:1px solid #e2e8f0; font-weight:600;"><div style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${d.alumnos?.nombre || 'S/D'}</div></td>
+                    <td style="text-align:center; padding:${padTable}; border-bottom:1px solid #e2e8f0;">${d.alumnos?.matricula || 'N/A'}</td>
+                    <td style="text-align:center; padding:${padTable}; border-bottom:1px solid #e2e8f0;">${d.alumnos?.grupos?.nombre || 'S/G'}</td>
+                    <td style="text-align:center; padding:${padTable}; border-bottom:1px solid #e2e8f0;">
+                        <span style="${badgeStyle} padding:2px 6px; border-radius:4px; font-size:0.9em;">${d.estado}</span>
                     </td>
-                    <td style="text-align:center; padding:8px; border-bottom:1px solid #e2e8f0;">${d.hora || 'N/A'}</td>
+                    <td style="text-align:center; padding:${padTable}; border-bottom:1px solid #e2e8f0;">${d.hora || 'N/A'}</td>
                 </tr>
             `;
         }).join('');
@@ -8809,75 +8822,82 @@ window.imprimirRegistroAccesos = async (fechaInputId = 'fechaAsistenciaApoyo', g
                 <head>
                     <title>Reporte de Accesos y Salidas - ${fecha}</title>
                     <style>
-                        body { font-family: 'Segoe UI', Arial, sans-serif; padding: 30px; color: #333; line-height: 1.4; }
-                        .header { text-align: center; margin-bottom: 25px; border-bottom: 2px solid #1e40af; padding-bottom: 12px; }
-                        .logo-img { max-height: 70px; margin-bottom: 8px; object-fit: contain; }
-                        .header h2 { font-size: 24px; margin: 0 0 4px 0; color: #000; text-transform: uppercase; }
-                        .header h1 { margin: 0; color: #1e40af; font-size: 18px; text-transform: uppercase; }
-                        .header p { margin: 4px 0; font-size: 13px; color: #555; font-weight: bold; }
-                        .summary-box { background: #f8fafc; border: 1px solid #cbd5e1; padding: 15px; border-radius: 8px; margin-bottom: 20px; display: flex; justify-content: space-around; font-size: 13px; text-align: center; }
+                        * { box-sizing: border-box; margin: 0; padding: 0; }
+                        body { font-family: 'Segoe UI', Arial, sans-serif; color: #333; line-height: 1.2; padding: 10px; }
+                        .header { text-align: center; margin-bottom: 8px; border-bottom: 2px solid #1e40af; padding-bottom: 6px; }
+                        .logo-img { max-height: 55px; margin-bottom: 4px; object-fit: contain; }
+                        .header h2 { font-size: 18px; margin: 0 0 2px 0; color: #000; text-transform: uppercase; }
+                        .header h1 { margin: 0; color: #1e40af; font-size: 15px; text-transform: uppercase; }
+                        .header p { margin: 2px 0; font-size: 11px; color: #555; font-weight: bold; }
+                        .summary-box { background: #f8fafc; border: 1px solid #cbd5e1; padding: 6px; border-radius: 6px; margin-bottom: 8px; display: flex; justify-content: space-around; font-size: 11px; text-align: center; }
                         .summary-item { display: flex; flex-direction: column; }
-                        .summary-num { font-size: 18px; font-weight: bold; }
-                        table { width: 100%; border-collapse: collapse; font-size: 12px; margin-top: 10px; }
-                        th { background: #1e40af; color: white; padding: 8px; text-align: left; text-transform: uppercase; font-size: 11px; }
+                        .summary-num { font-size: 14px; font-weight: bold; }
+                        table { width: 100%; border-collapse: collapse; font-size: ${fontSizeTable}; margin-top: 4px; table-layout: fixed; }
+                        th { background: #1e40af; color: white; padding: ${padTable}; text-align: left; text-transform: uppercase; font-size: ${fontSizeTable}; height: ${rowHeightAcc}px; }
                         th.center, td.center { text-align: center; }
-                        .footer { margin-top: 30px; display: flex; justify-content: space-between; font-size: 11px; color: #64748b; border-top: 1px solid #e2e8f0; padding-top: 10px; }
+                        .footer { margin-top: 8px; display: flex; justify-content: space-between; font-size: 9.5px; color: #64748b; border-top: 1px solid #e2e8f0; padding-top: 4px; }
                         @media print {
-                            body { padding: 10px; }
+                            @page { size: portrait; margin: 5mm; }
+                            html, body { width: 100%; height: 100%; margin: 0 !important; padding: 0 !important; overflow: hidden !important; }
+                            .print-main-wrapper { height: 100%; max-height: 100%; display: flex; flex-direction: column; justify-content: space-between; overflow: hidden; page-break-inside: avoid; break-inside: avoid; }
                             button { display: none; }
                         }
                     </style>
                 </head>
                 <body>
-                    <div class="header">
-                        ${schoolLogo ? `<img src="${schoolLogo}" class="logo-img" />` : ''}
-                        <h2>${schoolName}</h2>
-                        <h1>Reporte Diario de Accesos y Salidas</h1>
-                        <p>Fecha del Reporte: ${fecha}</p>
-                    </div>
+                    <div class="print-main-wrapper">
+                    <div>
+                        <div class="header">
+                            ${schoolLogo ? `<img src="${schoolLogo}" class="logo-img" />` : ''}
+                            <h2>${schoolName}</h2>
+                            <h1>Reporte Diario de Accesos y Salidas</h1>
+                            <p>Fecha del Reporte: ${fecha}</p>
+                        </div>
 
-                    <div class="summary-box">
-                        <div class="summary-item">
-                            <span class="summary-num" style="color:#166534;">${countAsistencia}</span>
-                            <span>Entradas Puntuales</span>
+                        <div class="summary-box">
+                            <div class="summary-item">
+                                <span class="summary-num" style="color:#166534;">${countAsistencia}</span>
+                                <span>Entradas Puntuales</span>
+                            </div>
+                            <div class="summary-item">
+                                <span class="summary-num" style="color:#92400e;">${countRetardo}</span>
+                                <span>Retardos</span>
+                            </div>
+                            <div class="summary-item">
+                                <span class="summary-num" style="color:#d97706;">${countSalida}</span>
+                                <span>Salidas</span>
+                            </div>
+                            <div class="summary-item">
+                                <span class="summary-num" style="color:#991b1b;">${countInasistencia}</span>
+                                <span>Inasistencias</span>
+                            </div>
+                            <div class="summary-item">
+                                <span class="summary-num" style="color:#1e40af;">${data.length}</span>
+                                <span>Total Registros</span>
+                            </div>
                         </div>
-                        <div class="summary-item">
-                            <span class="summary-num" style="color:#92400e;">${countRetardo}</span>
-                            <span>Retardos</span>
-                        </div>
-                        <div class="summary-item">
-                            <span class="summary-num" style="color:#d97706;">${countSalida}</span>
-                            <span>Salidas</span>
-                        </div>
-                        <div class="summary-item">
-                            <span class="summary-num" style="color:#991b1b;">${countInasistencia}</span>
-                            <span>Inasistencias</span>
-                        </div>
-                        <div class="summary-item">
-                            <span class="summary-num" style="color:#1e40af;">${data.length}</span>
-                            <span>Total Registros</span>
-                        </div>
-                    </div>
 
-                    <table>
-                        <thead>
-                            <tr>
-                                <th class="center" style="width:40px;">#</th>
-                                <th>Alumno</th>
-                                <th class="center">Matrícula</th>
-                                <th class="center">Grupo</th>
-                                <th class="center">Estado</th>
-                                <th class="center">Hora</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            ${filasTable}
-                        </tbody>
-                    </table>
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th class="center" style="width:35px;">#</th>
+                                    <th>Alumno</th>
+                                    <th class="center" style="width:100px;">Matrícula</th>
+                                    <th class="center" style="width:70px;">Grupo</th>
+                                    <th class="center" style="width:80px;">Estado</th>
+                                    <th class="center" style="width:70px;">Hora</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${filasTable}
+                            </tbody>
+                        </table>
+                    </div>
 
                     <div class="footer">
                         <span>Generado por Sistema Escolar EDU-LM</span>
                         <span>Impreso el: ${fechaImpresion}</span>
+                    </div>
                     </div>
                     <script>
                         window.onload = function() { window.print(); }
@@ -18688,6 +18708,13 @@ window.imprimirLista = async (esVacia = false) => {
 
     const currentTrim = state.selectedMaestroTrimestre === 'final' ? 'PROMEDIO FINAL' : `${state.selectedMaestroTrimestre}° TRIMESTRE`;
 
+    // Resolver nombre del docente (si estamos en vista de directivo/admin/secretaria, tomar el maestro seleccionado)
+    let teacherName = state.userName || 'Docente Titular';
+    const selAdminMaestro = document.getElementById('adminSelMaestro');
+    if (selAdminMaestro && selAdminMaestro.selectedIndex > 0) {
+        teacherName = selAdminMaestro.options[selAdminMaestro.selectedIndex].text.replace(/^--\s*/, '').trim();
+    }
+
     // Obtener datos del plantel y director registrado para el membrete y firmas
     let schoolName = CONFIG.schoolName || 'Escuela';
     let schoolLogo = null;
@@ -18706,43 +18733,68 @@ window.imprimirLista = async (esVacia = false) => {
         }
     } catch(e) {}
 
-    // Contar el número de alumnos válidos y columnas para escalado dinámico
+    // Contar el número de alumnos válidos
     const rowsList = Array.from(tbody.querySelectorAll("tr")).filter(r => {
         const txt = r.innerText || "";
         return txt && !txt.includes("Seleccione") && !txt.includes("Cargando") && !txt.includes("Sin resultados");
     });
     const totalAlumnos = rowsList.length || 1;
-
-    // Detectar número de columnas para decidir orientación automáticamente
-    const totalCols = tabla ? (tabla.querySelectorAll('tr:first-child th, tr:first-child td').length || 5) : 5;
-    const esHorizontal = esVacia || totalCols > 6 || (selT && selT.value === 'evaluaciones');
-
-    // CÁLCULO MATEMÁTICO CONTINUO PARA GARANTIZAR 1 SOLA HOJA CON TODO Y FIRMAS
     const n = Math.max(totalAlumnos, 1);
-    
-    // Tamaño de fuente continuo entre 5.0px y 10.0px (ajustado por columnas)
-    let fontSizePx = Math.max(5.0, Math.min(10.0, (240 / (n + 8)) - (totalCols > 8 ? 0.8 : 0)));
-    let fontSize = fontSizePx.toFixed(1) + 'px';
 
-    // Padding vertical y horizontal proporcional ultra ajustado
-    let padV = Math.max(0, Math.min(3.5, (120 / n) - 1.8)).toFixed(1) + 'px';
-    let padH = Math.max(1, Math.min(4, (160 / n))).toFixed(1) + 'px';
-    let paddingCell = `${padV} ${padH}`;
+    // Contar columnas
+    const totalCols = tabla ? (tabla.querySelectorAll('tr:first-child th, tr:first-child td').length || 5) : 5;
 
-    // Logo y espacios de firma escalados continuamente
-    let logoHeight = Math.max(30, Math.min(65, 450 / n)).toFixed(0) + 'px';
-    let sigMargin = Math.max(4, Math.min(15, 250 / n)).toFixed(0) + 'px';
-    let sigLineHeight = Math.max(12, Math.min(22, 300 / n)).toFixed(0) + 'px';
+    // =========================================================================
+    // FORMATO 100% VERTICAL (PORTRAIT) PARA MAXIMIZAR ALTURA Y TAMAÑO DE LETRA
+    // =========================================================================
+    const esHorizontal = false;
+    const pageHeight = 980; // Altura imprimible completa en hoja vertical Carta/A4 (con márgenes de 5mm)
+
+    // Dimensiones proporcionales en vertical
+    let headerHeight, sigHeight, logoHeight, sigLineHeight;
+    if (n <= 25) {
+        headerHeight = 68; sigHeight = 60; logoHeight = 56; sigLineHeight = 26;
+    } else if (n <= 38) {
+        headerHeight = 58; sigHeight = 50; logoHeight = 46; sigLineHeight = 18;
+    } else {
+        headerHeight = 50; sigHeight = 40; logoHeight = 38; sigLineHeight = 14;
+    }
+
+    const hasStats = !esVacia && statsCont && statsCont.querySelectorAll('.card').length > 0;
+    const statsHeight = hasStats ? 20 : 0;
+    const gaps = 8;
+
+    const fixedHeight = headerHeight + statsHeight + sigHeight + gaps;
+    const availableTableHeight = pageHeight - fixedHeight;
+
+    const totalRows = n + 1; // n filas de alumnos + 1 fila thead
+    const rawRowHeight = Math.floor(availableTableHeight / totalRows);
+
+    const maxRow = 38;
+    const minRow = 14;
+    const rowHeight = Math.max(minRow, Math.min(maxRow, rawRowHeight));
+
+    // Cálculo de tamaño de fuente en vertical (rango amplio y claro: de 9.5px a 13.5px)
+    let baseFontSize = Math.max(9.0, Math.min(13.5, rowHeight * 0.58));
+    if (totalCols > 15) baseFontSize *= 0.90;
+    else if (totalCols > 9) baseFontSize *= 0.95;
+
+    const calcFont = Math.max(8.5, baseFontSize);
+    const fontSize = calcFont.toFixed(1) + 'px';
+
+    const padV = Math.max(0.5, Math.min(6, (rowHeight - calcFont) / 2)).toFixed(1) + 'px';
+    const padH = totalCols > 15 ? '2px' : '4px';
+    const rowHeightPx = rowHeight.toFixed(1) + 'px';
 
     let tableContentHtml = '';
     let statsHtml = '';
-    
+
     if (esVacia) {
-        // Generar una plantilla vacía de 30 columnas (registro mensual completo de 30 días/casillas)
-        const numCols = 30;
-        let headers = `<th style="width:20px;">No.</th><th style="text-align:left; min-width: 130px;">Nombre del Alumno</th>`;
+        // Plantilla vacía de 20 columnas (4 semanas de lunes a viernes = 1 mes escolar) ajustada a vertical
+        const numCols = 20;
+        let headers = `<th class="col-num" style="width:28px; text-align:center;">#</th><th class="col-alumno" style="text-align:left; min-width:180px; width:28%;">Nombre del Alumno</th>`;
         for (let i = 1; i <= numCols; i++) {
-            headers += `<th style="width: 15px; text-align:center;">${i}</th>`;
+            headers += `<th class="col-day" style="text-align:center; font-size:${Math.max(8.0, calcFont * 0.9).toFixed(1)}px; font-weight:600;">${i}</th>`;
         }
         
         let rowsHtml = '';
@@ -18750,11 +18802,12 @@ window.imprimirLista = async (esVacia = false) => {
         for (let i = 0; i < rowsList.length; i++) {
             const spanNombre = rowsList[i].querySelector("td span[style*='font-weight:600']") || rowsList[i].cells[0];
             if (spanNombre && spanNombre.innerText) {
-                rowsHtml += `<tr>`;
-                rowsHtml += `<td style="text-align:center; font-weight:bold;">${count}</td>`;
-                rowsHtml += `<td style="text-align:left; font-weight:600;">${spanNombre.innerText.trim()}</td>`;
+                const sName = spanNombre.innerText.trim();
+                rowsHtml += `<tr style="height:${rowHeightPx};">`;
+                rowsHtml += `<td class="col-num" style="text-align:center; font-weight:bold;">${count}</td>`;
+                rowsHtml += `<td class="col-alumno" style="text-align:left; font-weight:600;"><div style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${sName}</div></td>`;
                 for (let j = 1; j <= numCols; j++) {
-                    rowsHtml += `<td></td>`;
+                    rowsHtml += `<td class="col-day"></td>`;
                 }
                 rowsHtml += `</tr>`;
                 count++;
@@ -18764,7 +18817,7 @@ window.imprimirLista = async (esVacia = false) => {
         tableContentHtml = `
             <table class="data-table">
                 <thead>
-                    <tr>${headers}</tr>
+                    <tr style="height:${rowHeightPx};">${headers}</tr>
                 </thead>
                 <tbody>
                     ${rowsHtml}
@@ -18772,45 +18825,74 @@ window.imprimirLista = async (esVacia = false) => {
             </table>
         `;
     } else {
-        // Clonar tabla y limpiar columnas/estilos inline de celdas
         const cloneTable = tabla.cloneNode(true);
         cloneTable.classList.add('data-table');
         
-        // Limpiar inline styles (padding: 12px, avatar height: 32px) para permitir escalado CSS
-        cloneTable.querySelectorAll('th, td').forEach(c => {
-            c.style.padding = paddingCell;
-            c.style.height = 'auto';
-            c.style.minWidth = 'auto';
-            
-            // Eliminar avatares redondos y reducir nombres
-            const avatar = c.querySelector('div[style*="border-radius:50%"]');
-            if(avatar) avatar.remove();
-            
-            const spanName = c.querySelector('span[style*="font-weight:600"]');
-            if(spanName) {
-                c.innerHTML = `<strong>${spanName.innerText.trim()}</strong>`;
-            }
-        });
-
+        // Quitar columnas de contacto o botones
         cloneTable.querySelectorAll('tr').forEach(r => {
-            r.style.height = 'auto';
             const lastTd = r.cells[r.cells.length - 1];
             if(lastTd && (lastTd.innerHTML.includes('fa-envelope') || lastTd.innerText.includes('Contacto'))) {
                 lastTd.remove();
             }
         });
 
-        // En el reporte impreso, las calificaciones menores a 6.0 (reprobatorias SEP como 5.4, 4.6, etc.) aparecen como 5
-        cloneTable.querySelectorAll('tbody tr').forEach(r => {
+        // Asegurar que la primera columna sea "#" numeración consecutiva
+        const theadTr = cloneTable.querySelector('thead tr');
+        let hasNumCol = false;
+        if (theadTr) {
+            const txtFirst = (theadTr.cells[0]?.innerText || '').trim().toLowerCase();
+            hasNumCol = txtFirst === '#' || txtFirst === 'no.' || txtFirst === 'no';
+            if (!hasNumCol) {
+                const thNum = document.createElement('th');
+                thNum.className = 'col-num';
+                thNum.style.width = '28px';
+                thNum.style.textAlign = 'center';
+                thNum.textContent = '#';
+                theadTr.insertBefore(thNum, theadTr.cells[0]);
+            }
+        }
+
+        const tbodyRows = Array.from(cloneTable.querySelectorAll('tbody tr')).filter(r => {
+            const txt = r.innerText || "";
+            return txt && !txt.includes("Seleccione") && !txt.includes("Cargando") && !txt.includes("Sin resultados");
+        });
+
+        tbodyRows.forEach((r, idx) => {
+            r.style.height = rowHeightPx;
+
+            if (!hasNumCol) {
+                const tdNum = document.createElement('td');
+                tdNum.className = 'col-num';
+                tdNum.style.width = '28px';
+                tdNum.style.textAlign = 'center';
+                tdNum.style.fontWeight = 'bold';
+                tdNum.textContent = String(idx + 1);
+                r.insertBefore(tdNum, r.cells[0]);
+            }
+
+            // Formatear celda de alumno (ahora en celda 1)
+            const alumnoCell = r.cells[1];
+            if (alumnoCell) {
+                alumnoCell.classList.add('col-alumno');
+                const spanName = alumnoCell.querySelector("span[style*='font-weight:600']") || alumnoCell.querySelector("strong");
+                const cleanName = spanName ? spanName.innerText.trim() : alumnoCell.innerText.trim();
+                alumnoCell.innerHTML = `<div style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-weight:600; text-align:left;">${cleanName}</div>`;
+                alumnoCell.style.textAlign = 'left';
+            }
+
+            // Aplicar tamaño, padding y regla SEP para reprobatorias (< 6.0 se imprime como 5)
             Array.from(r.cells).forEach((td, cellIdx) => {
-                if (cellIdx === 0) return; // Omitir columna de Alumno
-                
+                td.style.padding = `${padV} ${padH}`;
+                td.style.height = rowHeightPx;
+                td.style.fontSize = fontSize;
+
+                if (cellIdx === 0 || cellIdx === 1) return; // Omitir # y Alumno
+
                 const txt = (td.innerText || '').trim();
                 if (txt.includes('%')) return; // Omitir Asistencias
                 if (td.querySelector('.badge') || /aprobado|reprobado|sin n\/e/i.test(txt)) return; // Omitir Estatus
                 if (!txt || txt === '-') return;
 
-                // En modo desglose de actividades individuales, ajustar únicamente la columna de Promedio final
                 if (selT && selT.value === 'evaluaciones') {
                     const isPromCol = td.id && td.id.startsWith('prom_alumno_');
                     if (!isPromCol) return;
@@ -18822,23 +18904,37 @@ window.imprimirLista = async (esVacia = false) => {
                 }
             });
         });
+
+        if (theadTr) {
+            theadTr.style.height = rowHeightPx;
+            Array.from(theadTr.cells).forEach(th => {
+                th.style.padding = `${padV} ${padH}`;
+                th.style.height = rowHeightPx;
+                th.style.fontSize = fontSize;
+                const btnMasivo = th.querySelector('button');
+                if (btnMasivo) btnMasivo.remove();
+                th.style.whiteSpace = 'nowrap';
+                th.style.overflow = 'hidden';
+                th.style.textOverflow = 'ellipsis';
+            });
+        }
+
         tableContentHtml = cloneTable.outerHTML;
 
-        // Preparar HTML de estadísticas ultra-compacto
-        if(statsCont) {
+        if (statsCont && hasStats) {
             const statsData = Array.from(statsCont.querySelectorAll('.card')).map(c => {
                 return { label: c.children[0]?.innerText || '', value: c.children[1]?.innerText || '' };
             }).filter(s => s.label && s.value);
 
             if(statsData.length > 0) {
                 statsHtml = `
-                    <div style="display:flex; justify-content:space-around; align-items:center; background:#f8fafc; border:1px solid #cbd5e1; border-radius:4px; padding:1px 4px; margin-bottom:2px; font-size:${fontSize};">
+                    <div style="display:flex; justify-content:space-around; align-items:center; background:#f8fafc; border:1px solid #cbd5e1; border-radius:4px; padding:2px 8px; margin-bottom:4px; font-size:${Math.max(8.0, calcFont * 0.95).toFixed(1)}px; flex-shrink:0;">
                         ${statsData.map(s => `
                             <div>
                                 <span style="color:#64748b; font-weight:600;">${s.label}:</span>
-                                <strong style="color:#1e40af; font-size:1.05em; margin-left:2px;">${s.value}</strong>
+                                <strong style="color:#1e40af; font-size:1.05em; margin-left:3px;">${s.value}</strong>
                             </div>
-                        `).join('<span style="color:#cbd5e1;">|</span>')}
+                        `).join('<span style="color:#cbd5e1; margin:0 4px;">|</span>')}
                     </div>
                 `;
             }
@@ -18846,160 +18942,226 @@ window.imprimirLista = async (esVacia = false) => {
     }
 
     const printWindow = window.open('', '_blank');
+    if (!printWindow) {
+        return alert("Por favor permite las ventanas emergentes en tu navegador para imprimir la lista.");
+    }
+
     printWindow.document.write(`
         <!DOCTYPE html>
-        <html>
+        <html lang="es">
             <head>
+                <meta charset="UTF-8">
                 <title>${esVacia ? 'Plantilla de Seguimiento' : 'Acta de Resultados'} - ${grupoName}</title>
                 <style>
                     * { box-sizing: border-box; margin: 0; padding: 0; }
-                    body { 
-                        font-family: 'Segoe UI', Arial, sans-serif; 
-                        color: #1e293b; 
-                        background: #fff;
-                        padding: 4px;
-                        font-size: ${fontSize};
-                        line-height: 1.0;
+                    
+                    @page { 
+                        size: portrait; 
+                        margin: 5mm 6mm; 
                     }
+
+                    html, body { 
+                        width: 100%;
+                        height: 100%;
+                        background: #fff;
+                        color: #0f172a;
+                        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+                        -webkit-print-color-adjust: exact !important;
+                        print-color-adjust: exact !important;
+                        margin: 0 !important;
+                        padding: 0 !important;
+                        overflow: hidden !important;
+                    }
+
+                    .print-main-wrapper {
+                        box-sizing: border-box;
+                        width: 100%;
+                        height: 100%;
+                        max-height: 100%;
+                        display: flex;
+                        flex-direction: column;
+                        justify-content: space-between;
+                        overflow: hidden;
+                        page-break-after: avoid;
+                        page-break-inside: avoid;
+                        break-inside: avoid;
+                    }
+
                     .header-container {
                         display: flex;
                         justify-content: space-between;
                         align-items: center;
-                        border-bottom: 1.5px solid #1e40af;
-                        padding-bottom: 2px;
-                        margin-bottom: 2px;
+                        border-bottom: 2px solid #1e40af;
+                        padding-bottom: 3px;
+                        margin-bottom: 4px;
+                        flex-shrink: 0;
+                        min-height: ${headerHeight}px;
                     }
+
                     .header-left {
                         display: flex;
                         align-items: center;
-                        gap: 5px;
+                        gap: 8px;
                     }
+
                     .logo-img { 
-                        max-height: ${logoHeight}; 
+                        max-height: ${logoHeight}px; 
+                        max-width: 90px;
                         object-fit: contain; 
                     }
+
                     .title-box h1 { 
-                        font-size: 11px; 
+                        font-size: 14px; 
                         color: #1e40af; 
                         text-transform: uppercase; 
                         margin: 0;
                         font-weight: 800;
-                        line-height: 1.0;
+                        line-height: 1.1;
                     }
+
                     .title-box p { 
-                        font-size: 7.5px; 
+                        font-size: 9.5px; 
                         color: #475569; 
                         font-weight: 600;
+                        margin-top: 1px;
                     }
+
                     .meta-grid {
                         display: grid;
                         grid-template-columns: auto auto;
-                        gap: 1px 8px;
-                        font-size: 7px;
+                        gap: 1px 12px;
+                        font-size: 9px;
                         text-align: right;
                         color: #334155;
+                        line-height: 1.2;
                     }
                     .meta-grid strong { color: #0f172a; }
-                    
-                    .data-table, table { 
-                        width: 100%; 
-                        border-collapse: collapse; 
-                        margin-bottom: 2px; 
+
+                    .table-container {
+                        flex: 1 1 auto;
+                        display: flex;
+                        flex-direction: column;
+                        min-height: 0;
+                        width: 100%;
+                        overflow: hidden;
                     }
-                    .data-table th, .data-table td, table th, table td { 
+
+                    .data-table { 
+                        width: 100%; 
+                        height: 100%;
+                        border-collapse: collapse; 
+                        table-layout: fixed;
+                        page-break-inside: avoid;
+                        break-inside: avoid;
+                    }
+
+                    .data-table th, .data-table td { 
                         border: 1px solid #475569 !important; 
-                        padding: ${paddingCell} !important; 
+                        padding: ${padV} ${padH} !important; 
                         text-align: center; 
                         font-size: ${fontSize} !important; 
-                        line-height: 1.0 !important;
-                        height: auto !important;
+                        line-height: 1.1 !important;
+                        height: ${rowHeightPx} !important;
+                        vertical-align: middle;
+                        box-sizing: border-box;
+                        page-break-inside: avoid;
+                        break-inside: avoid;
                     }
-                    .data-table th, table th { 
-                        background-color: #f1f5f9; 
+
+                    .data-table th { 
+                        background-color: #f1f5f9 !important; 
                         font-weight: 700; 
                         color: #0f172a;
                     }
-                    
+
+                    .col-num {
+                        width: 28px !important;
+                        text-align: center !important;
+                        font-weight: bold;
+                    }
+
+                    .col-alumno {
+                        text-align: left !important;
+                        padding-left: 6px !important;
+                        font-weight: 600;
+                    }
+
+                    .badge {
+                        display: inline-block;
+                        padding: 1px 4px;
+                        font-size: 0.9em;
+                        font-weight: bold;
+                        border-radius: 3px;
+                    }
+
                     .signatures { 
                         display: flex !important; 
                         justify-content: space-around !important; 
                         align-items: flex-end !important;
-                        margin-top: ${sigMargin} !important; 
-                        padding-top: 1px !important;
+                        margin-top: 4px !important; 
+                        padding-top: 2px !important;
                         flex-shrink: 0 !important;
                         page-break-inside: avoid !important; 
                         break-inside: avoid !important;
+                        min-height: ${sigHeight}px;
                     }
+
                     .signature-box { 
                         text-align: center !important; 
-                        width: 150px !important; 
+                        width: 260px !important; 
                     }
+
                     .signature-line { 
                         border-top: 1.5px solid #000000 !important; 
-                        margin-bottom: 1px !important; 
-                        height: ${sigLineHeight} !important; 
+                        margin-bottom: 2px !important; 
+                        height: ${sigLineHeight}px !important; 
                     }
 
                     @media print {
-                        @page { 
-                            size: ${esHorizontal ? 'landscape' : 'portrait'}; 
-                            margin: 0.2cm; 
-                        }
                         body {
                             margin: 0 !important;
                             padding: 0 !important;
                         }
-                        .print-main-wrapper {
-                            min-height: 93vh !important;
-                            display: flex !important;
-                            flex-direction: column !important;
-                            justify-content: space-between !important;
-                        }
-                        table {
-                            page-break-inside: avoid !important;
-                            break-inside: avoid !important;
-                        }
-                        tr {
-                            page-break-inside: avoid !important;
-                            break-inside: avoid !important;
+                        .no-print {
+                            display: none !important;
                         }
                     }
                 </style>
             </head>
             <body>
                 <div class="print-main-wrapper">
-                    <div>
-                        <div class="header-container">
-                            <div class="header-left">
-                                ${schoolLogo ? `<img src="${schoolLogo}" class="logo-img" alt="Logo">` : ''}
-                                <div class="title-box">
-                                    <h1>${schoolName.toUpperCase()}</h1>
-                                    <p>${esVacia ? 'PLANTILLA AUXILIAR DE REGISTRO Y CONTROL' : 'ACTA OFICIAL DE RESULTADOS ESCOLARES'}</p>
-                                </div>
-                            </div>
-                            <div class="meta-grid">
-                                <div><strong>Docente:</strong> ${state.userName || 'Docente Titular'}</div>
-                                <div><strong>Periodo:</strong> ${currentTrim}</div>
-                                <div><strong>Grupo/Materia:</strong> ${grupoName}</div>
-                                <div><strong>Fecha:</strong> ${fecha}</div>
+                    <div class="header-container">
+                        <div class="header-left">
+                            ${schoolLogo ? `<img src="${schoolLogo}" class="logo-img" alt="Logo">` : ''}
+                            <div class="title-box">
+                                <h1>${schoolName.toUpperCase()}</h1>
+                                <p>${esVacia ? 'PLANTILLA AUXILIAR DE REGISTRO Y CONTROL' : 'ACTA OFICIAL DE RESULTADOS ESCOLARES'}</p>
                             </div>
                         </div>
+                        <div class="meta-grid">
+                            <div><strong>Docente:</strong> ${teacherName}</div>
+                            <div><strong>Periodo:</strong> ${currentTrim}</div>
+                            <div><strong>Grupo/Materia:</strong> ${grupoName}</div>
+                            <div><strong>Fecha:</strong> ${fecha}</div>
+                        </div>
+                    </div>
 
-                        ${statsHtml}
+                    ${statsHtml}
 
+                    <div class="table-container">
                         ${tableContentHtml}
                     </div>
 
                     <div class="signatures">
                         <div class="signature-box">
                             <div class="signature-line"></div>
-                            <div style="font-size: 8px; font-weight: bold; color: #000; line-height: 1;">${state.userName || 'Docente Titular'}</div>
-                            <div style="font-size: 6.5px; color: #333; text-transform: uppercase; font-weight: 600;">Docente / Profesor(a) Titular</div>
+                            <div style="font-size:${Math.max(7.5, calcFont * 0.9).toFixed(1)}px; font-weight: bold; color: #000; line-height: 1.1;">${teacherName}</div>
+                            <div style="font-size:${Math.max(6.5, calcFont * 0.75).toFixed(1)}px; color: #333; text-transform: uppercase; font-weight: 600;">Docente / Profesor(a) Titular</div>
                         </div>
                         <div class="signature-box">
                             <div class="signature-line"></div>
-                            <div style="font-size: 8px; font-weight: bold; color: #000; line-height: 1;">${directorName}</div>
-                            <div style="font-size: 6.5px; color: #333; text-transform: uppercase; font-weight: 600;">Director(a) / Responsable Directo</div>
+                            <div style="font-size:${Math.max(7.5, calcFont * 0.9).toFixed(1)}px; font-weight: bold; color: #000; line-height: 1.1;">${directorName}</div>
+                            <div style="font-size:${Math.max(6.5, calcFont * 0.75).toFixed(1)}px; color: #333; text-transform: uppercase; font-weight: 600;">Director(a) / Responsable Directo</div>
                         </div>
                     </div>
                 </div>
@@ -19007,7 +19169,7 @@ window.imprimirLista = async (esVacia = false) => {
                 <script>
                     window.onload = function() {
                         window.print();
-                        setTimeout(function() { window.close(); }, 500);
+                        setTimeout(function() { window.close(); }, 600);
                     };
                 </script>
             </body>
@@ -29297,12 +29459,18 @@ function renderAdminListas() {
                 </select>
             </div>
             <div style="display:flex; flex-direction:column; gap:8px;">
-                <div style="display:flex; gap:8px; justify-content:flex-end;">
-                    <button class="btn btn-outline" style="border-color:#6366f1; color:#6366f1; padding: 6px 12px; font-size:0.85rem;" onclick="window.descargarAdminListaPDF(true)">
-                        <i class="fa-solid fa-file-pdf"></i> PDF (Asistencia)
+                <div style="display:flex; gap:8px; justify-content:flex-end; flex-wrap:wrap;">
+                    <button class="btn btn-primary" style="padding: 6px 12px; font-size:0.85rem;" onclick="window.imprimirAdminLista(false)" title="Imprimir lista oficial de grupo con formato de página completa">
+                        <i class="fa-solid fa-print"></i> Imprimir Simple
                     </button>
-                    <button class="btn btn-primary" style="padding: 6px 12px; font-size:0.85rem;" onclick="window.descargarAdminListaPDF(false)">
-                        <i class="fa-solid fa-file-pdf"></i> PDF (Simple)
+                    <button class="btn btn-outline" style="border-color:#6366f1; color:#6366f1; padding: 6px 12px; font-size:0.85rem;" onclick="window.imprimirAdminLista(true)" title="Imprimir plantilla de asistencia en blanco (20 casillas)">
+                        <i class="fa-solid fa-print"></i> Imprimir Asistencia
+                    </button>
+                    <button class="btn btn-outline" style="border-color:var(--text-muted); color:var(--text-main); padding: 6px 12px; font-size:0.85rem;" onclick="window.descargarAdminListaPDF(false)">
+                        <i class="fa-solid fa-file-pdf"></i> PDF Simple
+                    </button>
+                    <button class="btn btn-outline" style="border-color:#6366f1; color:#6366f1; padding: 6px 12px; font-size:0.85rem;" onclick="window.descargarAdminListaPDF(true)">
+                        <i class="fa-solid fa-file-pdf"></i> PDF Asistencia
                     </button>
                 </div>
                 <div style="display:flex; gap:8px; justify-content:flex-end;">
@@ -29396,6 +29564,207 @@ window.cargarAdminListaPreview = async () => {
     }
 };
 
+window.imprimirAdminLista = async (esVacia = false) => {
+    const sel = document.getElementById('adminListaGrupoSelect');
+    const tbody = document.getElementById('adminListaPreviewTbody');
+    
+    if(!sel || !sel.value || !tbody || tbody.innerText.includes("Seleccione") || tbody.innerText.includes("Cargando") || tbody.innerText.includes("No tiene")) {
+        return alert("Seleccione un grupo con alumnos primero.");
+    }
+
+    const grupoName = sel.options[sel.selectedIndex].text;
+    const fecha = new Date().toLocaleDateString('es-MX', { day: '2-digit', month: '2-digit', year: 'numeric' });
+
+    let schoolName = CONFIG.schoolName || 'Escuela';
+    let schoolLogo = null;
+    let directorName = 'DIRECCIÓN ESCOLAR / RESPONSABLE DIRECTO';
+    try {
+        if(state.plantelId) {
+            const { data: pt } = await supabaseClient.from('planteles').select('nombre, logo_url, cct').eq('id', state.plantelId).maybeSingle();
+            if(pt) {
+                if(pt.nombre) schoolName = pt.nombre + (pt.cct ? '<br><span style="font-size:0.75em; color:#555; font-weight:normal;">C.C.T. ' + pt.cct + '</span>' : '');
+                if(pt.logo_url) schoolLogo = window.getCleanLogoUrl(pt.logo_url);
+            }
+            const { data: dirData } = await supabaseClient.from('perfiles').select('nombre').eq('plantel_id', state.plantelId).eq('rol', 'directivo').maybeSingle();
+            if(dirData && dirData.nombre) directorName = dirData.nombre;
+        }
+    } catch(e) {}
+
+    const rowsList = Array.from(tbody.querySelectorAll("tr")).filter(r => {
+        const txt = r.innerText || "";
+        return txt && !txt.includes("Seleccione") && !txt.includes("Cargando") && !txt.includes("No tiene");
+    });
+    const totalAlumnos = rowsList.length || 1;
+    const n = Math.max(totalAlumnos, 1);
+    const esHorizontal = false; // Formato vertical (portrait)
+
+    const pageHeight = 980;
+    let headerHeight, sigHeight, logoHeight, sigLineHeight;
+    if (n <= 25) { headerHeight = 70; sigHeight = 62; logoHeight = 58; sigLineHeight = 28; }
+    else if (n <= 38) { headerHeight = 60; sigHeight = 50; logoHeight = 46; sigLineHeight = 20; }
+    else { headerHeight = 52; sigHeight = 40; logoHeight = 38; sigLineHeight = 15; }
+
+    const gaps = 8;
+    const fixedHeight = headerHeight + sigHeight + gaps;
+    const availableTableHeight = pageHeight - fixedHeight;
+
+    const totalRows = n + 1;
+    const rawRowHeight = Math.floor(availableTableHeight / totalRows);
+    const maxRow = 38;
+    const minRow = 14;
+    const rowHeight = Math.max(minRow, Math.min(maxRow, rawRowHeight));
+
+    let baseFontSize = Math.max(9.0, Math.min(13.5, rowHeight * 0.58));
+    const calcFont = baseFontSize;
+    const fontSize = calcFont.toFixed(1) + 'px';
+    const padV = Math.max(0.5, Math.min(6, (rowHeight - calcFont) / 2)).toFixed(1) + 'px';
+    const padH = esVacia ? '2px' : '6px';
+    const rowHeightPx = rowHeight.toFixed(1) + 'px';
+
+    let tableContentHtml = '';
+
+    if (esVacia) {
+        const numCols = 20;
+        let headers = `<th class="col-num" style="width:28px; text-align:center;">#</th><th class="col-alumno" style="text-align:left; min-width:180px; width:28%;">Nombre del Alumno</th>`;
+        for (let i = 1; i <= numCols; i++) {
+            headers += `<th class="col-day" style="text-align:center; font-size:${Math.max(8.0, calcFont * 0.9).toFixed(1)}px; font-weight:600;">${i}</th>`;
+        }
+        let rowsHtml = '';
+        rowsList.forEach((tr, index) => {
+            const nombre = tr.cells[1]?.innerText || '';
+            rowsHtml += `<tr style="height:${rowHeightPx};">`;
+            rowsHtml += `<td class="col-num" style="text-align:center; font-weight:bold;">${index + 1}</td>`;
+            rowsHtml += `<td class="col-alumno" style="text-align:left; font-weight:600;"><div style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${nombre}</div></td>`;
+            for (let i = 0; i < numCols; i++) rowsHtml += `<td class="col-day"></td>`;
+            rowsHtml += `</tr>`;
+        });
+        tableContentHtml = `
+            <table class="data-table">
+                <thead><tr style="height:${rowHeightPx};">${headers}</tr></thead>
+                <tbody>${rowsHtml}</tbody>
+            </table>
+        `;
+    } else {
+        let rowsHtml = '';
+        rowsList.forEach((tr, index) => {
+            const nombre = tr.cells[1]?.innerText || '';
+            const matricula = tr.cells[2]?.innerText || '-';
+            rowsHtml += `
+            <tr style="height:${rowHeightPx};">
+                <td class="col-num" style="text-align:center; font-weight:bold;">${index + 1}</td>
+                <td class="col-alumno" style="text-align:left; font-weight:600;"><div style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${nombre}</div></td>
+                <td style="text-align:center;">${matricula}</td>
+            </tr>`;
+        });
+        tableContentHtml = `
+            <table class="data-table">
+                <thead>
+                    <tr style="height:${rowHeightPx};">
+                        <th class="col-num" style="width:40px; text-align:center;">#</th>
+                        <th class="col-alumno" style="text-align:left;">Nombre del Alumno</th>
+                        <th style="width:160px; text-align:center;">Matrícula / Folio</th>
+                    </tr>
+                </thead>
+                <tbody>${rowsHtml}</tbody>
+            </table>
+        `;
+    }
+
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) {
+        return alert("Por favor permite las ventanas emergentes en tu navegador para imprimir la lista.");
+    }
+
+    printWindow.document.write(`
+        <!DOCTYPE html>
+        <html lang="es">
+            <head>
+                <meta charset="UTF-8">
+                <title>${esVacia ? 'Plantilla Oficial de Asistencia' : 'Lista Oficial de Alumnos'} - ${grupoName}</title>
+                <style>
+                    * { box-sizing: border-box; margin: 0; padding: 0; }
+                    @page { 
+                        size: portrait; 
+                        margin: 5mm 6mm; 
+                    }
+                    html, body { 
+                        width: 100%; height: 100%; background: #fff; color: #0f172a;
+                        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+                        -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important;
+                        margin: 0 !important; padding: 0 !important; overflow: hidden !important;
+                    }
+                    .print-main-wrapper {
+                        box-sizing: border-box; width: 100%; height: 100%; max-height: 100%;
+                        display: flex; flex-direction: column; justify-content: space-between;
+                        overflow: hidden; page-break-after: avoid; page-break-inside: avoid; break-inside: avoid;
+                    }
+                    .header-container {
+                        display: flex; justify-content: space-between; align-items: center;
+                        border-bottom: 2px solid #1e40af; padding-bottom: 3px; margin-bottom: 4px;
+                        flex-shrink: 0; min-height: ${headerHeight}px;
+                    }
+                    .header-left { display: flex; align-items: center; gap: 8px; }
+                    .logo-img { max-height: ${logoHeight}px; max-width: 90px; object-fit: contain; }
+                    .title-box h1 { font-size: 14px; color: #1e40af; text-transform: uppercase; margin: 0; font-weight: 800; line-height: 1.1; }
+                    .title-box p { font-size: 9.5px; color: #475569; font-weight: 600; margin-top: 1px; }
+                    .meta-grid { display: grid; grid-template-columns: auto auto; gap: 1px 12px; font-size: 9px; text-align: right; color: #334155; line-height: 1.2; }
+                    .meta-grid strong { color: #0f172a; }
+                    .table-container { flex: 1 1 auto; display: flex; flex-direction: column; min-height: 0; width: 100%; overflow: hidden; }
+                    .data-table { width: 100%; height: 100%; border-collapse: collapse; table-layout: fixed; page-break-inside: avoid; break-inside: avoid; }
+                    .data-table th, .data-table td { border: 1px solid #475569 !important; padding: ${padV} ${padH} !important; text-align: center; font-size: ${fontSize} !important; line-height: 1.1 !important; height: ${rowHeightPx} !important; vertical-align: middle; box-sizing: border-box; page-break-inside: avoid; break-inside: avoid; }
+                    .data-table th { background-color: #f1f5f9 !important; font-weight: 700; color: #0f172a; }
+                    .col-num { width: 28px !important; text-align: center !important; font-weight: bold; }
+                    .col-alumno { text-align: left !important; padding-left: 6px !important; font-weight: 600; }
+                    .signatures { display: flex !important; justify-content: space-around !important; align-items: flex-end !important; margin-top: 4px !important; padding-top: 2px !important; flex-shrink: 0 !important; min-height: ${sigHeight}px; }
+                    .signature-box { text-align: center !important; width: 260px !important; }
+                    .signature-line { border-top: 1.5px solid #000000 !important; margin-bottom: 2px !important; height: ${sigLineHeight}px !important; }
+                </style>
+            </head>
+            <body>
+                <div class="print-main-wrapper">
+                    <div class="header-container">
+                        <div class="header-left">
+                            ${schoolLogo ? `<img src="${schoolLogo}" class="logo-img" alt="Logo">` : ''}
+                            <div class="title-box">
+                                <h1>${schoolName.toUpperCase()}</h1>
+                                <p>${esVacia ? 'PLANTILLA AUXILIAR DE CONTROL Y ASISTENCIA' : 'LISTA OFICIAL DE ALUMNOS REGISTRADOS'}</p>
+                            </div>
+                        </div>
+                        <div class="meta-grid">
+                            <div><strong>Control Escolar:</strong> Dirección Académica</div>
+                            <div><strong>Ciclo Escolar:</strong> Activo</div>
+                            <div><strong>Grupo:</strong> ${grupoName}</div>
+                            <div><strong>Fecha:</strong> ${fecha}</div>
+                        </div>
+                    </div>
+                    <div class="table-container">
+                        ${tableContentHtml}
+                    </div>
+                    <div class="signatures">
+                        <div class="signature-box">
+                            <div class="signature-line"></div>
+                            <div style="font-size:${Math.max(7.5, calcFont * 0.9).toFixed(1)}px; font-weight: bold; color: #000; line-height: 1.1;">Control Escolar / Administración</div>
+                            <div style="font-size:${Math.max(6.5, calcFont * 0.75).toFixed(1)}px; color: #333; text-transform: uppercase; font-weight: 600;">Sello y Cotejo Oficial</div>
+                        </div>
+                        <div class="signature-box">
+                            <div class="signature-line"></div>
+                            <div style="font-size:${Math.max(7.5, calcFont * 0.9).toFixed(1)}px; font-weight: bold; color: #000; line-height: 1.1;">${directorName}</div>
+                            <div style="font-size:${Math.max(6.5, calcFont * 0.75).toFixed(1)}px; color: #333; text-transform: uppercase; font-weight: 600;">Director(a) / Responsable Directo</div>
+                        </div>
+                    </div>
+                </div>
+                <script>
+                    window.onload = function() {
+                        window.print();
+                        setTimeout(function() { window.close(); }, 600);
+                    };
+                </script>
+            </body>
+        </html>
+    `);
+    printWindow.document.close();
+};
+
 window.descargarAdminListaPDF = async (esVacia = false) => {
     const sel = document.getElementById('adminListaGrupoSelect');
     const tbody = document.getElementById('adminListaPreviewTbody');
@@ -29409,7 +29778,7 @@ window.descargarAdminListaPDF = async (esVacia = false) => {
 
     let schoolName = CONFIG.schoolName || 'Escuela';
     let schoolLogo = null;
-    let directorName = 'DIRECCIÓN ESCOLAR';
+    let directorName = 'DIRECCIÓN ESCOLAR / RESPONSABLE DIRECTO';
     try {
         if(state.plantelId) {
             const { data: pt } = await supabaseClient.from('planteles').select('nombre, logo_url, cct').eq('id', state.plantelId).maybeSingle();
@@ -29422,35 +29791,41 @@ window.descargarAdminListaPDF = async (esVacia = false) => {
         }
     } catch(e) {}
 
-    const rowsList = Array.from(tbody.querySelectorAll("tr"));
-    const n = Math.max(rowsList.length, 1);
-    
-    // Dynamic styles
-    const totalCols = esVacia ? 32 : 3;
-    const esHorizontal = esVacia;
-    
-    // Dynamic fit logic to ensure ALL students fit perfectly on exactly ONE page
-    let availableHeight = esHorizontal ? 620 : 880; // Safe margins for A4
-    let rowHeight = Math.floor(availableHeight / Math.max(n + 2, 1)); // +2 to account for header and borders
-    
-    // Maximize font size up to 14px, but constrain if there are many rows
-    let calcFont = Math.max(7.5, Math.min(14, rowHeight * 0.65)); 
-    if (esVacia) calcFont = Math.min(calcFont, 10.5);
-    
-    let fontSize = calcFont.toFixed(1) + 'px';
-    let padV = Math.max(1, Math.floor((rowHeight - calcFont - 1.5) / 2)).toFixed(0) + 'px';
-    
+    const rowsList = Array.from(tbody.querySelectorAll("tr")).filter(r => {
+        const txt = r.innerText || "";
+        return txt && !txt.includes("Seleccione") && !txt.includes("Cargando") && !txt.includes("No tiene");
+    });
+    const totalAlumnos = rowsList.length || 1;
+    const n = Math.max(totalAlumnos, 1);
+    const esHorizontal = false; // Formato vertical (portrait)
+
+    const pageHeight = 980;
+    const fixedHeight = 150;
+    const availableTableHeight = pageHeight - fixedHeight;
+
+    const totalRows = n + 1;
+    const rawRowHeight = Math.floor(availableTableHeight / totalRows);
+    const maxRow = 38;
+    const minRow = 14;
+    const rowHeight = Math.max(minRow, Math.min(maxRow, rawRowHeight));
+
+    let baseFontSize = Math.max(9.0, Math.min(13.5, rowHeight * 0.58));
+    const calcFont = baseFontSize;
+    const fontSize = calcFont.toFixed(1) + 'px';
+    const padV = Math.max(0.5, Math.min(6, (rowHeight - calcFont) / 2)).toFixed(1) + 'px';
+    const rowHeightPx = rowHeight.toFixed(1) + 'px';
+
     let tableContentHtml = '';
-    
+
     if (esVacia) {
-        const numCols = 30;
-        let headers = `<th style="width:20px;">No.</th><th style="text-align:left; min-width: 130px;">Nombre del Alumno</th>`;
-        for(let i=1; i<=numCols; i++) headers += `<th style="width:12px; font-weight:normal; font-size:0.8em; color:#666;">${i}</th>`;
-        tableContentHtml += `<thead><tr>${headers}</tr></thead><tbody>`;
+        const numCols = 20;
+        let headers = `<th style="width:28px; text-align:center; padding:${padV} 2px;">#</th><th style="text-align:left; min-width:180px; width:28%; padding:${padV} 4px;">Nombre del Alumno</th>`;
+        for(let i=1; i<=numCols; i++) headers += `<th style="text-align:center; font-size:${Math.max(8.0, calcFont * 0.9).toFixed(1)}px; font-weight:600; padding:${padV} 1px;">${i}</th>`;
+        tableContentHtml += `<thead><tr style="height:${rowHeightPx};">${headers}</tr></thead><tbody>`;
         
         rowsList.forEach((tr, index) => {
-            const nombre = tr.cells[1].innerText;
-            let row = `<tr><td style="text-align:center;">${index + 1}</td><td><div style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:140px;">${nombre}</div></td>`;
+            const nombre = tr.cells[1]?.innerText || '';
+            let row = `<tr style="height:${rowHeightPx};"><td style="text-align:center; font-weight:bold; padding:${padV} 2px;">${index + 1}</td><td style="padding:${padV} 4px;"><div style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${nombre}</div></td>`;
             for(let i=0; i<numCols; i++) row += `<td></td>`;
             row += `</tr>`;
             tableContentHtml += row;
@@ -29459,58 +29834,67 @@ window.descargarAdminListaPDF = async (esVacia = false) => {
     } else {
         tableContentHtml += `
           <thead>
-             <tr>
-                <th style="width:40px; text-align:center;">No.</th>
-                <th style="text-align:left;">Nombre del Alumno</th>
-                <th style="text-align:center;">Matrícula / Folio</th>
+             <tr style="height:${rowHeightPx};">
+                <th style="width:40px; text-align:center; padding:${padV} 4px;">#</th>
+                <th style="text-align:left; padding:${padV} 6px;">Nombre del Alumno</th>
+                <th style="width:160px; text-align:center; padding:${padV} 4px;">Matrícula / Folio</th>
              </tr>
           </thead>
           <tbody>
         `;
         rowsList.forEach((tr, index) => {
-            const nombre = tr.cells[1].innerText;
-            const matricula = tr.cells[2].innerText;
+            const nombre = tr.cells[1]?.innerText || '';
+            const matricula = tr.cells[2]?.innerText || '-';
             tableContentHtml += `
-            <tr>
-                <td style="text-align:center;">${index + 1}</td>
-                <td>${nombre}</td>
-                <td style="text-align:center;">${matricula}</td>
+            <tr style="height:${rowHeightPx};">
+                <td style="text-align:center; font-weight:bold; padding:${padV} 4px;">${index + 1}</td>
+                <td style="padding:${padV} 6px;"><div style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${nombre}</div></td>
+                <td style="text-align:center; padding:${padV} 4px;">${matricula}</td>
             </tr>`;
         });
         tableContentHtml += '</tbody>';
     }
 
     const htmlToPrint = `
-    <div style="font-family: Arial, sans-serif; background:white; color:black; width:100%; height: 1010px; max-height: 1010px; overflow:hidden; display:flex; flex-direction:column; box-sizing:border-box; padding:20px;">
-        <table style="width:100%; border-collapse:collapse; margin-bottom:5px;">
-            <tr>
-                <td style="width:15%; text-align:center; vertical-align:middle;">
-                    ${schoolLogo ? `<img src="${schoolLogo}" style="height:90px; max-width:140px; object-fit:contain;" crossorigin="anonymous">` : ''}
-                </td>
-                <td style="text-align:center; vertical-align:middle;">
-                    <h2 style="margin:0; font-size:1.1em; color:#111;">${schoolName}</h2>
-                    <p style="margin:2px 0 0 0; font-size:0.8em; color:#333;">LISTA OFICIAL DE GRUPO</p>
-                    <p style="margin:2px 0 0 0; font-size:0.8em; font-weight:bold;">${grupoName}</p>
-                </td>
-                <td style="width:15%; text-align:center; vertical-align:middle; font-size:0.7em; color:#555;">
-                    <div style="border:1px solid #ddd; padding:4px; border-radius:4px; background:#fafafa;">
-                       <strong>Fecha:</strong><br>${fecha}
-                    </div>
-                </td>
-            </tr>
-        </table>
-        
-        <div style="border-top:1px solid #111; border-bottom:1px solid #111; height:3px; margin-bottom:10px;"></div>
-        
-        <style>
-            #adminPdfTable th, #adminPdfTable td {
-                padding: ${padV} 6px !important;
-                line-height: 1.1;
-            }
-        </style>
-        <table id="adminPdfTable" style="width:100%; flex-grow:1; border-collapse:collapse; font-size:${fontSize};" border="1" bordercolor="#ccc">
-            ${tableContentHtml}
-        </table>
+    <div style="font-family: -apple-system, BlinkMacSystemFont, Arial, sans-serif; background:white; color:#0f172a; width:100%; height:${pageHeight}px; max-height:${pageHeight}px; overflow:hidden; display:flex; flex-direction:column; justify-content:space-between; box-sizing:border-box; padding:15px;">
+        <div>
+            <table style="width:100%; border-collapse:collapse; margin-bottom:5px;">
+                <tr>
+                    <td style="width:15%; text-align:center; vertical-align:middle;">
+                        ${schoolLogo ? `<img src="${schoolLogo}" style="height:60px; max-width:100px; object-fit:contain;" crossorigin="anonymous">` : ''}
+                    </td>
+                    <td style="text-align:center; vertical-align:middle;">
+                        <h2 style="margin:0; font-size:1.15em; color:#1e40af; text-transform:uppercase;">${schoolName}</h2>
+                        <p style="margin:2px 0 0 0; font-size:0.85em; font-weight:bold; color:#333;">${esVacia ? 'PLANTILLA AUXILIAR DE CONTROL Y ASISTENCIA' : 'LISTA OFICIAL DE ALUMNOS REGISTRADOS'}</p>
+                        <p style="margin:2px 0 0 0; font-size:0.8em; color:#555;">Grupo: <strong>${grupoName}</strong></p>
+                    </td>
+                    <td style="width:18%; text-align:center; vertical-align:middle; font-size:0.75em; color:#555;">
+                        <div style="border:1px solid #cbd5e1; padding:4px; border-radius:4px; background:#f8fafc;">
+                           <strong>Fecha:</strong><br>${fecha}
+                        </div>
+                    </td>
+                </tr>
+            </table>
+            
+            <div style="border-top:2px solid #1e40af; margin-bottom:6px;"></div>
+            
+            <table id="adminPdfTable" style="width:100%; border-collapse:collapse; font-size:${fontSize}; table-layout:fixed;" border="1" bordercolor="#475569">
+                ${tableContentHtml}
+            </table>
+        </div>
+
+        <div style="display:flex; justify-content:space-around; align-items:flex-end; margin-top:8px; padding-top:4px;">
+            <div style="text-align:center; width:220px;">
+                <div style="border-top:1.5px solid #000; height:18px; margin-bottom:2px;"></div>
+                <div style="font-size:8px; font-weight:bold; color:#000;">Control Escolar / Administración</div>
+                <div style="font-size:7px; color:#555; text-transform:uppercase;">Sello y Cotejo Oficial</div>
+            </div>
+            <div style="text-align:center; width:220px;">
+                <div style="border-top:1.5px solid #000; height:18px; margin-bottom:2px;"></div>
+                <div style="font-size:8px; font-weight:bold; color:#000;">${directorName}</div>
+                <div style="font-size:7px; color:#555; text-transform:uppercase;">Director(a) / Responsable Directo</div>
+            </div>
+        </div>
     </div>`;
 
     const opt = {
@@ -29518,7 +29902,7 @@ window.descargarAdminListaPDF = async (esVacia = false) => {
         filename:     `Lista_${grupoName}.pdf`,
         image:        { type: 'jpeg', quality: 0.98 },
         html2canvas:  { scale: 2, useCORS: true, logging: false },
-        jsPDF:        { unit: 'mm', format: 'a4', orientation: esHorizontal ? 'landscape' : 'portrait' }
+        jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' }
     };
 
     try {
@@ -29528,6 +29912,7 @@ window.descargarAdminListaPDF = async (esVacia = false) => {
         alert("Error al generar PDF: " + err.message);
     }
 };
+
 window.descargarAdminListaDOC = async (esVacia = false) => {
     const sel = document.getElementById('adminListaGrupoSelect');
     const tbody = document.getElementById('adminListaPreviewTbody');
@@ -29653,7 +30038,7 @@ window.descargarAdminListaDOC = async (esVacia = false) => {
                     size: { 
                         width: esVacia ? 16838 : 11906,
                         height: esVacia ? 11906 : 16838,
-                        orientation: esVacia ? "landscape" : "portrait"
+                        orientation: "portrait"
                     }
                 }
             },
