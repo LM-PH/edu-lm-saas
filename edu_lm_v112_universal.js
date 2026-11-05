@@ -1989,16 +1989,47 @@ window.loadMaestrosAdminList = async () => {
     
     sel.innerHTML = '<option value="">Cargando maestros...</option>';
     try {
-        const { data, error } = await supabaseClient
+        const pId = window._obtenerPlantelIdActivo ? await window._obtenerPlantelIdActivo() : state.plantelId;
+        let q = supabaseClient
             .from('perfiles_permitidos')
-            .select('email, nombre')
-            .eq('plantel_id', state.plantelId)
-            .eq('rol', 'maestro')
+            .select('email, nombre, rol')
+            .in('rol', ['maestro', 'docente', 'profesor'])
             .order('nombre');
             
-        if(error) throw error;
+        if (pId) {
+            q = q.or('plantel_id.eq.' + pId + ',plantel_id.is.null');
+        }
+        const { data, error } = await q;
+        if(error) console.warn("Aviso al consultar perfiles_permitidos:", error);
+
+        // Map existing
+        const maestrosMap = new Map();
+        (data || []).forEach(m => {
+            if (m.email) {
+                maestrosMap.set(m.email.toLowerCase().trim(), m.nombre || m.email);
+            }
+        });
+
+        // Also check asignaciones_maestros to make sure all assigned teachers are included
+        try {
+            let qAsig = supabaseClient.from('asignaciones_maestros').select('docente_email');
+            if (pId) qAsig = qAsig.or('plantel_id.eq.' + pId + ',plantel_id.is.null');
+            const { data: asigs } = await qAsig;
+            (asigs || []).forEach(a => {
+                if (a.docente_email) {
+                    const em = a.docente_email.toLowerCase().trim();
+                    if (!maestrosMap.has(em)) {
+                        maestrosMap.set(em, a.docente_email);
+                    }
+                }
+            });
+        } catch(eAsig) {}
+
+        const maestrosList = Array.from(maestrosMap.entries()).map(([email, nombre]) => ({ email, nombre }));
+        maestrosList.sort((a, b) => (a.nombre || a.email).localeCompare(b.nombre || b.email));
         
-        sel.innerHTML = '<option value="">-- Seleccione un Maestro --</option>' + (data || []).map(m => `<option value="${m.email}">${m.nombre || m.email}</option>`).join('');
+        sel.innerHTML = '<option value="">-- Seleccione un Maestro --</option>' + 
+            maestrosList.map(m => `<option value="${m.email}">${m.nombre || m.email}</option>`).join('');
         
     } catch(err) {
         console.error(err);
@@ -2008,8 +2039,13 @@ window.loadMaestrosAdminList = async () => {
 
 window.cargarMateriasMaestroAdmin = async (docenteEmail) => {
     const selG = document.getElementById('listaMaestroGrupo');
+    const tbody = document.getElementById('listaMaestroAlumnos');
+    const statsCont = document.getElementById('statsListaMaestro');
     if(!selG) return;
     
+    if (tbody) tbody.innerHTML = '<tr><td colspan="100%" style="text-align:center; padding: 20px; color:var(--text-muted)">Seleccione una materia/grupo...</td></tr>';
+    if (statsCont) statsCont.innerHTML = '';
+
     if(!docenteEmail) {
         selG.innerHTML = '<option value="">Seleccione un maestro primero...</option>';
         return;
@@ -2017,11 +2053,17 @@ window.cargarMateriasMaestroAdmin = async (docenteEmail) => {
     
     selG.innerHTML = '<option value="">Cargando materias...</option>';
     try {
-        const { data: asignaciones, error } = await supabaseClient
+        const pId = window._obtenerPlantelIdActivo ? await window._obtenerPlantelIdActivo() : state.plantelId;
+        let q = supabaseClient
             .from('asignaciones_maestros')
             .select('id, grupo_id, materia, target_grado, grupos(nombre)')
-            .eq('docente_email', docenteEmail)
+            .ilike('docente_email', docenteEmail.trim())
             .order('id');
+            
+        if (pId) {
+            q = q.or('plantel_id.eq.' + pId + ',plantel_id.is.null');
+        }
+        const { data: asignaciones, error } = await q;
             
         if(error) throw error;
         
@@ -2030,13 +2072,22 @@ window.cargarMateriasMaestroAdmin = async (docenteEmail) => {
             return;
         }
 
+        const seen = new Set();
         let optsHTML = '<option value="">-- Seleccione Materia/Grupo --</option>';
         
         asignaciones.forEach(a => {
+            let val = '';
+            let label = '';
             if(a.grupo_id) {
-                optsHTML += `<option value="${a.grupo_id}|${a.materia}">${a.materia} - ${a.grupos ? a.grupos.nombre : 'Grupo ' + a.grupo_id}</option>`;
+                val = `${a.grupo_id}|${a.materia}`;
+                label = `${a.materia} - ${a.grupos ? a.grupos.nombre : 'Grupo ' + a.grupo_id}`;
             } else if(a.target_grado) {
-                optsHTML += `<option value="grado:${a.target_grado}|${a.materia}">${a.materia} - Grado ${a.target_grado}</option>`;
+                val = `grado:${a.target_grado}|${a.materia}`;
+                label = `${a.materia} - Grado ${a.target_grado}`;
+            }
+            if (val && !seen.has(val)) {
+                seen.add(val);
+                optsHTML += `<option value="${val}">${label}</option>`;
             }
         });
         
@@ -17077,6 +17128,7 @@ window.cargarAlumnosLista = async () => {
 
         const alumnos = rawAlumnos;
         window._currentListaAlumnos = alumnos;
+        const alumnoIds = alumnos.map(a => a.id);
 
         let htmlRows = '';
         let stats = { sumPromedios: 0, aprobados: 0, reprobados: 0, total: alumnos.length };
@@ -17262,114 +17314,165 @@ window.cargarAlumnosLista = async () => {
             if (window._procesarColaEvaluacionesPendientes) window._procesarColaEvaluacionesPendientes();
             
         } else if (tipo === 'resumen_admin') {
-            const currentTrimNum = state.selectedMaestroTrimestre === 'final' ? 4 : parseInt(state.selectedMaestroTrimestre || 1);
             const currentTrim = state.selectedMaestroTrimestre || 1;
             const isModoFinal = currentTrim === 'final';
+            const currentTrimNum = isModoFinal ? 4 : parseInt(currentTrim);
             const materiaLimpia = (materia || '').trim();
 
             const resResolved = await window._resolverActividadesYEvaluacionesGrupo({
                 gid, targetGrado, materia: materiaLimpia, isTec, currentTrim, isModoFinal, pId, alumnos
             });
 
-            const acts = resResolved.acts;
-            let evals = resResolved.evals;
+            const acts = resResolved.acts || [];
+            let evals = resResolved.evals || [];
             const hasActs = resResolved.hasActs;
 
-            // Fetch Oficial Historial
+            // Fetch Oficial Historial (calificaciones asentadas y enviadas a administración)
             let histQuery = supabaseClient.from('calificaciones')
                 .select('alumno_id, calificacion, trimestre, materia_nombre')
                 .in('alumno_id', alumnoIds);
-            if (pId) histQuery = histQuery.eq('plantel_id', pId);
+            if (pId) histQuery = histQuery.or('plantel_id.eq.' + pId + ',plantel_id.is.null');
             if(isModoFinal) {
                 histQuery = histQuery.in('trimestre', [1, 2, 3, 4]);
             } else {
-                histQuery = histQuery.eq('trimestre', currentTrim);
+                histQuery = histQuery.eq('trimestre', currentTrimNum);
             }
             const { data: rawHistorial } = await histQuery;
-            const historial = (rawHistorial || []).filter(h => 
-                !materiaLimpia || (h.materia_nombre || '').trim().toLowerCase() === materiaLimpia.toLowerCase()
-            );
+            const historial = (rawHistorial || []).filter(h => {
+                if (!materiaLimpia) return true;
+                const nomH = (h.materia_nombre || '').trim();
+                if (window._matchMateriaEducativa) {
+                    return window._matchMateriaEducativa(nomH, materiaLimpia);
+                }
+                return nomH.toLowerCase() === materiaLimpia.toLowerCase();
+            });
 
             // Fetch Asistencias
             let qAsist = supabaseClient.from('asistencias')
-                .select('alumno_id, estado, creado_en')
-                .in('alumno_id', alumnoIds)
-                .eq('materia', materiaLimpia);
-            if (pId) qAsist = qAsist.eq('plantel_id', pId);
-            if (!isModoFinal) qAsist = qAsist.eq('trimestre', currentTrim);
-            const { data: asistenciasRegistradas } = await qAsist;
+                .select('alumno_id, estado, creado_en, materia')
+                .in('alumno_id', alumnoIds);
+            if (pId) qAsist = qAsist.or('plantel_id.eq.' + pId + ',plantel_id.is.null');
+            if (!isModoFinal) qAsist = qAsist.eq('trimestre', currentTrimNum);
+            const { data: rawAsist } = await qAsist;
+            const asistenciasRegistradas = (rawAsist || []).filter(a => {
+                if (!materiaLimpia) return true;
+                if (window._matchMateriaEducativa) {
+                    return window._matchMateriaEducativa(a.materia, materiaLimpia);
+                }
+                return (a.materia || '').trim().toLowerCase() === materiaLimpia.toLowerCase();
+            });
             
             let qSes = supabaseClient.from('asistencia_sesiones')
                 .select('fecha')
-                .eq('grupo_id', String(rawVal))
-                .eq('materia', materiaLimpia);
-            if (pId) qSes = qSes.eq('plantel_id', pId);
-            if (!isModoFinal) qSes = qSes.eq('trimestre', currentTrim);
+                .or(`grupo_id.eq.${String(rawVal)},grupo_id.eq.${gid || ''}`);
+            if (pId) qSes = qSes.or('plantel_id.eq.' + pId + ',plantel_id.is.null');
+            if (!isModoFinal) qSes = qSes.eq('trimestre', currentTrimNum);
             const { data: sesiones } = await qSes;
             
             let diasPaseLista = new Set();
-            if(sesiones) sesiones.forEach(s => diasPaseLista.add(s.fecha));
+            if(sesiones) sesiones.forEach(s => { if(s.fecha) diasPaseLista.add(s.fecha); });
             if(asistenciasRegistradas) {
                 asistenciasRegistradas.forEach(a => {
-                    let d = new Date(a.creado_en);
-                    diasPaseLista.add(d.getFullYear() + "-" + String(d.getMonth()+1).padStart(2,'0') + "-" + String(d.getDate()).padStart(2,'0'));
+                    if (a.creado_en) {
+                        let d = new Date(a.creado_en);
+                        diasPaseLista.add(d.getFullYear() + "-" + String(d.getMonth()+1).padStart(2,'0') + "-" + String(d.getDate()).padStart(2,'0'));
+                    }
                 });
             }
             let totalDias = diasPaseLista.size;
 
-            cabecera.innerHTML = `<tr>
-                <th class="col-sticky-alumno" style="padding:12px; text-align:left; min-width:180px;">Alumno (Apellido)</th>
-                <th style="padding:12px; text-align:center;">Asistencias (%)</th>
-                <th style="padding:12px; text-align:center;">Calif. ${isModoFinal ? 'Final' : 'T' + currentTrim}</th>
-                <th style="padding:12px; text-align:center;">Estatus</th>
-             </tr>`;
+            if (isModoFinal) {
+                cabecera.innerHTML = `<tr>
+                    <th class="col-sticky-alumno" style="padding:12px; text-align:left; min-width:180px;">Alumno (Apellido)</th>
+                    <th style="padding:12px; text-align:center;">1° Trim</th>
+                    <th style="padding:12px; text-align:center;">2° Trim</th>
+                    <th style="padding:12px; text-align:center;">3° Trim</th>
+                    <th style="padding:12px; text-align:center; background:var(--page-bg);">Calif. Final</th>
+                    <th style="padding:12px; text-align:center;">Asistencias (%)</th>
+                    <th style="padding:12px; text-align:center;">Estatus</th>
+                 </tr>`;
+            } else {
+                cabecera.innerHTML = `<tr>
+                    <th class="col-sticky-alumno" style="padding:12px; text-align:left; min-width:180px;">Alumno (Apellido)</th>
+                    <th style="padding:12px; text-align:center;">Asistencias (%)</th>
+                    <th style="padding:12px; text-align:center;">Calif. T${currentTrim}</th>
+                    <th style="padding:12px; text-align:center;">Estatus</th>
+                 </tr>`;
+            }
 
             const redondearCalificacionSep = (val) => {
                 if (val === null || val === undefined || isNaN(val)) return 0;
                 const num = parseFloat(val);
                 if (num <= 0) return 0;
-                if (num < 6.0) return parseFloat(num.toFixed(1)); // Calificación real reprobatoria sin forzar a 5 (ej. 3.3)
+                if (num < 6.0) return parseFloat(num.toFixed(1)); // Calificación real reprobatoria sin forzar a 5
                 return Math.round(num); 
             };
 
+            const fmtGrade = (val) => {
+                if (val === null || val === undefined || isNaN(val)) return '-';
+                return Number(val).toFixed(1);
+            };
+
+            let statsResumen = { evaluados: 0, sumPromedios: 0, aprobados: 0, reprobados: 0 };
+
             for(let al of alumnos) {
-                const initials = al.nombre.substring(0,2).toUpperCase();
-                let promFinalNum = 0;
+                const initials = String(al?.nombre || 'AL').substring(0,2).toUpperCase();
                 let currentSettledVal = null;
+                let hasGrade = false;
+                let v1 = null, v2 = null, v3 = null;
 
                 if (isModoFinal) {
-                    let t1 = historial?.find(h => h.alumno_id === al.id && h.trimestre === 1)?.calificacion || 0;
-                    let t2 = historial?.find(h => h.alumno_id === al.id && h.trimestre === 2)?.calificacion || 0;
-                    let t3 = historial?.find(h => h.alumno_id === al.id && h.trimestre === 3)?.calificacion || 0;
+                    let t1 = historial?.find(h => h.alumno_id === al.id && Number(h.trimestre) === 1)?.calificacion;
+                    let t2 = historial?.find(h => h.alumno_id === al.id && Number(h.trimestre) === 2)?.calificacion;
+                    let t3 = historial?.find(h => h.alumno_id === al.id && Number(h.trimestre) === 3)?.calificacion;
                     
+                    v1 = (t1 !== undefined && t1 !== null && !isNaN(t1)) ? parseFloat(t1) : null;
+                    v2 = (t2 !== undefined && t2 !== null && !isNaN(t2)) ? parseFloat(t2) : null;
+                    v3 = (t3 !== undefined && t3 !== null && !isNaN(t3)) ? parseFloat(t3) : null;
+
                     // If no settled grades exist, fallback to calculated
-                    if (t1 === 0 && t2 === 0 && t3 === 0) {
-                        let promsTrim = { 1: 0, 2: 0, 3: 0 };
+                    if (v1 === null && v2 === null && v3 === null) {
+                        let promsTrim = { 1: null, 2: null, 3: null };
                         [1, 2, 3].forEach(t => {
-                            const actsT = acts.filter(a => a.trimestre === t);
+                            const actsT = acts.filter(a => Number(a.trimestre) === t);
                             if(actsT.length === 0) return;
                             const resT = window._calcularCalificacionAlumno({ alumnoId: al.id, acts: actsT, evals });
-                            promsTrim[t] = resT.promFinalNum;
+                            if (resT.countNotas > 0) {
+                                promsTrim[t] = resT.promFinalNum;
+                            }
                         });
-                        t1 = redondearCalificacionSep(promsTrim[1]);
-                        t2 = redondearCalificacionSep(promsTrim[2]);
-                        t3 = redondearCalificacionSep(promsTrim[3]);
+                        v1 = promsTrim[1] !== null ? redondearCalificacionSep(promsTrim[1]) : null;
+                        v2 = promsTrim[2] !== null ? redondearCalificacionSep(promsTrim[2]) : null;
+                        v3 = promsTrim[3] !== null ? redondearCalificacionSep(promsTrim[3]) : null;
                     }
-                    
-                    promFinalNum = (t1 + t2 + t3) / 3;
-                    currentSettledVal = historial?.find(h => h.alumno_id === al.id && h.trimestre === 4)?.calificacion;
+
+                    const t4 = historial?.find(h => h.alumno_id === al.id && Number(h.trimestre) === 4)?.calificacion;
+                    if (t4 !== undefined && t4 !== null && !isNaN(t4)) {
+                        currentSettledVal = parseFloat(t4);
+                        hasGrade = true;
+                    } else {
+                        const validVals = [v1, v2, v3].filter(v => v !== null && !isNaN(v));
+                        if (validVals.length > 0) {
+                            currentSettledVal = validVals.reduce((a, b) => a + b, 0) / validVals.length;
+                            hasGrade = true;
+                        }
+                    }
                 } else {
-                    if(hasActs) {
+                    const rowSettled = historial?.find(h => h.alumno_id === al.id && Number(h.trimestre) === currentTrimNum);
+                    if (rowSettled !== undefined && rowSettled !== null && rowSettled.calificacion !== null && rowSettled.calificacion !== undefined && !isNaN(rowSettled.calificacion)) {
+                        currentSettledVal = parseFloat(rowSettled.calificacion);
+                        hasGrade = true;
+                    } else if (hasActs) {
                         const resCalc = window._calcularCalificacionAlumno({ alumnoId: al.id, acts, evals });
-                        promFinalNum = resCalc.promFinalNum;
+                        if (resCalc.countNotas > 0) {
+                            currentSettledVal = redondearCalificacionSep(resCalc.promFinalNum);
+                            hasGrade = true;
+                        }
                     }
-                    currentSettledVal = historial?.find(h => h.alumno_id === al.id)?.calificacion;
                 }
 
-                const promRounded = redondearCalificacionSep(promFinalNum);
-                const displayVal = currentSettledVal !== undefined && currentSettledVal !== null ? currentSettledVal : promRounded;
-
                 let asistenciasConteo = 0;
+                let pctAsist = 100;
                 if (asistenciasRegistradas && totalDias > 0) {
                     const asisAl = asistenciasRegistradas.filter(a => a.alumno_id === al.id);
                     asisAl.forEach(a => {
@@ -17377,34 +17480,100 @@ window.cargarAlumnosLista = async () => {
                             asistenciasConteo++;
                         }
                     });
+                    pctAsist = Math.round((asistenciasConteo / totalDias) * 100);
                 }
-                let pctAsist = totalDias > 0 ? Math.round((asistenciasConteo / totalDias) * 100) : 100;
-                
-                let badge = displayVal < 6 ? '<span class="badge" style="background:#fee2e2; color:#991b1b">Reprobado</span>' : '<span class="badge" style="background:#d1fae5; color:#065f46">Aprobado</span>';
-                
-                htmlRows += `
-                <tr style="border-bottom:1px solid var(--border)">
-                    <td class="col-sticky-alumno" style="padding:10px 12px;">
-                       <div style="display:flex; gap:10px; align-items:center; min-width:0;">
-                          <div style="width:32px; height:32px; border-radius:50%; background:var(--primary); color:white; display:flex; justify-content:center; align-items:center; font-size:11px; font-weight:bold; flex-shrink:0;">${initials}</div>
-                          <div style="min-width:0; overflow:hidden;">
-                             <span style="font-weight:600; display:block; font-size:0.85rem; line-height:1.2; word-break:break-word;">${al.nombre}</span>
-                             <span style="font-size:0.72rem; color:var(--text-muted); display:block; margin-top:2px;">${al.matricula}</span>
-                          </div>
-                       </div>
-                    </td>
-                    <td style="text-align:center; padding:12px;"><b>${pctAsist}%</b></td>
-                    <td style="text-align:center; padding:12px; font-weight:bold; color:var(--primary); font-size:1.1rem;">${Number(displayVal).toFixed(1)}</td>
-                    <td style="text-align:center; padding:12px;">${badge}</td>
-                </tr>`;
+
+                let badge = !hasGrade 
+                    ? '<span class="badge" style="background:#f3f4f6; color:#4b5563">Sin N/E</span>' 
+                    : (currentSettledVal < 6.0 
+                        ? '<span class="badge" style="background:#fee2e2; color:#991b1b">Reprobado</span>' 
+                        : '<span class="badge" style="background:#d1fae5; color:#065f46">Aprobado</span>');
+
+                if (hasGrade) {
+                    statsResumen.evaluados++;
+                    statsResumen.sumPromedios += currentSettledVal;
+                    if (currentSettledVal >= 6.0) statsResumen.aprobados++;
+                    else statsResumen.reprobados++;
+                }
+
+                if (isModoFinal) {
+                    htmlRows += `
+                    <tr style="border-bottom:1px solid var(--border)">
+                        <td class="col-sticky-alumno" style="padding:10px 12px;">
+                           <div style="display:flex; gap:10px; align-items:center; min-width:0;">
+                              <div style="width:32px; height:32px; border-radius:50%; background:var(--primary); color:white; display:flex; justify-content:center; align-items:center; font-size:11px; font-weight:bold; flex-shrink:0;">${initials}</div>
+                              <div style="min-width:0; overflow:hidden;">
+                                 <span style="font-weight:600; display:block; font-size:0.85rem; line-height:1.2; word-break:break-word;">${al.nombre}</span>
+                                 <span style="font-size:0.72rem; color:var(--text-muted); display:block; margin-top:2px;">${al.matricula}</span>
+                              </div>
+                           </div>
+                        </td>
+                        <td style="text-align:center; padding:12px; color:var(--text-muted);">${fmtGrade(v1)}</td>
+                        <td style="text-align:center; padding:12px; color:var(--text-muted);">${fmtGrade(v2)}</td>
+                        <td style="text-align:center; padding:12px; color:var(--text-muted);">${fmtGrade(v3)}</td>
+                        <td style="text-align:center; padding:12px; font-weight:bold; color:var(--primary); font-size:1.1rem; background:var(--page-bg);">${hasGrade ? Number(currentSettledVal).toFixed(1) : '-'}</td>
+                        <td style="text-align:center; padding:12px;"><b>${pctAsist}%</b></td>
+                        <td style="text-align:center; padding:12px;">${badge}</td>
+                    </tr>`;
+                } else {
+                    htmlRows += `
+                    <tr style="border-bottom:1px solid var(--border)">
+                        <td class="col-sticky-alumno" style="padding:10px 12px;">
+                           <div style="display:flex; gap:10px; align-items:center; min-width:0;">
+                              <div style="width:32px; height:32px; border-radius:50%; background:var(--primary); color:white; display:flex; justify-content:center; align-items:center; font-size:11px; font-weight:bold; flex-shrink:0;">${initials}</div>
+                              <div style="min-width:0; overflow:hidden;">
+                                 <span style="font-weight:600; display:block; font-size:0.85rem; line-height:1.2; word-break:break-word;">${al.nombre}</span>
+                                 <span style="font-size:0.72rem; color:var(--text-muted); display:block; margin-top:2px;">${al.matricula}</span>
+                              </div>
+                           </div>
+                        </td>
+                        <td style="text-align:center; padding:12px;"><b>${pctAsist}%</b></td>
+                        <td style="text-align:center; padding:12px; font-weight:bold; color:var(--primary); font-size:1.1rem;">${hasGrade ? Number(currentSettledVal).toFixed(1) : '-'}</td>
+                        <td style="text-align:center; padding:12px;">${badge}</td>
+                    </tr>`;
+                }
             }
-            
-            if (statsCont) statsCont.innerHTML = '';
+
+            if (statsCont) {
+                const evCount = statsResumen.evaluados;
+                const promG = evCount > 0 ? (statsResumen.sumPromedios / evCount).toFixed(2) : '-';
+                const pApr = evCount > 0 ? (statsResumen.aprobados / evCount * 100).toFixed(1) : 0;
+                const pRep = evCount > 0 ? (statsResumen.reprobados / evCount * 100).toFixed(1) : 0;
+
+                statsCont.innerHTML = `
+                    <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap:16px;">
+                        <div class="card" style="padding:16px; border-left:4px solid var(--primary); display:flex; flex-direction:column; gap:4px;">
+                            <span style="font-size:0.75rem; color:var(--text-muted); text-transform:uppercase; font-weight:bold;">Promedio Grupal</span>
+                            <span style="font-size:1.5rem; font-weight:bold; color:var(--primary);">${promG}</span>
+                        </div>
+                        <div class="card" style="padding:16px; border-left:4px solid var(--success); display:flex; flex-direction:column; gap:4px;">
+                            <span style="font-size:0.75rem; color:var(--text-muted); text-transform:uppercase; font-weight:bold;">Aprobados</span>
+                            <div style="display:flex; align-items:baseline; gap:8px;">
+                                <span style="font-size:1.5rem; font-weight:bold; color:var(--success);">${statsResumen.aprobados}</span>
+                                <span style="font-size:0.9rem; color:var(--text-muted);">(${pApr}%)</span>
+                            </div>
+                        </div>
+                        <div class="card" style="padding:16px; border-left:4px solid var(--danger); display:flex; flex-direction:column; gap:4px;">
+                            <span style="font-size:0.75rem; color:var(--text-muted); text-transform:uppercase; font-weight:bold;">Reprobados</span>
+                            <div style="display:flex; align-items:baseline; gap:8px;">
+                                <span style="font-size:1.5rem; font-weight:bold; color:var(--danger);">${statsResumen.reprobados}</span>
+                                <span style="font-size:0.9rem; color:var(--text-muted);">(${pRep}%)</span>
+                            </div>
+                        </div>
+                        <div class="card" style="padding:16px; border-left:4px solid #3b82f6; display:flex; flex-direction:column; gap:4px;">
+                            <span style="font-size:0.75rem; color:var(--text-muted); text-transform:uppercase; font-weight:bold;">Evaluados / Total</span>
+                            <div style="display:flex; align-items:baseline; gap:8px;">
+                                <span style="font-size:1.5rem; font-weight:bold; color:#3b82f6;">${evCount}</span>
+                                <span style="font-size:0.9rem; color:var(--text-muted);">de ${alumnos.length}</span>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }
         } else {
             // MODO ASISTENCIAS - Simplificado para este contexto pero manteniendo el orden
             statsCont.innerHTML = '';
             // (El código de asistencias sigue aquí, pero me enfocaré en las evaluaciones que es lo que el usuario está viendo usualmente)
-            const alumnoIds = alumnos.map(a => a.id);
             const materiaLimpia = (materia || '').trim();
             const currentTrim = state.selectedMaestroTrimestre === 'final' ? null : (state.selectedMaestroTrimestre || 1);
             
@@ -17975,6 +18144,7 @@ window.cargarBoletasGrupo = async () => {
 
         const alumnos = rawAlumnos;
         window._currentListaAlumnos = alumnos;
+        const alumnoIds = alumnos.map(a => a.id);
 
         // 3. Fetch Calificaciones ya asentadas (Si es modo final, traer los 3 trimestres)
         // Usamos ilike con el nombre de la materia directamente para mayor compatibilidad
@@ -18442,8 +18612,8 @@ window.exportarRejillaBlancoCSV = () => {
 };
 
 window.exportarListasCSV = () => {
-    const tabla = document.querySelector(".risk-table");
     const tbody = document.getElementById('listaMaestroAlumnos');
+    const tabla = tbody ? tbody.closest('table') : document.querySelector(".risk-table");
     const statsCont = document.getElementById('statsListaMaestro');
 
     if(!tabla || !tbody || tbody.innerText.includes("Seleccione") || tbody.innerText.includes("Error") || tbody.innerText.includes("Cargando")) {
@@ -18471,9 +18641,9 @@ window.exportarListasCSV = () => {
         csv.push('"RESUMEN ACADÉMICO DEL GRUPO"');
         const cards = statsCont.querySelectorAll('.card');
         cards.forEach(card => {
-            const title = card.children[0].innerText;
-            const value = card.children[1].innerText;
-            csv.push(`"${title}","${value}"`);
+            const title = card.children[0]?.innerText || '';
+            const value = card.children[1]?.innerText || '';
+            if (title && value) csv.push(`"${title}","${value}"`);
         });
     }
 
@@ -18492,8 +18662,8 @@ window.exportarListasCSV = () => {
 };
 
 window.imprimirLista = async (esVacia = false) => {
-    const tabla = document.querySelector(".risk-table");
     const tbody = document.getElementById('listaMaestroAlumnos');
+    const tabla = tbody ? tbody.closest('table') : document.querySelector(".risk-table");
     const statsCont = document.getElementById('statsListaMaestro');
     
     if(!tabla || !tbody || tbody.innerText.includes("Seleccione") || tbody.innerText.includes("Error") || tbody.innerText.includes("Cargando")) {
@@ -22375,12 +22545,15 @@ window.agregarBitacora = async () => {
 
 window.loadAdminCalificacionesFiltros = async () => {
     try {
-        const { data: grupos, error } = await supabaseClient.from('grupos').select('id, nombre, turno').eq('plantel_id', state.plantelId).order('nombre');
+        const pId = window._obtenerPlantelIdActivo ? await window._obtenerPlantelIdActivo() : state.plantelId;
+        let q = supabaseClient.from('grupos').select('id, nombre, turno').order('nombre');
+        if (pId) q = q.or('plantel_id.eq.' + pId + ',plantel_id.is.null');
+        const { data: grupos, error } = await q;
         if(error) return console.error(error);
         const sel = document.getElementById('adminGrupoSel');
         if(!sel) return;
         sel.innerHTML = '<option value="">-- Selecciona un grupo --</option>' + 
-           grupos.map(g => `<option value="${g.id}">${g.nombre} - ${g.turno}</option>`).join('');
+           (grupos || []).map(g => `<option value="${g.id}">${g.nombre} - ${g.turno}</option>`).join('');
     } catch(err) { console.error(err); }
 };
 
