@@ -2072,6 +2072,25 @@ window.cargarMateriasMaestroAdmin = async (docenteEmail) => {
             return;
         }
 
+        // Mapeo dinámico de talleres por grado y grupo para mostrar nombres amigables al administrativo (ej. 1°C)
+        let talleresPorGrado = {};
+        try {
+            let qAlTaller = supabaseClient.from('alumnos').select('grado, taller, grupos(nombre)');
+            if (pId) qAlTaller = qAlTaller.eq('plantel_id', pId);
+            const { data: alusTaller } = await qAlTaller;
+            (alusTaller || []).forEach(al => {
+                if (al.taller && al.grado && al.grupos?.nombre) {
+                    const gNorm = String(al.grado).replace(/[°\s]/g, '');
+                    const matNorm = (al.taller || '').trim().toLowerCase();
+                    const key = `${gNorm}|${matNorm}`;
+                    if (!talleresPorGrado[key]) talleresPorGrado[key] = new Set();
+                    talleresPorGrado[key].add(al.grupos.nombre);
+                }
+            });
+        } catch(eT) {
+            console.error('Error al resolver talleres por grado:', eT);
+        }
+
         const seen = new Set();
         let optsHTML = '<option value="">-- Seleccione Materia/Grupo --</option>';
         
@@ -2082,8 +2101,20 @@ window.cargarMateriasMaestroAdmin = async (docenteEmail) => {
                 val = `${a.grupo_id}|${a.materia}`;
                 label = `${a.materia} - ${a.grupos ? a.grupos.nombre : 'Grupo ' + a.grupo_id}`;
             } else if(a.target_grado) {
+                const gNorm = String(a.target_grado).replace(/[°\s]/g, '');
+                const matNorm = (a.materia || '').trim().toLowerCase();
+                let matchedGrupos = [];
+                Object.keys(talleresPorGrado).forEach(k => {
+                    const [gKey, tKey] = k.split('|');
+                    if (gKey === gNorm && (window._coincidenTalleres ? window._coincidenTalleres(tKey, matNorm) : (tKey.includes(matNorm) || matNorm.includes(tKey)))) {
+                        talleresPorGrado[k].forEach(gName => matchedGrupos.push(gName));
+                    }
+                });
+                const gruposUniq = Array.from(new Set(matchedGrupos)).sort();
+                const gruposSubtext = gruposUniq.length > 0 ? ` (${gruposUniq.join(', ')})` : '';
+
                 val = `grado:${a.target_grado}|${a.materia}`;
-                label = `${a.materia} - Grado ${a.target_grado}`;
+                label = `${a.materia.trim()} - Grado ${a.target_grado}${gruposSubtext}`;
             }
             if (val && !seen.has(val)) {
                 seen.add(val);
@@ -22562,10 +22593,11 @@ window.cargarSabanaGrupo = async () => {
     const trimRaw = document.getElementById('adminTrimestreSel').value;
     const gid = document.getElementById('adminGrupoSel').value;
     
-    // Extract number from "Trimestre 1"
-    const trim = parseInt(trimRaw.replace(/\D/g, ''));
+    // Identificar si es modo final anual o trimestre específico (ej. "Trimestre 1")
+    const isFinal = trimRaw === 'Calificación Final' || trimRaw === 'final';
+    const trim = isFinal ? 4 : parseInt(trimRaw.replace(/\D/g, ''));
     
-    if(!gid || isNaN(trim)) {
+    if(!gid || (!isFinal && isNaN(trim))) {
         if(hold) hold.innerHTML = '<div style="color:var(--text-muted); font-size:0.9rem;">Seleccione un grupo y trimestre...</div>';
         return;
     }
@@ -22573,8 +22605,8 @@ window.cargarSabanaGrupo = async () => {
     if(hold) hold.innerHTML = '<div style="color:var(--text-muted); font-size:0.9rem;"><i class="fa-solid fa-spinner fa-spin"></i> Consultando base de datos oficial...</div>';
     
     try {
-        // Obtenemos alumnos del grupo (v122: traemos taller para identificar tecnología)
-        const resAlums = await supabaseClient.from('alumnos').select('id, nombre, taller').eq('grupo_id', gid).order('nombre');
+        // Obtenemos alumnos del grupo (v122: traemos grado y taller para identificar materias y tecnología)
+        const resAlums = await supabaseClient.from('alumnos').select('id, nombre, grado, taller').eq('grupo_id', gid).order('nombre');
 
         if(!resAlums.data || resAlums.data.length === 0) {
             hold.innerHTML = '<div style="color:var(--warning); font-size:0.9rem;">No hay alumnos registrados en este grupo.</div>';
@@ -22584,7 +22616,6 @@ window.cargarSabanaGrupo = async () => {
         const studentIds = resAlums.data.map(a => a.id);
         
         // Obtenemos calificaciones para estos alumnos en este trimestre (o en los 3 si es final)
-        const isFinal = trimRaw === 'Calificación Final';
         const trimFilter = isFinal ? [1, 2, 3] : [trim];
         
         const { data: califs, error } = await supabaseClient.from('calificaciones')
@@ -22600,11 +22631,97 @@ window.cargarSabanaGrupo = async () => {
         
         let htmlRows = '';
         const matSet = new Set();
-        califs.forEach(c => {
+        (califs || []).forEach(c => {
             let mName = c.materia_nombre || (c.materia_id ? c.materia_id.nombre : 'Sin Nombre');
             if(/tecnología|tecnologia/gi.test(mName)) matSet.add('Tecnología');
             else matSet.add(mName);
         });
+
+        // 1. Siempre incluir Tecnología si algún alumno del grupo tiene taller registrado
+        const hasTaller = resAlums.data.some(al => al.taller);
+        if (hasTaller) matSet.add('Tecnología');
+
+        // 2. Incluir todas las materias asignadas al grupo en asignaciones_maestros
+        try {
+            const { data: asigsG } = await supabaseClient
+                .from('asignaciones_maestros')
+                .select('materia')
+                .eq('grupo_id', gid);
+            (asigsG || []).forEach(a => {
+                if (a.materia) {
+                    let mName = a.materia.trim();
+                    if(/tecnología|tecnologia/gi.test(mName)) matSet.add('Tecnología');
+                    else matSet.add(mName);
+                }
+            });
+        } catch(eAsig) {}
+
+        // 3. Fallback dinámico de evaluaciones continuas para materias sin actas selladas aún
+        let dynamicEvalsMap = {};
+        try {
+            const pIdActivo = window._obtenerPlantelIdActivo ? await window._obtenerPlantelIdActivo() : state.plantelId;
+            const targetGradoNorm = resAlums.data[0]?.grado ? String(resAlums.data[0].grado).replace(/[°\s]/g, '') : null;
+            
+            let qActs = supabaseClient
+                .from('actividades_maestro')
+                .select('id, materia, trimestre, target_grado, grupo_id, rubro_peso, rubro_name');
+            if (pIdActivo) qActs = qActs.eq('plantel_id', pIdActivo);
+            
+            let orCond = `grupo_id.eq.${gid}`;
+            if (targetGradoNorm) {
+                orCond += `,target_grado.eq.${targetGradoNorm},target_grado.eq.${targetGradoNorm}°`;
+            }
+            qActs = qActs.or(orCond).in('trimestre', trimFilter);
+            const { data: actsGrupo } = await qActs;
+            
+            if (actsGrupo && actsGrupo.length > 0) {
+                actsGrupo.forEach(a => {
+                    let m = (a.materia || '').trim();
+                    if (/tecnología|tecnologia/gi.test(m)) matSet.add('Tecnología');
+                    else if (m) matSet.add(m);
+                });
+
+                const actIds = actsGrupo.map(a => a.id);
+                let evalsData = [];
+                const batchSize = 100;
+                for (let i = 0; i < actIds.length; i += batchSize) {
+                    const chunk = actIds.slice(i, i + batchSize);
+                    let qEv = supabaseClient.from('evaluaciones_actividades')
+                        .select('actividad_id, alumno_id, calificacion')
+                        .in('actividad_id', chunk)
+                        .in('alumno_id', studentIds);
+                    const { data: evChunk } = await qEv;
+                    if (evChunk) evalsData = evalsData.concat(evChunk);
+                }
+
+                if (evalsData && evalsData.length > 0) {
+                    resAlums.data.forEach(al => {
+                        trimFilter.forEach(tNum => {
+                            const actsTrim = actsGrupo.filter(a => Number(a.trimestre) === Number(tNum));
+                            Array.from(matSet).forEach(mName => {
+                                let actsSubj = [];
+                                if (mName === 'Tecnología') {
+                                    if (al.taller) {
+                                        actsSubj = actsTrim.filter(a => window._coincidenTalleres ? window._coincidenTalleres(al.taller, a.materia) : /tecnolog/i.test(a.materia));
+                                    }
+                                } else {
+                                    actsSubj = actsTrim.filter(a => window._matchMateriaEducativa ? window._matchMateriaEducativa(a.materia, mName) : (a.materia || '').toLowerCase().includes(mName.toLowerCase()));
+                                }
+                                if (actsSubj.length > 0) {
+                                    const resCalc = window._calcularCalificacionAlumno({ alumnoId: al.id, acts: actsSubj, evals: evalsData });
+                                    if (resCalc.countNotas > 0) {
+                                        dynamicEvalsMap[`${al.id}_${mName}_${tNum}`] = resCalc.promFinalNum;
+                                    }
+                                }
+                            });
+                        });
+                    });
+                }
+            }
+        } catch(eDyn) {
+            console.error("Error al calcular evaluaciones continuas en sábana:", eDyn);
+        }
+
         const materiasObj = Array.from(matSet);
         const orderPriorityMap = [{k:'espanol',i:1},{k:'ingles',i:2},{k:'matematicas',i:3},{k:'ciencias',i:4},{k:'biologia',i:4},{k:'quimica',i:4},{k:'educacion fisica',i:8},{k:'edu. fisica',i:8},{k:'fisica',i:4},{k:'geografia',i:5},{k:'historia',i:6},{k:'formacion civica',i:7},{k:'f.c.',i:7},{k:'artes',i:9},{k:'tecnologia',i:10}];
         const normalize = s => s.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
@@ -22620,12 +22737,12 @@ window.cargarSabanaGrupo = async () => {
         });
 
         if (materiasObj.length === 0) {
-            hold.innerHTML = '<div style="color:var(--text-muted); font-size:0.9rem;">Los maestros de este grupo aún no han enviado sus actas de calificación.</div>';
+            hold.innerHTML = '<div style="color:var(--text-muted); font-size:0.9rem;">Este grupo aún no tiene materias asignadas ni actas enviadas.</div>';
             return;
         }
 
         resAlums.data.forEach(al => {
-            const misC = califs.filter(c => c.alumno_id === al.id);
+            const misC = (califs || []).filter(c => c.alumno_id === al.id);
             let cols = '';
             let generalSum = 0;
             let generalCount = 0;
@@ -22639,10 +22756,15 @@ window.cargarSabanaGrupo = async () => {
                 if (isFinal) {
                     const getGrade = (t) => {
                         const cx = subjectCalifs.find(x => x.trimestre === t);
-                        if (!cx) return null;
-                        const num = Number(cx.calificacion);
+                        let num = null;
+                        if (cx) {
+                            num = Number(cx.calificacion);
+                        } else if (dynamicEvalsMap[`${al.id}_${mName}_${t}`] !== undefined) {
+                            num = dynamicEvalsMap[`${al.id}_${mName}_${t}`];
+                        }
+                        if (num === null || isNaN(num) || num <= 0) return null;
                         // En concentrado y boleta oficial la calificación mínima es 5
-                        return (!isNaN(num) && num > 0 && num < 6.0) ? 5 : (num >= 6.0 ? Math.round(num) : num);
+                        return num < 6.0 ? 5 : Math.round(num);
                     };
                     const t1 = getGrade(1);
                     const t2 = getGrade(2);
@@ -22660,11 +22782,23 @@ window.cargarSabanaGrupo = async () => {
                              <td style="color:var(--text-main); font-weight:bold; background:var(--surface-hover);">${subjectAvg}</td>`;
                 } else {
                     const cx = subjectCalifs.find(x => x.trimestre === trim);
-                    if(cx) {
-                        const num = Number(cx.calificacion);
+                    let num = null;
+                    let realCalif = null;
+                    let isContinuous = false;
+                    if (cx) {
+                        num = Number(cx.calificacion);
+                        realCalif = cx.calificacion;
+                    } else if (dynamicEvalsMap[`${al.id}_${mName}_${trim}`] !== undefined) {
+                        num = dynamicEvalsMap[`${al.id}_${mName}_${trim}`];
+                        realCalif = num.toFixed(1);
+                        isContinuous = true;
+                    }
+
+                    if (num !== null && !isNaN(num) && num > 0) {
                         // En concentrado y boleta oficial la calificación mínima reprobatoria es 5
-                        const boletaCal = (!isNaN(num) && num > 0 && num < 6.0) ? 5 : (num >= 6.0 ? Math.round(num) : cx.calificacion);
-                        cols += `<td style="color:var(--text-main)" data-real-calif="${cx.calificacion}">${boletaCal}</td>`;
+                        const boletaCal = num < 6.0 ? 5 : Math.round(num);
+                        const continuousBadge = isContinuous ? ' <span title="Evaluación continua en progreso" style="color:var(--primary); font-size:0.7em;">●</span>' : '';
+                        cols += `<td style="color:var(--text-main)" data-real-calif="${realCalif}" title="Calificación real: ${realCalif}${isContinuous ? ' (Evaluación continua)' : ''}">${boletaCal}${continuousBadge}</td>`;
                         generalSum += Number(boletaCal);
                         generalCount++;
                     } else {
