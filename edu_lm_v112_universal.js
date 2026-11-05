@@ -8791,10 +8791,12 @@ window.imprimirRegistroAccesos = async (fechaInputId = 'fechaAsistenciaApoyo', g
 
         // Escalado dinámico si es un grupo (<= 50 alumnos) para que encaje exactamente en 1 sola hoja
         const nAcc = Math.max(data.length, 1);
-        const rowHeightAcc = Math.max(12, Math.min(26, Math.floor(620 / (nAcc + 1))));
-        const calcFontAcc = Math.max(8.0, Math.min(12.0, rowHeightAcc * 0.60));
+        const esHorizontal = (nAcc > 30);
+        const pageHeight = esHorizontal ? 730 : 960;
+        const rowHeightAcc = Math.max(esHorizontal ? 11.5 : 15, Math.min(26, Math.floor((pageHeight - 160) / (nAcc + 1))));
+        const calcFontAcc = Math.max(7.5, Math.min(12.0, rowHeightAcc * 0.58));
         const fontSizeTable = calcFontAcc.toFixed(1) + 'px';
-        const padVAcc = Math.max(0.5, Math.min(5, (rowHeightAcc - calcFontAcc) / 2)).toFixed(1) + 'px';
+        const padVAcc = Math.max(0.2, Math.min(4, (rowHeightAcc - calcFontAcc) / 2)).toFixed(1) + 'px';
         const padTable = `${padVAcc} 6px`;
 
         const filasTable = data.map((d, index) => {
@@ -8837,7 +8839,7 @@ window.imprimirRegistroAccesos = async (fechaInputId = 'fechaAsistenciaApoyo', g
                         th.center, td.center { text-align: center; }
                         .footer { margin-top: 8px; display: flex; justify-content: space-between; font-size: 9.5px; color: #64748b; border-top: 1px solid #e2e8f0; padding-top: 4px; }
                         @media print {
-                            @page { size: portrait; margin: 5mm; }
+                            @page { size: ${esHorizontal ? 'landscape' : 'portrait'}; margin: ${esHorizontal ? '4mm 5mm' : '5mm'}; }
                             html, body { width: 100%; height: 100%; margin: 0 !important; padding: 0 !important; overflow: hidden !important; }
                             .print-main-wrapper { height: 100%; max-height: 100%; display: flex; flex-direction: column; justify-content: space-between; overflow: hidden; page-break-inside: avoid; break-inside: avoid; }
                             button { display: none; }
@@ -18692,7 +18694,7 @@ window.exportarListasCSV = () => {
     link.click();
 };
 
-window.imprimirLista = async (esVacia = false) => {
+window.imprimirLista = async (esVacia = false, forzarOrientacion = null) => {
     const tbody = document.getElementById('listaMaestroAlumnos');
     const tabla = tbody ? tbody.closest('table') : document.querySelector(".risk-table");
     const statsCont = document.getElementById('statsListaMaestro');
@@ -18735,34 +18737,52 @@ window.imprimirLista = async (esVacia = false) => {
 
     // Contar el número de alumnos válidos
     const rowsList = Array.from(tbody.querySelectorAll("tr")).filter(r => {
-        const txt = r.innerText || "";
-        return txt && !txt.includes("Seleccione") && !txt.includes("Cargando") && !txt.includes("Sin resultados");
+        const txt = (r.innerText || "").trim();
+        return txt && !txt.includes("Seleccione") && !txt.includes("Cargando") && !txt.includes("Sin resultados") && !txt.includes("Sin Alumnos") && !txt.includes("no tiene alumnos");
     });
     const totalAlumnos = rowsList.length || 1;
     const n = Math.max(totalAlumnos, 1);
 
     // Contar columnas
-    const totalCols = tabla ? (tabla.querySelectorAll('tr:first-child th, tr:first-child td').length || 5) : 5;
+    const theadOriginal = tabla.querySelector('thead tr');
+    const totalCols = esVacia ? 22 : (theadOriginal ? (theadOriginal.querySelectorAll('th, td').length || 6) : 6);
 
     // =========================================================================
-    // FORMATO 100% VERTICAL (PORTRAIT) PARA MAXIMIZAR ALTURA Y TAMAÑO DE LETRA
+    // ORIENTACIÓN INTELIGENTE Y DINÁMICA
+    // Regla: "cuando es demasiada información de muchas filas mover la hoja en horizontal"
+    // - Si hay muchas filas (> 30 alumnos) o muchas columnas (> 6 columnas) o es plantilla vacía (20 cols) -> HORIZONTAL
+    // - Si es un grupo normal (<= 30 alumnos) con pocas columnas (<= 6 columnas) -> VERTICAL
     // =========================================================================
-    const esHorizontal = false;
-    const pageHeight = 980; // Altura imprimible completa en hoja vertical Carta/A4 (con márgenes de 5mm)
-
-    // Dimensiones proporcionales en vertical
-    let headerHeight, sigHeight, logoHeight, sigLineHeight;
-    if (n <= 25) {
-        headerHeight = 68; sigHeight = 60; logoHeight = 56; sigLineHeight = 26;
-    } else if (n <= 38) {
-        headerHeight = 58; sigHeight = 50; logoHeight = 46; sigLineHeight = 18;
+    let esHorizontal;
+    if (forzarOrientacion === 'horizontal' || forzarOrientacion === 'landscape') {
+        esHorizontal = true;
+    } else if (forzarOrientacion === 'vertical' || forzarOrientacion === 'portrait') {
+        esHorizontal = false;
     } else {
-        headerHeight = 50; sigHeight = 40; logoHeight = 38; sigLineHeight = 14;
+        esHorizontal = (esVacia || n > 30 || totalCols > 6);
+    }
+
+    // Altura imprimible segura garantizada en una sola hoja
+    const pageHeight = esHorizontal ? 730 : 960;
+
+    let headerHeight, sigHeight, logoHeight, sigLineHeight;
+    if (esHorizontal) {
+        if (n <= 35) {
+            headerHeight = 46; sigHeight = 42; logoHeight = 40; sigLineHeight = 16;
+        } else {
+            headerHeight = 38; sigHeight = 34; logoHeight = 32; sigLineHeight = 12;
+        }
+    } else {
+        if (n <= 20) {
+            headerHeight = 66; sigHeight = 58; logoHeight = 54; sigLineHeight = 26;
+        } else {
+            headerHeight = 54; sigHeight = 46; logoHeight = 42; sigLineHeight = 18;
+        }
     }
 
     const hasStats = !esVacia && statsCont && statsCont.querySelectorAll('.card').length > 0;
-    const statsHeight = hasStats ? 20 : 0;
-    const gaps = 8;
+    const statsHeight = hasStats ? (esHorizontal ? 16 : 20) : 0;
+    const gaps = esHorizontal ? 6 : 8;
 
     const fixedHeight = headerHeight + statsHeight + sigHeight + gaps;
     const availableTableHeight = pageHeight - fixedHeight;
@@ -18770,48 +18790,72 @@ window.imprimirLista = async (esVacia = false) => {
     const totalRows = n + 1; // n filas de alumnos + 1 fila thead
     const rawRowHeight = Math.floor(availableTableHeight / totalRows);
 
-    const maxRow = 38;
-    const minRow = 14;
+    const minRow = esHorizontal ? 11.5 : 16;
+    const maxRow = esHorizontal ? 28 : 36;
     const rowHeight = Math.max(minRow, Math.min(maxRow, rawRowHeight));
 
-    // Cálculo de tamaño de fuente en vertical (rango amplio y claro: de 9.5px a 13.5px)
-    let baseFontSize = Math.max(9.0, Math.min(13.5, rowHeight * 0.58));
-    if (totalCols > 15) baseFontSize *= 0.90;
-    else if (totalCols > 9) baseFontSize *= 0.95;
+    // Cálculo proporcional del tamaño de letra
+    let baseFontSize = esHorizontal 
+        ? Math.max(8.0, Math.min(12.0, rowHeight * 0.58))
+        : Math.max(9.5, Math.min(13.5, rowHeight * 0.55));
+    if (totalCols > 15) baseFontSize = Math.max(7.5, baseFontSize * 0.90);
+    else if (totalCols > 9) baseFontSize = Math.max(8.0, baseFontSize * 0.95);
 
-    const calcFont = Math.max(8.5, baseFontSize);
+    const calcFont = Math.max(7.5, baseFontSize);
     const fontSize = calcFont.toFixed(1) + 'px';
 
-    const padV = Math.max(0.5, Math.min(6, (rowHeight - calcFont) / 2)).toFixed(1) + 'px';
-    const padH = totalCols > 15 ? '2px' : '4px';
+    const padV = Math.max(0.2, Math.min(esHorizontal ? 4 : 6, (rowHeight - calcFont) / 2)).toFixed(1) + 'px';
+    const padH = totalCols > 15 ? '2px' : (esHorizontal ? '3px' : '5px');
     const rowHeightPx = rowHeight.toFixed(1) + 'px';
+
+    // Extracción limpia y 100% fiable del nombre del alumno (sin iniciales de avatar ni matrículas)
+    const getCleanStudentName = (row, idx) => {
+        if (window._currentListaAlumnos && window._currentListaAlumnos[idx] && window._currentListaAlumnos[idx].nombre) {
+            return window._currentListaAlumnos[idx].nombre.trim();
+        }
+        if (window._currentAlumnos && window._currentAlumnos[idx] && window._currentAlumnos[idx].nombre) {
+            return window._currentAlumnos[idx].nombre.trim();
+        }
+        const cellAlumno = row.querySelector('.col-sticky-alumno') || row.cells[0];
+        if (cellAlumno) {
+            const spans = Array.from(cellAlumno.querySelectorAll('span'));
+            for (const s of spans) {
+                const txt = (s.innerText || '').trim();
+                if (txt.length > 2 && !/^\d{4,}$/.test(txt) && !s.classList.contains('badge') && !s.id?.startsWith('stat_')) {
+                    return txt;
+                }
+            }
+            const strong = cellAlumno.querySelector('strong, b');
+            if (strong && strong.innerText.trim().length > 2) {
+                return strong.innerText.trim();
+            }
+            let raw = cellAlumno.innerText.trim();
+            return raw.replace(/^[A-ZÁÉÍÓÚÑ]{1,3}\s+/, '').split('\n')[0].trim();
+        }
+        return `Alumno ${idx + 1}`;
+    };
 
     let tableContentHtml = '';
     let statsHtml = '';
 
     if (esVacia) {
-        // Plantilla vacía de 20 columnas (4 semanas de lunes a viernes = 1 mes escolar) ajustada a vertical
         const numCols = 20;
-        let headers = `<th class="col-num" style="width:28px; text-align:center;">#</th><th class="col-alumno" style="text-align:left; min-width:180px; width:28%;">Nombre del Alumno</th>`;
+        const alWidth = esHorizontal ? '24%' : '30%';
+        let headers = `<th class="col-num" style="width:28px; text-align:center;">#</th><th class="col-alumno" style="text-align:left; min-width:180px; width:${alWidth};">Nombre del Alumno</th>`;
         for (let i = 1; i <= numCols; i++) {
-            headers += `<th class="col-day" style="text-align:center; font-size:${Math.max(8.0, calcFont * 0.9).toFixed(1)}px; font-weight:600;">${i}</th>`;
+            headers += `<th class="col-day" style="text-align:center; font-size:${Math.max(7.5, calcFont * 0.9).toFixed(1)}px; font-weight:600;">${i}</th>`;
         }
         
         let rowsHtml = '';
-        let count = 1;
         for (let i = 0; i < rowsList.length; i++) {
-            const spanNombre = rowsList[i].querySelector("td span[style*='font-weight:600']") || rowsList[i].cells[0];
-            if (spanNombre && spanNombre.innerText) {
-                const sName = spanNombre.innerText.trim();
-                rowsHtml += `<tr style="height:${rowHeightPx};">`;
-                rowsHtml += `<td class="col-num" style="text-align:center; font-weight:bold;">${count}</td>`;
-                rowsHtml += `<td class="col-alumno" style="text-align:left; font-weight:600;"><div style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${sName}</div></td>`;
-                for (let j = 1; j <= numCols; j++) {
-                    rowsHtml += `<td class="col-day"></td>`;
-                }
-                rowsHtml += `</tr>`;
-                count++;
+            const sName = getCleanStudentName(rowsList[i], i);
+            rowsHtml += `<tr style="height:${rowHeightPx};">`;
+            rowsHtml += `<td class="col-num" style="text-align:center; font-weight:bold;">${i + 1}</td>`;
+            rowsHtml += `<td class="col-alumno" style="text-align:left; font-weight:600;"><div style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis; line-height:1.1;">${sName}</div></td>`;
+            for (let j = 1; j <= numCols; j++) {
+                rowsHtml += `<td class="col-day"></td>`;
             }
+            rowsHtml += `</tr>`;
         }
         
         tableContentHtml = `
@@ -18853,8 +18897,8 @@ window.imprimirLista = async (esVacia = false) => {
         }
 
         const tbodyRows = Array.from(cloneTable.querySelectorAll('tbody tr')).filter(r => {
-            const txt = r.innerText || "";
-            return txt && !txt.includes("Seleccione") && !txt.includes("Cargando") && !txt.includes("Sin resultados");
+            const txt = (r.innerText || "").trim();
+            return txt && !txt.includes("Seleccione") && !txt.includes("Cargando") && !txt.includes("Sin resultados") && !txt.includes("Sin Alumnos") && !txt.includes("no tiene alumnos");
         });
 
         tbodyRows.forEach((r, idx) => {
@@ -18870,13 +18914,12 @@ window.imprimirLista = async (esVacia = false) => {
                 r.insertBefore(tdNum, r.cells[0]);
             }
 
-            // Formatear celda de alumno (ahora en celda 1)
+            // Formatear celda de alumno (ahora en celda 1) con nombre 100% garantizado
             const alumnoCell = r.cells[1];
             if (alumnoCell) {
                 alumnoCell.classList.add('col-alumno');
-                const spanName = alumnoCell.querySelector("span[style*='font-weight:600']") || alumnoCell.querySelector("strong");
-                const cleanName = spanName ? spanName.innerText.trim() : alumnoCell.innerText.trim();
-                alumnoCell.innerHTML = `<div style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-weight:600; text-align:left;">${cleanName}</div>`;
+                const cleanName = getCleanStudentName(rowsList[idx] || r, idx);
+                alumnoCell.innerHTML = `<div style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-weight:600; text-align:left; line-height:1.1;">${cleanName}</div>`;
                 alumnoCell.style.textAlign = 'left';
             }
 
@@ -18885,6 +18928,7 @@ window.imprimirLista = async (esVacia = false) => {
                 td.style.padding = `${padV} ${padH}`;
                 td.style.height = rowHeightPx;
                 td.style.fontSize = fontSize;
+                td.style.lineHeight = '1.05';
 
                 if (cellIdx === 0 || cellIdx === 1) return; // Omitir # y Alumno
 
@@ -18907,15 +18951,20 @@ window.imprimirLista = async (esVacia = false) => {
 
         if (theadTr) {
             theadTr.style.height = rowHeightPx;
-            Array.from(theadTr.cells).forEach(th => {
+            Array.from(theadTr.cells).forEach((th, cIdx) => {
                 th.style.padding = `${padV} ${padH}`;
                 th.style.height = rowHeightPx;
                 th.style.fontSize = fontSize;
                 const btnMasivo = th.querySelector('button');
                 if (btnMasivo) btnMasivo.remove();
+                if (cIdx === 1) {
+                    th.textContent = 'Nombre del Alumno';
+                    th.style.textAlign = 'left';
+                }
                 th.style.whiteSpace = 'nowrap';
                 th.style.overflow = 'hidden';
                 th.style.textOverflow = 'ellipsis';
+                th.style.lineHeight = '1.05';
             });
         }
 
@@ -18928,7 +18977,7 @@ window.imprimirLista = async (esVacia = false) => {
 
             if(statsData.length > 0) {
                 statsHtml = `
-                    <div style="display:flex; justify-content:space-around; align-items:center; background:#f8fafc; border:1px solid #cbd5e1; border-radius:4px; padding:2px 8px; margin-bottom:4px; font-size:${Math.max(8.0, calcFont * 0.95).toFixed(1)}px; flex-shrink:0;">
+                    <div style="display:flex; justify-content:space-around; align-items:center; background:#f8fafc; border:1px solid #cbd5e1; border-radius:4px; padding:2px 8px; margin-bottom:4px; font-size:${Math.max(7.5, calcFont * 0.92).toFixed(1)}px; flex-shrink:0;">
                         ${statsData.map(s => `
                             <div>
                                 <span style="color:#64748b; font-weight:600;">${s.label}:</span>
@@ -18956,8 +19005,8 @@ window.imprimirLista = async (esVacia = false) => {
                     * { box-sizing: border-box; margin: 0; padding: 0; }
                     
                     @page { 
-                        size: portrait; 
-                        margin: 5mm 6mm; 
+                        size: ${esHorizontal ? 'landscape' : 'portrait'}; 
+                        margin: ${esHorizontal ? '4mm 5mm' : '5mm 6mm'}; 
                     }
 
                     html, body { 
@@ -18992,8 +19041,8 @@ window.imprimirLista = async (esVacia = false) => {
                         justify-content: space-between;
                         align-items: center;
                         border-bottom: 2px solid #1e40af;
-                        padding-bottom: 3px;
-                        margin-bottom: 4px;
+                        padding-bottom: 2px;
+                        margin-bottom: 3px;
                         flex-shrink: 0;
                         min-height: ${headerHeight}px;
                     }
@@ -19011,7 +19060,7 @@ window.imprimirLista = async (esVacia = false) => {
                     }
 
                     .title-box h1 { 
-                        font-size: 14px; 
+                        font-size: ${esHorizontal ? '13px' : '14px'}; 
                         color: #1e40af; 
                         text-transform: uppercase; 
                         margin: 0;
@@ -19020,7 +19069,7 @@ window.imprimirLista = async (esVacia = false) => {
                     }
 
                     .title-box p { 
-                        font-size: 9.5px; 
+                        font-size: 9px; 
                         color: #475569; 
                         font-weight: 600;
                         margin-top: 1px;
@@ -19030,7 +19079,7 @@ window.imprimirLista = async (esVacia = false) => {
                         display: grid;
                         grid-template-columns: auto auto;
                         gap: 1px 12px;
-                        font-size: 9px;
+                        font-size: ${esHorizontal ? '8.5px' : '9px'};
                         text-align: right;
                         color: #334155;
                         line-height: 1.2;
@@ -19043,7 +19092,7 @@ window.imprimirLista = async (esVacia = false) => {
                         flex-direction: column;
                         min-height: 0;
                         width: 100%;
-                        overflow: hidden;
+                        overflow: visible;
                     }
 
                     .data-table { 
@@ -19060,7 +19109,7 @@ window.imprimirLista = async (esVacia = false) => {
                         padding: ${padV} ${padH} !important; 
                         text-align: center; 
                         font-size: ${fontSize} !important; 
-                        line-height: 1.1 !important;
+                        line-height: 1.05 !important;
                         height: ${rowHeightPx} !important;
                         vertical-align: middle;
                         box-sizing: border-box;
@@ -19084,6 +19133,7 @@ window.imprimirLista = async (esVacia = false) => {
                         text-align: left !important;
                         padding-left: 6px !important;
                         font-weight: 600;
+                        ${esHorizontal ? 'width: 24% !important; min-width: 200px !important;' : 'width: 32% !important; min-width: 180px !important;'}
                     }
 
                     .badge {
@@ -19098,7 +19148,7 @@ window.imprimirLista = async (esVacia = false) => {
                         display: flex !important; 
                         justify-content: space-around !important; 
                         align-items: flex-end !important;
-                        margin-top: 4px !important; 
+                        margin-top: 3px !important; 
                         padding-top: 2px !important;
                         flex-shrink: 0 !important;
                         page-break-inside: avoid !important; 
@@ -19108,7 +19158,7 @@ window.imprimirLista = async (esVacia = false) => {
 
                     .signature-box { 
                         text-align: center !important; 
-                        width: 260px !important; 
+                        width: ${esHorizontal ? '280px' : '260px'} !important; 
                     }
 
                     .signature-line { 
@@ -29564,7 +29614,7 @@ window.cargarAdminListaPreview = async () => {
     }
 };
 
-window.imprimirAdminLista = async (esVacia = false) => {
+window.imprimirAdminLista = async (esVacia = false, forzarOrientacion = null) => {
     const sel = document.getElementById('adminListaGrupoSelect');
     const tbody = document.getElementById('adminListaPreviewTbody');
     
@@ -29591,50 +29641,67 @@ window.imprimirAdminLista = async (esVacia = false) => {
     } catch(e) {}
 
     const rowsList = Array.from(tbody.querySelectorAll("tr")).filter(r => {
-        const txt = r.innerText || "";
-        return txt && !txt.includes("Seleccione") && !txt.includes("Cargando") && !txt.includes("No tiene");
+        const txt = (r.innerText || "").trim();
+        return txt && !txt.includes("Seleccione") && !txt.includes("Cargando") && !txt.includes("No tiene") && !txt.includes("Sin Alumnos");
     });
     const totalAlumnos = rowsList.length || 1;
     const n = Math.max(totalAlumnos, 1);
-    const esHorizontal = false; // Formato vertical (portrait)
 
-    const pageHeight = 980;
+    let esHorizontal;
+    if (forzarOrientacion === 'horizontal' || forzarOrientacion === 'landscape') {
+        esHorizontal = true;
+    } else if (forzarOrientacion === 'vertical' || forzarOrientacion === 'portrait') {
+        esHorizontal = false;
+    } else {
+        esHorizontal = (esVacia || n > 30);
+    }
+
+    const pageHeight = esHorizontal ? 730 : 960;
     let headerHeight, sigHeight, logoHeight, sigLineHeight;
-    if (n <= 25) { headerHeight = 70; sigHeight = 62; logoHeight = 58; sigLineHeight = 28; }
-    else if (n <= 38) { headerHeight = 60; sigHeight = 50; logoHeight = 46; sigLineHeight = 20; }
-    else { headerHeight = 52; sigHeight = 40; logoHeight = 38; sigLineHeight = 15; }
+    if (esHorizontal) {
+        if (n <= 35) { headerHeight = 46; sigHeight = 42; logoHeight = 40; sigLineHeight = 16; }
+        else { headerHeight = 38; sigHeight = 34; logoHeight = 32; sigLineHeight = 12; }
+    } else {
+        if (n <= 20) { headerHeight = 66; sigHeight = 58; logoHeight = 54; sigLineHeight = 26; }
+        else { headerHeight = 54; sigHeight = 46; logoHeight = 42; sigLineHeight = 18; }
+    }
 
-    const gaps = 8;
+    const gaps = esHorizontal ? 6 : 8;
     const fixedHeight = headerHeight + sigHeight + gaps;
     const availableTableHeight = pageHeight - fixedHeight;
 
     const totalRows = n + 1;
     const rawRowHeight = Math.floor(availableTableHeight / totalRows);
-    const maxRow = 38;
-    const minRow = 14;
+    const minRow = esHorizontal ? 11.5 : 16;
+    const maxRow = esHorizontal ? 28 : 36;
     const rowHeight = Math.max(minRow, Math.min(maxRow, rawRowHeight));
 
-    let baseFontSize = Math.max(9.0, Math.min(13.5, rowHeight * 0.58));
-    const calcFont = baseFontSize;
+    let baseFontSize = esHorizontal 
+        ? Math.max(8.0, Math.min(12.0, rowHeight * 0.58))
+        : Math.max(9.5, Math.min(13.5, rowHeight * 0.55));
+    if (esVacia) baseFontSize = Math.max(7.5, baseFontSize * 0.90);
+
+    const calcFont = Math.max(7.5, baseFontSize);
     const fontSize = calcFont.toFixed(1) + 'px';
-    const padV = Math.max(0.5, Math.min(6, (rowHeight - calcFont) / 2)).toFixed(1) + 'px';
-    const padH = esVacia ? '2px' : '6px';
+    const padV = Math.max(0.2, Math.min(esHorizontal ? 4 : 6, (rowHeight - calcFont) / 2)).toFixed(1) + 'px';
+    const padH = esVacia ? '2px' : (esHorizontal ? '4px' : '6px');
     const rowHeightPx = rowHeight.toFixed(1) + 'px';
 
     let tableContentHtml = '';
 
     if (esVacia) {
         const numCols = 20;
-        let headers = `<th class="col-num" style="width:28px; text-align:center;">#</th><th class="col-alumno" style="text-align:left; min-width:180px; width:28%;">Nombre del Alumno</th>`;
+        const alWidth = esHorizontal ? '24%' : '30%';
+        let headers = `<th class="col-num" style="width:28px; text-align:center;">#</th><th class="col-alumno" style="text-align:left; min-width:180px; width:${alWidth};">Nombre del Alumno</th>`;
         for (let i = 1; i <= numCols; i++) {
-            headers += `<th class="col-day" style="text-align:center; font-size:${Math.max(8.0, calcFont * 0.9).toFixed(1)}px; font-weight:600;">${i}</th>`;
+            headers += `<th class="col-day" style="text-align:center; font-size:${Math.max(7.5, calcFont * 0.9).toFixed(1)}px; font-weight:600;">${i}</th>`;
         }
         let rowsHtml = '';
         rowsList.forEach((tr, index) => {
-            const nombre = tr.cells[1]?.innerText || '';
+            const nombre = (tr.cells[1]?.innerText || '').trim();
             rowsHtml += `<tr style="height:${rowHeightPx};">`;
             rowsHtml += `<td class="col-num" style="text-align:center; font-weight:bold;">${index + 1}</td>`;
-            rowsHtml += `<td class="col-alumno" style="text-align:left; font-weight:600;"><div style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${nombre}</div></td>`;
+            rowsHtml += `<td class="col-alumno" style="text-align:left; font-weight:600;"><div style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis; line-height:1.1;">${nombre}</div></td>`;
             for (let i = 0; i < numCols; i++) rowsHtml += `<td class="col-day"></td>`;
             rowsHtml += `</tr>`;
         });
@@ -29647,12 +29714,12 @@ window.imprimirAdminLista = async (esVacia = false) => {
     } else {
         let rowsHtml = '';
         rowsList.forEach((tr, index) => {
-            const nombre = tr.cells[1]?.innerText || '';
-            const matricula = tr.cells[2]?.innerText || '-';
+            const nombre = (tr.cells[1]?.innerText || '').trim();
+            const matricula = (tr.cells[2]?.innerText || '-').trim();
             rowsHtml += `
             <tr style="height:${rowHeightPx};">
                 <td class="col-num" style="text-align:center; font-weight:bold;">${index + 1}</td>
-                <td class="col-alumno" style="text-align:left; font-weight:600;"><div style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${nombre}</div></td>
+                <td class="col-alumno" style="text-align:left; font-weight:600;"><div style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis; line-height:1.1;">${nombre}</div></td>
                 <td style="text-align:center;">${matricula}</td>
             </tr>`;
         });
@@ -29660,9 +29727,9 @@ window.imprimirAdminLista = async (esVacia = false) => {
             <table class="data-table">
                 <thead>
                     <tr style="height:${rowHeightPx};">
-                        <th class="col-num" style="width:40px; text-align:center;">#</th>
+                        <th class="col-num" style="width:36px; text-align:center;">#</th>
                         <th class="col-alumno" style="text-align:left;">Nombre del Alumno</th>
-                        <th style="width:160px; text-align:center;">Matrícula / Folio</th>
+                        <th style="width:${esHorizontal ? '180px' : '150px'}; text-align:center;">Matrícula / Folio</th>
                     </tr>
                 </thead>
                 <tbody>${rowsHtml}</tbody>
@@ -29684,8 +29751,8 @@ window.imprimirAdminLista = async (esVacia = false) => {
                 <style>
                     * { box-sizing: border-box; margin: 0; padding: 0; }
                     @page { 
-                        size: portrait; 
-                        margin: 5mm 6mm; 
+                        size: ${esHorizontal ? 'landscape' : 'portrait'}; 
+                        margin: ${esHorizontal ? '4mm 5mm' : '5mm 6mm'}; 
                     }
                     html, body { 
                         width: 100%; height: 100%; background: #fff; color: #0f172a;
@@ -29700,23 +29767,23 @@ window.imprimirAdminLista = async (esVacia = false) => {
                     }
                     .header-container {
                         display: flex; justify-content: space-between; align-items: center;
-                        border-bottom: 2px solid #1e40af; padding-bottom: 3px; margin-bottom: 4px;
+                        border-bottom: 2px solid #1e40af; padding-bottom: 2px; margin-bottom: 3px;
                         flex-shrink: 0; min-height: ${headerHeight}px;
                     }
                     .header-left { display: flex; align-items: center; gap: 8px; }
                     .logo-img { max-height: ${logoHeight}px; max-width: 90px; object-fit: contain; }
-                    .title-box h1 { font-size: 14px; color: #1e40af; text-transform: uppercase; margin: 0; font-weight: 800; line-height: 1.1; }
-                    .title-box p { font-size: 9.5px; color: #475569; font-weight: 600; margin-top: 1px; }
-                    .meta-grid { display: grid; grid-template-columns: auto auto; gap: 1px 12px; font-size: 9px; text-align: right; color: #334155; line-height: 1.2; }
+                    .title-box h1 { font-size: ${esHorizontal ? '13px' : '14px'}; color: #1e40af; text-transform: uppercase; margin: 0; font-weight: 800; line-height: 1.1; }
+                    .title-box p { font-size: 9px; color: #475569; font-weight: 600; margin-top: 1px; }
+                    .meta-grid { display: grid; grid-template-columns: auto auto; gap: 1px 12px; font-size: ${esHorizontal ? '8.5px' : '9px'}; text-align: right; color: #334155; line-height: 1.2; }
                     .meta-grid strong { color: #0f172a; }
-                    .table-container { flex: 1 1 auto; display: flex; flex-direction: column; min-height: 0; width: 100%; overflow: hidden; }
+                    .table-container { flex: 1 1 auto; display: flex; flex-direction: column; min-height: 0; width: 100%; overflow: visible; }
                     .data-table { width: 100%; height: 100%; border-collapse: collapse; table-layout: fixed; page-break-inside: avoid; break-inside: avoid; }
-                    .data-table th, .data-table td { border: 1px solid #475569 !important; padding: ${padV} ${padH} !important; text-align: center; font-size: ${fontSize} !important; line-height: 1.1 !important; height: ${rowHeightPx} !important; vertical-align: middle; box-sizing: border-box; page-break-inside: avoid; break-inside: avoid; }
+                    .data-table th, .data-table td { border: 1px solid #475569 !important; padding: ${padV} ${padH} !important; text-align: center; font-size: ${fontSize} !important; line-height: 1.05 !important; height: ${rowHeightPx} !important; vertical-align: middle; box-sizing: border-box; page-break-inside: avoid; break-inside: avoid; }
                     .data-table th { background-color: #f1f5f9 !important; font-weight: 700; color: #0f172a; }
                     .col-num { width: 28px !important; text-align: center !important; font-weight: bold; }
-                    .col-alumno { text-align: left !important; padding-left: 6px !important; font-weight: 600; }
-                    .signatures { display: flex !important; justify-content: space-around !important; align-items: flex-end !important; margin-top: 4px !important; padding-top: 2px !important; flex-shrink: 0 !important; min-height: ${sigHeight}px; }
-                    .signature-box { text-align: center !important; width: 260px !important; }
+                    .col-alumno { text-align: left !important; padding-left: 6px !important; font-weight: 600; ${esHorizontal ? 'width: 24% !important; min-width: 200px !important;' : 'width: 32% !important; min-width: 180px !important;'} }
+                    .signatures { display: flex !important; justify-content: space-around !important; align-items: flex-end !important; margin-top: 3px !important; padding-top: 2px !important; flex-shrink: 0 !important; min-height: ${sigHeight}px; }
+                    .signature-box { text-align: center !important; width: ${esHorizontal ? '280px' : '260px'} !important; }
                     .signature-line { border-top: 1.5px solid #000000 !important; margin-bottom: 2px !important; height: ${sigLineHeight}px !important; }
                 </style>
             </head>
@@ -29792,40 +29859,42 @@ window.descargarAdminListaPDF = async (esVacia = false) => {
     } catch(e) {}
 
     const rowsList = Array.from(tbody.querySelectorAll("tr")).filter(r => {
-        const txt = r.innerText || "";
+        const txt = (r.innerText || "").trim();
         return txt && !txt.includes("Seleccione") && !txt.includes("Cargando") && !txt.includes("No tiene");
     });
     const totalAlumnos = rowsList.length || 1;
     const n = Math.max(totalAlumnos, 1);
-    const esHorizontal = false; // Formato vertical (portrait)
 
-    const pageHeight = 980;
-    const fixedHeight = 150;
+    const esHorizontal = (esVacia || n > 30);
+    const pageHeight = esHorizontal ? 730 : 960;
+    const fixedHeight = esHorizontal ? 120 : 150;
     const availableTableHeight = pageHeight - fixedHeight;
 
     const totalRows = n + 1;
     const rawRowHeight = Math.floor(availableTableHeight / totalRows);
-    const maxRow = 38;
-    const minRow = 14;
+    const minRow = esHorizontal ? 11.5 : 14;
+    const maxRow = esHorizontal ? 26 : 38;
     const rowHeight = Math.max(minRow, Math.min(maxRow, rawRowHeight));
 
-    let baseFontSize = Math.max(9.0, Math.min(13.5, rowHeight * 0.58));
+    let baseFontSize = esHorizontal ? Math.max(8.0, Math.min(12.0, rowHeight * 0.58)) : Math.max(9.0, Math.min(13.5, rowHeight * 0.58));
+    if (esVacia) baseFontSize = Math.max(7.5, baseFontSize * 0.90);
     const calcFont = baseFontSize;
     const fontSize = calcFont.toFixed(1) + 'px';
-    const padV = Math.max(0.5, Math.min(6, (rowHeight - calcFont) / 2)).toFixed(1) + 'px';
+    const padV = Math.max(0.2, Math.min(esHorizontal ? 3 : 5, (rowHeight - calcFont) / 2)).toFixed(1) + 'px';
     const rowHeightPx = rowHeight.toFixed(1) + 'px';
 
     let tableContentHtml = '';
 
     if (esVacia) {
         const numCols = 20;
-        let headers = `<th style="width:28px; text-align:center; padding:${padV} 2px;">#</th><th style="text-align:left; min-width:180px; width:28%; padding:${padV} 4px;">Nombre del Alumno</th>`;
-        for(let i=1; i<=numCols; i++) headers += `<th style="text-align:center; font-size:${Math.max(8.0, calcFont * 0.9).toFixed(1)}px; font-weight:600; padding:${padV} 1px;">${i}</th>`;
+        const alWidth = esHorizontal ? '24%' : '28%';
+        let headers = `<th style="width:28px; text-align:center; padding:${padV} 2px;">#</th><th style="text-align:left; min-width:180px; width:${alWidth}; padding:${padV} 4px;">Nombre del Alumno</th>`;
+        for(let i=1; i<=numCols; i++) headers += `<th style="text-align:center; font-size:${Math.max(7.5, calcFont * 0.9).toFixed(1)}px; font-weight:600; padding:${padV} 1px;">${i}</th>`;
         tableContentHtml += `<thead><tr style="height:${rowHeightPx};">${headers}</tr></thead><tbody>`;
         
         rowsList.forEach((tr, index) => {
-            const nombre = tr.cells[1]?.innerText || '';
-            let row = `<tr style="height:${rowHeightPx};"><td style="text-align:center; font-weight:bold; padding:${padV} 2px;">${index + 1}</td><td style="padding:${padV} 4px;"><div style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${nombre}</div></td>`;
+            const nombre = (tr.cells[1]?.innerText || '').trim();
+            let row = `<tr style="height:${rowHeightPx};"><td style="text-align:center; font-weight:bold; padding:${padV} 2px;">${index + 1}</td><td style="padding:${padV} 4px;"><div style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis; line-height:1.1;">${nombre}</div></td>`;
             for(let i=0; i<numCols; i++) row += `<td></td>`;
             row += `</tr>`;
             tableContentHtml += row;
@@ -29835,20 +29904,20 @@ window.descargarAdminListaPDF = async (esVacia = false) => {
         tableContentHtml += `
           <thead>
              <tr style="height:${rowHeightPx};">
-                <th style="width:40px; text-align:center; padding:${padV} 4px;">#</th>
+                <th style="width:36px; text-align:center; padding:${padV} 4px;">#</th>
                 <th style="text-align:left; padding:${padV} 6px;">Nombre del Alumno</th>
-                <th style="width:160px; text-align:center; padding:${padV} 4px;">Matrícula / Folio</th>
+                <th style="width:${esHorizontal ? '180px' : '160px'}; text-align:center; padding:${padV} 4px;">Matrícula / Folio</th>
              </tr>
           </thead>
           <tbody>
         `;
         rowsList.forEach((tr, index) => {
-            const nombre = tr.cells[1]?.innerText || '';
-            const matricula = tr.cells[2]?.innerText || '-';
+            const nombre = (tr.cells[1]?.innerText || '').trim();
+            const matricula = (tr.cells[2]?.innerText || '-').trim();
             tableContentHtml += `
             <tr style="height:${rowHeightPx};">
                 <td style="text-align:center; font-weight:bold; padding:${padV} 4px;">${index + 1}</td>
-                <td style="padding:${padV} 6px;"><div style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${nombre}</div></td>
+                <td style="padding:${padV} 6px;"><div style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis; line-height:1.1;">${nombre}</div></td>
                 <td style="text-align:center; padding:${padV} 4px;">${matricula}</td>
             </tr>`;
         });
@@ -29902,7 +29971,7 @@ window.descargarAdminListaPDF = async (esVacia = false) => {
         filename:     `Lista_${grupoName}.pdf`,
         image:        { type: 'jpeg', quality: 0.98 },
         html2canvas:  { scale: 2, useCORS: true, logging: false },
-        jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' }
+        jsPDF:        { unit: 'mm', format: 'a4', orientation: esHorizontal ? 'landscape' : 'portrait' }
     };
 
     try {
@@ -30035,10 +30104,10 @@ window.descargarAdminListaDOC = async (esVacia = false) => {
             properties: {
                 page: {
                     margin: { top: 800, right: 800, bottom: 800, left: 800 },
-                    size: { 
-                        width: esVacia ? 16838 : 11906,
-                        height: esVacia ? 11906 : 16838,
-                        orientation: "portrait"
+                    size: {
+                        width: (esVacia || rowsList.length > 30) ? 16838 : 11906,
+                        height: (esVacia || rowsList.length > 30) ? 11906 : 16838,
+                        orientation: (esVacia || rowsList.length > 30) ? "landscape" : "portrait"
                     }
                 }
             },
