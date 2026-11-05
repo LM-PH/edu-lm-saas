@@ -18705,19 +18705,20 @@ window.imprimirLista = async (esVacia = false, forzarOrientacion = null) => {
 
     const selG = document.getElementById('listaMaestroGrupo');
     const selT = document.getElementById('listaMaestroTipo');
+    const tipo = selT ? selT.value : 'evaluaciones';
     const grupoName = selG && selG.selectedIndex > 0 ? selG.options[selG.selectedIndex].text : 'Grupo';
     const fecha = new Date().toLocaleDateString('es-MX', { day: '2-digit', month: '2-digit', year: 'numeric' });
 
     const currentTrim = state.selectedMaestroTrimestre === 'final' ? 'PROMEDIO FINAL' : `${state.selectedMaestroTrimestre}° TRIMESTRE`;
 
-    // Resolver nombre del docente (si estamos en vista de directivo/admin/secretaria, tomar el maestro seleccionado)
+    // Resolver nombre del docente
     let teacherName = state.userName || 'Docente Titular';
     const selAdminMaestro = document.getElementById('adminSelMaestro');
     if (selAdminMaestro && selAdminMaestro.selectedIndex > 0) {
         teacherName = selAdminMaestro.options[selAdminMaestro.selectedIndex].text.replace(/^--\s*/, '').trim();
     }
 
-    // Obtener datos del plantel y director registrado para el membrete y firmas
+    // Datos del plantel y director para membrete y firmas
     let schoolName = CONFIG.schoolName || 'Escuela';
     let schoolLogo = null;
     let directorName = 'DIRECCIÓN ESCOLAR / RESPONSABLE DIRECTO';
@@ -18729,13 +18730,11 @@ window.imprimirLista = async (esVacia = false, forzarOrientacion = null) => {
                 if(pt.logo_url) schoolLogo = window.getCleanLogoUrl(pt.logo_url);
             }
             const { data: dirData } = await supabaseClient.from('perfiles').select('nombre').eq('plantel_id', state.plantelId).eq('rol', 'directivo').maybeSingle();
-            if(dirData && dirData.nombre) {
-                directorName = dirData.nombre;
-            }
+            if(dirData && dirData.nombre) directorName = dirData.nombre;
         }
     } catch(e) {}
 
-    // Contar el número de alumnos válidos
+    // Contar alumnos válidos
     const rowsList = Array.from(tbody.querySelectorAll("tr")).filter(r => {
         const txt = (r.innerText || "").trim();
         return txt && !txt.includes("Seleccione") && !txt.includes("Cargando") && !txt.includes("Sin resultados") && !txt.includes("Sin Alumnos") && !txt.includes("no tiene alumnos");
@@ -18750,8 +18749,6 @@ window.imprimirLista = async (esVacia = false, forzarOrientacion = null) => {
     // =========================================================================
     // ORIENTACIÓN INTELIGENTE Y DINÁMICA
     // Regla: "cuando es demasiada información de muchas filas mover la hoja en horizontal"
-    // - Si hay muchas filas (> 30 alumnos) o muchas columnas (> 6 columnas) o es plantilla vacía (20 cols) -> HORIZONTAL
-    // - Si es un grupo normal (<= 30 alumnos) con pocas columnas (<= 6 columnas) -> VERTICAL
     // =========================================================================
     let esHorizontal;
     if (forzarOrientacion === 'horizontal' || forzarOrientacion === 'landscape') {
@@ -18762,53 +18759,58 @@ window.imprimirLista = async (esVacia = false, forzarOrientacion = null) => {
         esHorizontal = (esVacia || n > 30 || totalCols > 6);
     }
 
-    // Altura imprimible segura garantizada en una sola hoja
     const pageHeight = esHorizontal ? 730 : 960;
 
     let headerHeight, sigHeight, logoHeight, sigLineHeight;
     if (esHorizontal) {
         if (n <= 35) {
-            headerHeight = 46; sigHeight = 42; logoHeight = 40; sigLineHeight = 16;
+            headerHeight = 44; sigHeight = 38; logoHeight = 38; sigLineHeight = 15;
         } else {
-            headerHeight = 38; sigHeight = 34; logoHeight = 32; sigLineHeight = 12;
+            headerHeight = 36; sigHeight = 32; logoHeight = 30; sigLineHeight = 12;
         }
     } else {
         if (n <= 20) {
-            headerHeight = 66; sigHeight = 58; logoHeight = 54; sigLineHeight = 26;
+            headerHeight = 64; sigHeight = 56; logoHeight = 52; sigLineHeight = 24;
         } else {
-            headerHeight = 54; sigHeight = 46; logoHeight = 42; sigLineHeight = 18;
+            headerHeight = 52; sigHeight = 44; logoHeight = 40; sigLineHeight = 16;
         }
     }
 
     const hasStats = !esVacia && statsCont && statsCont.querySelectorAll('.card').length > 0;
     const statsHeight = hasStats ? (esHorizontal ? 16 : 20) : 0;
+    // Si hay muchas columnas (actividades o asistencias), reservamos 14px para la leyenda aclaratoria al pie
+    const hasLegend = !esVacia && (totalCols > 7 || tipo === 'asistencias');
+    const legendHeight = hasLegend ? 14 : 0;
     const gaps = esHorizontal ? 6 : 8;
 
-    const fixedHeight = headerHeight + statsHeight + sigHeight + gaps;
+    const fixedHeight = headerHeight + statsHeight + legendHeight + sigHeight + gaps;
     const availableTableHeight = pageHeight - fixedHeight;
 
-    const totalRows = n + 1; // n filas de alumnos + 1 fila thead
-    const rawRowHeight = Math.floor(availableTableHeight / totalRows);
+    // Altura del encabezado: si hay muchas columnas (> 6), se le da más altura (30px-34px) para evitar empalmes
+    const theadHeight = totalCols > 6 ? (esHorizontal ? 32 : 36) : (esHorizontal ? 24 : 28);
+    const availableTbodyHeight = Math.max(100, availableTableHeight - theadHeight);
 
-    const minRow = esHorizontal ? 11.5 : 16;
-    const maxRow = esHorizontal ? 28 : 36;
+    const rawRowHeight = Math.floor(availableTbodyHeight / n);
+    const minRow = esHorizontal ? 11.5 : 15;
+    const maxRow = esHorizontal ? 26 : 34;
     const rowHeight = Math.max(minRow, Math.min(maxRow, rawRowHeight));
 
-    // Cálculo proporcional del tamaño de letra
+    // Tamaño de fuente proporcional sin cortes ni desbordes
     let baseFontSize = esHorizontal 
-        ? Math.max(8.0, Math.min(12.0, rowHeight * 0.58))
-        : Math.max(9.5, Math.min(13.5, rowHeight * 0.55));
-    if (totalCols > 15) baseFontSize = Math.max(7.5, baseFontSize * 0.90);
-    else if (totalCols > 9) baseFontSize = Math.max(8.0, baseFontSize * 0.95);
+        ? Math.max(7.5, Math.min(11.5, rowHeight * 0.58))
+        : Math.max(9.0, Math.min(13.0, rowHeight * 0.55));
+    if (totalCols > 20) baseFontSize = Math.max(7.0, baseFontSize * 0.85);
+    else if (totalCols > 13) baseFontSize = Math.max(7.5, baseFontSize * 0.90);
+    else if (totalCols > 8) baseFontSize = Math.max(8.0, baseFontSize * 0.95);
 
-    const calcFont = Math.max(7.5, baseFontSize);
+    const calcFont = Math.max(7.0, baseFontSize);
     const fontSize = calcFont.toFixed(1) + 'px';
 
-    const padV = Math.max(0.2, Math.min(esHorizontal ? 4 : 6, (rowHeight - calcFont) / 2)).toFixed(1) + 'px';
-    const padH = totalCols > 15 ? '2px' : (esHorizontal ? '3px' : '5px');
+    const padV = Math.max(0.1, Math.min(esHorizontal ? 3 : 5, (rowHeight - calcFont) / 2)).toFixed(1) + 'px';
+    const padH = totalCols > 18 ? '1px' : (totalCols > 10 ? '2px' : (esHorizontal ? '4px' : '5px'));
     const rowHeightPx = rowHeight.toFixed(1) + 'px';
 
-    // Extracción limpia y 100% fiable del nombre del alumno (sin iniciales de avatar ni matrículas)
+    // Extracción limpia y 100% fiable del nombre del alumno
     const getCleanStudentName = (row, idx) => {
         if (window._currentListaAlumnos && window._currentListaAlumnos[idx] && window._currentListaAlumnos[idx].nombre) {
             return window._currentListaAlumnos[idx].nombre.trim();
@@ -18837,13 +18839,14 @@ window.imprimirLista = async (esVacia = false, forzarOrientacion = null) => {
 
     let tableContentHtml = '';
     let statsHtml = '';
+    let legendHtml = '';
 
     if (esVacia) {
         const numCols = 20;
         const alWidth = esHorizontal ? '24%' : '30%';
-        let headers = `<th class="col-num" style="width:28px; text-align:center;">#</th><th class="col-alumno" style="text-align:left; min-width:180px; width:${alWidth};">Nombre del Alumno</th>`;
+        let headers = `<th class="col-num" style="width:26px; text-align:center;">#</th><th class="col-alumno" style="text-align:left; min-width:180px; width:${alWidth};">Nombre del Alumno</th>`;
         for (let i = 1; i <= numCols; i++) {
-            headers += `<th class="col-day" style="text-align:center; font-size:${Math.max(7.5, calcFont * 0.9).toFixed(1)}px; font-weight:600;">${i}</th>`;
+            headers += `<th class="col-day" style="text-align:center; font-size:${Math.max(7.5, calcFont * 0.9).toFixed(1)}px; font-weight:600; width:auto;">${i}</th>`;
         }
         
         let rowsHtml = '';
@@ -18861,7 +18864,7 @@ window.imprimirLista = async (esVacia = false, forzarOrientacion = null) => {
         tableContentHtml = `
             <table class="data-table">
                 <thead>
-                    <tr style="height:${rowHeightPx};">${headers}</tr>
+                    <tr style="height:${theadHeight}px;">${headers}</tr>
                 </thead>
                 <tbody>
                     ${rowsHtml}
@@ -18872,7 +18875,7 @@ window.imprimirLista = async (esVacia = false, forzarOrientacion = null) => {
         const cloneTable = tabla.cloneNode(true);
         cloneTable.classList.add('data-table');
         
-        // Quitar columnas de contacto o botones
+        // Quitar columnas innecesarias en papel (ej. enlaces de contacto mailto)
         cloneTable.querySelectorAll('tr').forEach(r => {
             const lastTd = r.cells[r.cells.length - 1];
             if(lastTd && (lastTd.innerHTML.includes('fa-envelope') || lastTd.innerText.includes('Contacto'))) {
@@ -18889,7 +18892,7 @@ window.imprimirLista = async (esVacia = false, forzarOrientacion = null) => {
             if (!hasNumCol) {
                 const thNum = document.createElement('th');
                 thNum.className = 'col-num';
-                thNum.style.width = '28px';
+                thNum.style.width = '26px';
                 thNum.style.textAlign = 'center';
                 thNum.textContent = '#';
                 theadTr.insertBefore(thNum, theadTr.cells[0]);
@@ -18901,20 +18904,23 @@ window.imprimirLista = async (esVacia = false, forzarOrientacion = null) => {
             return txt && !txt.includes("Seleccione") && !txt.includes("Cargando") && !txt.includes("Sin resultados") && !txt.includes("Sin Alumnos") && !txt.includes("no tiene alumnos");
         });
 
+        // =========================================================================
+        // FORMATEO PROFESIONAL DE CELDAS DE ALUMNOS Y DATOS (CERO EMPALMES)
+        // =========================================================================
         tbodyRows.forEach((r, idx) => {
             r.style.height = rowHeightPx;
 
             if (!hasNumCol) {
                 const tdNum = document.createElement('td');
                 tdNum.className = 'col-num';
-                tdNum.style.width = '28px';
+                tdNum.style.width = '26px';
                 tdNum.style.textAlign = 'center';
                 tdNum.style.fontWeight = 'bold';
                 tdNum.textContent = String(idx + 1);
                 r.insertBefore(tdNum, r.cells[0]);
             }
 
-            // Formatear celda de alumno (ahora en celda 1) con nombre 100% garantizado
+            // Formatear celda de alumno (celda 1) con nombre 100% limpio y garantizado
             const alumnoCell = r.cells[1];
             if (alumnoCell) {
                 alumnoCell.classList.add('col-alumno');
@@ -18923,52 +18929,227 @@ window.imprimirLista = async (esVacia = false, forzarOrientacion = null) => {
                 alumnoCell.style.textAlign = 'left';
             }
 
-            // Aplicar tamaño, padding y regla SEP para reprobatorias (< 6.0 se imprime como 5)
+            // Formatear celdas de datos (a partir de la celda 2)
             Array.from(r.cells).forEach((td, cellIdx) => {
                 td.style.padding = `${padV} ${padH}`;
                 td.style.height = rowHeightPx;
                 td.style.fontSize = fontSize;
                 td.style.lineHeight = '1.05';
+                td.style.boxSizing = 'border-box';
+                td.style.verticalAlign = 'middle';
 
                 if (cellIdx === 0 || cellIdx === 1) return; // Omitir # y Alumno
 
-                const txt = (td.innerText || '').trim();
-                if (txt.includes('%')) return; // Omitir Asistencias
-                if (td.querySelector('.badge') || /aprobado|reprobado|sin n\/e/i.test(txt)) return; // Omitir Estatus
-                if (!txt || txt === '-') return;
-
-                if (selT && selT.value === 'evaluaciones') {
-                    const isPromCol = td.id && td.id.startsWith('prom_alumno_');
-                    if (!isPromCol) return;
+                // 1. Quitar botones residuales (ej: botón de justificar falta)
+                const btn = td.querySelector('button');
+                if (btn) {
+                    const btnContent = btn.innerHTML;
+                    btn.remove();
+                    td.innerHTML = btnContent;
                 }
 
-                const num = parseFloat(txt);
-                if (!isNaN(num) && num > 0 && num < 6.0) {
-                    td.textContent = '5';
+                // 2. Limpiar enlaces y botones de contacto
+                const mailLink = td.querySelector('a');
+                if (mailLink) mailLink.remove();
+
+                // 3. CONVERSIÓN DE MARCAS DE ASISTENCIA A TEXTO REAL Y VISIBLE
+                const tdHtml = td.innerHTML;
+                if (tdHtml.includes('fa-check') || td.style.color.includes('success') || td.querySelector('.fa-check')) {
+                    td.innerHTML = '<span style="color:#166534; font-weight:bold; font-size:1.15em; line-height:1;">✓</span>';
+                    td.style.textAlign = 'center';
+                    return;
+                } else if (tdHtml.includes('fa-clock') || td.style.color.includes('warning') || td.querySelector('.fa-clock')) {
+                    td.innerHTML = '<span style="color:#d97706; font-weight:bold; line-height:1;">R</span>';
+                    td.style.textAlign = 'center';
+                    return;
+                } else if (tdHtml.includes('fa-file-shield') || tdHtml.includes('Justificada') || td.querySelector('.fa-file-shield')) {
+                    td.innerHTML = '<span style="color:#2563eb; font-weight:bold; line-height:1;">J</span>';
+                    td.style.textAlign = 'center';
+                    return;
+                } else if (tdHtml.includes('fa-xmark') || td.style.color.includes('danger') || td.querySelector('.fa-xmark')) {
+                    td.innerHTML = '<span style="color:#dc2626; font-weight:bold; font-size:1.1em; line-height:1;">✗</span>';
+                    td.style.textAlign = 'center';
+                    return;
+                }
+
+                // 4. Limpiar iconos de edición de actividades (fa-pen, fa-plus)
+                const icons = td.querySelectorAll('i.fa-pen, i.fa-plus, i.fa-bolt');
+                icons.forEach(ic => ic.remove());
+
+                const rawTxt = (td.innerText || '').trim();
+
+                // 5. RESUMEN DE ASISTENCIAS: En una sola línea sin saltos para evitar empalmes
+                if (rawTxt.includes('A') && rawTxt.includes('F') && (rawTxt.includes('/') || rawTxt.includes('R'))) {
+                    const matchA = (rawTxt.match(/(\d+)\s*A/i) || [])[1] || '0';
+                    const matchR = (rawTxt.match(/(\d+)\s*R/i) || [])[1] || '0';
+                    const matchJ = (rawTxt.match(/(\d+)\s*J/i) || [])[1] || '0';
+                    const matchF = (rawTxt.match(/(\d+)\s*F/i) || [])[1] || '0';
+                    td.innerHTML = `<div style="white-space:nowrap; font-size:${Math.max(6.5, calcFont * 0.82).toFixed(1)}px; font-weight:bold; line-height:1;">` +
+                        `<span style="color:#166534;">${matchA}A</span> ` +
+                        `<span style="color:#d97706;">${matchR}R</span> ` +
+                        `<span style="color:#2563eb;">${matchJ}J</span> ` +
+                        `<span style="color:#dc2626;">${matchF}F</span></div>`;
+                    td.style.textAlign = 'center';
+                    return;
+                }
+
+                // 6. ESTATUS DE ASISTENCIAS (%): En una sola línea sin <br> para evitar empalmes
+                if (rawTxt.includes('%')) {
+                    const pctMatch = rawTxt.match(/(\d+)%/);
+                    const isRiesgo = /riesgo/i.test(rawTxt);
+                    const isReg = /regular/i.test(rawTxt);
+                    const tag = isRiesgo ? 'Riesgo' : (isReg ? 'Reg.' : '');
+                    if (pctMatch) {
+                        const color = isRiesgo ? '#991b1b' : '#166534';
+                        td.innerHTML = `<div style="white-space:nowrap; font-weight:bold; font-size:${fontSize}; line-height:1; color:${color};">${pctMatch[1]}%${tag ? ` <span style="font-size:0.8em; font-weight:normal; color:#475569;">(${tag})</span>` : ''}</div>`;
+                        td.style.textAlign = 'center';
+                        return;
+                    }
+                }
+
+                // 7. ESTATUS DE EVALUACIONES: En una sola línea compacta
+                if (td.querySelector('.badge') || /aprobado|reprobado|sin n\/e/i.test(rawTxt)) {
+                    const isApr = /aprobado/i.test(rawTxt);
+                    const isRep = /reprobado/i.test(rawTxt);
+                    const sColor = isApr ? '#166534' : (isRep ? '#991b1b' : '#475569');
+                    const sLabel = isApr ? 'Aprobado' : (isRep ? 'Reprobado' : 'Sin N/E');
+                    td.innerHTML = `<div style="white-space:nowrap; font-weight:bold; font-size:${Math.max(7.0, calcFont * 0.88).toFixed(1)}px; color:${sColor}; line-height:1;">${sLabel}</div>`;
+                    td.style.textAlign = 'center';
+                    return;
+                }
+
+                // 8. COLUMNA DE PROMEDIO: Limpia de puntos extra para no desbordar
+                if (td.id && td.id.startsWith('prom_alumno_')) {
+                    const numProm = parseFloat(rawTxt);
+                    if (!isNaN(numProm)) {
+                        let promVal = numProm;
+                        let promDisplay = (promVal > 0 && promVal < 6.0) ? '5.0' : promVal.toFixed(1);
+                        td.innerHTML = `<div style="white-space:nowrap; font-weight:bold; font-size:${Math.max(8.0, calcFont * 1.05).toFixed(1)}px; color:#1e40af; line-height:1;">${promDisplay}</div>`;
+                        td.style.textAlign = 'center';
+                        return;
+                    }
+                }
+
+                // 9. CELDAS DE NOTAS INDIVIDUALES
+                if (!rawTxt || rawTxt === '-') {
+                    td.innerHTML = `<span style="color:#94a3b8; font-weight:normal;">-</span>`;
+                    td.style.textAlign = 'center';
+                    return;
+                }
+
+                const numVal = parseFloat(rawTxt);
+                if (!isNaN(numVal)) {
+                    const isGrade = numVal >= 0 && numVal <= 10;
+                    const displayVal = (isGrade && numVal > 0 && numVal < 6.0) ? '5' : String(numVal);
+                    td.innerHTML = `<div style="white-space:nowrap; font-weight:600; line-height:1;">${displayVal}</div>`;
+                    td.style.textAlign = 'center';
+                } else {
+                    td.innerHTML = `<div style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis; line-height:1;">${rawTxt}</div>`;
                 }
             });
         });
 
+        // =========================================================================
+        // FORMATEO DE ENCABEZADOS DE TABLA (THEAD) - IDENTIFICACIÓN CLARA Y SIN EMPALMES
+        // =========================================================================
         if (theadTr) {
-            theadTr.style.height = rowHeightPx;
-            Array.from(theadTr.cells).forEach((th, cIdx) => {
+            theadTr.style.height = `${theadHeight}px`;
+            const ths = Array.from(theadTr.cells);
+            const numColsTotal = ths.length;
+
+            let alumnoWidthPct;
+            if (numColsTotal <= 5) alumnoWidthPct = esHorizontal ? 32 : 36;
+            else if (numColsTotal <= 8) alumnoWidthPct = esHorizontal ? 26 : 30;
+            else if (numColsTotal <= 14) alumnoWidthPct = 20;
+            else alumnoWidthPct = 17;
+
+            let actCounter = 1;
+
+            ths.forEach((th, cIdx) => {
+                th.style.height = `${theadHeight}px`;
                 th.style.padding = `${padV} ${padH}`;
-                th.style.height = rowHeightPx;
                 th.style.fontSize = fontSize;
-                const btnMasivo = th.querySelector('button');
-                if (btnMasivo) btnMasivo.remove();
-                if (cIdx === 1) {
-                    th.textContent = 'Nombre del Alumno';
-                    th.style.textAlign = 'left';
-                }
-                th.style.whiteSpace = 'nowrap';
-                th.style.overflow = 'hidden';
-                th.style.textOverflow = 'ellipsis';
+                th.style.boxSizing = 'border-box';
                 th.style.lineHeight = '1.05';
+                th.style.verticalAlign = 'middle';
+                th.style.textAlign = 'center';
+
+                if (cIdx === 0) {
+                    th.style.width = '26px';
+                    th.textContent = '#';
+                } else if (cIdx === 1) {
+                    th.style.width = `${alumnoWidthPct}%`;
+                    th.style.minWidth = `${numColsTotal > 14 ? '165px' : '190px'}`;
+                    th.style.textAlign = 'left';
+                    th.textContent = 'Nombre del Alumno';
+                } else {
+                    const btn = th.querySelector('button');
+                    if (btn) btn.remove();
+
+                    const thTextLower = th.innerText.toLowerCase();
+                    const isProm = thTextLower.includes('prom') || thTextLower.includes('calif');
+                    const isEst = thTextLower.includes('estat');
+                    const isResumen = thTextLower.includes('resumen') || thTextLower.includes('asistencia') || thTextLower.includes('contacto');
+
+                    if (isProm) {
+                        th.style.width = numColsTotal > 14 ? '48px' : '65px';
+                        th.innerHTML = `<div style="font-weight:bold; font-size:${Math.max(7.5, calcFont * 0.95).toFixed(1)}px; line-height:1.1;">Promedio</div>`;
+                    } else if (isEst) {
+                        th.style.width = numColsTotal > 14 ? '52px' : '70px';
+                        th.innerHTML = `<div style="font-weight:bold; font-size:${Math.max(7.5, calcFont * 0.95).toFixed(1)}px; line-height:1.1;">Estatus</div>`;
+                    } else if (isResumen) {
+                        th.style.width = numColsTotal > 14 ? '58px' : '75px';
+                        th.innerHTML = `<div style="font-weight:bold; font-size:${Math.max(7.5, calcFont * 0.95).toFixed(1)}px; line-height:1.1;">Resumen</div>`;
+                    } else {
+                        const actObj = (window._currentActs && window._currentActs[actCounter - 1]) ? window._currentActs[actCounter - 1] : null;
+                        const thText = th.innerText.trim();
+
+                        // Detectar si es fecha de asistencia (ej: 11-05)
+                        if (/^\d{1,2}[-\/]\d{1,2}$|^\d{4}[-\/]\d{1,2}[-\/]\d{1,2}$/.test(thText) || (thText.length <= 6 && thText.includes('-'))) {
+                            const parts = thText.split(/[-\/]/);
+                            const dia = parts[parts.length - 1];
+                            const mes = parts.length > 1 ? parts[parts.length - 2] : '';
+                            th.style.width = '28px';
+                            th.innerHTML = `<div style="font-weight:bold; font-size:${Math.max(7.5, calcFont * 0.95).toFixed(1)}px; line-height:1.05;">${dia}</div><div style="font-size:${Math.max(6.5, calcFont * 0.78).toFixed(1)}px; color:#64748b; line-height:1;">${mes}</div>`;
+                        } else if (actObj || numColsTotal > 8) {
+                            // Columna de actividad escolar
+                            const peso = actObj?.rubro_peso && Number(actObj.rubro_peso) > 0 ? (Number(actObj.rubro_peso) <= 10 ? `+${actObj.rubro_peso}pt` : `${actObj.rubro_peso}%`) : '';
+                            th.style.width = numColsTotal > 14 ? '38px' : '52px';
+                            th.innerHTML = `<div style="font-weight:bold; font-size:${Math.max(7.5, calcFont * 0.95).toFixed(1)}px; line-height:1.1;" title="${actObj?.titulo || thText}">A${actCounter}</div>` +
+                                (peso ? `<div style="font-size:${Math.max(6.5, calcFont * 0.78).toFixed(1)}px; color:#475569; line-height:1;">${peso}</div>` : '');
+                            actCounter++;
+                        } else {
+                            th.innerHTML = `<div style="font-weight:bold; font-size:${Math.max(7.5, calcFont * 0.95).toFixed(1)}px; line-height:1.1;">${thText}</div>`;
+                        }
+                    }
+                }
             });
         }
 
         tableContentHtml = cloneTable.outerHTML;
+
+        // Construir Leyenda Aclaratoria de Actividades al pie de la tabla
+        if (window._currentActs && window._currentActs.length > 0 && totalCols > 6) {
+            const actItems = window._currentActs.map((a, i) => {
+                const peso = a.rubro_peso && Number(a.rubro_peso) > 0 ? (Number(a.rubro_peso) <= 10 ? ` (+${a.rubro_peso} pts extra)` : ` (${a.rubro_peso}%)`) : '';
+                const rubro = a.rubro_name ? ` [${a.rubro_name}]` : '';
+                return `<strong>A${i + 1}:</strong> ${a.titulo || 'Actividad'}${rubro}${peso}`;
+            });
+            legendHtml = `
+                <div style="background:#f8fafc; border:1px solid #cbd5e1; border-radius:4px; padding:2px 8px; margin-top:3px; font-size:${Math.max(7.0, calcFont * 0.82).toFixed(1)}px; color:#334155; line-height:1.2; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; flex-shrink:0;">
+                    <span style="font-weight:bold; color:#1e40af;">Actividades:</span> ${actItems.join(' <span style="color:#cbd5e1; margin:0 4px;">•</span> ')}
+                </div>
+            `;
+        } else if (tipo === 'asistencias') {
+            legendHtml = `
+                <div style="background:#f8fafc; border:1px solid #cbd5e1; border-radius:4px; padding:2px 8px; margin-top:3px; font-size:${Math.max(7.0, calcFont * 0.82).toFixed(1)}px; color:#334155; line-height:1.2; display:flex; justify-content:space-around; flex-shrink:0;">
+                    <div><span style="color:#166534; font-weight:bold;">✓</span> Asistencia</div>
+                    <div><span style="color:#dc2626; font-weight:bold;">✗</span> Falta</div>
+                    <div><span style="color:#d97706; font-weight:bold;">R</span> Retardo</div>
+                    <div><span style="color:#2563eb; font-weight:bold;">J</span> Falta Justificada</div>
+                </div>
+            `;
+        }
 
         if (statsCont && hasStats) {
             const statsData = Array.from(statsCont.querySelectorAll('.card')).map(c => {
@@ -18977,7 +19158,7 @@ window.imprimirLista = async (esVacia = false, forzarOrientacion = null) => {
 
             if(statsData.length > 0) {
                 statsHtml = `
-                    <div style="display:flex; justify-content:space-around; align-items:center; background:#f8fafc; border:1px solid #cbd5e1; border-radius:4px; padding:2px 8px; margin-bottom:4px; font-size:${Math.max(7.5, calcFont * 0.92).toFixed(1)}px; flex-shrink:0;">
+                    <div style="display:flex; justify-content:space-around; align-items:center; background:#f8fafc; border:1px solid #cbd5e1; border-radius:4px; padding:2px 8px; margin-bottom:3px; font-size:${Math.max(7.5, calcFont * 0.90).toFixed(1)}px; flex-shrink:0;">
                         ${statsData.map(s => `
                             <div>
                                 <span style="color:#64748b; font-weight:600;">${s.label}:</span>
@@ -19001,6 +19182,7 @@ window.imprimirLista = async (esVacia = false, forzarOrientacion = null) => {
             <head>
                 <meta charset="UTF-8">
                 <title>${esVacia ? 'Plantilla de Seguimiento' : 'Acta de Resultados'} - ${grupoName}</title>
+                <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
                 <style>
                     * { box-sizing: border-box; margin: 0; padding: 0; }
                     
@@ -19097,7 +19279,6 @@ window.imprimirLista = async (esVacia = false, forzarOrientacion = null) => {
 
                     .data-table { 
                         width: 100%; 
-                        height: 100%;
                         border-collapse: collapse; 
                         table-layout: fixed;
                         page-break-inside: avoid;
@@ -19124,7 +19305,7 @@ window.imprimirLista = async (esVacia = false, forzarOrientacion = null) => {
                     }
 
                     .col-num {
-                        width: 28px !important;
+                        width: 26px !important;
                         text-align: center !important;
                         font-weight: bold;
                     }
@@ -19133,22 +19314,13 @@ window.imprimirLista = async (esVacia = false, forzarOrientacion = null) => {
                         text-align: left !important;
                         padding-left: 6px !important;
                         font-weight: 600;
-                        ${esHorizontal ? 'width: 24% !important; min-width: 200px !important;' : 'width: 32% !important; min-width: 180px !important;'}
-                    }
-
-                    .badge {
-                        display: inline-block;
-                        padding: 1px 4px;
-                        font-size: 0.9em;
-                        font-weight: bold;
-                        border-radius: 3px;
                     }
 
                     .signatures { 
                         display: flex !important; 
                         justify-content: space-around !important; 
                         align-items: flex-end !important;
-                        margin-top: 3px !important; 
+                        margin-top: 2px !important; 
                         padding-top: 2px !important;
                         flex-shrink: 0 !important;
                         page-break-inside: avoid !important; 
@@ -19201,6 +19373,8 @@ window.imprimirLista = async (esVacia = false, forzarOrientacion = null) => {
                     <div class="table-container">
                         ${tableContentHtml}
                     </div>
+
+                    ${legendHtml}
 
                     <div class="signatures">
                         <div class="signature-box">
