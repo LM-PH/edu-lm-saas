@@ -18798,6 +18798,29 @@ window.imprimirLista = async (esVacia = false) => {
                 lastTd.remove();
             }
         });
+
+        // En el reporte impreso, las calificaciones menores a 5 aparecen como 5, conservando todo lo demás intacto
+        cloneTable.querySelectorAll('tbody tr').forEach(r => {
+            Array.from(r.cells).forEach((td, cellIdx) => {
+                if (cellIdx === 0) return; // Omitir columna de Alumno
+                
+                const txt = (td.innerText || '').trim();
+                if (txt.includes('%')) return; // Omitir Asistencias
+                if (td.querySelector('.badge') || /aprobado|reprobado|sin n\/e/i.test(txt)) return; // Omitir Estatus
+                if (!txt || txt === '-') return;
+
+                // En modo desglose de actividades individuales, ajustar únicamente la columna de Promedio final
+                if (selT && selT.value === 'evaluaciones') {
+                    const isPromCol = td.id && td.id.startsWith('prom_alumno_');
+                    if (!isPromCol) return;
+                }
+
+                const num = parseFloat(txt);
+                if (!isNaN(num) && num > 0 && num < 5.0) {
+                    td.textContent = '5';
+                }
+            });
+        });
         tableContentHtml = cloneTable.outerHTML;
 
         // Preparar HTML de estadísticas ultra-compacto
