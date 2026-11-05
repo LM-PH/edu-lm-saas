@@ -18764,9 +18764,9 @@ window.imprimirLista = async (esVacia = false, forzarOrientacion = null) => {
     let headerHeight, sigHeight, logoHeight, sigLineHeight;
     if (esHorizontal) {
         if (n <= 35) {
-            headerHeight = 44; sigHeight = 38; logoHeight = 38; sigLineHeight = 15;
+            headerHeight = 42; sigHeight = 36; logoHeight = 38; sigLineHeight = 15;
         } else {
-            headerHeight = 36; sigHeight = 32; logoHeight = 30; sigLineHeight = 12;
+            headerHeight = 34; sigHeight = 30; logoHeight = 30; sigLineHeight = 12;
         }
     } else {
         if (n <= 20) {
@@ -18778,16 +18778,15 @@ window.imprimirLista = async (esVacia = false, forzarOrientacion = null) => {
 
     const hasStats = !esVacia && statsCont && statsCont.querySelectorAll('.card').length > 0;
     const statsHeight = hasStats ? (esHorizontal ? 16 : 20) : 0;
-    // Si hay muchas columnas (actividades o asistencias), reservamos 14px para la leyenda aclaratoria al pie
     const hasLegend = !esVacia && (totalCols > 7 || tipo === 'asistencias');
     const legendHeight = hasLegend ? 14 : 0;
-    const gaps = esHorizontal ? 6 : 8;
+    const margins = 4;
 
-    const fixedHeight = headerHeight + statsHeight + legendHeight + sigHeight + gaps;
-    const availableTableHeight = pageHeight - fixedHeight;
+    const fixedTotal = headerHeight + statsHeight + legendHeight + sigHeight + margins;
+    const availableTableHeight = pageHeight - fixedTotal;
 
-    // Altura del encabezado: si hay muchas columnas (> 6), se le da más altura (30px-34px) para evitar empalmes
-    const theadHeight = totalCols > 6 ? (esHorizontal ? 32 : 36) : (esHorizontal ? 24 : 28);
+    // Altura del encabezado thead (28px a 32px para albergar 2 renglones sin empalme)
+    const theadHeight = totalCols > 6 ? (esHorizontal ? 28 : 32) : 24;
     const availableTbodyHeight = Math.max(100, availableTableHeight - theadHeight);
 
     const rawRowHeight = Math.floor(availableTbodyHeight / n);
@@ -18795,7 +18794,7 @@ window.imprimirLista = async (esVacia = false, forzarOrientacion = null) => {
     const maxRow = esHorizontal ? 26 : 34;
     const rowHeight = Math.max(minRow, Math.min(maxRow, rawRowHeight));
 
-    // Tamaño de fuente proporcional sin cortes ni desbordes
+    // Tamaño de fuente proporcional
     let baseFontSize = esHorizontal 
         ? Math.max(7.5, Math.min(11.5, rowHeight * 0.58))
         : Math.max(9.0, Math.min(13.0, rowHeight * 0.55));
@@ -18806,8 +18805,8 @@ window.imprimirLista = async (esVacia = false, forzarOrientacion = null) => {
     const calcFont = Math.max(7.0, baseFontSize);
     const fontSize = calcFont.toFixed(1) + 'px';
 
-    const padV = Math.max(0.1, Math.min(esHorizontal ? 3 : 5, (rowHeight - calcFont) / 2)).toFixed(1) + 'px';
-    const padH = totalCols > 18 ? '1px' : (totalCols > 10 ? '2px' : (esHorizontal ? '4px' : '5px'));
+    const padV = Math.max(0.1, Math.min(esHorizontal ? 2.5 : 4.5, (rowHeight - calcFont) / 2)).toFixed(1) + 'px';
+    const padH = totalCols > 18 ? '1px' : (totalCols > 10 ? '2px' : (esHorizontal ? '3px' : '4px'));
     const rowHeightPx = rowHeight.toFixed(1) + 'px';
 
     // Extracción limpia y 100% fiable del nombre del alumno
@@ -18843,18 +18842,20 @@ window.imprimirLista = async (esVacia = false, forzarOrientacion = null) => {
 
     if (esVacia) {
         const numCols = 20;
-        const alWidth = esHorizontal ? '24%' : '30%';
-        let headers = `<th class="col-num" style="width:26px; text-align:center;">#</th><th class="col-alumno" style="text-align:left; min-width:180px; width:${alWidth};">Nombre del Alumno</th>`;
+        const alWidthPct = esHorizontal ? 22 : 28;
+        const dayWidthPct = ((100 - 3.5 - alWidthPct) / numCols).toFixed(2);
+        
+        let headers = `<th class="col-num" style="width:3.5%; text-align:center;">#</th><th class="col-alumno" style="text-align:left; width:${alWidthPct}%;">Nombre del Alumno</th>`;
         for (let i = 1; i <= numCols; i++) {
-            headers += `<th class="col-day" style="text-align:center; font-size:${Math.max(7.5, calcFont * 0.9).toFixed(1)}px; font-weight:600; width:auto;">${i}</th>`;
+            headers += `<th class="col-day" style="text-align:center; font-size:${Math.max(7.0, calcFont * 0.9).toFixed(1)}px; font-weight:600; width:${dayWidthPct}%;">${i}</th>`;
         }
         
         let rowsHtml = '';
         for (let i = 0; i < rowsList.length; i++) {
             const sName = getCleanStudentName(rowsList[i], i);
-            rowsHtml += `<tr style="height:${rowHeightPx};">`;
+            rowsHtml += `<tr>`;
             rowsHtml += `<td class="col-num" style="text-align:center; font-weight:bold;">${i + 1}</td>`;
-            rowsHtml += `<td class="col-alumno" style="text-align:left; font-weight:600;"><div style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis; line-height:1.1;">${sName}</div></td>`;
+            rowsHtml += `<td class="col-alumno" style="text-align:left; font-weight:600;">${sName}</td>`;
             for (let j = 1; j <= numCols; j++) {
                 rowsHtml += `<td class="col-day"></td>`;
             }
@@ -18864,7 +18865,7 @@ window.imprimirLista = async (esVacia = false, forzarOrientacion = null) => {
         tableContentHtml = `
             <table class="data-table">
                 <thead>
-                    <tr style="height:${theadHeight}px;">${headers}</tr>
+                    <tr>${headers}</tr>
                 </thead>
                 <tbody>
                     ${rowsHtml}
@@ -18875,7 +18876,7 @@ window.imprimirLista = async (esVacia = false, forzarOrientacion = null) => {
         const cloneTable = tabla.cloneNode(true);
         cloneTable.classList.add('data-table');
         
-        // Quitar columnas innecesarias en papel (ej. enlaces de contacto mailto)
+        // Quitar columnas de contacto o correo
         cloneTable.querySelectorAll('tr').forEach(r => {
             const lastTd = r.cells[r.cells.length - 1];
             if(lastTd && (lastTd.innerHTML.includes('fa-envelope') || lastTd.innerText.includes('Contacto'))) {
@@ -18892,8 +18893,6 @@ window.imprimirLista = async (esVacia = false, forzarOrientacion = null) => {
             if (!hasNumCol) {
                 const thNum = document.createElement('th');
                 thNum.className = 'col-num';
-                thNum.style.width = '26px';
-                thNum.style.textAlign = 'center';
                 thNum.textContent = '#';
                 theadTr.insertBefore(thNum, theadTr.cells[0]);
             }
@@ -18905,135 +18904,113 @@ window.imprimirLista = async (esVacia = false, forzarOrientacion = null) => {
         });
 
         // =========================================================================
-        // FORMATEO PROFESIONAL DE CELDAS DE ALUMNOS Y DATOS (CERO EMPALMES)
+        // FORMATEO EXCLUSIVAMENTE EN 1 SOLA LÍNEA POR CELDA (SIN WRAP NI EMPALMES)
         // =========================================================================
         tbodyRows.forEach((r, idx) => {
-            r.style.height = rowHeightPx;
-
             if (!hasNumCol) {
                 const tdNum = document.createElement('td');
                 tdNum.className = 'col-num';
-                tdNum.style.width = '26px';
-                tdNum.style.textAlign = 'center';
                 tdNum.style.fontWeight = 'bold';
                 tdNum.textContent = String(idx + 1);
                 r.insertBefore(tdNum, r.cells[0]);
             }
 
-            // Formatear celda de alumno (celda 1) con nombre 100% limpio y garantizado
+            // Formatear celda de alumno (celda 1)
             const alumnoCell = r.cells[1];
             if (alumnoCell) {
                 alumnoCell.classList.add('col-alumno');
                 const cleanName = getCleanStudentName(rowsList[idx] || r, idx);
-                alumnoCell.innerHTML = `<div style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-weight:600; text-align:left; line-height:1.1;">${cleanName}</div>`;
-                alumnoCell.style.textAlign = 'left';
+                alumnoCell.textContent = cleanName;
             }
 
-            // Formatear celdas de datos (a partir de la celda 2)
+            // Formatear celdas de datos
             Array.from(r.cells).forEach((td, cellIdx) => {
-                td.style.padding = `${padV} ${padH}`;
-                td.style.height = rowHeightPx;
-                td.style.fontSize = fontSize;
-                td.style.lineHeight = '1.05';
-                td.style.boxSizing = 'border-box';
-                td.style.verticalAlign = 'middle';
+                if (cellIdx === 0 || cellIdx === 1) return;
 
-                if (cellIdx === 0 || cellIdx === 1) return; // Omitir # y Alumno
-
-                // 1. Quitar botones residuales (ej: botón de justificar falta)
+                // Quitar botones y enlaces
                 const btn = td.querySelector('button');
                 if (btn) {
-                    const btnContent = btn.innerHTML;
+                    const btnHtml = btn.innerHTML;
                     btn.remove();
-                    td.innerHTML = btnContent;
+                    td.innerHTML = btnHtml;
                 }
-
-                // 2. Limpiar enlaces y botones de contacto
                 const mailLink = td.querySelector('a');
                 if (mailLink) mailLink.remove();
 
-                // 3. CONVERSIÓN DE MARCAS DE ASISTENCIA A TEXTO REAL Y VISIBLE
+                // Marcas de asistencia: convertir a símbolos limpios de 1 caracter
                 const tdHtml = td.innerHTML;
                 if (tdHtml.includes('fa-check') || td.style.color.includes('success') || td.querySelector('.fa-check')) {
-                    td.innerHTML = '<span style="color:#166534; font-weight:bold; font-size:1.15em; line-height:1;">✓</span>';
-                    td.style.textAlign = 'center';
+                    td.innerHTML = '<span style="color:#166534; font-weight:bold; font-size:1.15em;">✓</span>';
                     return;
                 } else if (tdHtml.includes('fa-clock') || td.style.color.includes('warning') || td.querySelector('.fa-clock')) {
-                    td.innerHTML = '<span style="color:#d97706; font-weight:bold; line-height:1;">R</span>';
-                    td.style.textAlign = 'center';
+                    td.innerHTML = '<span style="color:#d97706; font-weight:bold;">R</span>';
                     return;
                 } else if (tdHtml.includes('fa-file-shield') || tdHtml.includes('Justificada') || td.querySelector('.fa-file-shield')) {
-                    td.innerHTML = '<span style="color:#2563eb; font-weight:bold; line-height:1;">J</span>';
-                    td.style.textAlign = 'center';
+                    td.innerHTML = '<span style="color:#2563eb; font-weight:bold;">J</span>';
                     return;
                 } else if (tdHtml.includes('fa-xmark') || td.style.color.includes('danger') || td.querySelector('.fa-xmark')) {
-                    td.innerHTML = '<span style="color:#dc2626; font-weight:bold; font-size:1.1em; line-height:1;">✗</span>';
-                    td.style.textAlign = 'center';
+                    td.innerHTML = '<span style="color:#dc2626; font-weight:bold; font-size:1.1em;">✗</span>';
                     return;
                 }
 
-                // 4. Limpiar iconos de edición de actividades (fa-pen, fa-plus)
+                // Limpiar iconos de edición
                 const icons = td.querySelectorAll('i.fa-pen, i.fa-plus, i.fa-bolt');
                 icons.forEach(ic => ic.remove());
 
                 const rawTxt = (td.innerText || '').trim();
 
-                // 5. RESUMEN DE ASISTENCIAS: En una sola línea sin saltos para evitar empalmes
+                // Resumen de asistencias (ej: 12A / 2R / 1J / 3F)
                 if (rawTxt.includes('A') && rawTxt.includes('F') && (rawTxt.includes('/') || rawTxt.includes('R'))) {
                     const matchA = (rawTxt.match(/(\d+)\s*A/i) || [])[1] || '0';
                     const matchR = (rawTxt.match(/(\d+)\s*R/i) || [])[1] || '0';
                     const matchJ = (rawTxt.match(/(\d+)\s*J/i) || [])[1] || '0';
                     const matchF = (rawTxt.match(/(\d+)\s*F/i) || [])[1] || '0';
-                    td.innerHTML = `<div style="white-space:nowrap; font-size:${Math.max(6.5, calcFont * 0.82).toFixed(1)}px; font-weight:bold; line-height:1;">` +
-                        `<span style="color:#166534;">${matchA}A</span> ` +
-                        `<span style="color:#d97706;">${matchR}R</span> ` +
-                        `<span style="color:#2563eb;">${matchJ}J</span> ` +
-                        `<span style="color:#dc2626;">${matchF}F</span></div>`;
-                    td.style.textAlign = 'center';
+                    
+                    if (totalCols > 15) {
+                        // Modo ultra-compacto cuando hay muchos días
+                        td.innerHTML = `<span style="color:#166534; font-weight:bold;">${matchA}A</span> <span style="color:#dc2626; font-weight:bold;">${matchF}F</span>`;
+                    } else {
+                        td.innerHTML = `<span style="color:#166534; font-weight:bold;">${matchA}A</span> <span style="color:#d97706;">${matchR}R</span> <span style="color:#2563eb;">${matchJ}J</span> <span style="color:#dc2626; font-weight:bold;">${matchF}F</span>`;
+                    }
                     return;
                 }
 
-                // 6. ESTATUS DE ASISTENCIAS (%): En una sola línea sin <br> para evitar empalmes
+                // Estatus de asistencias con % (ej: 85%<br>Regular)
                 if (rawTxt.includes('%')) {
                     const pctMatch = rawTxt.match(/(\d+)%/);
-                    const isRiesgo = /riesgo/i.test(rawTxt);
-                    const isReg = /regular/i.test(rawTxt);
-                    const tag = isRiesgo ? 'Riesgo' : (isReg ? 'Reg.' : '');
                     if (pctMatch) {
-                        const color = isRiesgo ? '#991b1b' : '#166534';
-                        td.innerHTML = `<div style="white-space:nowrap; font-weight:bold; font-size:${fontSize}; line-height:1; color:${color};">${pctMatch[1]}%${tag ? ` <span style="font-size:0.8em; font-weight:normal; color:#475569;">(${tag})</span>` : ''}</div>`;
-                        td.style.textAlign = 'center';
+                        const numPct = parseInt(pctMatch[1]);
+                        const color = numPct < 70 ? '#991b1b' : '#166534';
+                        td.innerHTML = `<span style="font-weight:bold; color:${color};">${pctMatch[1]}%</span>`;
                         return;
                     }
                 }
 
-                // 7. ESTATUS DE EVALUACIONES: En una sola línea compacta
+                // Estatus de evaluación (Aprobado / Reprobado / Sin N/E)
                 if (td.querySelector('.badge') || /aprobado|reprobado|sin n\/e/i.test(rawTxt)) {
                     const isApr = /aprobado/i.test(rawTxt);
                     const isRep = /reprobado/i.test(rawTxt);
                     const sColor = isApr ? '#166534' : (isRep ? '#991b1b' : '#475569');
-                    const sLabel = isApr ? 'Aprobado' : (isRep ? 'Reprobado' : 'Sin N/E');
-                    td.innerHTML = `<div style="white-space:nowrap; font-weight:bold; font-size:${Math.max(7.0, calcFont * 0.88).toFixed(1)}px; color:${sColor}; line-height:1;">${sLabel}</div>`;
-                    td.style.textAlign = 'center';
+                    // Abreviar a 3-4 letras para que nunca desborde columnas estrechas
+                    const sLabel = totalCols > 8 ? (isApr ? 'Apr.' : (isRep ? 'Rep.' : 'S/N')) : (isApr ? 'Aprobado' : (isRep ? 'Reprobado' : 'Sin N/E'));
+                    td.innerHTML = `<span style="font-weight:bold; color:${sColor};">${sLabel}</span>`;
                     return;
                 }
 
-                // 8. COLUMNA DE PROMEDIO: Limpia de puntos extra para no desbordar
+                // Columna de Promedio
                 if (td.id && td.id.startsWith('prom_alumno_')) {
                     const numProm = parseFloat(rawTxt);
                     if (!isNaN(numProm)) {
                         let promVal = numProm;
                         let promDisplay = (promVal > 0 && promVal < 6.0) ? '5.0' : promVal.toFixed(1);
-                        td.innerHTML = `<div style="white-space:nowrap; font-weight:bold; font-size:${Math.max(8.0, calcFont * 1.05).toFixed(1)}px; color:#1e40af; line-height:1;">${promDisplay}</div>`;
-                        td.style.textAlign = 'center';
+                        td.innerHTML = `<span style="font-weight:bold; color:#1e40af;">${promDisplay}</span>`;
                         return;
                     }
                 }
 
-                // 9. CELDAS DE NOTAS INDIVIDUALES
+                // Celdas numéricas regulares
                 if (!rawTxt || rawTxt === '-') {
-                    td.innerHTML = `<span style="color:#94a3b8; font-weight:normal;">-</span>`;
-                    td.style.textAlign = 'center';
+                    td.innerHTML = '<span style="color:#94a3b8;">-</span>';
                     return;
                 }
 
@@ -19041,85 +19018,87 @@ window.imprimirLista = async (esVacia = false, forzarOrientacion = null) => {
                 if (!isNaN(numVal)) {
                     const isGrade = numVal >= 0 && numVal <= 10;
                     const displayVal = (isGrade && numVal > 0 && numVal < 6.0) ? '5' : String(numVal);
-                    td.innerHTML = `<div style="white-space:nowrap; font-weight:600; line-height:1;">${displayVal}</div>`;
-                    td.style.textAlign = 'center';
+                    td.innerHTML = `<span style="font-weight:600;">${displayVal}</span>`;
                 } else {
-                    td.innerHTML = `<div style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis; line-height:1;">${rawTxt}</div>`;
+                    td.textContent = rawTxt;
                 }
             });
         });
 
         // =========================================================================
-        // FORMATEO DE ENCABEZADOS DE TABLA (THEAD) - IDENTIFICACIÓN CLARA Y SIN EMPALMES
+        // DISTRIBUCIÓN MATEMÁTICA EXACTA AL 100% DE LAS COLUMNAS EN EL ENCABEZADO
         // =========================================================================
         if (theadTr) {
-            theadTr.style.height = `${theadHeight}px`;
             const ths = Array.from(theadTr.cells);
             const numColsTotal = ths.length;
 
-            let alumnoWidthPct;
-            if (numColsTotal <= 5) alumnoWidthPct = esHorizontal ? 32 : 36;
-            else if (numColsTotal <= 8) alumnoWidthPct = esHorizontal ? 26 : 30;
-            else if (numColsTotal <= 14) alumnoWidthPct = 20;
-            else alumnoWidthPct = 17;
+            const numPct = 3.5;
+            let alPct = numColsTotal > 15 ? 20.0 : (numColsTotal > 10 ? 24.0 : 30.0);
+            
+            // Detectar columnas de resumen al final
+            let summaryThs = [];
+            let dataThs = [];
+
+            ths.forEach((th, idx) => {
+                if (idx === 0 || idx === 1) return;
+                const txtLower = th.innerText.toLowerCase();
+                const isSummary = txtLower.includes('prom') || txtLower.includes('calif') || txtLower.includes('estat') || txtLower.includes('resumen') || txtLower.includes('asist') || txtLower.includes('contacto');
+                if (isSummary) summaryThs.push({ th, idx });
+                else dataThs.push({ th, idx });
+            });
+
+            // Si por alguna razón todas se clasificaron como resumen o ninguna
+            if (dataThs.length === 0 && summaryThs.length > 2) {
+                // Las últimas 2 son de resumen, las demás son datos
+                dataThs = summaryThs.slice(0, -2);
+                summaryThs = summaryThs.slice(-2);
+            }
+
+            const summaryColPct = summaryThs.length > 0 ? (totalCols > 15 ? 5.5 : 7.0) : 0;
+            const totalSummaryPct = summaryColPct * summaryThs.length;
+            const remainingPct = Math.max(10, 100.0 - numPct - alPct - totalSummaryPct);
+            const dataColPct = dataThs.length > 0 ? (remainingPct / dataThs.length).toFixed(2) : 5.0;
 
             let actCounter = 1;
 
             ths.forEach((th, cIdx) => {
-                th.style.height = `${theadHeight}px`;
-                th.style.padding = `${padV} ${padH}`;
-                th.style.fontSize = fontSize;
-                th.style.boxSizing = 'border-box';
-                th.style.lineHeight = '1.05';
-                th.style.verticalAlign = 'middle';
-                th.style.textAlign = 'center';
+                const btn = th.querySelector('button');
+                if (btn) btn.remove();
 
                 if (cIdx === 0) {
-                    th.style.width = '26px';
+                    th.style.width = `${numPct}%`;
                     th.textContent = '#';
                 } else if (cIdx === 1) {
-                    th.style.width = `${alumnoWidthPct}%`;
-                    th.style.minWidth = `${numColsTotal > 14 ? '165px' : '190px'}`;
+                    th.style.width = `${alPct}%`;
                     th.style.textAlign = 'left';
                     th.textContent = 'Nombre del Alumno';
                 } else {
-                    const btn = th.querySelector('button');
-                    if (btn) btn.remove();
-
-                    const thTextLower = th.innerText.toLowerCase();
-                    const isProm = thTextLower.includes('prom') || thTextLower.includes('calif');
-                    const isEst = thTextLower.includes('estat');
-                    const isResumen = thTextLower.includes('resumen') || thTextLower.includes('asistencia') || thTextLower.includes('contacto');
-
-                    if (isProm) {
-                        th.style.width = numColsTotal > 14 ? '48px' : '65px';
-                        th.innerHTML = `<div style="font-weight:bold; font-size:${Math.max(7.5, calcFont * 0.95).toFixed(1)}px; line-height:1.1;">Promedio</div>`;
-                    } else if (isEst) {
-                        th.style.width = numColsTotal > 14 ? '52px' : '70px';
-                        th.innerHTML = `<div style="font-weight:bold; font-size:${Math.max(7.5, calcFont * 0.95).toFixed(1)}px; line-height:1.1;">Estatus</div>`;
-                    } else if (isResumen) {
-                        th.style.width = numColsTotal > 14 ? '58px' : '75px';
-                        th.innerHTML = `<div style="font-weight:bold; font-size:${Math.max(7.5, calcFont * 0.95).toFixed(1)}px; line-height:1.1;">Resumen</div>`;
+                    const isSummary = summaryThs.some(s => s.th === th);
+                    if (isSummary) {
+                        th.style.width = `${summaryColPct}%`;
+                        const txtLower = th.innerText.toLowerCase();
+                        if (txtLower.includes('prom') || txtLower.includes('calif')) th.textContent = 'Prom.';
+                        else if (txtLower.includes('estat')) th.textContent = 'Est.';
+                        else if (txtLower.includes('resumen')) th.textContent = 'Tot.';
+                        else if (txtLower.includes('asist')) th.textContent = '%';
+                        else th.textContent = th.innerText.trim().substring(0, 5);
                     } else {
+                        th.style.width = `${dataColPct}%`;
                         const actObj = (window._currentActs && window._currentActs[actCounter - 1]) ? window._currentActs[actCounter - 1] : null;
                         const thText = th.innerText.trim();
 
-                        // Detectar si es fecha de asistencia (ej: 11-05)
                         if (/^\d{1,2}[-\/]\d{1,2}$|^\d{4}[-\/]\d{1,2}[-\/]\d{1,2}$/.test(thText) || (thText.length <= 6 && thText.includes('-'))) {
                             const parts = thText.split(/[-\/]/);
                             const dia = parts[parts.length - 1];
                             const mes = parts.length > 1 ? parts[parts.length - 2] : '';
-                            th.style.width = '28px';
-                            th.innerHTML = `<div style="font-weight:bold; font-size:${Math.max(7.5, calcFont * 0.95).toFixed(1)}px; line-height:1.05;">${dia}</div><div style="font-size:${Math.max(6.5, calcFont * 0.78).toFixed(1)}px; color:#64748b; line-height:1;">${mes}</div>`;
-                        } else if (actObj || numColsTotal > 8) {
-                            // Columna de actividad escolar
+                            th.innerHTML = `<div style="font-weight:bold; font-size:${Math.max(7.0, calcFont * 0.95).toFixed(1)}px; line-height:1.05;">${dia}</div><div style="font-size:${Math.max(6.0, calcFont * 0.75).toFixed(1)}px; color:#64748b; line-height:1;">${mes}</div>`;
+                        } else if (actObj || numColsTotal > 7) {
                             const peso = actObj?.rubro_peso && Number(actObj.rubro_peso) > 0 ? (Number(actObj.rubro_peso) <= 10 ? `+${actObj.rubro_peso}pt` : `${actObj.rubro_peso}%`) : '';
-                            th.style.width = numColsTotal > 14 ? '38px' : '52px';
-                            th.innerHTML = `<div style="font-weight:bold; font-size:${Math.max(7.5, calcFont * 0.95).toFixed(1)}px; line-height:1.1;" title="${actObj?.titulo || thText}">A${actCounter}</div>` +
-                                (peso ? `<div style="font-size:${Math.max(6.5, calcFont * 0.78).toFixed(1)}px; color:#475569; line-height:1;">${peso}</div>` : '');
+                            th.innerHTML = `<div style="font-weight:bold; font-size:${Math.max(7.0, calcFont * 0.95).toFixed(1)}px; line-height:1.05;">A${actCounter}</div>` +
+                                (peso ? `<div style="font-size:${Math.max(6.0, calcFont * 0.75).toFixed(1)}px; color:#475569; line-height:1;">${peso}</div>` : '');
                             actCounter++;
                         } else {
-                            th.innerHTML = `<div style="font-weight:bold; font-size:${Math.max(7.5, calcFont * 0.95).toFixed(1)}px; line-height:1.1;">${thText}</div>`;
+                            th.textContent = thText.substring(0, 8);
                         }
                     }
                 }
@@ -19128,7 +19107,7 @@ window.imprimirLista = async (esVacia = false, forzarOrientacion = null) => {
 
         tableContentHtml = cloneTable.outerHTML;
 
-        // Construir Leyenda Aclaratoria de Actividades al pie de la tabla
+        // Leyenda aclaratoria
         if (window._currentActs && window._currentActs.length > 0 && totalCols > 6) {
             const actItems = window._currentActs.map((a, i) => {
                 const peso = a.rubro_peso && Number(a.rubro_peso) > 0 ? (Number(a.rubro_peso) <= 10 ? ` (+${a.rubro_peso} pts extra)` : ` (${a.rubro_peso}%)`) : '';
@@ -19136,13 +19115,13 @@ window.imprimirLista = async (esVacia = false, forzarOrientacion = null) => {
                 return `<strong>A${i + 1}:</strong> ${a.titulo || 'Actividad'}${rubro}${peso}`;
             });
             legendHtml = `
-                <div style="background:#f8fafc; border:1px solid #cbd5e1; border-radius:4px; padding:2px 8px; margin-top:3px; font-size:${Math.max(7.0, calcFont * 0.82).toFixed(1)}px; color:#334155; line-height:1.2; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; flex-shrink:0;">
+                <div style="background:#f8fafc; border:1px solid #cbd5e1; border-radius:4px; padding:2px 8px; margin-top:2px; font-size:${Math.max(6.5, calcFont * 0.80).toFixed(1)}px; color:#334155; line-height:1.15; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; flex-shrink:0;">
                     <span style="font-weight:bold; color:#1e40af;">Actividades:</span> ${actItems.join(' <span style="color:#cbd5e1; margin:0 4px;">•</span> ')}
                 </div>
             `;
         } else if (tipo === 'asistencias') {
             legendHtml = `
-                <div style="background:#f8fafc; border:1px solid #cbd5e1; border-radius:4px; padding:2px 8px; margin-top:3px; font-size:${Math.max(7.0, calcFont * 0.82).toFixed(1)}px; color:#334155; line-height:1.2; display:flex; justify-content:space-around; flex-shrink:0;">
+                <div style="background:#f8fafc; border:1px solid #cbd5e1; border-radius:4px; padding:2px 8px; margin-top:2px; font-size:${Math.max(6.5, calcFont * 0.80).toFixed(1)}px; color:#334155; line-height:1.15; display:flex; justify-content:space-around; flex-shrink:0;">
                     <div><span style="color:#166534; font-weight:bold;">✓</span> Asistencia</div>
                     <div><span style="color:#dc2626; font-weight:bold;">✗</span> Falta</div>
                     <div><span style="color:#d97706; font-weight:bold;">R</span> Retardo</div>
@@ -19158,7 +19137,7 @@ window.imprimirLista = async (esVacia = false, forzarOrientacion = null) => {
 
             if(statsData.length > 0) {
                 statsHtml = `
-                    <div style="display:flex; justify-content:space-around; align-items:center; background:#f8fafc; border:1px solid #cbd5e1; border-radius:4px; padding:2px 8px; margin-bottom:3px; font-size:${Math.max(7.5, calcFont * 0.90).toFixed(1)}px; flex-shrink:0;">
+                    <div style="display:flex; justify-content:space-around; align-items:center; background:#f8fafc; border:1px solid #cbd5e1; border-radius:4px; padding:2px 8px; margin-bottom:2px; font-size:${Math.max(7.0, calcFont * 0.88).toFixed(1)}px; flex-shrink:0;">
                         ${statsData.map(s => `
                             <div>
                                 <span style="color:#64748b; font-weight:600;">${s.label}:</span>
@@ -19211,7 +19190,7 @@ window.imprimirLista = async (esVacia = false, forzarOrientacion = null) => {
                         max-height: 100%;
                         display: flex;
                         flex-direction: column;
-                        justify-content: space-between;
+                        justify-content: flex-start;
                         overflow: hidden;
                         page-break-after: avoid;
                         page-break-inside: avoid;
@@ -19224,7 +19203,7 @@ window.imprimirLista = async (esVacia = false, forzarOrientacion = null) => {
                         align-items: center;
                         border-bottom: 2px solid #1e40af;
                         padding-bottom: 2px;
-                        margin-bottom: 3px;
+                        margin-bottom: 2px;
                         flex-shrink: 0;
                         min-height: ${headerHeight}px;
                     }
@@ -19242,7 +19221,7 @@ window.imprimirLista = async (esVacia = false, forzarOrientacion = null) => {
                     }
 
                     .title-box h1 { 
-                        font-size: ${esHorizontal ? '13px' : '14px'}; 
+                        font-size: ${esHorizontal ? '12.5px' : '13.5px'}; 
                         color: #1e40af; 
                         text-transform: uppercase; 
                         margin: 0;
@@ -19251,7 +19230,7 @@ window.imprimirLista = async (esVacia = false, forzarOrientacion = null) => {
                     }
 
                     .title-box p { 
-                        font-size: 9px; 
+                        font-size: 8.5px; 
                         color: #475569; 
                         font-weight: 600;
                         margin-top: 1px;
@@ -19260,20 +19239,18 @@ window.imprimirLista = async (esVacia = false, forzarOrientacion = null) => {
                     .meta-grid {
                         display: grid;
                         grid-template-columns: auto auto;
-                        gap: 1px 12px;
-                        font-size: ${esHorizontal ? '8.5px' : '9px'};
+                        gap: 1px 10px;
+                        font-size: ${esHorizontal ? '8px' : '8.5px'};
                         text-align: right;
                         color: #334155;
-                        line-height: 1.2;
+                        line-height: 1.15;
                     }
                     .meta-grid strong { color: #0f172a; }
 
                     .table-container {
-                        flex: 1 1 auto;
-                        display: flex;
-                        flex-direction: column;
-                        min-height: 0;
                         width: 100%;
+                        margin: 0;
+                        padding: 0;
                         overflow: visible;
                     }
 
@@ -19287,40 +19264,49 @@ window.imprimirLista = async (esVacia = false, forzarOrientacion = null) => {
 
                     .data-table th, .data-table td { 
                         border: 1px solid #475569 !important; 
-                        padding: ${padV} ${padH} !important; 
-                        text-align: center; 
+                        text-align: center !important; 
                         font-size: ${fontSize} !important; 
-                        line-height: 1.05 !important;
-                        height: ${rowHeightPx} !important;
-                        vertical-align: middle;
-                        box-sizing: border-box;
-                        page-break-inside: avoid;
-                        break-inside: avoid;
+                        vertical-align: middle !important;
+                        box-sizing: border-box !important;
+                        overflow: hidden !important;
+                        text-overflow: ellipsis !important;
+                        white-space: nowrap !important;
+                        page-break-inside: avoid !important;
+                        break-inside: avoid !important;
                     }
 
-                    .data-table th { 
+                    .data-table thead th { 
                         background-color: #f1f5f9 !important; 
-                        font-weight: 700; 
-                        color: #0f172a;
+                        font-weight: 700 !important; 
+                        color: #0f172a !important;
+                        height: ${theadHeight}px !important;
+                        padding: 1px ${padH} !important;
+                        line-height: 1.05 !important;
+                    }
+
+                    .data-table tbody td {
+                        height: ${rowHeightPx} !important;
+                        padding: ${padV} ${padH} !important;
+                        line-height: 1.05 !important;
+                        max-width: 0 !important;
                     }
 
                     .col-num {
-                        width: 26px !important;
                         text-align: center !important;
-                        font-weight: bold;
+                        font-weight: bold !important;
                     }
 
                     .col-alumno {
                         text-align: left !important;
-                        padding-left: 6px !important;
-                        font-weight: 600;
+                        padding-left: 4px !important;
+                        font-weight: 600 !important;
                     }
 
                     .signatures { 
                         display: flex !important; 
                         justify-content: space-around !important; 
                         align-items: flex-end !important;
-                        margin-top: 2px !important; 
+                        margin-top: auto !important; 
                         padding-top: 2px !important;
                         flex-shrink: 0 !important;
                         page-break-inside: avoid !important; 
@@ -19330,7 +19316,7 @@ window.imprimirLista = async (esVacia = false, forzarOrientacion = null) => {
 
                     .signature-box { 
                         text-align: center !important; 
-                        width: ${esHorizontal ? '280px' : '260px'} !important; 
+                        width: ${esHorizontal ? '260px' : '240px'} !important; 
                     }
 
                     .signature-line { 
@@ -19379,13 +19365,13 @@ window.imprimirLista = async (esVacia = false, forzarOrientacion = null) => {
                     <div class="signatures">
                         <div class="signature-box">
                             <div class="signature-line"></div>
-                            <div style="font-size:${Math.max(7.5, calcFont * 0.9).toFixed(1)}px; font-weight: bold; color: #000; line-height: 1.1;">${teacherName}</div>
-                            <div style="font-size:${Math.max(6.5, calcFont * 0.75).toFixed(1)}px; color: #333; text-transform: uppercase; font-weight: 600;">Docente / Profesor(a) Titular</div>
+                            <div style="font-size:${Math.max(7.0, calcFont * 0.9).toFixed(1)}px; font-weight: bold; color: #000; line-height: 1.1;">${teacherName}</div>
+                            <div style="font-size:${Math.max(6.0, calcFont * 0.75).toFixed(1)}px; color: #333; text-transform: uppercase; font-weight: 600;">Docente / Profesor(a) Titular</div>
                         </div>
                         <div class="signature-box">
                             <div class="signature-line"></div>
-                            <div style="font-size:${Math.max(7.5, calcFont * 0.9).toFixed(1)}px; font-weight: bold; color: #000; line-height: 1.1;">${directorName}</div>
-                            <div style="font-size:${Math.max(6.5, calcFont * 0.75).toFixed(1)}px; color: #333; text-transform: uppercase; font-weight: 600;">Director(a) / Responsable Directo</div>
+                            <div style="font-size:${Math.max(7.0, calcFont * 0.9).toFixed(1)}px; font-weight: bold; color: #000; line-height: 1.1;">${directorName}</div>
+                            <div style="font-size:${Math.max(6.0, calcFont * 0.75).toFixed(1)}px; color: #333; text-transform: uppercase; font-weight: 600;">Director(a) / Responsable Directo</div>
                         </div>
                     </div>
                 </div>
@@ -29833,55 +29819,56 @@ window.imprimirAdminLista = async (esVacia = false, forzarOrientacion = null) =>
     const pageHeight = esHorizontal ? 730 : 960;
     let headerHeight, sigHeight, logoHeight, sigLineHeight;
     if (esHorizontal) {
-        if (n <= 35) { headerHeight = 46; sigHeight = 42; logoHeight = 40; sigLineHeight = 16; }
-        else { headerHeight = 38; sigHeight = 34; logoHeight = 32; sigLineHeight = 12; }
+        if (n <= 35) { headerHeight = 42; sigHeight = 36; logoHeight = 38; sigLineHeight = 15; }
+        else { headerHeight = 34; sigHeight = 30; logoHeight = 30; sigLineHeight = 12; }
     } else {
-        if (n <= 20) { headerHeight = 66; sigHeight = 58; logoHeight = 54; sigLineHeight = 26; }
-        else { headerHeight = 54; sigHeight = 46; logoHeight = 42; sigLineHeight = 18; }
+        if (n <= 20) { headerHeight = 64; sigHeight = 56; logoHeight = 52; sigLineHeight = 24; }
+        else { headerHeight = 52; sigHeight = 44; logoHeight = 40; sigLineHeight = 16; }
     }
 
-    const gaps = esHorizontal ? 6 : 8;
-    const fixedHeight = headerHeight + sigHeight + gaps;
-    const availableTableHeight = pageHeight - fixedHeight;
+    const margins = 4;
+    const theadHeight = esVacia ? (esHorizontal ? 28 : 32) : 24;
+    const fixedTotal = headerHeight + sigHeight + margins + theadHeight;
+    const availableTbodyHeight = Math.max(100, pageHeight - fixedTotal);
 
-    const totalRows = n + 1;
-    const rawRowHeight = Math.floor(availableTableHeight / totalRows);
-    const minRow = esHorizontal ? 11.5 : 16;
-    const maxRow = esHorizontal ? 28 : 36;
+    const rawRowHeight = Math.floor(availableTbodyHeight / n);
+    const minRow = esHorizontal ? 11.5 : 15;
+    const maxRow = esHorizontal ? 26 : 34;
     const rowHeight = Math.max(minRow, Math.min(maxRow, rawRowHeight));
 
     let baseFontSize = esHorizontal 
-        ? Math.max(8.0, Math.min(12.0, rowHeight * 0.58))
-        : Math.max(9.5, Math.min(13.5, rowHeight * 0.55));
-    if (esVacia) baseFontSize = Math.max(7.5, baseFontSize * 0.90);
+        ? Math.max(7.5, Math.min(11.5, rowHeight * 0.58))
+        : Math.max(9.0, Math.min(13.0, rowHeight * 0.55));
+    if (esVacia) baseFontSize = Math.max(7.0, baseFontSize * 0.88);
 
-    const calcFont = Math.max(7.5, baseFontSize);
+    const calcFont = Math.max(7.0, baseFontSize);
     const fontSize = calcFont.toFixed(1) + 'px';
-    const padV = Math.max(0.2, Math.min(esHorizontal ? 4 : 6, (rowHeight - calcFont) / 2)).toFixed(1) + 'px';
-    const padH = esVacia ? '2px' : (esHorizontal ? '4px' : '6px');
+    const padV = Math.max(0.1, Math.min(esHorizontal ? 2.5 : 4.5, (rowHeight - calcFont) / 2)).toFixed(1) + 'px';
+    const padH = esVacia ? '1px' : (esHorizontal ? '4px' : '6px');
     const rowHeightPx = rowHeight.toFixed(1) + 'px';
 
     let tableContentHtml = '';
 
     if (esVacia) {
         const numCols = 20;
-        const alWidth = esHorizontal ? '24%' : '30%';
-        let headers = `<th class="col-num" style="width:28px; text-align:center;">#</th><th class="col-alumno" style="text-align:left; min-width:180px; width:${alWidth};">Nombre del Alumno</th>`;
+        const alWidthPct = esHorizontal ? 22 : 28;
+        const dayWidthPct = ((100 - 3.5 - alWidthPct) / numCols).toFixed(2);
+        let headers = `<th class="col-num" style="width:3.5%; text-align:center;">#</th><th class="col-alumno" style="text-align:left; width:${alWidthPct}%;">Nombre del Alumno</th>`;
         for (let i = 1; i <= numCols; i++) {
-            headers += `<th class="col-day" style="text-align:center; font-size:${Math.max(7.5, calcFont * 0.9).toFixed(1)}px; font-weight:600;">${i}</th>`;
+            headers += `<th class="col-day" style="text-align:center; font-size:${Math.max(7.0, calcFont * 0.9).toFixed(1)}px; font-weight:600; width:${dayWidthPct}%;">${i}</th>`;
         }
         let rowsHtml = '';
         rowsList.forEach((tr, index) => {
             const nombre = (tr.cells[1]?.innerText || '').trim();
-            rowsHtml += `<tr style="height:${rowHeightPx};">`;
+            rowsHtml += `<tr>`;
             rowsHtml += `<td class="col-num" style="text-align:center; font-weight:bold;">${index + 1}</td>`;
-            rowsHtml += `<td class="col-alumno" style="text-align:left; font-weight:600;"><div style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis; line-height:1.1;">${nombre}</div></td>`;
+            rowsHtml += `<td class="col-alumno" style="text-align:left; font-weight:600;">${nombre}</td>`;
             for (let i = 0; i < numCols; i++) rowsHtml += `<td class="col-day"></td>`;
             rowsHtml += `</tr>`;
         });
         tableContentHtml = `
             <table class="data-table">
-                <thead><tr style="height:${rowHeightPx};">${headers}</tr></thead>
+                <thead><tr>${headers}</tr></thead>
                 <tbody>${rowsHtml}</tbody>
             </table>
         `;
@@ -29891,19 +29878,19 @@ window.imprimirAdminLista = async (esVacia = false, forzarOrientacion = null) =>
             const nombre = (tr.cells[1]?.innerText || '').trim();
             const matricula = (tr.cells[2]?.innerText || '-').trim();
             rowsHtml += `
-            <tr style="height:${rowHeightPx};">
+            <tr>
                 <td class="col-num" style="text-align:center; font-weight:bold;">${index + 1}</td>
-                <td class="col-alumno" style="text-align:left; font-weight:600;"><div style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis; line-height:1.1;">${nombre}</div></td>
+                <td class="col-alumno" style="text-align:left; font-weight:600;">${nombre}</td>
                 <td style="text-align:center;">${matricula}</td>
             </tr>`;
         });
         tableContentHtml = `
             <table class="data-table">
                 <thead>
-                    <tr style="height:${rowHeightPx};">
-                        <th class="col-num" style="width:36px; text-align:center;">#</th>
-                        <th class="col-alumno" style="text-align:left;">Nombre del Alumno</th>
-                        <th style="width:${esHorizontal ? '180px' : '150px'}; text-align:center;">Matrícula / Folio</th>
+                    <tr>
+                        <th class="col-num" style="width:4.5%; text-align:center;">#</th>
+                        <th class="col-alumno" style="width:70%; text-align:left;">Nombre del Alumno</th>
+                        <th style="width:25.5%; text-align:center;">Matrícula / Folio</th>
                     </tr>
                 </thead>
                 <tbody>${rowsHtml}</tbody>
@@ -29936,28 +29923,60 @@ window.imprimirAdminLista = async (esVacia = false, forzarOrientacion = null) =>
                     }
                     .print-main-wrapper {
                         box-sizing: border-box; width: 100%; height: 100%; max-height: 100%;
-                        display: flex; flex-direction: column; justify-content: space-between;
+                        display: flex; flex-direction: column; justify-content: flex-start;
                         overflow: hidden; page-break-after: avoid; page-break-inside: avoid; break-inside: avoid;
                     }
                     .header-container {
                         display: flex; justify-content: space-between; align-items: center;
-                        border-bottom: 2px solid #1e40af; padding-bottom: 2px; margin-bottom: 3px;
+                        border-bottom: 2px solid #1e40af; padding-bottom: 2px; margin-bottom: 2px;
                         flex-shrink: 0; min-height: ${headerHeight}px;
                     }
                     .header-left { display: flex; align-items: center; gap: 8px; }
                     .logo-img { max-height: ${logoHeight}px; max-width: 90px; object-fit: contain; }
-                    .title-box h1 { font-size: ${esHorizontal ? '13px' : '14px'}; color: #1e40af; text-transform: uppercase; margin: 0; font-weight: 800; line-height: 1.1; }
-                    .title-box p { font-size: 9px; color: #475569; font-weight: 600; margin-top: 1px; }
-                    .meta-grid { display: grid; grid-template-columns: auto auto; gap: 1px 12px; font-size: ${esHorizontal ? '8.5px' : '9px'}; text-align: right; color: #334155; line-height: 1.2; }
+                    .title-box h1 { font-size: ${esHorizontal ? '12.5px' : '13.5px'}; color: #1e40af; text-transform: uppercase; margin: 0; font-weight: 800; line-height: 1.1; }
+                    .title-box p { font-size: 8.5px; color: #475569; font-weight: 600; margin-top: 1px; }
+                    .meta-grid { display: grid; grid-template-columns: auto auto; gap: 1px 10px; font-size: ${esHorizontal ? '8px' : '8.5px'}; text-align: right; color: #334155; line-height: 1.15; }
                     .meta-grid strong { color: #0f172a; }
-                    .table-container { flex: 1 1 auto; display: flex; flex-direction: column; min-height: 0; width: 100%; overflow: visible; }
-                    .data-table { width: 100%; height: 100%; border-collapse: collapse; table-layout: fixed; page-break-inside: avoid; break-inside: avoid; }
-                    .data-table th, .data-table td { border: 1px solid #475569 !important; padding: ${padV} ${padH} !important; text-align: center; font-size: ${fontSize} !important; line-height: 1.05 !important; height: ${rowHeightPx} !important; vertical-align: middle; box-sizing: border-box; page-break-inside: avoid; break-inside: avoid; }
-                    .data-table th { background-color: #f1f5f9 !important; font-weight: 700; color: #0f172a; }
-                    .col-num { width: 28px !important; text-align: center !important; font-weight: bold; }
-                    .col-alumno { text-align: left !important; padding-left: 6px !important; font-weight: 600; ${esHorizontal ? 'width: 24% !important; min-width: 200px !important;' : 'width: 32% !important; min-width: 180px !important;'} }
-                    .signatures { display: flex !important; justify-content: space-around !important; align-items: flex-end !important; margin-top: 3px !important; padding-top: 2px !important; flex-shrink: 0 !important; min-height: ${sigHeight}px; }
-                    .signature-box { text-align: center !important; width: ${esHorizontal ? '280px' : '260px'} !important; }
+                    .table-container { width: 100%; margin: 0; padding: 0; overflow: visible; }
+                    .data-table { width: 100%; border-collapse: collapse; table-layout: fixed; page-break-inside: avoid; break-inside: avoid; }
+                    .data-table th, .data-table td { 
+                        border: 1px solid #475569 !important; 
+                        text-align: center !important; 
+                        font-size: ${fontSize} !important; 
+                        vertical-align: middle !important;
+                        box-sizing: border-box !important;
+                        overflow: hidden !important;
+                        text-overflow: ellipsis !important;
+                        white-space: nowrap !important;
+                        page-break-inside: avoid !important;
+                        break-inside: avoid !important;
+                    }
+                    .data-table thead th { 
+                        background-color: #f1f5f9 !important; 
+                        font-weight: 700 !important; 
+                        color: #0f172a !important;
+                        height: ${theadHeight}px !important;
+                        padding: 1px ${padH} !important;
+                        line-height: 1.05 !important;
+                    }
+                    .data-table tbody td {
+                        height: ${rowHeightPx} !important;
+                        padding: ${padV} ${padH} !important;
+                        line-height: 1.05 !important;
+                        max-width: 0 !important;
+                    }
+                    .col-num { text-align: center !important; font-weight: bold !important; }
+                    .col-alumno { text-align: left !important; padding-left: 4px !important; font-weight: 600 !important; }
+                    .signatures { 
+                        display: flex !important; 
+                        justify-content: space-around !important; 
+                        align-items: flex-end !important; 
+                        margin-top: auto !important; 
+                        padding-top: 2px !important; 
+                        flex-shrink: 0 !important; 
+                        min-height: ${sigHeight}px; 
+                    }
+                    .signature-box { text-align: center !important; width: ${esHorizontal ? '260px' : '240px'} !important; }
                     .signature-line { border-top: 1.5px solid #000000 !important; margin-bottom: 2px !important; height: ${sigLineHeight}px !important; }
                 </style>
             </head>
@@ -29984,13 +30003,13 @@ window.imprimirAdminLista = async (esVacia = false, forzarOrientacion = null) =>
                     <div class="signatures">
                         <div class="signature-box">
                             <div class="signature-line"></div>
-                            <div style="font-size:${Math.max(7.5, calcFont * 0.9).toFixed(1)}px; font-weight: bold; color: #000; line-height: 1.1;">Control Escolar / Administración</div>
-                            <div style="font-size:${Math.max(6.5, calcFont * 0.75).toFixed(1)}px; color: #333; text-transform: uppercase; font-weight: 600;">Sello y Cotejo Oficial</div>
+                            <div style="font-size:${Math.max(7.0, calcFont * 0.9).toFixed(1)}px; font-weight: bold; color: #000; line-height: 1.1;">Control Escolar / Administración</div>
+                            <div style="font-size:${Math.max(6.0, calcFont * 0.75).toFixed(1)}px; color: #333; text-transform: uppercase; font-weight: 600;">Sello y Cotejo Oficial</div>
                         </div>
                         <div class="signature-box">
                             <div class="signature-line"></div>
-                            <div style="font-size:${Math.max(7.5, calcFont * 0.9).toFixed(1)}px; font-weight: bold; color: #000; line-height: 1.1;">${directorName}</div>
-                            <div style="font-size:${Math.max(6.5, calcFont * 0.75).toFixed(1)}px; color: #333; text-transform: uppercase; font-weight: 600;">Director(a) / Responsable Directo</div>
+                            <div style="font-size:${Math.max(7.0, calcFont * 0.9).toFixed(1)}px; font-weight: bold; color: #000; line-height: 1.1;">${directorName}</div>
+                            <div style="font-size:${Math.max(6.0, calcFont * 0.75).toFixed(1)}px; color: #333; text-transform: uppercase; font-weight: 600;">Director(a) / Responsable Directo</div>
                         </div>
                     </div>
                 </div>
@@ -30034,42 +30053,59 @@ window.descargarAdminListaPDF = async (esVacia = false) => {
 
     const rowsList = Array.from(tbody.querySelectorAll("tr")).filter(r => {
         const txt = (r.innerText || "").trim();
-        return txt && !txt.includes("Seleccione") && !txt.includes("Cargando") && !txt.includes("No tiene");
+        return txt && !txt.includes("Seleccione") && !txt.includes("Cargando") && !txt.includes("No tiene") && !txt.includes("Sin Alumnos");
     });
     const totalAlumnos = rowsList.length || 1;
     const n = Math.max(totalAlumnos, 1);
 
     const esHorizontal = (esVacia || n > 30);
     const pageHeight = esHorizontal ? 730 : 960;
-    const fixedHeight = esHorizontal ? 120 : 150;
-    const availableTableHeight = pageHeight - fixedHeight;
+    
+    let headerHeight, sigHeight, logoHeight, sigLineHeight;
+    if (esHorizontal) {
+        if (n <= 35) { headerHeight = 42; sigHeight = 36; logoHeight = 38; sigLineHeight = 15; }
+        else { headerHeight = 34; sigHeight = 30; logoHeight = 30; sigLineHeight = 12; }
+    } else {
+        if (n <= 20) { headerHeight = 64; sigHeight = 56; logoHeight = 52; sigLineHeight = 24; }
+        else { headerHeight = 52; sigHeight = 44; logoHeight = 40; sigLineHeight = 16; }
+    }
 
-    const totalRows = n + 1;
-    const rawRowHeight = Math.floor(availableTableHeight / totalRows);
-    const minRow = esHorizontal ? 11.5 : 14;
-    const maxRow = esHorizontal ? 26 : 38;
+    const margins = 4;
+    const theadHeight = esVacia ? (esHorizontal ? 28 : 32) : 24;
+    const fixedTotal = headerHeight + sigHeight + margins + theadHeight;
+    const availableTbodyHeight = Math.max(100, pageHeight - fixedTotal);
+
+    const rawRowHeight = Math.floor(availableTbodyHeight / n);
+    const minRow = esHorizontal ? 11.5 : 15;
+    const maxRow = esHorizontal ? 26 : 34;
     const rowHeight = Math.max(minRow, Math.min(maxRow, rawRowHeight));
 
-    let baseFontSize = esHorizontal ? Math.max(8.0, Math.min(12.0, rowHeight * 0.58)) : Math.max(9.0, Math.min(13.5, rowHeight * 0.58));
-    if (esVacia) baseFontSize = Math.max(7.5, baseFontSize * 0.90);
-    const calcFont = baseFontSize;
+    let baseFontSize = esHorizontal 
+        ? Math.max(7.5, Math.min(11.5, rowHeight * 0.58)) 
+        : Math.max(9.0, Math.min(13.0, rowHeight * 0.55));
+    if (esVacia) baseFontSize = Math.max(7.0, baseFontSize * 0.88);
+    const calcFont = Math.max(7.0, baseFontSize);
     const fontSize = calcFont.toFixed(1) + 'px';
-    const padV = Math.max(0.2, Math.min(esHorizontal ? 3 : 5, (rowHeight - calcFont) / 2)).toFixed(1) + 'px';
+    const padV = Math.max(0.1, Math.min(esHorizontal ? 2.5 : 4.5, (rowHeight - calcFont) / 2)).toFixed(1) + 'px';
+    const padH = esVacia ? '1px' : (esHorizontal ? '4px' : '6px');
     const rowHeightPx = rowHeight.toFixed(1) + 'px';
 
     let tableContentHtml = '';
 
     if (esVacia) {
         const numCols = 20;
-        const alWidth = esHorizontal ? '24%' : '28%';
-        let headers = `<th style="width:28px; text-align:center; padding:${padV} 2px;">#</th><th style="text-align:left; min-width:180px; width:${alWidth}; padding:${padV} 4px;">Nombre del Alumno</th>`;
-        for(let i=1; i<=numCols; i++) headers += `<th style="text-align:center; font-size:${Math.max(7.5, calcFont * 0.9).toFixed(1)}px; font-weight:600; padding:${padV} 1px;">${i}</th>`;
-        tableContentHtml += `<thead><tr style="height:${rowHeightPx};">${headers}</tr></thead><tbody>`;
+        const alWidthPct = esHorizontal ? 22 : 28;
+        const dayWidthPct = ((100 - 3.5 - alWidthPct) / numCols).toFixed(2);
+        let headers = `<th style="width:3.5%; text-align:center; height:${theadHeight}px; padding:1px ${padH}; background:#f1f5f9; font-weight:700;">#</th><th style="text-align:left; width:${alWidthPct}%; height:${theadHeight}px; padding:1px ${padH}; background:#f1f5f9; font-weight:700;">Nombre del Alumno</th>`;
+        for(let i=1; i<=numCols; i++) {
+            headers += `<th style="text-align:center; font-size:${Math.max(7.0, calcFont * 0.9).toFixed(1)}px; font-weight:600; width:${dayWidthPct}%; height:${theadHeight}px; padding:1px ${padH}; background:#f1f5f9;">${i}</th>`;
+        }
+        tableContentHtml += `<thead><tr>${headers}</tr></thead><tbody>`;
         
         rowsList.forEach((tr, index) => {
             const nombre = (tr.cells[1]?.innerText || '').trim();
-            let row = `<tr style="height:${rowHeightPx};"><td style="text-align:center; font-weight:bold; padding:${padV} 2px;">${index + 1}</td><td style="padding:${padV} 4px;"><div style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis; line-height:1.1;">${nombre}</div></td>`;
-            for(let i=0; i<numCols; i++) row += `<td></td>`;
+            let row = `<tr style="height:${rowHeightPx};"><td style="text-align:center; font-weight:bold; height:${rowHeightPx}; padding:${padV} ${padH}; max-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${index + 1}</td><td style="text-align:left; font-weight:600; height:${rowHeightPx}; padding:${padV} 4px; max-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${nombre}</td>`;
+            for(let i=0; i<numCols; i++) row += `<td style="height:${rowHeightPx}; max-width:0;"></td>`;
             row += `</tr>`;
             tableContentHtml += row;
         });
@@ -30077,10 +30113,10 @@ window.descargarAdminListaPDF = async (esVacia = false) => {
     } else {
         tableContentHtml += `
           <thead>
-             <tr style="height:${rowHeightPx};">
-                <th style="width:36px; text-align:center; padding:${padV} 4px;">#</th>
-                <th style="text-align:left; padding:${padV} 6px;">Nombre del Alumno</th>
-                <th style="width:${esHorizontal ? '180px' : '160px'}; text-align:center; padding:${padV} 4px;">Matrícula / Folio</th>
+             <tr>
+                <th style="width:4.5%; text-align:center; height:${theadHeight}px; padding:1px ${padH}; background:#f1f5f9; font-weight:700;">#</th>
+                <th style="width:70%; text-align:left; height:${theadHeight}px; padding:1px ${padH}; background:#f1f5f9; font-weight:700;">Nombre del Alumno</th>
+                <th style="width:25.5%; text-align:center; height:${theadHeight}px; padding:1px ${padH}; background:#f1f5f9; font-weight:700;">Matrícula / Folio</th>
              </tr>
           </thead>
           <tbody>
@@ -30090,52 +30126,48 @@ window.descargarAdminListaPDF = async (esVacia = false) => {
             const matricula = (tr.cells[2]?.innerText || '-').trim();
             tableContentHtml += `
             <tr style="height:${rowHeightPx};">
-                <td style="text-align:center; font-weight:bold; padding:${padV} 4px;">${index + 1}</td>
-                <td style="padding:${padV} 6px;"><div style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis; line-height:1.1;">${nombre}</div></td>
-                <td style="text-align:center; padding:${padV} 4px;">${matricula}</td>
+                <td style="text-align:center; font-weight:bold; height:${rowHeightPx}; padding:${padV} ${padH}; max-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${index + 1}</td>
+                <td style="text-align:left; font-weight:600; height:${rowHeightPx}; padding:${padV} 4px; max-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${nombre}</td>
+                <td style="text-align:center; height:${rowHeightPx}; padding:${padV} ${padH}; max-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${matricula}</td>
             </tr>`;
         });
         tableContentHtml += '</tbody>';
     }
 
     const htmlToPrint = `
-    <div style="font-family: -apple-system, BlinkMacSystemFont, Arial, sans-serif; background:white; color:#0f172a; width:100%; height:${pageHeight}px; max-height:${pageHeight}px; overflow:hidden; display:flex; flex-direction:column; justify-content:space-between; box-sizing:border-box; padding:15px;">
-        <div>
-            <table style="width:100%; border-collapse:collapse; margin-bottom:5px;">
-                <tr>
-                    <td style="width:15%; text-align:center; vertical-align:middle;">
-                        ${schoolLogo ? `<img src="${schoolLogo}" style="height:60px; max-width:100px; object-fit:contain;" crossorigin="anonymous">` : ''}
-                    </td>
-                    <td style="text-align:center; vertical-align:middle;">
-                        <h2 style="margin:0; font-size:1.15em; color:#1e40af; text-transform:uppercase;">${schoolName}</h2>
-                        <p style="margin:2px 0 0 0; font-size:0.85em; font-weight:bold; color:#333;">${esVacia ? 'PLANTILLA AUXILIAR DE CONTROL Y ASISTENCIA' : 'LISTA OFICIAL DE ALUMNOS REGISTRADOS'}</p>
-                        <p style="margin:2px 0 0 0; font-size:0.8em; color:#555;">Grupo: <strong>${grupoName}</strong></p>
-                    </td>
-                    <td style="width:18%; text-align:center; vertical-align:middle; font-size:0.75em; color:#555;">
-                        <div style="border:1px solid #cbd5e1; padding:4px; border-radius:4px; background:#f8fafc;">
-                           <strong>Fecha:</strong><br>${fecha}
-                        </div>
-                    </td>
-                </tr>
-            </table>
-            
-            <div style="border-top:2px solid #1e40af; margin-bottom:6px;"></div>
-            
+    <div style="font-family: -apple-system, BlinkMacSystemFont, Arial, sans-serif; background:white; color:#0f172a; width:100%; height:${pageHeight}px; max-height:${pageHeight}px; overflow:hidden; display:flex; flex-direction:column; justify-content:flex-start; box-sizing:border-box; padding:10px 15px;">
+        <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:2px solid #1e40af; padding-bottom:2px; margin-bottom:2px; flex-shrink:0; min-height:${headerHeight}px;">
+            <div style="display:flex; align-items:center; gap:8px;">
+                ${schoolLogo ? `<img src="${schoolLogo}" style="max-height:${logoHeight}px; max-width:90px; object-fit:contain;" crossorigin="anonymous">` : ''}
+                <div>
+                    <h1 style="font-size:${esHorizontal ? '12.5px' : '13.5px'}; color:#1e40af; text-transform:uppercase; margin:0; font-weight:800; line-height:1.1;">${schoolName}</h1>
+                    <p style="font-size:8.5px; color:#475569; font-weight:600; margin-top:1px;">${esVacia ? 'PLANTILLA AUXILIAR DE CONTROL Y ASISTENCIA' : 'LISTA OFICIAL DE ALUMNOS REGISTRADOS'}</p>
+                </div>
+            </div>
+            <div style="display:grid; grid-template-columns:auto auto; gap:1px 10px; font-size:${esHorizontal ? '8px' : '8.5px'}; text-align:right; color:#334155; line-height:1.15;">
+                <div><strong>Control Escolar:</strong> Dirección Académica</div>
+                <div><strong>Grupo:</strong> ${grupoName}</div>
+                <div><strong>Ciclo:</strong> Activo</div>
+                <div><strong>Fecha:</strong> ${fecha}</div>
+            </div>
+        </div>
+        
+        <div style="width:100%; margin:0; padding:0; overflow:visible;">
             <table id="adminPdfTable" style="width:100%; border-collapse:collapse; font-size:${fontSize}; table-layout:fixed;" border="1" bordercolor="#475569">
                 ${tableContentHtml}
             </table>
         </div>
 
-        <div style="display:flex; justify-content:space-around; align-items:flex-end; margin-top:8px; padding-top:4px;">
-            <div style="text-align:center; width:220px;">
-                <div style="border-top:1.5px solid #000; height:18px; margin-bottom:2px;"></div>
-                <div style="font-size:8px; font-weight:bold; color:#000;">Control Escolar / Administración</div>
-                <div style="font-size:7px; color:#555; text-transform:uppercase;">Sello y Cotejo Oficial</div>
+        <div style="display:flex; justify-content:space-around; align-items:flex-end; margin-top:auto; padding-top:2px; flex-shrink:0; min-height:${sigHeight}px;">
+            <div style="text-align:center; width:${esHorizontal ? '260px' : '240px'};">
+                <div style="border-top:1.5px solid #000; height:${sigLineHeight}px; margin-bottom:2px;"></div>
+                <div style="font-size:${Math.max(7.0, calcFont * 0.9).toFixed(1)}px; font-weight:bold; color:#000; line-height:1.1;">Control Escolar / Administración</div>
+                <div style="font-size:${Math.max(6.0, calcFont * 0.75).toFixed(1)}px; color:#333; text-transform:uppercase; font-weight:600;">Sello y Cotejo Oficial</div>
             </div>
-            <div style="text-align:center; width:220px;">
-                <div style="border-top:1.5px solid #000; height:18px; margin-bottom:2px;"></div>
-                <div style="font-size:8px; font-weight:bold; color:#000;">${directorName}</div>
-                <div style="font-size:7px; color:#555; text-transform:uppercase;">Director(a) / Responsable Directo</div>
+            <div style="text-align:center; width:${esHorizontal ? '260px' : '240px'};">
+                <div style="border-top:1.5px solid #000; height:${sigLineHeight}px; margin-bottom:2px;"></div>
+                <div style="font-size:${Math.max(7.0, calcFont * 0.9).toFixed(1)}px; font-weight:bold; color:#000; line-height:1.1;">${directorName}</div>
+                <div style="font-size:${Math.max(6.0, calcFont * 0.75).toFixed(1)}px; color:#333; text-transform:uppercase; font-weight:600;">Director(a) / Responsable Directo</div>
             </div>
         </div>
     </div>`;
