@@ -17246,6 +17246,80 @@ window._resolverActividadesYEvaluacionesGrupo = async ({
     }
 };
 
+window._construirFiltroSqlMateria = (materiaLimpia) => {
+    if (!materiaLimpia) return null;
+    const sinAcentos = (s) => (s || '').normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
+    // Quitar paréntesis y comas que interfieren con la sintaxis de PostgREST .or()
+    const sanitize = (s) => (s || '').replace(/[()[\],:;\"'!?]/g, ' ').replace(/\s+/g, ' ').trim();
+
+    const rawSanitized = sanitize(materiaLimpia);
+    const sinSanitized = sanitize(sinAcentos(materiaLimpia));
+
+    const tokens = [];
+
+    // Agregar palabras significativas individuales
+    rawSanitized.split(/\s+/).forEach(w => {
+        const wSin = sinAcentos(w).toLowerCase();
+        if (w.length >= 4 && !['para', 'grado', 'secundaria', 'primer', 'segundo', 'tercer', 'educacion'].includes(wSin)) {
+            tokens.push(w);
+            tokens.push(sinAcentos(w));
+        }
+    });
+
+    const norm = sinSanitized.toLowerCase();
+    if (norm.includes('civic') || norm.includes('f.c') || norm.includes('f c') || norm.includes('etica')) {
+        tokens.push('Civica', 'Cívica', 'Etica', 'Ética', 'F.C', 'F. C');
+    }
+    if (norm.includes('fisic') || norm.includes('edu. f') || norm.includes('edu f')) {
+        tokens.push('Fisica', 'Física', 'Edu. F');
+    }
+    if (norm.includes('espanol') || norm.includes('lengua')) {
+        tokens.push('Español', 'Espanol', 'Lengua');
+    }
+    if (norm.includes('matemat')) {
+        tokens.push('Matemáticas', 'Matematicas');
+    }
+    if (norm.includes('biol')) {
+        tokens.push('Biología', 'Biologia');
+    }
+    if (norm.includes('geog')) {
+        tokens.push('Geografía', 'Geografia');
+    }
+    if (norm.includes('quim')) {
+        tokens.push('Química', 'Quimica');
+    }
+    if (norm.includes('hist')) {
+        tokens.push('Historia');
+    }
+    if (norm.includes('ingl')) {
+        tokens.push('Inglés', 'Ingles');
+    }
+    if (norm.includes('integ')) {
+        tokens.push('Integración', 'Integracion');
+    }
+    if (norm.includes('tutor')) {
+        tokens.push('Tutoría', 'Tutoria');
+    }
+    if (norm.includes('artes') || norm.includes('arte')) {
+        tokens.push('Artes', 'Arte');
+    }
+
+    if (norm.includes('tecnolog') || norm.includes('taller')) {
+        const palabras = rawSanitized.split(/\s+/);
+        palabras.forEach(p => {
+            const pSin = sinAcentos(p).toLowerCase();
+            if (pSin.length >= 4 && !['tecnologia', 'taller', 'para', 'grado', 'secundaria'].includes(pSin)) {
+                tokens.push(p);
+                tokens.push(sinAcentos(p));
+            }
+        });
+    }
+
+    const uniq = [...new Set(tokens.map(t => sanitize(t)).filter(t => t && t.length >= 3))];
+    if (uniq.length === 0) return null;
+    return uniq.map(t => `materia.ilike.%${t}%`).join(',');
+};
+
 window._resolverAsistenciasGrupoMateria = async ({
     gid,
     targetGrado,
@@ -17273,21 +17347,39 @@ window._resolverAsistenciasGrupoMateria = async ({
             };
         }
 
-        // 1. Obtener registros de asistencias de los alumnos
-        let qAsist = supabaseClient.from('asistencias')
-            .select('id, alumno_id, estado, creado_en, fecha, materia, trimestre')
-            .in('alumno_id', alumnoIds);
+        const sqlMateriaFilter = window._construirFiltroSqlMateria(materiaLimpia);
 
-        if (pId) {
-            qAsist = qAsist.or(`plantel_id.eq.${pId},plantel_id.is.null`);
-        }
-        if (currentTrimNum) {
-            qAsist = qAsist.eq('trimestre', currentTrimNum);
-        }
+        // 1. Obtener registros de asistencias de los alumnos con paginación automática
+        // PostgREST tiene un límite estricto de max-rows=1000 por petición en el servidor;
+        // paginando con .range() aseguramos no perder ningún registro sin importar el tamaño del grupo o trimestre.
+        let rawAsist = [];
+        let page = 0;
+        const pageSize = 1000;
+        while (true) {
+            let qAsist = supabaseClient.from('asistencias')
+                .select('id, alumno_id, estado, creado_en, fecha, materia, trimestre')
+                .in('alumno_id', alumnoIds);
 
-        const { data: rawAsist, error: errAsist } = await qAsist.limit(15000);
-        if (errAsist) {
-            console.warn("Error consultando asistencias en _resolverAsistenciasGrupoMateria:", errAsist);
+            if (sqlMateriaFilter) {
+                qAsist = qAsist.or(sqlMateriaFilter);
+            }
+            if (pId) {
+                qAsist = qAsist.or(`plantel_id.eq.${pId},plantel_id.is.null`);
+            }
+            if (currentTrimNum) {
+                qAsist = qAsist.eq('trimestre', currentTrimNum);
+            }
+
+            const { data: pageData, error: errAsist } = await qAsist.range(page * pageSize, (page + 1) * pageSize - 1);
+            if (errAsist) {
+                console.warn("Error consultando asistencias en _resolverAsistenciasGrupoMateria:", errAsist);
+                break;
+            }
+            if (!pageData || pageData.length === 0) break;
+            rawAsist.push(...pageData);
+            if (pageData.length < pageSize) break;
+            page++;
+            if (page > 20) break; // salvaguarda de seguridad
         }
 
         // Filtrar asistencias por materia usando comparador educativo universal
@@ -17316,6 +17408,9 @@ window._resolverAsistenciasGrupoMateria = async ({
             qSes = qSes.in('grupo_id', posiblesGrupoIds);
         }
 
+        if (sqlMateriaFilter) {
+            qSes = qSes.or(sqlMateriaFilter);
+        }
         if (pId) {
             qSes = qSes.or(`plantel_id.eq.${pId},plantel_id.is.null`);
         }
