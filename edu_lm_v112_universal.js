@@ -17246,6 +17246,211 @@ window._resolverActividadesYEvaluacionesGrupo = async ({
     }
 };
 
+window._resolverAsistenciasGrupoMateria = async ({
+    gid,
+    targetGrado,
+    rawVal,
+    materia,
+    isTec,
+    currentTrim,
+    isModoFinal,
+    pId,
+    alumnos
+}) => {
+    try {
+        const materiaLimpia = (materia || '').trim();
+        const currentTrimNum = isModoFinal ? null : (parseInt(currentTrim) || null);
+        const alumnoIds = (alumnos || []).map(a => a.id).filter(Boolean);
+
+        if (!alumnoIds || alumnoIds.length === 0) {
+            return {
+                diasArray: [],
+                totalDias: 0,
+                asistMap: {},
+                statsPorAlumno: {},
+                asistenciasRegistradas: [],
+                sesiones: []
+            };
+        }
+
+        // 1. Obtener registros de asistencias de los alumnos
+        let qAsist = supabaseClient.from('asistencias')
+            .select('id, alumno_id, estado, creado_en, fecha, materia, trimestre')
+            .in('alumno_id', alumnoIds);
+
+        if (pId) {
+            qAsist = qAsist.or(`plantel_id.eq.${pId},plantel_id.is.null`);
+        }
+        if (currentTrimNum) {
+            qAsist = qAsist.eq('trimestre', currentTrimNum);
+        }
+
+        const { data: rawAsist, error: errAsist } = await qAsist.limit(15000);
+        if (errAsist) {
+            console.warn("Error consultando asistencias en _resolverAsistenciasGrupoMateria:", errAsist);
+        }
+
+        // Filtrar asistencias por materia usando comparador educativo universal
+        const asistenciasRegistradas = (rawAsist || []).filter(a => {
+            if (!materiaLimpia) return true;
+            if (window._matchMateriaEducativa) {
+                return window._matchMateriaEducativa(a.materia, materiaLimpia);
+            }
+            return (a.materia || '').trim().toLowerCase() === materiaLimpia.toLowerCase();
+        });
+
+        // 2. Obtener sesiones registradas en 'asistencia_sesiones'
+        let posiblesGrupoIds = [gid, rawVal];
+        if (isTec) {
+            posiblesGrupoIds.push(`grado:${targetGrado}`);
+            posiblesGrupoIds.push(`grado:${targetGrado}|${materiaLimpia}`);
+        }
+        posiblesGrupoIds = [...new Set(posiblesGrupoIds.filter(Boolean).map(String))];
+
+        let qSes = supabaseClient.from('asistencia_sesiones')
+            .select('fecha, materia, grupo_id, trimestre');
+
+        if (posiblesGrupoIds.length === 1) {
+            qSes = qSes.eq('grupo_id', posiblesGrupoIds[0]);
+        } else if (posiblesGrupoIds.length > 1) {
+            qSes = qSes.in('grupo_id', posiblesGrupoIds);
+        }
+
+        if (pId) {
+            qSes = qSes.or(`plantel_id.eq.${pId},plantel_id.is.null`);
+        }
+        if (currentTrimNum) {
+            qSes = qSes.eq('trimestre', currentTrimNum);
+        }
+
+        const { data: rawSesiones, error: errSes } = await qSes.limit(2000);
+        if (errSes) {
+            console.warn("Error consultando asistencia_sesiones en _resolverAsistenciasGrupoMateria:", errSes);
+        }
+
+        // CRUCIAL: Filtrar sesiones estrictamente por materia para no inflar el denominador con sesiones de otras asignaturas
+        const sesionesFiltradas = (rawSesiones || []).filter(s => {
+            if (!materiaLimpia) return true;
+            if (window._matchMateriaEducativa) {
+                return window._matchMateriaEducativa(s.materia, materiaLimpia);
+            }
+            return (s.materia || '').trim().toLowerCase() === materiaLimpia.toLowerCase();
+        });
+
+        // 3. Consolidar fechas únicas y mapa de asistencias
+        const diasPaseLista = new Set();
+        const asistMap = {}; // asistMap[alumno_id][dateStr] = estado
+
+        // Fechas de sesiones oficiales registradas para esta materia
+        sesionesFiltradas.forEach(s => {
+            if (s.fecha) {
+                const fStr = String(s.fecha).split('T')[0].trim();
+                if (fStr) diasPaseLista.add(fStr);
+            }
+        });
+
+        // Fechas y estados de asistencias de los alumnos para esta materia
+        asistenciasRegistradas.forEach(a => {
+            let dateStr = null;
+            if (a.fecha) {
+                dateStr = String(a.fecha).split('T')[0].trim();
+            } else if (a.creado_en) {
+                const d = new Date(a.creado_en);
+                if (!isNaN(d.getTime())) {
+                    dateStr = d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, '0') + "-" + String(d.getDate()).padStart(2, '0');
+                }
+            }
+
+            if (dateStr) {
+                diasPaseLista.add(dateStr);
+                if (!asistMap[a.alumno_id]) asistMap[a.alumno_id] = {};
+
+                // Prioridad de estados si hubiera duplicados en el mismo día:
+                // Asistencia (4) > Justificada (3) > Retardo (2) > Falta (1)
+                const peso = { 'asistencia': 4, 'justificada': 3, 'retardo': 2, 'falta': 1 };
+                const estNormalizado = (a.estado || '').trim();
+                const estLower = estNormalizado.toLowerCase();
+                const prevEstado = asistMap[a.alumno_id][dateStr];
+                const prevLower = (prevEstado || '').trim().toLowerCase();
+
+                if (!prevEstado) {
+                    asistMap[a.alumno_id][dateStr] = estNormalizado;
+                } else if ((peso[estLower] || 0) > (peso[prevLower] || 0)) {
+                    asistMap[a.alumno_id][dateStr] = estNormalizado;
+                }
+            }
+        });
+
+        const diasArray = Array.from(diasPaseLista).sort();
+        const totalDias = diasArray.length;
+
+        // 4. Calcular estadísticas exactas e idénticas por alumno
+        const statsPorAlumno = {};
+
+        (alumnos || []).forEach(al => {
+            let asistenciasConteo = 0;
+            let retardosCount = 0;
+            let justificadasCount = 0;
+            let faltas = 0;
+
+            if (totalDias > 0) {
+                diasArray.forEach(d => {
+                    const rawEstado = asistMap[al.id] ? asistMap[al.id][d] : null;
+                    const est = (rawEstado || '').toLowerCase().trim();
+
+                    if (est === 'asistencia') {
+                        asistenciasConteo++;
+                    } else if (est === 'retardo') {
+                        asistenciasConteo++;
+                        retardosCount++;
+                    } else if (est === 'justificada' || est.includes('justif')) {
+                        asistenciasConteo++;
+                        justificadasCount++;
+                    } else {
+                        faltas++;
+                    }
+                });
+            }
+
+            const totalAsist = asistenciasConteo - retardosCount - justificadasCount; // Asistencias puras
+            const pctAsist = totalDias > 0 ? Math.round((asistenciasConteo / totalDias) * 100) : 100;
+            const badgeAsist = pctAsist < 70
+                ? '<span class="badge" style="background:#fee2e2; color:#991b1b">Riesgo</span>'
+                : '<span class="badge" style="background:#d1fae5; color:#065f46">Regular</span>';
+
+            statsPorAlumno[al.id] = {
+                asistenciasConteo,
+                retardosCount,
+                justificadasCount,
+                faltas,
+                totalAsist,
+                totalDias,
+                pctAsist,
+                badgeAsist
+            };
+        });
+
+        return {
+            diasArray,
+            totalDias,
+            asistMap,
+            statsPorAlumno,
+            asistenciasRegistradas,
+            sesiones: sesionesFiltradas
+        };
+    } catch (err) {
+        console.error("Error en _resolverAsistenciasGrupoMateria:", err);
+        return {
+            diasArray: [],
+            totalDias: 0,
+            asistMap: {},
+            statsPorAlumno: {},
+            asistenciasRegistradas: [],
+            sesiones: []
+        };
+    }
+};
+
 window.cargarAlumnosLista = async () => {
     const tbody = document.getElementById('listaMaestroAlumnos');
     const cabecera = document.getElementById('listaMaestroCabecera');
@@ -17536,39 +17741,11 @@ window.cargarAlumnosLista = async () => {
                 return nomH.toLowerCase() === materiaLimpia.toLowerCase();
             });
 
-            // Fetch Asistencias
-            let qAsist = supabaseClient.from('asistencias')
-                .select('alumno_id, estado, creado_en, materia')
-                .in('alumno_id', alumnoIds);
-            if (pId) qAsist = qAsist.or('plantel_id.eq.' + pId + ',plantel_id.is.null');
-            if (!isModoFinal) qAsist = qAsist.eq('trimestre', currentTrimNum);
-            const { data: rawAsist } = await qAsist;
-            const asistenciasRegistradas = (rawAsist || []).filter(a => {
-                if (!materiaLimpia) return true;
-                if (window._matchMateriaEducativa) {
-                    return window._matchMateriaEducativa(a.materia, materiaLimpia);
-                }
-                return (a.materia || '').trim().toLowerCase() === materiaLimpia.toLowerCase();
+            // Fetch Asistencias unificadas (mismo motor y cálculo que el perfil del maestro)
+            const resAsist = await window._resolverAsistenciasGrupoMateria({
+                gid, targetGrado, rawVal, materia: materiaLimpia, isTec, currentTrim, isModoFinal, pId, alumnos
             });
-            
-            let qSes = supabaseClient.from('asistencia_sesiones')
-                .select('fecha')
-                .or(`grupo_id.eq.${String(rawVal)},grupo_id.eq.${gid || ''}`);
-            if (pId) qSes = qSes.or('plantel_id.eq.' + pId + ',plantel_id.is.null');
-            if (!isModoFinal) qSes = qSes.eq('trimestre', currentTrimNum);
-            const { data: sesiones } = await qSes;
-            
-            let diasPaseLista = new Set();
-            if(sesiones) sesiones.forEach(s => { if(s.fecha) diasPaseLista.add(s.fecha); });
-            if(asistenciasRegistradas) {
-                asistenciasRegistradas.forEach(a => {
-                    if (a.creado_en) {
-                        let d = new Date(a.creado_en);
-                        diasPaseLista.add(d.getFullYear() + "-" + String(d.getMonth()+1).padStart(2,'0') + "-" + String(d.getDate()).padStart(2,'0'));
-                    }
-                });
-            }
-            let totalDias = diasPaseLista.size;
+            const statsAsistenciasMap = resAsist.statsPorAlumno || {};
 
             if (isModoFinal) {
                 cabecera.innerHTML = `<tr>
@@ -17639,17 +17816,8 @@ window.cargarAlumnosLista = async () => {
                     }
                 }
 
-                let asistenciasConteo = 0;
-                let pctAsist = 100;
-                if (asistenciasRegistradas && totalDias > 0) {
-                    const asisAl = asistenciasRegistradas.filter(a => a.alumno_id === al.id);
-                    asisAl.forEach(a => {
-                        if (a.estado === 'Asistencia' || a.estado === 'Retardo' || a.estado === 'Justificada') {
-                            asistenciasConteo++;
-                        }
-                    });
-                    pctAsist = Math.round((asistenciasConteo / totalDias) * 100);
-                }
+                const stAsist = statsAsistenciasMap[al.id] || { pctAsist: 100 };
+                const pctAsist = stAsist.pctAsist;
 
                 let badge = !hasGrade 
                     ? '<span class="badge" style="background:#f3f4f6; color:#4b5563">Sin N/E</span>' 
@@ -17739,48 +17907,28 @@ window.cargarAlumnosLista = async () => {
                 `;
             }
         } else {
-            // MODO ASISTENCIAS - Simplificado para este contexto pero manteniendo el orden
+            // MODO ASISTENCIAS (Perfil del Maestro)
             statsCont.innerHTML = '';
-            // (El código de asistencias sigue aquí, pero me enfocaré en las evaluaciones que es lo que el usuario está viendo usualmente)
             const materiaLimpia = (materia || '').trim();
-            const currentTrim = state.selectedMaestroTrimestre === 'final' ? null : (state.selectedMaestroTrimestre || 1);
+            const currentTrim = state.selectedMaestroTrimestre || 1;
+            const isModoFinal = currentTrim === 'final';
             
             let isAsistBloqueada = false;
-            if (currentTrim && window.checkPaseListaBloqueado) {
+            if (!isModoFinal && window.checkPaseListaBloqueado) {
                 const bMsg = await window.checkPaseListaBloqueado(materiaLimpia, gid || rawVal, currentTrim);
                 if (bMsg) isAsistBloqueada = true;
             }
 
-            let qAsist = supabaseClient.from('asistencias')
-                .select('alumno_id, estado, creado_en')
-                .in('alumno_id', alumnoIds)
-                .eq('materia', materiaLimpia)
-                .order('creado_en');
-            if (pId) qAsist = qAsist.eq('plantel_id', pId);
-            if (currentTrim) qAsist = qAsist.eq('trimestre', currentTrim);
-            const { data: asistenciasRegistradas } = await qAsist;
-                
-            let qSes = supabaseClient.from('asistencia_sesiones')
-                .select('fecha')
-                .eq('grupo_id', String(rawVal))
-                .eq('materia', materiaLimpia);
-            if (pId) qSes = qSes.eq('plantel_id', pId);
-            if (currentTrim) qSes = qSes.eq('trimestre', currentTrim);
-            const { data: sesiones } = await qSes;
-                
-            let diasPaseLista = new Set();
-            if(sesiones) sesiones.forEach(s => diasPaseLista.add(s.fecha));
-            let asistMap = {}; 
-            if (asistenciasRegistradas) {
-                asistenciasRegistradas.forEach(a => {
-                    let d = new Date(a.creado_en);
-                    let dateStr = d.getFullYear() + "-" + String(d.getMonth()+1).padStart(2,'0') + "-" + String(d.getDate()).padStart(2,'0');
-                    diasPaseLista.add(dateStr);
-                    if(!asistMap[a.alumno_id]) asistMap[a.alumno_id] = {};
-                    asistMap[a.alumno_id][dateStr] = a.estado; 
-                });
-            }
-            let diasArray = Array.from(diasPaseLista).sort();
+            // Resolver Asistencias con el motor unificado institucional
+            const resAsist = await window._resolverAsistenciasGrupoMateria({
+                gid, targetGrado, rawVal, materia: materiaLimpia, isTec, currentTrim, isModoFinal, pId, alumnos
+            });
+
+            const diasArray = resAsist.diasArray || [];
+            const totalDias = resAsist.totalDias || 0;
+            const asistMap = resAsist.asistMap || {};
+            const statsPorAlumno = resAsist.statsPorAlumno || {};
+
             let dateHeaders = diasArray.map(d => `<th style="padding:12px; text-align:center; max-width:60px; font-size:0.8rem">${d.substring(5)}</th>`).join('');
             if(diasArray.length === 0) dateHeaders = `<th style="padding:12px; text-align:center;">Días</th>`;
             
@@ -17793,27 +17941,28 @@ window.cargarAlumnosLista = async () => {
              </tr>`;
              
             for(let al of alumnos) {
-                const initials = al.nombre.substring(0,2).toUpperCase();
-                let asistCell = '', totalDias = diasArray.length, faltas = 0, asistenciasConteo = 0, retardosCount = 0, justificadasCount = 0;
+                const initials = (al?.nombre || 'AL').substring(0,2).toUpperCase();
+                const st = statsPorAlumno[al.id] || { 
+                    asistenciasConteo: 0, retardosCount: 0, justificadasCount: 0, 
+                    faltas: 0, totalAsist: 0, pctAsist: 100, 
+                    badgeAsist: '<span class="badge" style="background:#d1fae5; color:#065f46">Regular</span>' 
+                };
+
+                let asistCell = '';
                 if (totalDias > 0) {
                     diasArray.forEach(d => {
-                        const estado = asistMap[al.id] ? asistMap[al.id][d] : null;
-                        if (estado === 'Asistencia') { 
-                            asistenciasConteo++; 
+                        const rawEstado = asistMap[al.id] ? asistMap[al.id][d] : null;
+                        const estado = (rawEstado || '').toLowerCase().trim();
+                        if (estado === 'asistencia') { 
                             asistCell += `<td style="text-align:center; padding:12px; color:var(--success);"><i class="fa-solid fa-check"></i></td>`; 
                         }
-                        else if (estado === 'Retardo') { 
-                            asistenciasConteo++; 
-                            retardosCount++;
+                        else if (estado === 'retardo') { 
                             asistCell += `<td style="text-align:center; padding:12px; color:var(--warning);"><i class="fa-solid fa-clock"></i></td>`; 
                         }
-                        else if (estado === 'Justificada') { 
-                            asistenciasConteo++; 
-                            justificadasCount++;
+                        else if (estado === 'justificada' || estado.includes('justif')) { 
                             asistCell += `<td style="text-align:center; padding:12px; color:var(--primary);"><i class="fa-solid fa-file-shield" title="Justificada"></i></td>`; 
                         }
                         else { 
-                            faltas++; 
                             if (isAsistBloqueada) {
                                 asistCell += `<td style="text-align:center; padding:12px; color:var(--danger);" title="Falta (Trimestre Cerrado)">
                                     <i class="fa-solid fa-xmark"></i>
@@ -17827,18 +17976,16 @@ window.cargarAlumnosLista = async () => {
                             }
                         }
                     });
-                } else { asistCell = `<td style="text-align:center; padding:12px; color:var(--text-muted)">No hay sesiones</td>`; }
+                } else { 
+                    asistCell = `<td style="text-align:center; padding:12px; color:var(--text-muted)">No hay sesiones</td>`; 
+                }
                 
-                let totalAsist = asistenciasConteo - retardosCount - justificadasCount; // Asis puras
-                let summaryText = `<div style="font-size:0.8rem; line-height:1.2;">
-                    <b class="text-success" title="Asistencia">${totalAsist}A</b> / 
-                    <b class="text-warning" title="Retardo">${retardosCount}R</b> / 
-                    <b class="text-primary" title="Justificada">${justificadasCount}J</b> / 
-                    <b class="text-danger" title="Falta">${faltas}F</b>
+                const summaryText = `<div style="font-size:0.8rem; line-height:1.2;">
+                    <b class="text-success" title="Asistencia">${st.totalAsist}A</b> / 
+                    <b class="text-warning" title="Retardo">${st.retardosCount}R</b> / 
+                    <b class="text-primary" title="Justificada">${st.justificadasCount}J</b> / 
+                    <b class="text-danger" title="Falta">${st.faltas}F</b>
                 </div>`;
-                
-                let pctAsist = totalDias > 0 ? Math.round((asistenciasConteo / totalDias) * 100) : 100;
-                let badge = pctAsist < 70 ? '<span class="badge" style="background:#fee2e2; color:#991b1b">Riesgo</span>' : '<span class="badge" style="background:#d1fae5; color:#065f46">Regular</span>';
                 
                 htmlRows += `
                 <tr style="border-bottom:1px solid var(--border)">
@@ -17853,7 +18000,7 @@ window.cargarAlumnosLista = async () => {
                     </td>
                     ${asistCell}
                     <td style="text-align:center; padding:12px;">${summaryText}</td>
-                    <td style="text-align:center; padding:12px;"><b>${pctAsist}%</b><br>${badge}</td>
+                    <td style="text-align:center; padding:12px;"><b>${st.pctAsist}%</b><br>${st.badgeAsist}</td>
                     <td style="text-align:center; padding:12px;"><a href="mailto:${al.contacto_email || ''}" class="btn btn-ghost btn-xs"><i class="fa-solid fa-envelope"></i></a></td>
                  </tr>`;
             }
