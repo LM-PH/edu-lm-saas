@@ -14875,17 +14875,56 @@ window.loadActividadesMaestro = async () => {
             }
         }
 
+        // Actualizar opciones de trimestre según estén habilitados oficialmente
+        if (window.isTrimestreHabilitado) {
+            const t2Hab = await window.isTrimestreHabilitado(2, null, pId);
+            const t3Hab = await window.isTrimestreHabilitado(3, null, pId);
+            const selActTrim = document.getElementById('actTrimestre');
+            if (selActTrim) {
+                const opt2 = selActTrim.querySelector('option[value="2"]');
+                const opt3 = selActTrim.querySelector('option[value="3"]');
+                if (opt2) {
+                    opt2.disabled = !t2Hab;
+                    opt2.text = t2Hab ? '2° Trimestre' : '2° Trimestre (Bloqueado hasta envío 1° T)';
+                }
+                if (opt3) {
+                    opt3.disabled = !t3Hab;
+                    opt3.text = t3Hab ? '3° Trimestre' : '3° Trimestre (Bloqueado hasta envío 2° T)';
+                }
+            }
+            const selFiltroTrim = document.getElementById('filtroTrimestreAct');
+            if (selFiltroTrim) {
+                const fOpt2 = selFiltroTrim.querySelector('option[value="2"]');
+                const fOpt3 = selFiltroTrim.querySelector('option[value="3"]');
+                if (fOpt2) fOpt2.text = t2Hab ? '2° Trimestre' : '2° Trimestre (Bloqueado)';
+                if (fOpt3) fOpt3.text = t3Hab ? '3° Trimestre' : '3° Trimestre (Bloqueado)';
+            }
+        }
+
         // Fetch actividades del maestro filtradas por pestaña y trimestre
         const isFinalizada = currentTab === 'archivo';
         const trimSelected = document.getElementById('filtroTrimestreAct')?.value || 1;
         const filtroGrupoVal = document.getElementById('filtroGrupoAct')?.value;
+
+        const trimInt = parseInt(trimSelected, 10);
+        if (trimInt > 1 && window.isTrimestreHabilitado) {
+            const habilitado = await window.isTrimestreHabilitado(trimInt, null, pId);
+            if (!habilitado) {
+                constLista.innerHTML = `<div style="text-align:center; padding:40px; color:var(--text-muted)">
+                    <i class="fa-solid fa-lock fa-2x" style="opacity:0.3; margin-bottom:10px; display:block; color:#f59e0b;"></i>
+                    <strong style="color:var(--text-main);">El ${trimInt}° Trimestre aún no está habilitado</strong><br>
+                    <span style="font-size:0.85rem;">Se activará en cuanto la Administración escolar envíe las boletas/reportes oficiales del ${trimInt - 1}° Trimestre.</span>
+                </div>`;
+                return;
+            }
+        }
         
         let qMisActs = supabaseClient.from('actividades_maestro')
            .select('*, grupos(nombre), evaluaciones_actividades(id)')
            .eq('maestro_id', currentUser.data.user.id)
            .eq('finalizada', isFinalizada)
-           .eq('trimestre', trimSelected);
-        if (pId) qMisActs = qMisActs.or(`plantel_id.eq.${pId},plantel_id.is.null`);
+           .eq('trimestre', trimInt);
+        if (pId) qMisActs = qMisActs.eq('plantel_id', pId);
         
         const { data: misActividades, error: errAct } = await qMisActs.order('fecha_creacion', { ascending: false });
            
@@ -15682,8 +15721,17 @@ window.agregarActividad = async () => {
            }
        }
        
-       const trimVal = document.getElementById('actTrimestre').value || 1;
+       const trimVal = document.getElementById('actTrimestre')?.value || 1;
+       const trimNum = parseInt(trimVal, 10);
        const activePlantelId = state.plantelId || (window._obtenerPlantelIdActivo ? await window._obtenerPlantelIdActivo() : null);
+       
+       if (trimNum > 1 && window.isTrimestreHabilitado) {
+           const habilitado = await window.isTrimestreHabilitado(trimNum, null, activePlantelId);
+           if (!habilitado) {
+               alert(`El ${trimNum}° Trimestre aún no está habilitado para registrar actividades.\n\nSe activará automáticamente cuando la Administración escolar envíe las boletas/reportes oficiales del ${trimNum - 1}° Trimestre.`);
+               return;
+           }
+       }
        
        // Soportar múltiples grupos si seleccionó "Todos mis grupos"
        const itemsToInsert = valMulti.split(',').map(val => {
@@ -16425,6 +16473,37 @@ window.loadListasMaestro = async (retryCount = 0) => {
     if(!selGrupo) return;
     try {
         const pId = await window._obtenerPlantelIdActivo();
+
+        if (window.isTrimestreHabilitado) {
+            const t2Hab = await window.isTrimestreHabilitado(2, null, pId);
+            const t3Hab = await window.isTrimestreHabilitado(3, null, pId);
+            const btns = document.querySelectorAll('#tabsTrimestresListas .t-btn');
+            btns.forEach(b => {
+                const txt = b.innerText || '';
+                if (txt.includes('2° T')) {
+                    if (!t2Hab) {
+                        b.innerHTML = '<i class="fa-solid fa-lock" style="font-size:0.7rem; margin-right:3px; opacity:0.6;"></i> 2° T';
+                        b.title = 'Bloqueado: se activará al enviar las boletas oficiales del 1° Trimestre';
+                        b.style.opacity = '0.6';
+                    } else {
+                        b.innerHTML = '2° T';
+                        b.style.opacity = '1';
+                        b.removeAttribute('title');
+                    }
+                } else if (txt.includes('3° T')) {
+                    if (!t3Hab) {
+                        b.innerHTML = '<i class="fa-solid fa-lock" style="font-size:0.7rem; margin-right:3px; opacity:0.6;"></i> 3° T';
+                        b.title = 'Bloqueado: se activará al enviar las boletas oficiales del 2° Trimestre';
+                        b.style.opacity = '0.6';
+                    } else {
+                        b.innerHTML = '3° T';
+                        b.style.opacity = '1';
+                        b.removeAttribute('title');
+                    }
+                }
+            });
+        }
+
         const userRes = await supabaseClient.auth.getUser();
         const email = userRes?.data?.user?.email;
         if (!email) {
@@ -16492,7 +16571,14 @@ window.loadListasMaestro = async (retryCount = 0) => {
     }
 };
 
-window.cambiarTrimestreLista = (trim, btn) => {
+window.cambiarTrimestreLista = async (trim, btn) => {
+    if (typeof trim === 'number' && trim > 1 && window.isTrimestreHabilitado) {
+        const habilitado = await window.isTrimestreHabilitado(trim);
+        if (!habilitado) {
+            window.showToast(`El ${trim}° Trimestre se habilitará cuando la Administración envíe las calificaciones/reportes oficiales del ${trim - 1}° Trimestre.`, 'warning');
+            return;
+        }
+    }
     state.selectedMaestroTrimestre = trim;
     
     // UI Update
@@ -16882,6 +16968,65 @@ window._matchMateriaEducativa = (actMat, targetMat) => {
     return cleanA === cleanB;
 };
 
+window._trimestresHabilitadosCache = {};
+
+window.isTrimestreHabilitado = async (trimestreNum, grupoId = null, pId = null) => {
+    const trim = parseInt(trimestreNum, 10);
+    if (trim <= 1 || isNaN(trim)) return true;
+
+    try {
+        const activePid = pId || state.plantelId || (window._obtenerPlantelIdActivo ? await window._obtenerPlantelIdActivo() : null);
+        const cacheKey = `${activePid || 'no_pid'}_${trim}_${grupoId || 'all'}`;
+        const now = Date.now();
+        if (window._trimestresHabilitadosCache[cacheKey]) {
+            const cached = window._trimestresHabilitadosCache[cacheKey];
+            if (now - cached.timestamp < 30000) {
+                return cached.result;
+            }
+        }
+
+        const guardarEnCache = (val) => {
+            window._trimestresHabilitadosCache[cacheKey] = { result: val, timestamp: Date.now() };
+            return val;
+        };
+
+        const prevTrim = trim - 1;
+
+        // 1. Revisar si la administración ya envió las calificaciones del trimestre PREVIO mediante comunicados oficiales
+        let qCom = supabaseClient
+            .from('comunicados')
+            .select('id, titulo, mensaje')
+            .eq('tipo', 'reporte_academico_automatico');
+        if (activePid) qCom = qCom.eq('plantel_id', activePid);
+
+        const { data: coms } = await qCom.limit(200);
+
+        const prevTrimRegex = new RegExp(`(Trimestre\\s*${prevTrim}|${prevTrim}[°º]\\s*Trimestre|Trimestre\\s*#?\\s*${prevTrim})`, 'i');
+        const tieneEnvioPrevio = (coms || []).some(c => {
+            return prevTrimRegex.test(c.titulo || '') || prevTrimRegex.test(c.mensaje || '');
+        });
+
+        if (tieneEnvioPrevio) return guardarEnCache(true);
+
+        // 2. Revisar si en periodos_calificaciones el admin habilitó explícitamente el trimestre
+        let qPer = supabaseClient
+            .from('periodos_calificaciones')
+            .select('*')
+            .eq('trimestre', trim);
+        if (activePid) qPer = qPer.eq('plantel_id', activePid);
+        const { data: per } = await qPer.maybeSingle();
+
+        if (per && per.bloqueado === false && per.habilitado_manual === true) {
+            return guardarEnCache(true);
+        }
+
+        return guardarEnCache(false);
+    } catch(e) {
+        console.warn("Error en isTrimestreHabilitado:", e);
+        return false;
+    }
+};
+
 window._resolverActividadesYEvaluacionesGrupo = async ({
     gid,
     targetGrado,
@@ -16904,6 +17049,12 @@ window._resolverActividadesYEvaluacionesGrupo = async ({
             }
         };
 
+        // Plantel ID estricto para evitar cruces entre escuelas
+        let activePid = pId || state.plantelId;
+        if (!activePid && typeof window._obtenerPlantelIdActivo === 'function') {
+            activePid = await window._obtenerPlantelIdActivo();
+        }
+
         // Obtener usuario actual para filtrar por docente si no es master/admin
         let currentUserId = null;
         let esAdminOMod = false;
@@ -16924,7 +17075,7 @@ window._resolverActividadesYEvaluacionesGrupo = async ({
         // 1. Fetch actividades candidatas en base a grupo y materia en supabase
         let actsQuery = supabaseClient.from('actividades_maestro')
             .select('id, titulo, rubro_name, rubro_peso, trimestre, materia, grupo_id, maestro_id, target_grado');
-        if (pId) actsQuery = actsQuery.or(`plantel_id.eq.${pId},plantel_id.is.null`);
+        if (activePid) actsQuery = actsQuery.eq('plantel_id', activePid);
         
         if (isTec) {
             if (targetGrado) {
@@ -16937,7 +17088,12 @@ window._resolverActividadesYEvaluacionesGrupo = async ({
         }
 
         if (!isModoFinal && currentTrim) {
-            actsQuery = actsQuery.or(`trimestre.eq.${currentTrim},trimestre.is.null`);
+            const trimInt = parseInt(currentTrim, 10);
+            if (trimInt === 1) {
+                actsQuery = actsQuery.or('trimestre.eq.1,trimestre.is.null');
+            } else {
+                actsQuery = actsQuery.eq('trimestre', trimInt);
+            }
         }
 
         let rawActs = [];
@@ -16965,10 +17121,12 @@ window._resolverActividadesYEvaluacionesGrupo = async ({
                 const chunkSize = 100;
                 for (let i = 0; i < alumnoIds.length; i += chunkSize) {
                     const chunk = alumnoIds.slice(i, i + chunkSize);
-                    const { data: sEvals } = await supabaseClient
+                    let qEvals = supabaseClient
                         .from('evaluaciones_actividades')
                         .select('actividad_id, alumno_id, calificacion, fecha_evaluacion')
-                        .in('alumno_id', chunk)
+                        .in('alumno_id', chunk);
+                    if (activePid) qEvals = qEvals.eq('plantel_id', activePid);
+                    const { data: sEvals } = await qEvals
                         .order('fecha_evaluacion', { ascending: false })
                         .limit(4000);
                     if (sEvals && sEvals.length > 0) {
@@ -16988,10 +17146,12 @@ window._resolverActividadesYEvaluacionesGrupo = async ({
 
         if (matchMateria('Español', materia) && (esGrupoFelicia1C || tieneEvalsB7 || tieneActDisciplina)) {
             try {
-                const { data: b7Direct } = await supabaseClient
+                let qB7 = supabaseClient
                     .from('evaluaciones_actividades')
                     .select('actividad_id, alumno_id, calificacion, fecha_evaluacion')
                     .eq('actividad_id', 'b7f24be8-16f2-4759-8ad1-85129360bc16');
+                if (activePid) qB7 = qB7.eq('plantel_id', activePid);
+                const { data: b7Direct } = await qB7;
                 if (b7Direct && b7Direct.length > 0) {
                     b7Direct.forEach(be => {
                         const exists = studentEvals.some(se => se.actividad_id === be.actividad_id && se.alumno_id === be.alumno_id);
@@ -17030,13 +17190,18 @@ window._resolverActividadesYEvaluacionesGrupo = async ({
                         .from('actividades_maestro')
                         .select('id, titulo, rubro_name, rubro_peso, trimestre, materia, grupo_id, maestro_id, target_grado')
                         .in('id', chunk);
+                    if (activePid) qMiss = qMiss.eq('plantel_id', activePid);
                     
                     const { data: missingActs } = await qMiss;
                     if (missingActs && missingActs.length > 0) {
-                        // FILTRAR ESTRICTAMENTE por materia ANTES de agregar a rawActs
-                        // Esto evita el 100% del cruce de tecnologías y otras asignaturas
+                        // FILTRAR ESTRICTAMENTE por materia Y trimestre ANTES de agregar a rawActs
                         const relevantActs = missingActs.filter(a => {
                             if (!matchMateria(a.materia, materia)) return false;
+                            // Blindaje de trimestre: NO jalar actividades de otro trimestre
+                            if (!isModoFinal && currentTrim) {
+                                const actT = a.trimestre ? String(a.trimestre) : '1';
+                                if (actT !== String(currentTrim)) return false;
+                            }
                             if (!esAdminOMod && currentUserId && !a.grupo_id && !a.target_grado) {
                                 if (a.maestro_id && a.maestro_id !== currentUserId) return false;
                             }
@@ -17067,9 +17232,10 @@ window._resolverActividadesYEvaluacionesGrupo = async ({
             const mMatch = matchMateria(a.materia, materia);
             if (!mMatch) return false;
 
-            const hasEvalsInThisGroup = studentEvals.some(e => e.actividad_id === a.id);
-            const tMatch = isModoFinal || !a.trimestre || String(a.trimestre) === String(currentTrim) || hasEvalsInThisGroup;
-            return tMatch;
+            // Blindaje estricto de trimestre: nunca contaminar un trimestre con actividades de otro
+            if (isModoFinal) return true;
+            const actT = a.trimestre ? String(a.trimestre) : '1';
+            return actT === String(currentTrim);
         });
 
         // 5. DEDUPLICAR Y CONSOLIDAR ACTIVIDADES HOMÓLOGAS
@@ -17630,6 +17796,20 @@ window.cargarAlumnosLista = async () => {
     const gid = isTec ? null : idPart;  
     const targetGrado = isTec ? idPart.replace('grado:', '').trim() : null;
 
+    const curTrimNum = state.selectedMaestroTrimestre === 'final' ? 4 : parseInt(state.selectedMaestroTrimestre || 1, 10);
+    if (curTrimNum > 1 && curTrimNum <= 3 && window.isTrimestreHabilitado) {
+        const habilitado = await window.isTrimestreHabilitado(curTrimNum, gid, pId);
+        if (!habilitado) {
+            tbody.innerHTML = `<tr><td colspan="10" style="text-align:center; padding: 40px; color:var(--text-muted);">
+                <i class="fa-solid fa-lock fa-2x" style="opacity:0.3; margin-bottom:12px; display:block; color:#f59e0b;"></i>
+                <strong style="color:var(--text-main); font-size:1.05rem;">El ${curTrimNum}° Trimestre aún no está habilitado</strong><br>
+                <span style="font-size:0.85rem;">Se habilitará automáticamente cuando la Administración escolar envíe las boletas/reportes oficiales del ${curTrimNum - 1}° Trimestre.</span>
+            </td></tr>`;
+            if (statsCont) statsCont.innerHTML = '';
+            return;
+        }
+    }
+
     // Pre-cache de bloqueo de evaluación para que editar calificaciones sea 100% instantáneo (0ms)
     window._evaluacionesGrupoBloqueadas = null;
     if (window.checkPaseListaBloqueado && materia) {
@@ -17865,7 +18045,7 @@ window.cargarAlumnosLista = async () => {
             let histQuery = supabaseClient.from('calificaciones')
                 .select('alumno_id, calificacion, trimestre, materia_nombre')
                 .in('alumno_id', alumnoIds);
-            if (pId) histQuery = histQuery.or('plantel_id.eq.' + pId + ',plantel_id.is.null');
+            if (pId) histQuery = histQuery.eq('plantel_id', pId);
             if(isModoFinal) {
                 histQuery = histQuery.in('trimestre', [1, 2, 3, 4]);
             } else {
@@ -21940,9 +22120,12 @@ window.checkPaseListaBloqueado = async (materia, grupoId, trimestre, forzar = fa
                 const matNorm = window._normalizarTextoTaller ? window._normalizarTextoTaller(materia) : rawMat;
 
                 const tieneCalificaciones = califs.some(c => {
-                    const mNombre = (c.materia_nombre || '').trim().toLowerCase();
-                    const mNorm = window._normalizarTextoTaller ? window._normalizarTextoTaller(mNombre) : mNombre;
-                    return mNombre === rawMat || mNorm === matNorm || mNombre.includes(rawMat) || rawMat.includes(mNombre);
+                    const mNombre = (c.materia_nombre || '').trim();
+                    if (window._matchMateriaEducativa) {
+                        return window._matchMateriaEducativa(mNombre, materia);
+                    }
+                    const mNorm = window._normalizarTextoTaller ? window._normalizarTextoTaller(mNombre) : mNombre.toLowerCase();
+                    return mNombre.toLowerCase() === rawMat || mNorm === matNorm;
                 });
 
                 if (tieneCalificaciones) {
@@ -21959,12 +22142,16 @@ window.checkPaseListaBloqueado = async (materia, grupoId, trimestre, forzar = fa
 };
 
 window.getTrimestreActivoPaseLista = async (materia, grupoId) => {
-    // Buscar el primer trimestre que no esté bloqueado (1, 2 o 3)
+    // Buscar el primer trimestre que no esté bloqueado (1, 2 o 3) Y que esté habilitado
     for (let trim = 1; trim <= 3; trim++) {
+        if (window.isTrimestreHabilitado) {
+            const habilitado = await window.isTrimestreHabilitado(trim, grupoId);
+            if (!habilitado) break; // Si T2 no está habilitado, jamás avanzar a T2 ni a T3
+        }
         const isBlocked = await window.checkPaseListaBloqueado(materia, grupoId, trim);
         if (!isBlocked) return trim;
     }
-    return null; // Todos bloqueados
+    return 1;
 };
 
 window.showQRScannerModal = async (title = 'Grupo Seleccionado', grupoId = null, materia = null) => {
@@ -22537,6 +22724,15 @@ window.cargarRubrosParaActividad = async () => {
     const gid = isTec ? null : idPart;
     const targetGrado = isTec ? idPart.replace('grado:', '') : null;
     const trimSelected = document.getElementById('actTrimestre')?.value || 1;
+    const trimInt = parseInt(trimSelected, 10);
+    if (trimInt > 1 && window.isTrimestreHabilitado) {
+        const habilitado = await window.isTrimestreHabilitado(trimInt);
+        if (!habilitado) {
+            alert(`El ${trimInt}° Trimestre aún no está habilitado para registrar actividades.\n\nSe activará automáticamente cuando la Administración escolar envíe las boletas/reportes oficiales del ${trimInt - 1}° Trimestre.`);
+            document.getElementById('actTrimestre').value = "1";
+            return window.cargarRubrosParaActividad();
+        }
+    }
 
     try {
         const u = await supabaseClient.auth.getUser();
@@ -22969,6 +23165,13 @@ window.sincronizarAsistenciaActividad = async ({ grupoId, materia, trimestre, ta
         if (!uid) return;
 
         const trim = parseInt(trimestre || window.currentTrimestre || 1, 10);
+        if (trim > 1 && window.isTrimestreHabilitado) {
+            const habilitado = await window.isTrimestreHabilitado(trim, grupoId);
+            if (!habilitado) {
+                console.log(`[Asistencia] Omitiendo sincronización automática para T${trim}: aún no habilitado.`);
+                return;
+            }
+        }
         const mat = (materia || '').trim();
         const gid = (grupoId && !String(grupoId).startsWith('grado:')) ? String(grupoId) : null;
         let tGrado = targetGrado;
@@ -23004,7 +23207,7 @@ window.sincronizarAsistenciaActividad = async ({ grupoId, materia, trimestre, ta
             // Si no hay targetActId ni rubro en el encuadre, revisar si ya existe alguna actividad de asistencia creada
             let qCheck = supabaseClient.from('actividades_maestro')
                 .select('id, rubro_peso, rubro_name, titulo')
-                .or(`plantel_id.eq.${state.plantelId},plantel_id.is.null`)
+                .eq('plantel_id', state.plantelId)
                 .eq('maestro_id', uid)
                 .ilike('materia', mat)
                 .eq('trimestre', trim);
@@ -23033,7 +23236,7 @@ window.sincronizarAsistenciaActividad = async ({ grupoId, materia, trimestre, ta
         if (!actId) {
             let qAct = supabaseClient.from('actividades_maestro')
                 .select('id, rubro_peso, rubro_name, titulo')
-                .or(`plantel_id.eq.${state.plantelId},plantel_id.is.null`)
+                .eq('plantel_id', state.plantelId)
                 .eq('maestro_id', uid)
                 .ilike('materia', mat)
                 .eq('trimestre', trim);
