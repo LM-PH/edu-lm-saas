@@ -296,6 +296,126 @@ window._obtenerPlantelIdActivo = async () => {
 };
 
 
+
+window.obtenerNombreDirector = async (plantelIdOverride = null) => {
+    let pId = plantelIdOverride || state.plantelId;
+    if (!pId && typeof window._obtenerPlantelIdActivo === 'function') {
+        pId = await window._obtenerPlantelIdActivo();
+    }
+    if (!pId) {
+        pId = window.currentUserProfile?.plantel_id || state.user?.user_metadata?.plantel_id;
+    }
+
+    // Cache en memoria por sesión
+    if (!window._directorCache) window._directorCache = {};
+    if (pId && window._directorCache[pId]) {
+        return window._directorCache[pId];
+    }
+
+    let directorName = '';
+
+    if (pId) {
+        try {
+            // 1. Buscar en perfiles_permitidos (es la fuente autorizada y accesible para todos los roles)
+            const { data: permitidos, error: errPerm } = await supabaseClient
+                .from('perfiles_permitidos')
+                .select('nombre, rol, email')
+                .eq('plantel_id', pId)
+                .in('rol', ['directivo', 'director', 'subdirector']);
+
+            if (!errPerm && permitidos && permitidos.length > 0) {
+                // A) Si alguno tiene 'director' o 'directora' explícito en nombre o email o rol (y no es subdirector)
+                const dirEspecifico = permitidos.find(u => {
+                    const nom = (u.nombre || '').toLowerCase();
+                    const em = (u.email || '').toLowerCase();
+                    const r = (u.rol || '').toLowerCase();
+                    const isSub = nom.includes('subdirector') || em.includes('subdirector') || r.includes('subdirector');
+                    if (isSub) return false;
+                    return nom.includes('director') || nom.includes('directora') || nom.startsWith('dir.') || em.includes('director') || r === 'director';
+                });
+
+                if (dirEspecifico && dirEspecifico.nombre) {
+                    directorName = dirEspecifico.nombre.trim();
+                } else {
+                    // B) Primer directivo que no sea subdirector ni secretaria
+                    const primerDirectivo = permitidos.find(u => {
+                        const nom = (u.nombre || '').toLowerCase();
+                        const em = (u.email || '').toLowerCase();
+                        return !nom.includes('subdirector') && !em.includes('subdirector') && !nom.includes('secretari');
+                    });
+                    if (primerDirectivo && primerDirectivo.nombre) {
+                        directorName = primerDirectivo.nombre.trim();
+                    } else if (permitidos[0]?.nombre) {
+                        directorName = permitidos[0].nombre.trim();
+                    }
+                }
+            }
+        } catch(e) {
+            console.warn("Error buscando director en perfiles_permitidos:", e);
+        }
+
+        // 2. Si no se encontró en perfiles_permitidos, buscar en la tabla perfiles
+        if (!directorName) {
+            try {
+                const { data: perfs, error: errPerf } = await supabaseClient
+                    .from('perfiles')
+                    .select('nombre, rol')
+                    .eq('plantel_id', pId)
+                    .in('rol', ['directivo', 'director'])
+                    .limit(10);
+
+                if (!errPerf && perfs && perfs.length > 0) {
+                    const dirP = perfs.find(u => {
+                        const nom = (u.nombre || '').toLowerCase();
+                        return !nom.includes('subdirector') && !nom.includes('secretari');
+                    }) || perfs[0];
+                    if (dirP && dirP.nombre) directorName = dirP.nombre.trim();
+                }
+            } catch(e) {
+                console.warn("Error buscando director en perfiles:", e);
+            }
+        }
+
+        // 3. Si no se encontró, verificar si la tabla planteles tiene campo director
+        if (!directorName) {
+            try {
+                const { data: pt, error: errPt } = await supabaseClient
+                    .from('planteles')
+                    .select('*')
+                    .eq('id', pId)
+                    .maybeSingle();
+
+                if (!errPt && pt) {
+                    if (pt.director && typeof pt.director === 'string') directorName = pt.director.trim();
+                    else if (pt.nombre_director && typeof pt.nombre_director === 'string') directorName = pt.nombre_director.trim();
+                    else if (pt.director_nombre && typeof pt.director_nombre === 'string') directorName = pt.director_nombre.trim();
+                }
+            } catch(e) {
+                console.warn("Error buscando director en planteles:", e);
+            }
+        }
+    }
+
+    // 4. Si el usuario actual tiene rol directivo o director, su propio nombre puede servir
+    const isCurrentUserDirectivo = ['directivo', 'director'].includes(state.role);
+    const currentUserName = (state.userName || window.currentUserProfile?.nombre || '').trim();
+    if (!directorName && isCurrentUserDirectivo && currentUserName && !currentUserName.toLowerCase().includes('admin')) {
+        directorName = currentUserName;
+    }
+
+    // 5. Fallback si no hay ningún director registrado en toda la base de datos
+    if (!directorName) {
+        directorName = 'DIRECCIÓN ESCOLAR';
+    }
+
+    if (pId) {
+        window._directorCache[pId] = directorName;
+    }
+
+    return directorName;
+};
+
+
 window.handleLogin = async (e) => {
   if (e && e.preventDefault) e.preventDefault();
   const emailInput = document.getElementById('fb-email');
@@ -5913,7 +6033,8 @@ window.renderTablasPorcentajes = () => {
     `;
 };
 
-window.imprimirReporteRiesgoActitudinal = () => {
+window.imprimirReporteRiesgoActitudinal = async () => {
+    const directorName = await window.obtenerNombreDirector();
     const data = window._riesgoActitudinalCacheados;
     if (!data || !data.alumnos || data.alumnos.length === 0) return alert("No hay datos para imprimir.");
 
@@ -6077,8 +6198,14 @@ window.imprimirReporteRiesgoActitudinal = () => {
             </table>
 
             <div style="margin-top:35px; display:flex; justify-content:space-around; text-align:center;">
-                <div style="width:220px; border-top:1px solid #333; padding-top:5px;">Trabajo Social / Prefectura</div>
-                <div style="width:220px; border-top:1px solid #333; padding-top:5px;">Dirección Escolar</div>
+                <div style="width:240px; border-top:1px solid #333; padding-top:5px;">
+                    <div style="font-weight:bold; font-size:12px;">Personal de Apoyo</div>
+                    <div style="font-size:10px; color:#555; text-transform:uppercase;">Trabajo Social / Prefectura</div>
+                </div>
+                <div style="width:240px; border-top:1px solid #333; padding-top:5px;">
+                    <div style="font-weight:bold; font-size:12px;">${directorName}</div>
+                    <div style="font-size:10px; color:#555; text-transform:uppercase;">Dirección Escolar / Director(a)</div>
+                </div>
             </div>
             <script>window.onload = () => { window.print(); };<\/script>
         </body>
@@ -13439,15 +13566,23 @@ window.descargarBoletaPDF = async (aluId, nombre, matricula) => {
             firmaTutorHtml += '</div>';
         } catch(e) { console.warn('Error fetching firmas:', e); }
 
+        let pId = state && state.plantelId;
+        if (!pId && typeof window._obtenerPlantelIdActivo === 'function') {
+            pId = await window._obtenerPlantelIdActivo();
+        }
+        if (!pId) pId = window.currentUserProfile?.plantel_id || state.user?.user_metadata?.plantel_id;
+
         let plantelName = CONFIG.schoolName;
         let plantelLogo = null;
         try {
-            if (state && state.plantelId) {
-                const { data: pt } = await supabaseClient.from('planteles').select('nombre, logo_url, cct').eq('id', state.plantelId).maybeSingle();
+            if (pId) {
+                const { data: pt } = await supabaseClient.from('planteles').select('nombre, logo_url, cct').eq('id', pId).maybeSingle();
                 if (pt && pt.nombre) plantelName = pt.nombre + (pt.cct ? '<br><span style="font-size:0.75em; color:#555; font-weight:normal;">C.C.T. ' + pt.cct + '</span>' : '');
                 if (pt && pt.logo_url) plantelLogo = window.getCleanLogoUrl(pt.logo_url);
             }
         } catch(e) {}
+
+        const directorName = await window.obtenerNombreDirector(pId);
 
         printWindow.document.write(`
             <html>
@@ -13508,8 +13643,8 @@ window.descargarBoletaPDF = async (aluId, nombre, matricula) => {
                     <div class="signatures">
                         <div class="signature-box">
                             <div class="signature-line"></div>
-                            <div class="signature-title">Dirección del Plantel</div>
-                            <div style="font-size:11px; margin-top:5px; color:#555;">Firma y Sello Oficial</div>
+                            <div class="signature-title">${directorName}</div>
+                            <div style="font-size:11px; margin-top:5px; color:#555;">Dirección Escolar / Director(a) del Plantel</div>
                         </div>
                         <div class="signature-box">
                             ${firmaTutorHtml}
@@ -18719,20 +18854,25 @@ window.imprimirLista = async (esVacia = false, forzarOrientacion = null) => {
     }
 
     // Datos del plantel y director para membrete y firmas
+    let pId = state.plantelId;
+    if (!pId && typeof window._obtenerPlantelIdActivo === 'function') {
+        pId = await window._obtenerPlantelIdActivo();
+    }
+    if (!pId) pId = window.currentUserProfile?.plantel_id || state.user?.user_metadata?.plantel_id;
+
     let schoolName = CONFIG.schoolName || 'Escuela';
     let schoolLogo = null;
-    let directorName = 'DIRECCIÓN ESCOLAR / RESPONSABLE DIRECTO';
     try {
-        if(state.plantelId) {
-            const { data: pt } = await supabaseClient.from('planteles').select('nombre, logo_url, cct').eq('id', state.plantelId).maybeSingle();
+        if(pId) {
+            const { data: pt } = await supabaseClient.from('planteles').select('nombre, logo_url, cct').eq('id', pId).maybeSingle();
             if(pt) {
                 if(pt.nombre) schoolName = pt.nombre + (pt.cct ? '<br><span style="font-size:0.75em; color:#555; font-weight:normal;">C.C.T. ' + pt.cct + '</span>' : '');
                 if(pt.logo_url) schoolLogo = window.getCleanLogoUrl(pt.logo_url);
             }
-            const { data: dirData } = await supabaseClient.from('perfiles').select('nombre').eq('plantel_id', state.plantelId).eq('rol', 'directivo').maybeSingle();
-            if(dirData && dirData.nombre) directorName = dirData.nombre;
         }
     } catch(e) {}
+
+    const directorName = await window.obtenerNombreDirector(pId);
 
     // Contar alumnos válidos
     const rowsList = Array.from(tbody.querySelectorAll("tr")).filter(r => {
@@ -19371,7 +19511,7 @@ window.imprimirLista = async (esVacia = false, forzarOrientacion = null) => {
                         <div class="signature-box">
                             <div class="signature-line"></div>
                             <div style="font-size:${Math.max(7.0, calcFont * 0.9).toFixed(1)}px; font-weight: bold; color: #000; line-height: 1.1;">${directorName}</div>
-                            <div style="font-size:${Math.max(6.0, calcFont * 0.75).toFixed(1)}px; color: #333; text-transform: uppercase; font-weight: 600;">Director(a) / Responsable Directo</div>
+                            <div style="font-size:${Math.max(6.0, calcFont * 0.75).toFixed(1)}px; color: #333; text-transform: uppercase; font-weight: 600;">Dirección Escolar / Director(a)</div>
                         </div>
                     </div>
                 </div>
@@ -24192,15 +24332,23 @@ window.descargarBoletaAdminPDF = async (alumnoId, nombre, matricula) => {
             firmaTutorHtml += '</div>';
         } catch(e) { console.warn('Error fetching firmas:', e); }
 
+        let pId = state && state.plantelId;
+        if (!pId && typeof window._obtenerPlantelIdActivo === 'function') {
+            pId = await window._obtenerPlantelIdActivo();
+        }
+        if (!pId) pId = window.currentUserProfile?.plantel_id || state.user?.user_metadata?.plantel_id;
+
         let plantelName = CONFIG.schoolName;
         let plantelLogo = null;
         try {
-            if (state && state.plantelId) {
-                const { data: pt } = await supabaseClient.from('planteles').select('nombre, logo_url, cct').eq('id', state.plantelId).maybeSingle();
+            if (pId) {
+                const { data: pt } = await supabaseClient.from('planteles').select('nombre, logo_url, cct').eq('id', pId).maybeSingle();
                 if (pt && pt.nombre) plantelName = pt.nombre + (pt.cct ? '<br><span style="font-size:0.75em; color:#555; font-weight:normal;">C.C.T. ' + pt.cct + '</span>' : '');
                 if (pt && pt.logo_url) plantelLogo = window.getCleanLogoUrl(pt.logo_url);
             }
         } catch(e) {}
+
+        const directorName = await window.obtenerNombreDirector(pId);
 
         printWindow.document.write(`
             <html>
@@ -24261,8 +24409,8 @@ window.descargarBoletaAdminPDF = async (alumnoId, nombre, matricula) => {
                     <div class="signatures">
                         <div class="signature-box">
                             <div class="signature-line"></div>
-                            <div class="signature-title">Dirección del Plantel</div>
-                            <div style="font-size:11px; margin-top:5px; color:#555;">Firma y Sello Oficial</div>
+                            <div class="signature-title">${directorName}</div>
+                            <div style="font-size:11px; margin-top:5px; color:#555;">Dirección Escolar / Director(a) del Plantel</div>
                         </div>
                         <div class="signature-box">
                             ${firmaTutorHtml}
@@ -29785,20 +29933,25 @@ window.imprimirAdminLista = async (esVacia = false, forzarOrientacion = null) =>
     const grupoName = sel.options[sel.selectedIndex].text;
     const fecha = new Date().toLocaleDateString('es-MX', { day: '2-digit', month: '2-digit', year: 'numeric' });
 
+    let pId = state.plantelId;
+    if (!pId && typeof window._obtenerPlantelIdActivo === 'function') {
+        pId = await window._obtenerPlantelIdActivo();
+    }
+    if (!pId) pId = window.currentUserProfile?.plantel_id || state.user?.user_metadata?.plantel_id;
+
     let schoolName = CONFIG.schoolName || 'Escuela';
     let schoolLogo = null;
-    let directorName = 'DIRECCIÓN ESCOLAR / RESPONSABLE DIRECTO';
     try {
-        if(state.plantelId) {
-            const { data: pt } = await supabaseClient.from('planteles').select('nombre, logo_url, cct').eq('id', state.plantelId).maybeSingle();
+        if(pId) {
+            const { data: pt } = await supabaseClient.from('planteles').select('nombre, logo_url, cct').eq('id', pId).maybeSingle();
             if(pt) {
                 if(pt.nombre) schoolName = pt.nombre + (pt.cct ? '<br><span style="font-size:0.75em; color:#555; font-weight:normal;">C.C.T. ' + pt.cct + '</span>' : '');
                 if(pt.logo_url) schoolLogo = window.getCleanLogoUrl(pt.logo_url);
             }
-            const { data: dirData } = await supabaseClient.from('perfiles').select('nombre').eq('plantel_id', state.plantelId).eq('rol', 'directivo').maybeSingle();
-            if(dirData && dirData.nombre) directorName = dirData.nombre;
         }
     } catch(e) {}
+
+    const directorName = await window.obtenerNombreDirector(pId);
 
     const rowsList = Array.from(tbody.querySelectorAll("tr")).filter(r => {
         const txt = (r.innerText || "").trim();
@@ -30009,7 +30162,7 @@ window.imprimirAdminLista = async (esVacia = false, forzarOrientacion = null) =>
                         <div class="signature-box">
                             <div class="signature-line"></div>
                             <div style="font-size:${Math.max(7.0, calcFont * 0.9).toFixed(1)}px; font-weight: bold; color: #000; line-height: 1.1;">${directorName}</div>
-                            <div style="font-size:${Math.max(6.0, calcFont * 0.75).toFixed(1)}px; color: #333; text-transform: uppercase; font-weight: 600;">Director(a) / Responsable Directo</div>
+                            <div style="font-size:${Math.max(6.0, calcFont * 0.75).toFixed(1)}px; color: #333; text-transform: uppercase; font-weight: 600;">Dirección Escolar / Director(a)</div>
                         </div>
                     </div>
                 </div>
@@ -30036,20 +30189,25 @@ window.descargarAdminListaPDF = async (esVacia = false) => {
     const grupoName = sel.options[sel.selectedIndex].text;
     const fecha = new Date().toLocaleDateString('es-MX', { day: '2-digit', month: '2-digit', year: 'numeric' });
 
+    let pId = state.plantelId;
+    if (!pId && typeof window._obtenerPlantelIdActivo === 'function') {
+        pId = await window._obtenerPlantelIdActivo();
+    }
+    if (!pId) pId = window.currentUserProfile?.plantel_id || state.user?.user_metadata?.plantel_id;
+
     let schoolName = CONFIG.schoolName || 'Escuela';
     let schoolLogo = null;
-    let directorName = 'DIRECCIÓN ESCOLAR / RESPONSABLE DIRECTO';
     try {
-        if(state.plantelId) {
-            const { data: pt } = await supabaseClient.from('planteles').select('nombre, logo_url, cct').eq('id', state.plantelId).maybeSingle();
+        if(pId) {
+            const { data: pt } = await supabaseClient.from('planteles').select('nombre, logo_url, cct').eq('id', pId).maybeSingle();
             if(pt) {
                 if(pt.nombre) schoolName = pt.nombre + (pt.cct ? '<br><span style="font-size:0.75em; color:#555; font-weight:normal;">C.C.T. ' + pt.cct + '</span>' : '');
                 if(pt.logo_url) schoolLogo = window.getCleanLogoUrl(pt.logo_url);
             }
-            const { data: dirData } = await supabaseClient.from('perfiles').select('nombre').eq('plantel_id', state.plantelId).eq('rol', 'directivo').maybeSingle();
-            if(dirData && dirData.nombre) directorName = dirData.nombre;
         }
     } catch(e) {}
+
+    const directorName = await window.obtenerNombreDirector(pId);
 
     const rowsList = Array.from(tbody.querySelectorAll("tr")).filter(r => {
         const txt = (r.innerText || "").trim();
@@ -30167,7 +30325,7 @@ window.descargarAdminListaPDF = async (esVacia = false) => {
             <div style="text-align:center; width:${esHorizontal ? '260px' : '240px'};">
                 <div style="border-top:1.5px solid #000; height:${sigLineHeight}px; margin-bottom:2px;"></div>
                 <div style="font-size:${Math.max(7.0, calcFont * 0.9).toFixed(1)}px; font-weight:bold; color:#000; line-height:1.1;">${directorName}</div>
-                <div style="font-size:${Math.max(6.0, calcFont * 0.75).toFixed(1)}px; color:#333; text-transform:uppercase; font-weight:600;">Director(a) / Responsable Directo</div>
+                <div style="font-size:${Math.max(6.0, calcFont * 0.75).toFixed(1)}px; color:#333; text-transform:uppercase; font-weight:600;">Dirección Escolar / Director(a)</div>
             </div>
         </div>
     </div>`;
@@ -31635,6 +31793,7 @@ window.imprimirHorarioDocente = async (email, name) => {
             }
         } catch(e) {}
 
+        const directorName = await window.obtenerNombreDirector(pid);
         const { data: slots, error: errSlots } = await supabaseClient.from('horarios_maestros')
             .select('*, grupos(nombre)')
             .eq('maestro_email', email)
@@ -31763,7 +31922,8 @@ window.imprimirHorarioDocente = async (email, name) => {
                         </div>
                         <div class="signature-box">
                             <div class="signature-line"></div>
-                            <div class="signature-title">Sello y Firma de Dirección</div>
+                            <div class="signature-title">${directorName}</div>
+                            <div style="font-size:10px; color:#555; text-transform:uppercase; margin-top:2px;">Dirección Escolar / Director(a)</div>
                         </div>
                     </div>
                     
