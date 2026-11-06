@@ -10358,18 +10358,13 @@ window.resolverAutorizacion = async (id, dictamen, payloadStr = null) => {
                  if(payload.email) await supabaseClient.from('perfiles_permitidos').delete().eq('email', payload.email);
             }
             else if(payload.action === 'desbloquear_calificaciones') {
-                 const { error: errDel } = await supabaseClient.from('calificaciones')
-                     .delete()
-                     .eq('plantel_id', state.plantelId)
-                     .eq('trimestre', payload.trimestre)
-                     .ilike('materia_nombre', (payload.materia || '').trim());
-                 if(errDel) throw errDel;
-
+                 // NUNCA borrar calificaciones existentes: se preservan las notas capturadas
+                 // para que el docente pueda modificarlas puntualmente sin perder su trabajo.
                  if(payload.maestro_id) {
                      await supabaseClient.from('comunicados').insert([{
                          autor_id: (await supabaseClient.auth.getUser()).data.user?.id,
                          titulo: `✅ AUTORIZADO: Apertura de Calificaciones (${payload.materia})`,
-                         mensaje: `La administración ha APROBADO tu solicitud de modificación de calificaciones para la materia ${payload.materia} (${payload.trimestre}° Trimestre).\n\nYa puedes ingresar nuevamente al módulo para capturar y asentar las correcciones necesarias.`,
+                         mensaje: `La administración ha APROBADO tu solicitud de modificación de calificaciones para la materia ${payload.materia} (${payload.trimestre}° Trimestre).\n\nYa puedes ingresar nuevamente al módulo para capturar y asentar las correcciones necesarias conservando las notas previas.`,
                          audiencia: `Maestro_${payload.maestro_id}`,
                          plantel_id: state.plantelId
                      }]);
@@ -13080,9 +13075,10 @@ window.loadBoletasAlumno = async () => {
 
         // 3. NUEVO: Buscar boletas en el bucket de Expediente Digital (PDFs)
         let storageHtml = '';
+        let boletasPdf = [];
         try {
             const { data: fileList } = await supabaseClient.storage.from('expedientes').list(alu.id.toString());
-            const boletasPdf = (fileList || []).filter(f => f.name.toLowerCase().includes('boleta'));
+            boletasPdf = (fileList || []).filter(f => f.name.toLowerCase().includes('boleta'));
             
             if(boletasPdf.length > 0) {
                 storageHtml = `
@@ -13220,14 +13216,35 @@ window.loadBoletasAlumno = async () => {
             return;
         }
 
-        // Construir tabla consolidada por materia
+        // Determinar qué trimestres han sido oficialmente enviados/liberados por la administración escolar
+        const trimestresOficialesEnviados = new Set();
+        (reportes || []).forEach(rep => {
+            const fullText = ((rep.titulo || '') + ' ' + (rep.mensaje || '')).toUpperCase();
+            if (/1°?\s*TRIMESTRE|1ER\s*TRIMESTRE|TRIMESTRE\s*1\b|\bT1\b/i.test(fullText)) trimestresOficialesEnviados.add(1);
+            if (/2°?\s*TRIMESTRE|2DO\s*TRIMESTRE|TRIMESTRE\s*2\b|\bT2\b/i.test(fullText)) trimestresOficialesEnviados.add(2);
+            if (/3°?\s*TRIMESTRE|3ER\s*TRIMESTRE|TRIMESTRE\s*3\b|\bT3\b/i.test(fullText)) trimestresOficialesEnviados.add(3);
+            if (/PROMEDIO\s*FINAL|FINAL\s*ANUAL|4°?\s*TRIMESTRE/i.test(fullText)) trimestresOficialesEnviados.add(4);
+        });
+
+        (boletasPdf || []).forEach(f => {
+            const name = (f.name || '').toUpperCase();
+            if (name.includes('T1') || name.includes('TRIM1') || name.includes('TRIMESTRE_1') || name.includes('TRIMESTRE1')) trimestresOficialesEnviados.add(1);
+            if (name.includes('T2') || name.includes('TRIM2') || name.includes('TRIMESTRE_2') || name.includes('TRIMESTRE2')) trimestresOficialesEnviados.add(2);
+            if (name.includes('T3') || name.includes('TRIM3') || name.includes('TRIMESTRE_3') || name.includes('TRIMESTRE3')) trimestresOficialesEnviados.add(3);
+        });
+
+        // Construir tabla consolidada por materia (únicamente de trimestres oficialmente liberados)
         const byMateria = {};
         const trimestresDetectados = new Set();
         const norm = (s) => (s||'').normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim().toLowerCase();
 
         (califs || []).forEach(c => {
-            const nom = c.materia_nombre || (c.materia_id && c.materia_id.nombre) || 'Materia';
             const t = parseInt(c.trimestre);
+            // Regla institucional: Los padres y alumnos NO pueden ver calificaciones que suben los maestros
+            // hasta que el perfil de administrativos envíe las calificaciones finales de ese trimestre
+            if (!trimestresOficialesEnviados.has(t)) return;
+
+            const nom = c.materia_nombre || (c.materia_id && c.materia_id.nombre) || 'Materia';
             if (!isNaN(t)) {
                 trimestresDetectados.add(t);
                 if(!byMateria[nom]) byMateria[nom] = {};
@@ -13243,11 +13260,12 @@ window.loadBoletasAlumno = async () => {
             }
         });
 
-        // Incluir materias de actividades continuas si no estaban en calificaciones
+        // Incluir materias de actividades continuas sólo si el trimestre fue oficialmente enviado por administración
         Object.values(realGradesFromActs).forEach(rg => {
+            const t = parseInt(rg.trimestre);
+            if (!trimestresOficialesEnviados.has(t)) return;
             if (rg.promFinalNum > 0) {
                 const nom = rg.materia;
-                const t = rg.trimestre;
                 trimestresDetectados.add(t);
                 if (!byMateria[nom]) byMateria[nom] = {};
                 if (byMateria[nom][t] === undefined) {
@@ -13255,6 +13273,20 @@ window.loadBoletasAlumno = async () => {
                 }
             }
         });
+
+        let avisoEnProcesoHtml = '';
+        if (Object.keys(byMateria).length === 0) {
+            avisoEnProcesoHtml = `
+                <div class="card" style="text-align:center; padding:35px 20px; border:2px dashed var(--border); border-radius:18px; background:white; margin-bottom:20px; box-shadow:0 4px 15px rgba(0,0,0,0.03);">
+                    <i class="fa-solid fa-clock-rotate-left" style="font-size:2.5rem; color:var(--primary); opacity:0.4; margin-bottom:12px;"></i>
+                    <h3 style="margin:0 0 8px 0; color:var(--text-main); font-size:1.15rem; font-weight:700;">Calificaciones en proceso de captura y validación</h3>
+                    <p style="color:var(--text-muted); font-size:0.9rem; margin:0 auto; max-width:480px; line-height:1.5;">
+                        Los docentes se encuentran actualmente en el periodo de captura de evaluaciones.<br>
+                        La boleta oficial de calificaciones estará visible para alumnos y padres de familia una vez que la <strong>Administración Escolar</strong> concluya la validación oficial y envíe los reportes finales.
+                    </p>
+                </div>
+            `;
+        }
 
         window._alumnoByMateriaCache = byMateria;
         window._alumnoRealGradesCache = realGradesFromActs;
@@ -13414,6 +13446,8 @@ window.loadBoletasAlumno = async () => {
             ${firmasHtml}
 
             ${reportHtml}
+
+            ${avisoEnProcesoHtml}
 
             ${tablesHtml || ''}
 
@@ -18622,12 +18656,12 @@ window.cargarBoletasGrupo = async () => {
                 r.payload_json?.trimestre === currentTrim && 
                 (r.payload_json?.grupo_id === gid || r.payload_json?.grupo_id === selectVal)
             );
-            // La solicitud aprobada sólo otorga permiso de edición MIENTRAS las calificaciones no hayan sido selladas y enviadas
-            tieneSolicitudAprobada = !tieneCalificacionesAsentadas && reqs.some(r => 
+            // La solicitud aprobada otorga permiso de edición para capturar, modificar y sellar
+            tieneSolicitudAprobada = reqs.some(r => 
                 r.estado === 'aprobada' &&
-                r.payload_json?.materia === materiaClean && 
-                r.payload_json?.trimestre === currentTrim && 
-                (r.payload_json?.grupo_id === gid || r.payload_json?.grupo_id === selectVal)
+                (r.payload_json?.materia || '').trim().toLowerCase() === materiaClean.toLowerCase() && 
+                parseInt(r.payload_json?.trimestre) === currentTrim && 
+                (r.payload_json?.grupo_id === gid || r.payload_json?.grupo_id === selectVal || (r.payload_json?.grupo_id || '').startsWith(gid))
             );
         }
         
@@ -18732,7 +18766,7 @@ window.cargarBoletasGrupo = async () => {
                    </div>
                 </td>
                 ${histCells}
-                <td style="background:var(--surface-hover); text-align:center; color:var(--text-muted); font-weight:bold;">${promFinalNum.toFixed(2)}</td>
+                <td style="background:var(--surface-hover); text-align:center; color:var(--text-muted); font-weight:bold;">${isModoFinal ? promFinalNum.toFixed(2) : (hasActs ? promFinalNum.toFixed(2) : (currentSettledVal !== undefined && currentSettledVal !== null ? Number(currentSettledVal).toFixed(1) : '-'))}</td>
                 <td style="background:var(--surface-hover); text-align:center; padding:12px;">
                    <input type="number" inputmode="decimal" class="form-input input-calificacion" 
                           data-alumno="${al.id}" 
@@ -18896,23 +18930,9 @@ window.sellarYEnviarCalificaciones = async () => {
             console.error("Error al concluir autorización consumida:", eConsumir);
         }
         
-        // 3. Procesar Notificaciones Automáticas (Trimestre Final)
-        if(reprobados.length > 0) {
-            let coms = reprobados.map(alId => ({
-                id: crypto.randomUUID(),
-                autor_id: actUserId,
-                titulo: `⚠️ AVISO DE REPROBACIÓN: ${materiaText}`,
-                mensaje: `Se le informa que el alumno ha REPROBADO la asignatura de ${materiaText} en su promedio final anual. Es necesario acudir urgentemente a la dirección escolar para solicitar el proceso de Examen Extraordinario.`,
-                audiencia: `Alumno_${alId}`,
-                fecha_envio: new Date().toISOString(),
-                plantel_id: state.plantelId
-            }));
-
-            const { error: errorComs } = await supabaseClient.from('comunicados').insert(coms);
-            if(errorComs) console.error("Error al enviar notificaciones de reprobación:", errorComs);
-        }
-
-        alert("¡Calificaciones de " + trimName + " asentadas exitosamente!" + (reprobados.length > 0 ? `\nSe enviaron ${reprobados.length} avisos de reprobación a los padres.` : ""));
+        // 3. Notificaciones finales: Las notificaciones oficiales de boleta y reportes a padres
+        // se emiten exclusivamente desde el perfil Administrativo tras la validación de la Sábana.
+        alert("¡Calificaciones de " + trimName + " asentadas y selladas exitosamente!\nSe enviaron a Control Escolar para su validación administrativa.");
         window.cargarBoletasGrupo(); // Recargar tabla
     } catch(e) {
         console.error(e);
