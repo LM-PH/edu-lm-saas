@@ -5,7 +5,7 @@ const CONFIG = {
 };
 
 // Supabase Configuration
-console.log("%c>>> EDU-LM V223 UNIVERSAL CARGADA: VIGILANCIA HUMANA ACTIVA", "color: yellow; background: black; padding: 12px; font-weight: 1000; border: 2px solid yellow;");
+console.log("%c>>> EDU-LM V224 UNIVERSAL CARGADA: VIGILANCIA HUMANA ACTIVA", "color: yellow; background: black; padding: 12px; font-weight: 1000; border: 2px solid yellow;");
 const SUPABASE_URL = "https://eexgjaydpuioncenlsmv.supabase.co"; 
 const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVleGdqYXlkcHVpb25jZW5sc212Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQ4NTM0MDAsImV4cCI6MjEwMDQyOTQwMH0.vrJGn_Bg04OBBntL-w21-I27XuvO61HcUNrphMYYSlY";
 const SUPABASE_KEY = SUPABASE_ANON_KEY;
@@ -14348,12 +14348,12 @@ window.firmarEncuadreDesdeTimeline = async (comunicadoId, btn) => {
                 // Prioridad 2: Buscar por nombre y grupo (Plan B para avisos viejos)
                 const isTecAviso = com.titulo.toLowerCase().includes('grado');
 
-                let qEnc = supabaseClient.from('encuadres').select('id, grupo_id, target_grado')
+                let qEnc = supabaseClient.from('encuadres').select('id, grupo_id, target_grado, materia')
                     .eq('plantel_id', state.plantelId)
-                    .eq('maestro_id', com.autor_id)
-                    .ilike('materia', tituloMatch); // ilike ayuda con mayúsculas/minúsculas
+                    .eq('maestro_id', com.autor_id);
 
-                const { data: encs } = await qEnc;
+                const { data: rawEncs } = await qEnc;
+                const encs = (rawEncs || []).filter(e => window._matchMateriaEducativa ? window._matchMateriaEducativa(e.materia, tituloMatch) : (e.materia || '').trim().toLowerCase() === tituloMatch.toLowerCase());
                 if(encs && encs.length > 0) {
                     if(isTecAviso) {
                         const { data: gData } = await supabaseClient.from('grupos').select('nombre').eq('id', al.grupo_id).maybeSingle();
@@ -14442,28 +14442,29 @@ window.loadFirmantesEncuadre = async () => {
         const u = await supabaseClient.auth.getUser();
         if(!u.data.user) return;
 
-        const [idPart, mat] = sel.value.split('|');
+        const [idPart, rawMat] = sel.value.split('|');
+        const mat = (rawMat || '').trim();
         const isTec = idPart.startsWith('grado:');
         const gid = isTec ? null : idPart;
-        const targetGrado = isTec ? idPart.replace('grado:', '') : null;
+        const targetGrado = isTec ? idPart.replace('grado:', '').trim() : null;
 
         // 1. Obtener TODOS los IDs de encuadre de este maestro/materia/TRIMESTRE
         let qEnc = supabaseClient.from('encuadres')
-            .select('id')
+            .select('id, materia')
             .eq('plantel_id', state.plantelId)
             .eq('maestro_id', u.data.user.id)
-            .ilike('materia', mat)
             .eq('trimestre', window.currentTrimestre || 1);
         
         if(isTec) qEnc = qEnc.is('grupo_id', null).eq('target_grado', targetGrado);
         else qEnc = qEnc.eq('grupo_id', gid);
         
-        const { data: encList } = await qEnc;
-        const encIds = encList ? encList.map(e => e.id) : [];
-        console.log(">>> [TRACKING] IDs de encuadre encontrados para esta materia:", encIds);
+        const { data: rawEncList } = await qEnc;
+        const encList = (rawEncList || []).filter(e => window._matchMateriaEducativa ? window._matchMateriaEducativa(e.materia, mat) : (e.materia || '').trim().toLowerCase() === mat.toLowerCase());
+        const encIds = encList.map(e => e.id);
+        console.log(">>> [TRACKING] IDs de encuadre encontrados para esta materia y grupo:", encIds);
 
         if(encIds.length === 0) {
-            cont.innerHTML = '<p style="color:var(--text-muted); padding:20px;">Este encuadre aún no ha sido enviado o no se encontró el registro oficial.</p>';
+            cont.innerHTML = '<p style="color:var(--text-muted); padding:20px;">Este encuadre aún no ha sido enviado para este grupo o no se encontró el registro oficial.</p>';
             return;
         }
 
@@ -15135,57 +15136,76 @@ window._normalizarGrado = (gr) => {
 };
 
 window._buscarMejorEncuadre = (encuadres, target) => {
-    if(!encuadres || encuadres.length === 0) return null;
-    const normTargetMat = window._normalizarTextoMateria(target.materia);
-    const targetGrado = window._normalizarGrado(target.target_grado) || window._normalizarGrado(target.grupo_nombre);
+    if(!encuadres || !Array.isArray(encuadres) || encuadres.length === 0 || !target) return null;
+    const targetMat = (target.materia || '').trim();
+    const normTargetMat = window._normalizarTextoMateria ? window._normalizarTextoMateria(targetMat) : targetMat.toLowerCase();
+    const targetGrupoId = target.grupo_id ? String(target.grupo_id).trim() : null;
+    const isTec = target.isTec || (targetGrupoId && targetGrupoId.startsWith('grado:')) || (!targetGrupoId && !!target.target_grado);
+    const targetGrado = window._normalizarGrado(target.target_grado || (targetGrupoId && targetGrupoId.startsWith('grado:') ? targetGrupoId.replace('grado:', '') : '')) || window._normalizarGrado(target.grupo_nombre);
     const targetTrim = target.trimestre ? String(target.trimestre).trim() : null;
-    const targetGrupoId = target.grupo_id ? String(target.grupo_id) : null;
+    const requireEnviado = target.requireEnviado !== false; // Por defecto sólo encuadres enviados oficialmente
 
-    const scored = encuadres.map(enc => {
-        let score = 0;
-        const normEncMat = window._normalizarTextoMateria(enc.materia);
-        
-        // Puntuación por materia (normalizada)
-        if(normEncMat && normTargetMat) {
-            if(normEncMat === normTargetMat) {
-                score += 300;
-            } else if(normEncMat.includes(normTargetMat) || normTargetMat.includes(normEncMat)) {
-                score += 150;
+    // Filtrar candidatos con validación estricta (sin mezclar materias ni grupos)
+    const candidatos = encuadres.filter(enc => {
+        if(!enc) return false;
+
+        // 1. Debe tener rubros válidos y definidos
+        if(!enc.rubros || !Array.isArray(enc.rubros) || enc.rubros.length === 0) {
+            return false;
+        }
+
+        // 2. Si se requiere que esté enviado oficialmente a alumnos
+        if(requireEnviado && enc.notificacion_enviada === false) {
+            return false;
+        }
+
+        // 3. Materia: COINCIDENCIA ESTRICTA (nunca mezclar materias entre sí, ej. Educación Física con Física o Tutoría)
+        const matchFn = window._matchMateriaEducativa;
+        const matCoincide = matchFn ? matchFn(enc.materia, targetMat) : (window._normalizarTextoMateria ? window._normalizarTextoMateria(enc.materia) === normTargetMat : (enc.materia || '').trim().toLowerCase() === targetMat.toLowerCase());
+        if(!matCoincide) return false;
+
+        // 4. Grupo / Grado: COINCIDENCIA ESTRICTA (cada grupo/taller tiene su propio encuadre)
+        if(isTec || enc.target_grado) {
+            // Caso Tecnologías / Talleres: debe coincidir el grado
+            const encGrado = window._normalizarGrado(enc.target_grado);
+            if(!targetGrado || !encGrado || targetGrado !== encGrado) return false;
+        } else {
+            // Caso Grupo regular: DEBE coincidir exactamente el grupo_id
+            if(!targetGrupoId || !enc.grupo_id || String(enc.grupo_id).trim() !== targetGrupoId) {
+                return false;
             }
         }
 
-        // Puntuación por grupo específico
-        if(targetGrupoId && enc.grupo_id && String(enc.grupo_id) === targetGrupoId) {
-            score += 120;
+        // 5. Trimestre: Si el target especifica trimestre, debe coincidir
+        if(targetTrim && enc.trimestre && String(enc.trimestre).trim() !== targetTrim) {
+            return false;
         }
 
-        // Puntuación por grado
-        const encGrado = window._normalizarGrado(enc.target_grado);
-        if(targetGrado && encGrado && targetGrado === encGrado) {
-            score += 80;
-        }
-
-        // Puntuación por trimestre
-        if(targetTrim && enc.trimestre && String(enc.trimestre).trim() === targetTrim) {
-            score += 40;
-        }
-
-        // Puntuación por tener rubros definidos válidos
-        if(enc.rubros && Array.isArray(enc.rubros) && enc.rubros.length > 0) {
-            score += 50;
-        }
-
-        // Fecha de creación (más reciente)
-        if(enc.fecha_creacion) {
-            const time = new Date(enc.fecha_creacion).getTime();
-            if(!isNaN(time)) score += Math.min(10, Math.floor(time / 100000000000));
-        }
-
-        return { enc, score };
+        return true;
     });
 
-    scored.sort((a, b) => b.score - a.score);
-    return scored[0]?.score > 0 ? scored[0].enc : (scored[0]?.enc || null);
+    if(candidatos.length === 0) return null;
+
+    // Si hay más de un candidato (por ejemplo, múltiples versiones del mismo grupo/materia/trimestre),
+    // ordenar para seleccionar el más relevante:
+    candidatos.sort((a, b) => {
+        // Prioridad 1: Coincidencia exacta de trimestre si target lo pidió
+        if(targetTrim) {
+            const aT = String(a.trimestre || '').trim() === targetTrim;
+            const bT = String(b.trimestre || '').trim() === targetTrim;
+            if(aT && !bT) return -1;
+            if(!aT && bT) return 1;
+        }
+        // Prioridad 2: notificacion_enviada = true
+        if(a.notificacion_enviada && !b.notificacion_enviada) return -1;
+        if(!a.notificacion_enviada && b.notificacion_enviada) return 1;
+        // Prioridad 3: Fecha de creación más reciente
+        const timeA = a.fecha_creacion ? new Date(a.fecha_creacion).getTime() : 0;
+        const timeB = b.fecha_creacion ? new Date(b.fecha_creacion).getTime() : 0;
+        return timeB - timeA;
+    });
+
+    return candidatos[0] || null;
 };
 
 window._modalEncuadresDisponibles = [];
@@ -15212,7 +15232,7 @@ window._renderOpcionesRubroModal = (encuadre, act) => {
     } else {
         rubrosHTML = `
         <div style="padding:12px; background:#fffbeb; border:1px solid #fef3c7; border-radius:8px; font-size:0.85rem; color:#92400e; margin-bottom:4px;">
-            <i class="fa-solid fa-triangle-exclamation"></i> No se encontró un encuadre guardado para esta materia. Puedes ingresar el rubro manualmente abajo.
+            <i class="fa-solid fa-triangle-exclamation"></i> No hay un encuadre oficial enviado para este grupo y materia. Puedes ingresar el rubro manualmente abajo o clasificar la actividad como extra.
         </div>`;
     }
 
@@ -15310,24 +15330,42 @@ window.abrirModalAsignarRubro = async (actId) => {
             .eq('actividad_id', actId);
         const evalCount = evalsData ? evalsData.length : 0;
 
-        // 3. Consultar todos los encuadres de este maestro en el plantel
+        // 3. Consultar todos los encuadres de este maestro en el plantel (enviados oficialmente)
         const maestroId = act.maestro_id || (state.user && state.user.id);
         const { data: rawEncuadres } = await supabaseClient.from('encuadres')
-            .select('id, rubros, materia, trimestre, grupo_id, target_grado, fecha_creacion, grupos(nombre)')
+            .select('id, rubros, materia, trimestre, grupo_id, target_grado, fecha_creacion, notificacion_enviada, grupos(nombre)')
             .eq('plantel_id', state.plantelId)
             .eq('maestro_id', maestroId)
+            .eq('notificacion_enviada', true)
             .order('fecha_creacion', { ascending: false });
 
-        const encuadresConRubros = (rawEncuadres || []).filter(e => e.rubros && Array.isArray(e.rubros) && e.rubros.length > 0);
-        window._modalEncuadresDisponibles = encuadresConRubros;
+        // Blindaje estricto: Filtrar ÚNICAMENTE encuadres que coincidan con la materia y grupo de esta actividad
+        const encuadresGrupoAct = (rawEncuadres || []).filter(e => {
+            if (!e.rubros || !Array.isArray(e.rubros) || e.rubros.length === 0) return false;
+            // Coincidencia estricta de materia
+            const matchM = window._matchMateriaEducativa ? window._matchMateriaEducativa(e.materia, act.materia) : (e.materia || '').trim().toLowerCase() === (act.materia || '').trim().toLowerCase();
+            if (!matchM) return false;
+            // Coincidencia estricta de grupo o taller
+            if (act.target_grado || (act.grupo_id && String(act.grupo_id).startsWith('grado:'))) {
+                const actGr = window._normalizarGrado(act.target_grado);
+                const encGr = window._normalizarGrado(e.target_grado);
+                if (!actGr || !encGr || actGr !== encGr) return false;
+            } else {
+                if (!act.grupo_id || !e.grupo_id || String(e.grupo_id).trim() !== String(act.grupo_id).trim()) return false;
+            }
+            return true;
+        });
+
+        window._modalEncuadresDisponibles = encuadresGrupoAct;
 
         // Buscar el mejor encuadre coincidente usando normalización inteligente
-        const bestEncuadre = window._buscarMejorEncuadre(encuadresConRubros, {
+        const bestEncuadre = window._buscarMejorEncuadre(encuadresGrupoAct, {
             materia: act.materia,
             grupo_id: act.grupo_id,
             target_grado: act.target_grado,
             trimestre: act.trimestre,
-            grupo_nombre: act.grupos?.nombre
+            grupo_nombre: act.grupos?.nombre,
+            requireEnviado: true
         });
 
         // 4. Buscar actividades hermanas (mismo maestro, materia, trimestre y título en otros grupos)
@@ -15341,10 +15379,8 @@ window.abrirModalAsignarRubro = async (actId) => {
                 .eq('titulo', act.titulo)
                 .neq('id', act.id);
             if(sibs) {
-                const normActMat = window._normalizarTextoMateria(act.materia);
                 siblingActs = sibs.filter(s => {
-                    const normSMat = window._normalizarTextoMateria(s.materia);
-                    return normSMat === normActMat || !normActMat || !normSMat;
+                    return window._matchMateriaEducativa ? window._matchMateriaEducativa(s.materia, act.materia) : (s.materia || '').trim().toLowerCase() === (act.materia || '').trim().toLowerCase();
                 });
             }
         } catch(e) {
@@ -15353,7 +15389,7 @@ window.abrirModalAsignarRubro = async (actId) => {
 
         // Selector de encuadre fuente si hay varios encuadres
         let encuadreSelectorHTML = '';
-        if(encuadresConRubros.length > 0) {
+        if(encuadresGrupoAct.length > 0) {
             encuadreSelectorHTML = `
             <div style="margin-bottom:12px; padding:10px 12px; background:#f0fdf4; border:1px solid #bbf7d0; border-radius:8px;">
                 <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
@@ -15361,11 +15397,11 @@ window.abrirModalAsignarRubro = async (actId) => {
                         <i class="fa-solid fa-sliders"></i> Rúbrica / Encuadre Detectado:
                     </label>
                     <span style="font-size:0.75rem; color:#15803d; font-weight:600;">
-                        ${bestEncuadre ? '✔ Coincidencia Automática' : 'Selecciona un encuadre'}
+                        ${bestEncuadre ? '✔ Coincidencia Oficial' : 'Selecciona un encuadre'}
                     </span>
                 </div>
                 <select id="selFuenteEncuadre" class="form-select" style="font-size:0.85rem; padding:6px 10px; margin-bottom:0; background:#fff;" onchange="window._cambiarFuenteEncuadre(this.value)">
-                    ${encuadresConRubros.map(e => {
+                    ${encuadresGrupoAct.map(e => {
                         const isSelected = bestEncuadre && bestEncuadre.id === e.id;
                         const gLabel = e.grupos?.nombre || (e.target_grado ? e.target_grado + ' Grado' : 'General');
                         const triLabel = e.trimestre ? `Trimestre ${e.trimestre}` : 'General';
@@ -15373,6 +15409,17 @@ window.abrirModalAsignarRubro = async (actId) => {
                         return `<option value="${e.id}" ${isSelected ? 'selected' : ''}>${(e.materia || '').trim()} - ${gLabel} (${triLabel}) [${rubroCount} rubros]</option>`;
                     }).join('')}
                 </select>
+            </div>`;
+        } else {
+            const nomGrupo = act.grupos?.nombre || (act.target_grado ? `${act.target_grado}° Grado` : 'este grupo');
+            encuadreSelectorHTML = `
+            <div style="margin-bottom:12px; padding:10px 12px; background:#fffbeb; border:1px solid #fef3c7; border-radius:8px;">
+                <div style="font-size:0.85rem; color:#92400e; font-weight:600; display:flex; align-items:center; gap:6px;">
+                    <i class="fa-solid fa-triangle-exclamation"></i> Sin Encuadre Oficial Enviado
+                </div>
+                <div style="font-size:0.8rem; color:#b45309; margin-top:3px;">
+                    No hay un encuadre enviado para <strong>${(act.materia || '').trim()}</strong> en <strong>${nomGrupo}</strong>. Puedes ingresar un rubro personalizado abajo o clasificar la actividad como extra.
+                </div>
             </div>`;
         }
 
@@ -15386,7 +15433,7 @@ window.abrirModalAsignarRubro = async (actId) => {
             siblingHTML = `
             <div style="margin-top:14px; padding:12px; background:#f0fdf4; border:1px solid #bbf7d0; border-radius:8px;">
                 <label style="display:flex; align-items:flex-start; gap:10px; cursor:pointer; font-size:0.85rem; color:#166534; font-weight:500; margin:0;">
-                    <input type="checkbox" id="chkAplicarHermanas" checked style="margin-top:3px; accent-color:var(--success); transform:scale(1.15);">
+                    <input type="checkbox" id="chkAplicarHermanas" style="margin-top:3px; accent-color:var(--success); transform:scale(1.15);">
                     <span>Aplicar también este rubro a otras <strong>${siblingActs.length}</strong> actividad(es) con el mismo título en otros grupos (<em>${gruposTxt}</em>).</span>
                 </label>
             </div>`;
@@ -15518,17 +15565,40 @@ window.guardarRubroActividad = async (actId) => {
         const chkHermanas = document.getElementById('chkAplicarHermanas');
         if(chkHermanas && chkHermanas.checked && act) {
             const { data: sibs } = await supabaseClient.from('actividades_maestro')
-                .select('id, materia')
+                .select('id, materia, grupo_id, target_grado')
                 .eq('plantel_id', state.plantelId)
                 .eq('maestro_id', act.maestro_id)
                 .eq('trimestre', act.trimestre)
                 .eq('titulo', act.titulo);
             if(sibs && sibs.length > 0) {
-                const normActMat = window._normalizarTextoMateria(act.materia);
-                idsToUpdate = sibs.filter(s => {
-                    const normSMat = window._normalizarTextoMateria(s.materia);
-                    return normSMat === normActMat || !normActMat || !normSMat;
-                }).map(s => s.id);
+                const sibsMateria = sibs.filter(s => {
+                    return window._matchMateriaEducativa ? window._matchMateriaEducativa(s.materia, act.materia) : (s.materia || '').trim().toLowerCase() === (act.materia || '').trim().toLowerCase();
+                });
+
+                // Si se asigna un rubro oficial de encuadre (rName), sólo propagar a actividades cuyos grupos tengan ese encuadre enviado
+                if (rName) {
+                    const { data: encsMaestro } = await supabaseClient.from('encuadres')
+                        .select('id, rubros, materia, trimestre, grupo_id, target_grado, notificacion_enviada')
+                        .eq('plantel_id', state.plantelId)
+                        .eq('maestro_id', act.maestro_id)
+                        .eq('notificacion_enviada', true);
+
+                    for (const s of sibsMateria) {
+                        const encS = window._buscarMejorEncuadre(encsMaestro, {
+                            materia: s.materia,
+                            grupo_id: s.grupo_id,
+                            target_grado: s.target_grado,
+                            trimestre: act.trimestre,
+                            requireEnviado: true
+                        });
+                        if (encS && encS.rubros && encS.rubros.some(r => r.name === rName)) {
+                            idsToUpdate.push(s.id);
+                        }
+                    }
+                } else {
+                    // Puntos extra o sin rubro, sí se puede propagar a todas las hermanas
+                    idsToUpdate = sibsMateria.map(s => s.id);
+                }
                 if(!idsToUpdate.includes(actId)) idsToUpdate.push(actId);
             }
         }
@@ -15583,7 +15653,9 @@ window.abrirModalCopiarActividad = async (actId) => {
     div.className = 'modal-backdrop';
     div.style = 'display:flex; position:fixed; z-index:100; left:0; top:0; width:100%; height:100%; background:rgba(0,0,0,0.5); backdrop-filter:blur(4px); justify-content:center; align-items:center;';
 
-    const asigs = (window.globalAsignacionesMaestro || []).filter(a => window._normalizarTextoMateria(a.materia) === window._normalizarTextoMateria(act.materia));
+    const asigs = (window.globalAsignacionesMaestro || []).filter(a => {
+        return window._matchMateriaEducativa ? window._matchMateriaEducativa(a.materia, act.materia) : (a.materia || '').trim().toLowerCase() === (act.materia || '').trim().toLowerCase();
+    });
     
     let checkboxesHTML = '';
     asigs.forEach(a => {
@@ -15625,21 +15697,55 @@ window.confirmarCopiarActividad = async (actId) => {
         if(errFetch || !act) throw errFetch;
 
         const activePlantelId = act.plantel_id || state.plantelId || (window._obtenerPlantelIdActivo ? await window._obtenerPlantelIdActivo() : null);
+
+        // Consultar encuadres enviados para los grupos destino para no contaminar rubros si no tienen encuadre enviado
+        let encsDestino = [];
+        if (act.rubro_name) {
+            const { data: encs } = await supabaseClient.from('encuadres')
+                .select('id, rubros, materia, trimestre, grupo_id, target_grado, notificacion_enviada')
+                .eq('plantel_id', activePlantelId)
+                .eq('maestro_id', act.maestro_id)
+                .eq('notificacion_enviada', true);
+            encsDestino = encs || [];
+        }
+
         const itemsToInsert = Array.from(checkboxes).map(cb => {
             const val = cb.value;
             const isTec = val.startsWith('grado:');
             const grupo_id = isTec ? null : val;
-            const target_grado = isTec ? val.replace('grado:', '') : null;
+            const target_grado = isTec ? val.replace('grado:', '').trim() : null;
             
+            let gRubroName = act.rubro_name;
+            let gRubroPeso = act.rubro_peso;
+
+            // Si la actividad original tenía un rubro del encuadre oficial, validar que el grupo destino tenga encuadre enviado con ese rubro
+            if (act.rubro_name) {
+                const encG = window._buscarMejorEncuadre(encsDestino, {
+                    materia: act.materia,
+                    grupo_id: grupo_id,
+                    target_grado: target_grado,
+                    trimestre: act.trimestre,
+                    requireEnviado: true
+                });
+                const rMatch = encG?.rubros?.find(r => r.name === act.rubro_name);
+                if (rMatch) {
+                    gRubroName = rMatch.name;
+                    gRubroPeso = rMatch.val;
+                } else {
+                    gRubroName = null;
+                    gRubroPeso = null;
+                }
+            }
+
             return {
                 maestro_id: act.maestro_id,
                 titulo: act.titulo,
                 descripcion: act.descripcion,
-                materia: act.materia,
+                materia: (act.materia || '').trim(),
                 grupo_id: grupo_id,
                 target_grado: target_grado,
-                rubro_name: act.rubro_name,
-                rubro_peso: act.rubro_peso,
+                rubro_name: gRubroName,
+                rubro_peso: gRubroPeso,
                 trimestre: act.trimestre,
                 plantel_id: activePlantelId,
                 fecha_creacion: new Date().toISOString(),
@@ -15735,13 +15841,46 @@ window.agregarActividad = async () => {
            }
        }
        
+       // Consultar encuadres enviados para validar rubros por grupo destino
+       let maestroEncuadres = [];
+       if (rubroName) {
+           const { data: encs } = await supabaseClient.from('encuadres')
+               .select('id, rubros, materia, trimestre, grupo_id, target_grado, notificacion_enviada')
+               .eq('plantel_id', activePlantelId)
+               .eq('maestro_id', user.id)
+               .eq('notificacion_enviada', true);
+           maestroEncuadres = encs || [];
+       }
+
        // Soportar múltiples grupos si seleccionó "Todos mis grupos"
        const itemsToInsert = valMulti.split(',').map(val => {
            const [idPart, materia] = val.split('|');
            const isTec = idPart.startsWith('grado:');
            const grupo_id = isTec ? null : idPart;
-           const target_grado = isTec ? idPart.replace('grado:', '') : null;
+           const target_grado = isTec ? idPart.replace('grado:', '').trim() : null;
            
+           let gRubroName = rubroName;
+           let gRubroPeso = rubroPeso;
+
+           // Si se seleccionó un rubro oficial (no extra), validar que este grupo específico tenga encuadre enviado con ese rubro
+           if (rubroName) {
+               const encGrupo = window._buscarMejorEncuadre(maestroEncuadres, {
+                   materia: materia,
+                   grupo_id: grupo_id,
+                   target_grado: target_grado,
+                   trimestre: trimVal,
+                   requireEnviado: true
+               });
+               const rubroEnGrupo = encGrupo?.rubros?.find(r => r.name === rubroName);
+               if (rubroEnGrupo) {
+                   gRubroName = rubroEnGrupo.name;
+                   gRubroPeso = rubroEnGrupo.val;
+               } else {
+                   gRubroName = null;
+                   gRubroPeso = null;
+               }
+           }
+
            return {
                maestro_id: user.id,
                titulo: titulo,
@@ -15749,8 +15888,8 @@ window.agregarActividad = async () => {
                materia: (materia || '').trim(),
                grupo_id: grupo_id,
                target_grado: target_grado,
-               rubro_name: rubroName,
-               rubro_peso: rubroPeso,
+               rubro_name: gRubroName,
+               rubro_peso: gRubroPeso,
                trimestre: parseInt(trimVal),
                plantel_id: activePlantelId,
                fecha_creacion: new Date().toISOString()
@@ -22939,12 +23078,15 @@ window.cargarRubrosParaActividad = async () => {
         return; 
     }
     
-    // Si selecciona "Todos mis grupos", el value es "ID1|Mat,ID2|Mat". Agarramos el primero para buscar el encuadre.
-    const firstVal = actMG.value.split(',')[0];
-    const [idPart, mat] = firstVal.split('|');
+    // Si selecciona "Todos mis grupos", el value es "ID1|Mat,ID2|Mat".
+    const isMultiGrupo = actMG.value.includes(',');
+    const gruposList = actMG.value.split(',');
+    const firstVal = gruposList[0];
+    const [idPart, rawMat] = firstVal.split('|');
+    const mat = (rawMat || '').trim();
     const isTec = idPart.startsWith('grado:');
     const gid = isTec ? null : idPart;
-    const targetGrado = isTec ? idPart.replace('grado:', '') : null;
+    const targetGrado = isTec ? idPart.replace('grado:', '').trim() : null;
     const trimSelected = document.getElementById('actTrimestre')?.value || 1;
     const trimInt = parseInt(trimSelected, 10);
     if (trimInt > 1 && window.isTrimestreHabilitado) {
@@ -22962,24 +23104,60 @@ window.cargarRubrosParaActividad = async () => {
         const maestroId = u?.data?.user?.id || (state.user && state.user.id);
 
         const { data: _encuadreArr } = await supabaseClient.from('encuadres')
-            .select('id, rubros, materia, trimestre, grupo_id, target_grado, fecha_creacion')
+            .select('id, rubros, materia, trimestre, grupo_id, target_grado, fecha_creacion, notificacion_enviada')
             .eq('plantel_id', state.plantelId)
             .eq('maestro_id', maestroId)
+            .eq('notificacion_enviada', true)
             .order('fecha_creacion', { ascending: false });
 
-        const encuadre = window._buscarMejorEncuadre(_encuadreArr, {
-            materia: mat,
-            grupo_id: gid,
-            target_grado: targetGrado,
-            trimestre: trimSelected
-        });
+        if (isMultiGrupo) {
+            let encuadresDeGrupos = [];
+            for (const item of gruposList) {
+                const [gIdPart, gMatRaw] = item.split('|');
+                const gMat = (gMatRaw || '').trim();
+                const gIsTec = gIdPart.startsWith('grado:');
+                const gGid = gIsTec ? null : gIdPart;
+                const gTGrado = gIsTec ? gIdPart.replace('grado:', '').trim() : null;
+                const encG = window._buscarMejorEncuadre(_encuadreArr, {
+                    materia: gMat,
+                    grupo_id: gGid,
+                    target_grado: gTGrado,
+                    trimestre: trimSelected,
+                    requireEnviado: true
+                });
+                encuadresDeGrupos.push(encG);
+            }
 
-        if(encuadre && encuadre.rubros && encuadre.rubros.length > 0) {
-             actR.innerHTML = '<option value="">No aplica (Extra)</option>' + encuadre.rubros.map(r => {
-                 return `<option value='${JSON.stringify({name:r.name, val:r.val})}'>${r.name} (${r.val}%)</option>`;
-             }).join('');
+            const todosTienenEncuadre = encuadresDeGrupos.every(e => e && e.rubros && e.rubros.length > 0);
+            if (todosTienenEncuadre) {
+                const primerRubrosStr = JSON.stringify(encuadresDeGrupos[0].rubros.map(r => ({ name: r.name, val: r.val })));
+                const todosCoinciden = encuadresDeGrupos.every(e => JSON.stringify(e.rubros.map(r => ({ name: r.name, val: r.val }))) === primerRubrosStr);
+                if (todosCoinciden) {
+                    actR.innerHTML = '<option value="">No aplica (Extra)</option>' + encuadresDeGrupos[0].rubros.map(r => {
+                        return `<option value='${JSON.stringify({name:r.name, val:r.val})}'>${r.name} (${r.val}%)</option>`;
+                    }).join('');
+                } else {
+                    actR.innerHTML = '<option value="">⚠️ Los grupos seleccionados tienen rubros distintos en su encuadre (Sin Rubro / Extra)</option>';
+                }
+            } else {
+                actR.innerHTML = '<option value="">⚠️ Uno o más grupos seleccionados no tienen encuadre enviado (Sin Rubro / Extra)</option>';
+            }
         } else {
-             actR.innerHTML = '<option value="">Sin encuadre configurado (No aplica)</option>';
+            const encuadre = window._buscarMejorEncuadre(_encuadreArr, {
+                materia: mat,
+                grupo_id: gid,
+                target_grado: targetGrado,
+                trimestre: trimSelected,
+                requireEnviado: true
+            });
+
+            if(encuadre && encuadre.rubros && encuadre.rubros.length > 0) {
+                 actR.innerHTML = '<option value="">No aplica (Extra)</option>' + encuadre.rubros.map(r => {
+                     return `<option value='${JSON.stringify({name:r.name, val:r.val})}'>${r.name} (${r.val}%)</option>`;
+                 }).join('');
+            } else {
+                 actR.innerHTML = '<option value="">Sin encuadre oficial enviado para este grupo (No aplica / Extra)</option>';
+            }
         }
         window.onActRubroChange();
     } catch(e) {
@@ -23007,18 +23185,18 @@ window.cargarEncuadreActivo = async () => {
     }
     
     overlay.style.display = 'none';
-    const [idPart, mat] = sel.value.split('|');
+    const [idPart, rawMat] = sel.value.split('|');
+    const mat = (rawMat || '').trim();
     const isTec = idPart.startsWith('grado:');
     const gid = isTec ? null : idPart;
-    const targetGrado = isTec ? idPart.replace('grado:', '') : null;
+    const targetGrado = isTec ? idPart.replace('grado:', '').trim() : null;
     title.innerText = `Configurando: ${sel.options[sel.selectedIndex].text}`;
     
     try {
         let q = supabaseClient.from('encuadres')
-            .select('rubros, notificacion_enviada, fecha_envio_notif')
+            .select('rubros, notificacion_enviada, fecha_envio_notif, materia')
             .eq('plantel_id', state.plantelId)
             .eq('maestro_id', state.user.id)
-            .eq('materia', mat)
             .eq('trimestre', window.currentTrimestre || 1);
 
         if(isTec) {
@@ -23026,8 +23204,8 @@ window.cargarEncuadreActivo = async () => {
         } else {
             q = q.eq('grupo_id', gid);
         }
-        const { data: _encArr } = await q.order('fecha_creacion', { ascending: false }).limit(1);
-        const enc = _encArr && _encArr.length > 0 ? _encArr[0] : null;
+        const { data: _encArr } = await q.order('fecha_creacion', { ascending: false });
+        const enc = (_encArr || []).find(e => window._matchMateriaEducativa ? window._matchMateriaEducativa(e.materia, mat) : (e.materia || '').trim().toLowerCase() === mat.toLowerCase()) || null;
         
         if (enc && enc.rubros) {
             window.rubros = enc.rubros;
@@ -23096,10 +23274,11 @@ window.cargarEncuadreActivo = async () => {
             btnReset.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Limpiando registros...';
         }
 
-        const [idPart, mat] = sel.value.split('|');
+        const [idPart, rawMat] = sel.value.split('|');
+        const mat = (rawMat || '').trim();
         const isTec = idPart.startsWith('grado:');
         const gid = isTec ? null : idPart;
-        const targetGrado = isTec ? idPart.replace('grado:', '') : null;
+        const targetGrado = isTec ? idPart.replace('grado:', '').trim() : null;
 
         try {
             const u = await supabaseClient.auth.getUser();
@@ -23108,19 +23287,19 @@ window.cargarEncuadreActivo = async () => {
 
             // 1. Obtener los IDs de encuadre existentes para este grupo/materia/trimestre
             let qEnc = supabaseClient.from('encuadres')
-                .select('id, maestro_id')
+                .select('id, materia, maestro_id')
                 .eq('plantel_id', pId)
                 .eq('maestro_id', maestroId)
-                .eq('materia', mat)
                 .eq('trimestre', window.currentTrimestre || 1);
 
             if(isTec) qEnc = qEnc.is('grupo_id', null).eq('target_grado', targetGrado);
             else qEnc = qEnc.eq('grupo_id', gid);
 
-            const { data: encList, error: errEnc } = await qEnc;
+            const { data: rawEncList, error: errEnc } = await qEnc;
             if(errEnc) throw errEnc;
 
-            const encIds = (encList || []).map(e => e.id).filter(Boolean);
+            const encList = (rawEncList || []).filter(e => window._matchMateriaEducativa ? window._matchMateriaEducativa(e.materia, mat) : (e.materia || '').trim().toLowerCase() === mat.toLowerCase());
+            const encIds = encList.map(e => e.id).filter(Boolean);
 
             // 2. Borrar firmas de enterado
             if(encIds.length > 0) {
@@ -23207,10 +23386,11 @@ window.cargarEncuadreActivo = async () => {
     let sum = window.rubros.reduce((acc, r) => acc + r.val, 0);
     if(sum !== 100) return alert("La suma total de rubros debe ser exactamente 100%.");
     
-    const [idPart, mat] = sel.value.split('|');
+    const [idPart, rawMat] = sel.value.split('|');
+    const mat = (rawMat || '').trim();
     const isTec = idPart.startsWith('grado:');
     const gid = isTec ? null : idPart;
-    const targetGrado = isTec ? idPart.replace('grado:', '') : null;
+    const targetGrado = isTec ? idPart.replace('grado:', '').trim() : null;
     const labelGrupo = sel.options[sel.selectedIndex].text;
 
     const btn = document.getElementById('btnEnviarEncuadre');
@@ -23218,16 +23398,19 @@ window.cargarEncuadreActivo = async () => {
     try {
         const u = await supabaseClient.auth.getUser();
 
-        // 0. Verificar si ya fue enviado antes (RESTRICTIVO POR TRIMESTRE)
-        const { data: _encExArr } = await supabaseClient
+        // 0. Verificar si ya fue enviado antes (RESTRICTIVO POR TRIMESTRE, GRUPO Y MATERIA)
+        let qEx = supabaseClient
             .from('encuadres')
-            .select('id, notificacion_enviada, fecha_envio_notif')
+            .select('id, materia, notificacion_enviada, fecha_envio_notif')
             .eq('plantel_id', state.plantelId)
             .eq('maestro_id', u.data.user.id)
-            .eq('materia', mat)
-            .eq('trimestre', window.currentTrimestre || 1)
-            .match(isTec ? { target_grado: targetGrado } : { grupo_id: gid }).order('fecha_creacion', { ascending: false }).limit(1);
-        const encExistente = _encExArr && _encExArr.length > 0 ? _encExArr[0] : null;
+            .eq('trimestre', window.currentTrimestre || 1);
+
+        if(isTec) qEx = qEx.is('grupo_id', null).eq('target_grado', targetGrado);
+        else qEx = qEx.eq('grupo_id', gid);
+
+        const { data: _encExArr } = await qEx.order('fecha_creacion', { ascending: false });
+        const encExistente = (_encExArr || []).find(e => window._matchMateriaEducativa ? window._matchMateriaEducativa(e.materia, mat) : (e.materia || '').trim().toLowerCase() === mat.toLowerCase()) || null;
 
         if(encExistente) {
             // El usuario modifica el encuadre: borramos la notificación anterior y las firmas para evitar duplicados
@@ -23297,17 +23480,16 @@ window.cargarEncuadreActivo = async () => {
         if(alumnos && alumnos.length > 0) {
             // Obtener el ID del encuadre para la referencia invisible si no lo tenemos aún
             if(!encId) {
-                let qEncId = supabaseClient.from('encuadres').select('id')
+                let qEncId = supabaseClient.from('encuadres').select('id, materia')
                     .eq('plantel_id', state.plantelId)
                     .eq('maestro_id', u.data.user.id)
-                    .eq('materia', mat)
                     .eq('trimestre', window.currentTrimestre || 1);
                 
                 if(isTec) qEncId = qEncId.is('grupo_id', null).eq('target_grado', targetGrado);
                 else qEncId = qEncId.eq('grupo_id', gid);
                 
-                const { data: _encObjArr } = await qEncId.order('fecha_creacion', { ascending: false }).limit(1);
-                const encObj = _encObjArr && _encObjArr.length > 0 ? _encObjArr[0] : null;
+                const { data: _encObjArr } = await qEncId.order('fecha_creacion', { ascending: false });
+                const encObj = (_encObjArr || []).find(e => window._matchMateriaEducativa ? window._matchMateriaEducativa(e.materia, mat) : (e.materia || '').trim().toLowerCase() === mat.toLowerCase()) || null;
                 encId = encObj?.id || null;
             }
 
@@ -23410,17 +23592,16 @@ window.sincronizarAsistenciaActividad = async ({ grupoId, materia, trimestre, ta
 
         // 1. Buscar si en el Encuadre de este maestro/materia/trimestre hay un rubro de Asistencia
         let qEnc = supabaseClient.from('encuadres')
-            .select('id, rubros')
+            .select('id, rubros, materia')
             .eq('plantel_id', state.plantelId)
             .eq('maestro_id', uid)
-            .ilike('materia', mat)
             .eq('trimestre', trim);
         
         if (isTec) qEnc = qEnc.is('grupo_id', null).eq('target_grado', tGrado);
         else qEnc = qEnc.eq('grupo_id', gid);
 
-        const { data: encArr } = await qEnc.order('fecha_creacion', { ascending: false }).limit(1);
-        const encuadre = encArr && encArr.length > 0 ? encArr[0] : null;
+        const { data: rawEncArr } = await qEnc.order('fecha_creacion', { ascending: false });
+        const encuadre = (rawEncArr || []).find(e => window._matchMateriaEducativa ? window._matchMateriaEducativa(e.materia, mat) : (e.materia || '').trim().toLowerCase() === mat.toLowerCase()) || null;
 
         const rubroAsist = encuadre && encuadre.rubros ? (encuadre.rubros || []).find(r => window.esRubroAsistencia && window.esRubroAsistencia(r.name) && Number(r.val) > 0) : null;
         if (rubroAsist) {
@@ -23430,14 +23611,14 @@ window.sincronizarAsistenciaActividad = async ({ grupoId, materia, trimestre, ta
         } else if (!targetActId) {
             // Si no hay targetActId ni rubro en el encuadre, revisar si ya existe alguna actividad de asistencia creada
             let qCheck = supabaseClient.from('actividades_maestro')
-                .select('id, rubro_peso, rubro_name, titulo')
+                .select('id, rubro_peso, rubro_name, titulo, materia')
                 .eq('plantel_id', state.plantelId)
                 .eq('maestro_id', uid)
-                .ilike('materia', mat)
                 .eq('trimestre', trim);
             if (isTec) qCheck = qCheck.is('grupo_id', null).eq('target_grado', tGrado);
             else qCheck = qCheck.eq('grupo_id', gid);
-            const { data: actsPre } = await qCheck;
+            const { data: rawActsPre } = await qCheck;
+            const actsPre = (rawActsPre || []).filter(a => window._matchMateriaEducativa ? window._matchMateriaEducativa(a.materia, mat) : (a.materia || '').trim().toLowerCase() === mat.toLowerCase());
             const tieneActCompat = (actsPre || []).some(a => 
                 (a.titulo || '').includes('Asistencia Continua') || 
                 (window.esRubroAsistencia && (window.esRubroAsistencia(a.titulo) || window.esRubroAsistencia(a.rubro_name)))
@@ -23459,16 +23640,16 @@ window.sincronizarAsistenciaActividad = async ({ grupoId, materia, trimestre, ta
         // 2. Buscar o crear la actividad oficial del sistema para Asistencia si no se proveyó targetActId
         if (!actId) {
             let qAct = supabaseClient.from('actividades_maestro')
-                .select('id, rubro_peso, rubro_name, titulo')
+                .select('id, rubro_peso, rubro_name, titulo, materia')
                 .eq('plantel_id', state.plantelId)
                 .eq('maestro_id', uid)
-                .ilike('materia', mat)
                 .eq('trimestre', trim);
 
             if (isTec) qAct = qAct.is('grupo_id', null).eq('target_grado', tGrado);
             else qAct = qAct.eq('grupo_id', gid);
 
-            const { data: actExistenteArr } = await qAct;
+            const { data: rawActExistenteArr } = await qAct;
+            const actExistenteArr = (rawActExistenteArr || []).filter(a => window._matchMateriaEducativa ? window._matchMateriaEducativa(a.materia, mat) : (a.materia || '').trim().toLowerCase() === mat.toLowerCase());
             const tituloAct = `Asistencia Continua (Pase de Lista - Trimestre ${trim})`;
             
             // Priorizar actividad oficial o una actividad existente que coincida con Attendance o Asistencia
