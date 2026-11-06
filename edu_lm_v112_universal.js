@@ -16825,6 +16825,17 @@ window._matchMateriaEducativa = (actMat, targetMat) => {
     if (!nA || !nB) return false;
     if (nA === nB) return true;
 
+    // 0. Distinción estricta: Educación Física vs Física (Ciencias)
+    const esEdFisica = (s) => s.includes('educacion fisica') || s.includes('ed. fisica') || s.includes('ed fisica') || s === 'ef';
+    const esFisicaCiencias = (s) => s.includes('fisica') && !esEdFisica(s);
+
+    if (esEdFisica(nA) || esEdFisica(nB)) {
+        return esEdFisica(nA) && esEdFisica(nB);
+    }
+    if (esFisicaCiencias(nA) || esFisicaCiencias(nB)) {
+        return esFisicaCiencias(nA) && esFisicaCiencias(nB);
+    }
+
     // 1. Si ambas o alguna es de Tecnología / Taller (excluyendo "Ciencias y Tecnología"):
     const esTecA = window._esMateriaTecnologia ? window._esMateriaTecnologia(actMat) : ((nA.includes('tecnolog') || nA.includes('taller')) && !nA.includes('ciencia'));
     const esTecB = window._esMateriaTecnologia ? window._esMateriaTecnologia(targetMat) : ((nB.includes('tecnolog') || nB.includes('taller')) && !nB.includes('ciencia'));
