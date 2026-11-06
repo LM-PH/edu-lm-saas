@@ -1185,6 +1185,8 @@ function renderSidebar() {
     ],
     directivo: [
       { name: 'Autorizaciones', path: '/directivo/autorizaciones', icon: 'fa-stamp' },
+      { name: 'Pase de Lista Entrada', path: '/directivo/prefectura', icon: 'fa-qrcode' },
+      { name: 'Pase de Lista Salida', path: '/directivo/ts_escaner', icon: 'fa-person-walking-arrow-right' },
       { name: 'Maestros y Materias', path: '/directivo/maestros', icon: 'fa-chalkboard-user' },
       { name: 'Grupos y Asignación', path: '/directivo/grupos', icon: 'fa-users-gear' },
       { name: 'Horarios de Clase', path: '/directivo/horarios', icon: 'fa-calendar-days' },
@@ -8580,15 +8582,23 @@ function renderApoyoPrefectura() {
     // Auto-iniciar cámara en modo metralleta
     if(window.startPrefScanner) window.startPrefScanner('metralleta');
   }, 500);
+  const homePath = state.role === 'biblioteca' ? '/biblioteca/dashboard' : (['directivo', 'director'].includes(state.role) ? '/directivo/autorizaciones' : (state.role === 'admin' ? '/admin/inscripcion' : '/apoyo/dashboard'));
+  const exitPath = ['directivo', 'director'].includes(state.role) ? '/directivo/ts_escaner' : (state.role === 'biblioteca' ? '/biblioteca/ts_escaner' : '/apoyo/ts_escaner');
+  const subtitle = state.role === 'biblioteca' ? 'Biblioteca y Aula de Medios | Escáner y Registro de Entrada' : (['directivo', 'director', 'admin'].includes(state.role) ? 'Dirección Escolar | Pase de Lista y Registro de Entrada' : 'Personal de Apoyo | Escáner y Registro');
   return `
-    <div class="page-header" style="display:flex; justify-content:space-between; align-items:center;">
+    <div class="page-header" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px;">
       <div>
-         <h2 class="page-title">Control de Accesos</h2>
-         <p class="page-subtitle">${state.role === 'biblioteca' ? 'Biblioteca y Aula de Medios | Escáner y Registro de Entrada' : 'Personal de Apoyo | Escáner y Registro'}</p>
+         <h2 class="page-title">Control de Accesos (Entrada)</h2>
+         <p class="page-subtitle">${subtitle}</p>
       </div>
-      <button class="btn btn-outline" onclick="window.navigate(state.role === 'biblioteca' ? '/biblioteca/dashboard' : '/apoyo/dashboard')" style="border-radius:30px; background:white;">
-         <i class="fa-solid fa-house"></i> Volver al Inicio
-      </button>
+      <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+         <button class="btn btn-outline" onclick="window.navigate('${exitPath}')" style="border-radius:30px; background:white; font-weight:600; border-color:#d97706; color:#d97706;">
+            <i class="fa-solid fa-person-walking-arrow-right"></i> Ir a Salida
+         </button>
+         <button class="btn btn-outline" onclick="window.navigate('${homePath}')" style="border-radius:30px; background:white;">
+            <i class="fa-solid fa-house"></i> Volver al Inicio
+         </button>
+      </div>
     </div>
 
     <!-- Panel de Control de Estado -->
@@ -8824,9 +8834,9 @@ window.loadAsistenciasApoyo = async () => {
         if(pId) query = query.eq('plantel_id', pId);
         
         const currentPath = (state.path || '').split('?')[0];
-        if (currentPath === '/apoyo/ts_escaner' || currentPath === '/biblioteca/ts_escaner' || currentPath === '/biblioteca/escaner_salida') {
+        if (currentPath.includes('ts_escaner') || currentPath.includes('escaner_salida') || currentPath.includes('pase_lista_salida')) {
             query = query.eq('estado', 'Salida');
-        } else if (currentPath === '/apoyo/prefectura' || currentPath === '/biblioteca/prefectura' || currentPath === '/biblioteca/escaner_entrada') {
+        } else if (currentPath.includes('prefectura') || currentPath.includes('escaner_entrada') || currentPath.includes('pase_lista_entrada')) {
             query = query.in('estado', ['Asistencia', 'Retardo']);
         }
 
@@ -9289,15 +9299,23 @@ function renderApoyoTSEscaner() {
     window.actualizarUIPortalTS();
     if(window.startTSScanner) window.startTSScanner('metralleta');
   }, 500);
+  const homePath = state.role === 'biblioteca' ? '/biblioteca/dashboard' : (['directivo', 'director'].includes(state.role) ? '/directivo/autorizaciones' : (state.role === 'admin' ? '/admin/inscripcion' : '/apoyo/dashboard'));
+  const entryPath = ['directivo', 'director'].includes(state.role) ? '/directivo/prefectura' : (state.role === 'biblioteca' ? '/biblioteca/prefectura' : '/apoyo/prefectura');
+  const subtitle = state.role === 'biblioteca' ? 'Biblioteca y Aula de Medios | Escáner de Salida' : (['directivo', 'director', 'admin'].includes(state.role) ? 'Dirección Escolar | Pase de Lista y Registro de Salida' : 'Escáner de Salida de Alumnos');
   return `
-    <div class="page-header" style="display:flex; justify-content:space-between; align-items:center;">
+    <div class="page-header" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px;">
       <div>
          <h2 class="page-title">Control de Salidas</h2>
-         <p class="page-subtitle">${state.role === 'biblioteca' ? 'Biblioteca y Aula de Medios | Escáner de Salida' : 'Escáner de Salida de Alumnos'}</p>
+         <p class="page-subtitle">${subtitle}</p>
       </div>
-      <button class="btn btn-outline" onclick="window.navigate(state.role === 'biblioteca' ? '/biblioteca/dashboard' : '/apoyo/dashboard')" style="border-radius:30px; background:white;">
-         <i class="fa-solid fa-house"></i> Volver al Inicio
-      </button>
+      <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+         <button class="btn btn-outline" onclick="window.navigate('${entryPath}')" style="border-radius:30px; background:white; font-weight:600; border-color:var(--primary); color:var(--primary);">
+            <i class="fa-solid fa-qrcode"></i> Ir a Entrada
+         </button>
+         <button class="btn btn-outline" onclick="window.navigate('${homePath}')" style="border-radius:30px; background:white;">
+            <i class="fa-solid fa-house"></i> Volver al Inicio
+         </button>
+      </div>
     </div>
 
     <!-- Panel de Control de Estado TS -->
@@ -11190,6 +11208,20 @@ async function renderPage(path) {
     case '/directivo/gestion-personal': return renderDirectivoPersonal();
     case '/directivo/comunicados': return renderDirectivoComunicados();
     case '/directivo/reportes': return renderApoyoReportes();
+    case '/directivo/prefectura':
+    case '/directivo/escaner_entrada':
+    case '/directivo/pase_lista_entrada':
+    case '/admin/prefectura':
+    case '/admin/escaner_entrada':
+    case '/admin/pase_lista_entrada':
+       return renderApoyoPrefectura();
+    case '/directivo/ts_escaner':
+    case '/directivo/escaner_salida':
+    case '/directivo/pase_lista_salida':
+    case '/admin/ts_escaner':
+    case '/admin/escaner_salida':
+    case '/admin/pase_lista_salida':
+       return renderApoyoTSEscaner();
     case '/maestro/evaluacion': return renderMaestroListas(); // Alias para evaluación rápida
     default: return '<h2>Pantalla en construcción</h2>';
   }
@@ -21915,7 +21947,7 @@ window.registrarAsistenciaEntrada = async (qrText) => {
         audio.play().catch(()=>{});
 
         const currentPath = (state.path || '').split('?')[0];
-        if(currentPath === '/apoyo/prefectura' || currentPath === '/biblioteca/prefectura' || currentPath === '/biblioteca/escaner_entrada') {
+        if(currentPath.includes('prefectura') || currentPath.includes('escaner_entrada') || currentPath.includes('pase_lista_entrada')) {
             window.loadResumenEntrada();
             window.loadAsistenciasApoyo();
         }
@@ -22210,7 +22242,7 @@ window.registrarAsistenciaTS = async (qrText) => {
         audio.play().catch(()=>{});
 
         const currentPath = (state.path || '').split('?')[0];
-        if(currentPath === '/apoyo/ts_escaner' || currentPath === '/biblioteca/ts_escaner' || currentPath === '/biblioteca/escaner_salida') {
+        if(currentPath.includes('ts_escaner') || currentPath.includes('escaner_salida') || currentPath.includes('pase_lista_salida')) {
             window.loadResumenSalida();
             window.loadAsistenciasApoyo();
         }
@@ -22380,7 +22412,7 @@ window.registrarSalidaAnticipada = async () => {
         document.getElementById('inSalidaAntRecoge').value = '';
         
         const currentPath = (state.path || '').split('?')[0];
-        if(currentPath === '/apoyo/ts_escaner' || currentPath === '/biblioteca/ts_escaner' || currentPath === '/biblioteca/escaner_salida') {
+        if(currentPath.includes('ts_escaner') || currentPath.includes('escaner_salida') || currentPath.includes('pase_lista_salida')) {
             window.loadResumenSalida();
             window.loadAsistenciasApoyo();
         }
