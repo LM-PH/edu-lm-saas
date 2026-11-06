@@ -5,7 +5,7 @@ const CONFIG = {
 };
 
 // Supabase Configuration
-console.log("%c>>> EDU-LM V112 UNIVERSAL CARGADA: VIGILANCIA HUMANA ACTIVA", "color: yellow; background: black; padding: 12px; font-weight: 1000; border: 2px solid yellow;");
+console.log("%c>>> EDU-LM V223 UNIVERSAL CARGADA: VIGILANCIA HUMANA ACTIVA", "color: yellow; background: black; padding: 12px; font-weight: 1000; border: 2px solid yellow;");
 const SUPABASE_URL = "https://eexgjaydpuioncenlsmv.supabase.co"; 
 const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVleGdqYXlkcHVpb25jZW5sc212Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQ4NTM0MDAsImV4cCI6MjEwMDQyOTQwMH0.vrJGn_Bg04OBBntL-w21-I27XuvO61HcUNrphMYYSlY";
 const SUPABASE_KEY = SUPABASE_ANON_KEY;
@@ -16576,7 +16576,9 @@ window.loadListasMaestro = async (retryCount = 0) => {
 window.cambiarTrimestreLista = async (trim, btn) => {
     if (typeof trim === 'number' && trim > 1 && window.isTrimestreHabilitado) {
         const rawVal = document.getElementById('listaMaestroGrupo')?.value || '';
-        const [idPart, matPart] = rawVal.split('|');
+        const parts = rawVal.includes('::') ? rawVal.split('::') : rawVal.split('|');
+        const idPart = parts[0]?.trim();
+        const matPart = parts[1]?.trim();
         const pId = state.plantelId || (window._obtenerPlantelIdActivo ? await window._obtenerPlantelIdActivo() : null);
         const habilitado = await window.isTrimestreHabilitado(trim, idPart, matPart, pId);
         if (!habilitado) {
@@ -16910,6 +16912,16 @@ window.addEventListener('online', () => {
 });
 
 window._matchMateriaEducativa = (actMat, targetMat) => {
+    if (!actMat || !targetMat) return false;
+
+    // Soporte para asignaciones con múltiples materias separadas por coma (ej. "EDUCACION FISICA, TUTORIA 2" o "BIOLOGIA, FISICA, QUIMICA, INTEGRACION CURRICULAR")
+    if (typeof actMat === 'string' && actMat.includes(',')) {
+        return actMat.split(',').some(part => window._matchMateriaEducativa(part.trim(), targetMat));
+    }
+    if (typeof targetMat === 'string' && targetMat.includes(',')) {
+        return targetMat.split(',').some(part => window._matchMateriaEducativa(actMat, part.trim()));
+    }
+
     const norm = (s) => (s || '').normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim().toLowerCase();
     const nA = norm(actMat);
     const nB = norm(targetMat);
@@ -16917,8 +16929,21 @@ window._matchMateriaEducativa = (actMat, targetMat) => {
     if (nA === nB) return true;
 
     // 0. Distinción estricta: Educación Física vs Física (Ciencias)
-    const esEdFisica = (s) => s.includes('educacion fisica') || s.includes('ed. fisica') || s.includes('ed fisica') || s === 'ef';
-    const esFisicaCiencias = (s) => s.includes('fisica') && !esEdFisica(s);
+    const esEdFisica = (s) => {
+        if (!s) return false;
+        const clean = norm(s);
+        if (clean === 'ef' || clean === 'ed fisica' || clean === 'ed. fisica' || clean === 'edu fisica' || clean === 'edu. fisica') return true;
+        if (clean.includes('educacion fisica') || clean.includes('educacion y deporte')) return true;
+        if (/\bedu\.?\s*fisic/i.test(clean)) return true;
+        if (/\bed\.?\s*fisic/i.test(clean)) return true;
+        return false;
+    };
+
+    const esFisicaCiencias = (s) => {
+        if (!s) return false;
+        const clean = norm(s);
+        return clean.includes('fisic') && !esEdFisica(clean);
+    };
 
     if (esEdFisica(nA) || esEdFisica(nB)) {
         return esEdFisica(nA) && esEdFisica(nB);
@@ -16927,7 +16952,22 @@ window._matchMateriaEducativa = (actMat, targetMat) => {
         return esFisicaCiencias(nA) && esFisicaCiencias(nB);
     }
 
-    // 1. Si ambas o alguna es de Tecnología / Taller (excluyendo "Ciencias y Tecnología"):
+    // 1. Formación Cívica y Ética vs F.C. y E.
+    const esCivica = (s) => {
+        const clean = s.replace(/[^a-z]/g, '');
+        return clean.includes('fcye') || clean.includes('fce') || clean.includes('civic') || clean.includes('etica');
+    };
+    if (esCivica(nA) || esCivica(nB)) {
+        return esCivica(nA) && esCivica(nB);
+    }
+
+    // 2. Tutoría / Tutoría 1 / Tutoría 2
+    const esTutoria = (s) => s.includes('tutori');
+    if (esTutoria(nA) || esTutoria(nB)) {
+        return esTutoria(nA) && esTutoria(nB);
+    }
+
+    // 3. Si ambas o alguna es de Tecnología / Taller (excluyendo "Ciencias y Tecnología"):
     const esTecA = window._esMateriaTecnologia ? window._esMateriaTecnologia(actMat) : ((nA.includes('tecnolog') || nA.includes('taller')) && !nA.includes('ciencia'));
     const esTecB = window._esMateriaTecnologia ? window._esMateriaTecnologia(targetMat) : ((nB.includes('tecnolog') || nB.includes('taller')) && !nB.includes('ciencia'));
 
@@ -16935,13 +16975,26 @@ window._matchMateriaEducativa = (actMat, targetMat) => {
         if (window._coincidenTalleres) {
             return window._coincidenTalleres(actMat, targetMat);
         }
+        const cleanT = (s) => norm(s)
+            .replace(/tecnologia\s*(de)?\s*/g, '')
+            .replace(/taller\s*(de)?\s*/g, '')
+            .replace(/administracion\s*contable|admon\s*contable|contabilidad/g, 'contabilidad')
+            .replace(/confeccion\s*del\s*vestido(\s*e\s*industria\s*textil)?|textil/g, 'textil')
+            .replace(/informatica|computacion/g, 'informatica')
+            .replace(/diseno\s*grafico/g, 'diseno')
+            .replace(/[^a-z0-9]/g, '')
+            .trim();
+        const cA = cleanT(nA);
+        const cB = cleanT(nB);
+        if (cA && cB && (cA === cB || cA.includes(cB) || cB.includes(cA))) return true;
+
         const cleanA = window._normalizarTextoTaller ? window._normalizarTextoTaller(actMat).trim() : nA;
         const cleanB = window._normalizarTextoTaller ? window._normalizarTextoTaller(targetMat).trim() : nB;
         if (!cleanA || !cleanB) return false;
         return cleanA === cleanB || cleanA.includes(cleanB) || cleanB.includes(cleanA);
     }
 
-    // 2. Para materias regulares (Español, Matemáticas, Ciencias, Inglés, etc.):
+    // 4. Para materias regulares (Español, Matemáticas, Ciencias, Inglés, etc.):
     const stopWords = new Set([
         'educacion', 'lengua', 'materna', 'extranjera', 'ciencias', 'ciencia',
         'curricular', 'primer', 'segundo', 'tercer', 'grado', 'secundaria',
@@ -16993,12 +17046,16 @@ window.isTrimestreHabilitado = async (trimestreNum, grupoId = null, materia = nu
         materia = null;
     }
 
-    // Si grupoId contiene el formato compuesto id|materia
-    if (typeof grupoId === "string" && grupoId.includes("|")) {
-        const parts = grupoId.split("|");
-        grupoId = parts[0].trim();
-        if (!materia && parts[1]) {
-            materia = parts[1].trim();
+    // Si grupoId contiene el formato compuesto id|materia o id::materia
+    if (typeof grupoId === "string") {
+        if (grupoId.includes("::")) {
+            const parts = grupoId.split("::");
+            grupoId = parts[0].trim();
+            if (!materia && parts[1]) materia = parts[1].trim();
+        } else if (grupoId.includes("|")) {
+            const parts = grupoId.split("|");
+            grupoId = parts[0].trim();
+            if (!materia && parts[1]) materia = parts[1].trim();
         }
     }
 
@@ -17056,13 +17113,43 @@ window.isTrimestreHabilitado = async (trimestreNum, grupoId = null, materia = nu
                     return guardarEnCache(true);
                 }
             }
+
+            // 1B. REGLA POR ACTIVIDADES EVALUADAS: Si el docente evaluó actividades en Listas y Seguimiento para el periodo previo
+            let qDocActs = supabaseClient
+                .from('actividades_maestro')
+                .select('id, materia, grupo_id, target_grado')
+                .eq('trimestre', prevTrim)
+                .eq('maestro_id', currentUserId);
+            if (activePid) qDocActs = qDocActs.eq('plantel_id', activePid);
+            const { data: docActs } = await qDocActs.limit(100);
+            if (docActs && docActs.length > 0) {
+                const matchedActs = docActs.filter(a => {
+                    if (materia && window._matchMateriaEducativa && !window._matchMateriaEducativa(a.materia, materia)) return false;
+                    if (grupoId) {
+                        const isTec = String(grupoId).startsWith('grado:');
+                        const gid = isTec ? null : String(grupoId).split(/[:|]/)[0].trim();
+                        const targetGrado = isTec ? String(grupoId).replace('grado:', '').split(/[|:]/)[0].trim() : null;
+                        if (isTec && targetGrado && a.target_grado && !a.target_grado.includes(targetGrado.replace(/[°\s]/g, ''))) return false;
+                        if (gid && a.grupo_id && a.grupo_id !== gid) return false;
+                    }
+                    return true;
+                });
+                const actIds = matchedActs.map(a => a.id);
+                if (actIds.length > 0) {
+                    const { count: evCount } = await supabaseClient
+                        .from('evaluaciones_actividades')
+                        .select('id', { count: 'exact', head: true })
+                        .in('actividad_id', actIds.slice(0, 50));
+                    if (evCount && evCount > 0) return guardarEnCache(true);
+                }
+            }
         }
 
         // 2. REGLA POR GRUPO: Revisar si hay calificaciones asentadas para este grupo específico
         if (grupoId) {
             const isTec = String(grupoId).startsWith('grado:');
-            const gid = isTec ? null : String(grupoId).split('|')[0].trim();
-            const targetGrado = isTec ? String(grupoId).replace('grado:', '').split('|')[0].trim() : null;
+            const gid = isTec ? null : String(grupoId).split(/[|:]/)[0].trim();
+            const targetGrado = isTec ? String(grupoId).replace('grado:', '').split(/[|:]/)[0].trim() : null;
 
             let alumnoIds = [];
             if (isTec && targetGrado) {
@@ -17085,7 +17172,6 @@ window.isTrimestreHabilitado = async (trimestreNum, grupoId = null, materia = nu
                     .eq('trimestre', prevTrim)
                     .in('alumno_id', alumnoIds);
                 if (activePid) qCal = qCal.eq('plantel_id', activePid);
-                if (currentUserId) qCal = qCal.eq('maestro_id', currentUserId);
 
                 const { data: cList } = await qCal.limit(500);
                 if (cList && cList.length > 0) {
@@ -18895,9 +18981,13 @@ window.cargarBoletasGrupo = async () => {
             histQuery = histQuery.eq('trimestre', currentTrim);
         }
         const { data: rawHistorial } = await histQuery;
-        const historial = (rawHistorial || []).filter(h => 
-            !materiaClean || (h.materia_nombre || '').trim().toLowerCase() === materiaClean.toLowerCase()
-        );
+        const historial = (rawHistorial || []).filter(h => {
+            if (!materiaClean) return true;
+            if (window._matchMateriaEducativa) {
+                return window._matchMateriaEducativa(h.materia_nombre, materiaClean);
+            }
+            return (h.materia_nombre || '').trim().toLowerCase() === materiaClean.toLowerCase();
+        });
         
         // Determinar si ya hay calificaciones asentadas para esta materia y trimestre
         const tieneCalificacionesAsentadas = (historial && historial.length > 0);
@@ -19249,8 +19339,10 @@ window.sellarYEnviarCalificaciones = async () => {
         window._trimestresHabilitadosCache = {};
         window._paseListaBloqueadoCache = {};
         window._evaluacionesGrupoBloqueadas = null;
+        window._trimestreActivoParaPase = null;
         if (window.loadListasMaestro) window.loadListasMaestro();
         if (window.loadActividadesMaestro) window.loadActividadesMaestro();
+        if (window.updateSessionUI) window.updateSessionUI();
 
         alert("¡Calificaciones de " + trimName + " asentadas y selladas exitosamente!\nSe enviaron a Control Escolar para su validación administrativa.");
         window.cargarBoletasGrupo(); // Recargar tabla
@@ -22173,7 +22265,7 @@ window.checkPaseListaBloqueado = async (materia, grupoId, trimestre, forzar = fa
         const now = Date.now();
         if (!forzar && window._paseListaBloqueadoCache[cacheKey]) {
             const cached = window._paseListaBloqueadoCache[cacheKey];
-            if (now - cached.timestamp < 60000) { // Validez por 60 segundos
+            if (now - cached.timestamp < 10000) { // Validez por 10 segundos
                 return cached.result;
             }
         }
@@ -22201,9 +22293,9 @@ window.checkPaseListaBloqueado = async (materia, grupoId, trimestre, forzar = fa
 
         // 2. Validar si el maestro ya selló y asentó calificaciones oficiales en la tabla oficial 'calificaciones'
         const isTec = String(grupoId).startsWith('grado:');
-        const gid = isTec ? null : String(grupoId).split('|')[0].trim();
-        const targetGrado = isTec ? String(grupoId).replace('grado:', '').split('|')[0].trim() : null;
-        const taller = isTec ? String(grupoId).split('|')[1]?.trim() : null;
+        const gid = isTec ? null : String(grupoId).split(/[:|]/)[0].trim();
+        const targetGrado = isTec ? String(grupoId).replace('grado:', '').split(/[|:]/)[0].trim() : null;
+        const taller = isTec ? (grupoId.includes('|') ? String(grupoId).split('|')[1]?.trim() : (grupoId.includes('::') ? String(grupoId).split('::')[1]?.trim() : null)) : null;
 
         let alumnoIds = [];
         if (isTec) {
