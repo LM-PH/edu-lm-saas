@@ -14839,7 +14839,7 @@ window.loadActividadesMaestro = async () => {
         const currentUser = await supabaseClient.auth.getUser();
         if(!currentUser.data.user) return;
         const email = currentUser.data.user.email;
-        const pId = await window._obtenerPlantelIdActivo();
+        const pId = state.plantelId || (window._obtenerPlantelIdActivo ? await window._obtenerPlantelIdActivo() : null);
 
         // Cargar seleccionables (solo si existe el select y está vacío/default)
         const actM = document.getElementById('actMateria');
@@ -14877,8 +14877,8 @@ window.loadActividadesMaestro = async () => {
 
         // Actualizar opciones de trimestre según estén habilitados oficialmente
         if (window.isTrimestreHabilitado) {
-            const t2Hab = await window.isTrimestreHabilitado(2, null, pId);
-            const t3Hab = await window.isTrimestreHabilitado(3, null, pId);
+            const t2Hab = await window.isTrimestreHabilitado(2, null, null, pId);
+            const t3Hab = await window.isTrimestreHabilitado(3, null, null, pId);
             const selActTrim = document.getElementById('actTrimestre');
             if (selActTrim) {
                 const opt2 = selActTrim.querySelector('option[value="2"]');
@@ -14908,12 +14908,12 @@ window.loadActividadesMaestro = async () => {
 
         const trimInt = parseInt(trimSelected, 10);
         if (trimInt > 1 && window.isTrimestreHabilitado) {
-            const habilitado = await window.isTrimestreHabilitado(trimInt, null, pId);
+            const habilitado = await window.isTrimestreHabilitado(trimInt, null, null, pId);
             if (!habilitado) {
                 constLista.innerHTML = `<div style="text-align:center; padding:40px; color:var(--text-muted)">
                     <i class="fa-solid fa-lock fa-2x" style="opacity:0.3; margin-bottom:10px; display:block; color:#f59e0b;"></i>
                     <strong style="color:var(--text-main);">El ${trimInt}° Trimestre aún no está habilitado</strong><br>
-                    <span style="font-size:0.85rem;">Se activará en cuanto la Administración escolar envíe las boletas/reportes oficiales del ${trimInt - 1}° Trimestre.</span>
+                    <span style="font-size:0.85rem;">Se activará automáticamente en cuanto selles y envíes a Control Escolar las calificaciones del ${trimInt - 1}° Trimestre.</span>
                 </div>`;
                 return;
             }
@@ -16116,7 +16116,7 @@ window.loadListaEvalManual = async () => {
     contenedor.innerHTML = '<div style="padding:20px; text-align:center;"><i class="fa-solid fa-spinner fa-spin"></i> Cargando lista...</div>';
     
     try {
-        const pId = await window._obtenerPlantelIdActivo();
+        const pId = state.plantelId || (window._obtenerPlantelIdActivo ? await window._obtenerPlantelIdActivo() : null);
         const [actId, actTitulo, actGrupoIdParam, actTargetGrado, actMateria, actTrimestre, actGrupoNombre] = window._lastEvalParams || [];
         let actGrupoId = actGrupoIdParam;
 
@@ -16474,18 +16474,18 @@ window.loadListasMaestro = async (retryCount = 0) => {
     const selGrupo = document.getElementById('listaMaestroGrupo');
     if(!selGrupo) return;
     try {
-        const pId = await window._obtenerPlantelIdActivo();
+        const pId = state.plantelId || (window._obtenerPlantelIdActivo ? await window._obtenerPlantelIdActivo() : null);
 
         if (window.isTrimestreHabilitado) {
-            const t2Hab = await window.isTrimestreHabilitado(2, null, pId);
-            const t3Hab = await window.isTrimestreHabilitado(3, null, pId);
+            const t2Hab = await window.isTrimestreHabilitado(2, null, null, pId);
+            const t3Hab = await window.isTrimestreHabilitado(3, null, null, pId);
             const btns = document.querySelectorAll('#tabsTrimestresListas .t-btn');
             btns.forEach(b => {
                 const txt = b.innerText || '';
                 if (txt.includes('2° T')) {
                     if (!t2Hab) {
                         b.innerHTML = '<i class="fa-solid fa-lock" style="font-size:0.7rem; margin-right:3px; opacity:0.6;"></i> 2° T';
-                        b.title = 'Bloqueado: se activará al enviar las boletas oficiales del 1° Trimestre';
+                        b.title = 'Bloqueado: se activará al sellar y enviar las calificaciones del 1° Trimestre';
                         b.style.opacity = '0.6';
                     } else {
                         b.innerHTML = '2° T';
@@ -16495,7 +16495,7 @@ window.loadListasMaestro = async (retryCount = 0) => {
                 } else if (txt.includes('3° T')) {
                     if (!t3Hab) {
                         b.innerHTML = '<i class="fa-solid fa-lock" style="font-size:0.7rem; margin-right:3px; opacity:0.6;"></i> 3° T';
-                        b.title = 'Bloqueado: se activará al enviar las boletas oficiales del 2° Trimestre';
+                        b.title = 'Bloqueado: se activará al sellar y enviar las calificaciones del 2° Trimestre';
                         b.style.opacity = '0.6';
                     } else {
                         b.innerHTML = '3° T';
@@ -16577,7 +16577,8 @@ window.cambiarTrimestreLista = async (trim, btn) => {
     if (typeof trim === 'number' && trim > 1 && window.isTrimestreHabilitado) {
         const rawVal = document.getElementById('listaMaestroGrupo')?.value || '';
         const [idPart, matPart] = rawVal.split('|');
-        const habilitado = await window.isTrimestreHabilitado(trim, idPart, matPart);
+        const pId = state.plantelId || (window._obtenerPlantelIdActivo ? await window._obtenerPlantelIdActivo() : null);
+        const habilitado = await window.isTrimestreHabilitado(trim, idPart, matPart, pId);
         if (!habilitado) {
             window.showToast(`El ${trim}° Trimestre se activará en cuanto selles y envíes las calificaciones oficiales del ${trim - 1}° Trimestre.`, 'warning');
             return;
@@ -16979,21 +16980,50 @@ window.isTrimestreHabilitado = async (trimestreNum, grupoId = null, materia = nu
     // 1° Trimestre siempre está habilitado (inicio de ciclo)
     if (trim <= 1 || isNaN(trim)) return true;
 
+    // Normalización de argumentos si se pasó objeto de opciones
+    if (grupoId && typeof grupoId === "object") {
+        ({ grupoId, materia, pId } = grupoId);
+    }
+
+    // Detección automática si pId fue pasado en posición de materia (UUID)
+    const isUuid = (val) => typeof val === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(val.trim());
+
+    if (isUuid(materia) && !pId) {
+        pId = materia.trim();
+        materia = null;
+    }
+
+    // Si grupoId contiene el formato compuesto id|materia
+    if (typeof grupoId === "string" && grupoId.includes("|")) {
+        const parts = grupoId.split("|");
+        grupoId = parts[0].trim();
+        if (!materia && parts[1]) {
+            materia = parts[1].trim();
+        }
+    }
+
     try {
+        // A) Respaldo: si el usuario es directivo/admin/master, siempre tiene acceso total
+        const userRole = String(state.role || state.userRol || "").toLowerCase();
+        const esAdmin = ["admin", "administrativo", "directivo", "director", "subdirector", "master"].includes(userRole) || state.esMaster;
+        if (esAdmin) return true;
+
         const prevTrim = trim - 1;
         const activePid = pId || state.plantelId || (window._obtenerPlantelIdActivo ? await window._obtenerPlantelIdActivo() : null);
 
-        let currentUserId = null;
-        try {
-            const uRes = await supabaseClient.auth.getUser();
-            currentUserId = uRes?.data?.user?.id;
-        } catch(e) {}
+        let currentUserId = state.user?.id || null;
+        if (!currentUserId) {
+            try {
+                const uRes = await supabaseClient.auth.getUser();
+                currentUserId = uRes?.data?.user?.id;
+            } catch(e) {}
+        }
 
         const cacheKey = `${activePid || 'no_pid'}_${currentUserId || 'all'}_T${trim}_${grupoId || 'all'}_${materia || 'all'}`;
         const now = Date.now();
         if (window._trimestresHabilitadosCache[cacheKey]) {
             const cached = window._trimestresHabilitadosCache[cacheKey];
-            if (now - cached.timestamp < 15000) {
+            if (now - cached.timestamp < 10000) {
                 return cached.result;
             }
         }
@@ -17003,7 +17033,32 @@ window.isTrimestreHabilitado = async (trimestreNum, grupoId = null, materia = nu
             return val;
         };
 
-        // 1. REGLA: El siguiente trimestre se activa cuando el maestro asienta, sella y envía las calificaciones del periodo previo
+        // 1. REGLA PRINCIPAL: El siguiente trimestre se activa cuando el maestro asienta, sella y envía las calificaciones oficiales del periodo previo
+        if (currentUserId) {
+            let qDocCal = supabaseClient
+                .from('calificaciones')
+                .select('id, materia_nombre')
+                .eq('trimestre', prevTrim)
+                .eq('maestro_id', currentUserId);
+            if (activePid) qDocCal = qDocCal.eq('plantel_id', activePid);
+
+            const { data: docCalifs } = await qDocCal.limit(1000);
+            if (docCalifs && docCalifs.length > 0) {
+                if (materia) {
+                    const tieneMat = docCalifs.some(c => {
+                        if (window._matchMateriaEducativa) {
+                            return window._matchMateriaEducativa(c.materia_nombre, materia);
+                        }
+                        return (c.materia_nombre || '').trim().toLowerCase() === materia.trim().toLowerCase();
+                    });
+                    if (tieneMat) return guardarEnCache(true);
+                } else {
+                    return guardarEnCache(true);
+                }
+            }
+        }
+
+        // 2. REGLA POR GRUPO: Revisar si hay calificaciones asentadas para este grupo específico
         if (grupoId) {
             const isTec = String(grupoId).startsWith('grado:');
             const gid = isTec ? null : String(grupoId).split('|')[0].trim();
@@ -17014,12 +17069,12 @@ window.isTrimestreHabilitado = async (trimestreNum, grupoId = null, materia = nu
                 const gSin = targetGrado.replace(/[°\s]/g, '');
                 let qAl = supabaseClient.from('alumnos').select('id').or(`grado.eq.${gSin},grado.eq.${gSin}°,grado.ilike.%${gSin}%`);
                 if (activePid) qAl = qAl.eq('plantel_id', activePid);
-                const { data: alms } = await qAl;
+                const { data: alms } = await qAl.limit(500);
                 alumnoIds = (alms || []).map(a => a.id);
             } else if (gid) {
                 let qAl = supabaseClient.from('alumnos').select('id').eq('grupo_id', gid);
                 if (activePid) qAl = qAl.eq('plantel_id', activePid);
-                const { data: alms } = await qAl;
+                const { data: alms } = await qAl.limit(200);
                 alumnoIds = (alms || []).map(a => a.id);
             }
 
@@ -17032,7 +17087,7 @@ window.isTrimestreHabilitado = async (trimestreNum, grupoId = null, materia = nu
                 if (activePid) qCal = qCal.eq('plantel_id', activePid);
                 if (currentUserId) qCal = qCal.eq('maestro_id', currentUserId);
 
-                const { data: cList } = await qCal.limit(100);
+                const { data: cList } = await qCal.limit(500);
                 if (cList && cList.length > 0) {
                     if (materia) {
                         const tieneCalifsMateria = cList.some(c => {
@@ -17049,39 +17104,7 @@ window.isTrimestreHabilitado = async (trimestreNum, grupoId = null, materia = nu
             }
         }
 
-        // B) Si no se pasó grupoId o no se hallaron por grupo, revisar si el docente ya selló calificaciones en prevTrim
-        if (currentUserId) {
-            let qDocCal = supabaseClient
-                .from('calificaciones')
-                .select('id, materia_nombre')
-                .eq('trimestre', prevTrim)
-                .eq('maestro_id', currentUserId);
-            if (activePid) qDocCal = qDocCal.eq('plantel_id', activePid);
-            
-            const { data: docCalifs } = await qDocCal.limit(50);
-            if (docCalifs && docCalifs.length > 0) {
-                if (materia) {
-                    const tieneMat = docCalifs.some(c => {
-                        if (window._matchMateriaEducativa) {
-                            return window._matchMateriaEducativa(c.materia_nombre, materia);
-                        }
-                        return (c.materia_nombre || '').trim().toLowerCase() === materia.trim().toLowerCase();
-                    });
-                    if (tieneMat) return guardarEnCache(true);
-                } else {
-                    return guardarEnCache(true);
-                }
-            }
-        }
-
-        // C) Respaldo: si el usuario es directivo/admin/master
-        let userRole = (state.role || state.userRol || '').toLowerCase();
-        const esAdmin = ['admin', 'directivo', 'director', 'subdirector', 'master'].includes(userRole);
-        if (esAdmin) {
-            return guardarEnCache(true);
-        }
-
-        // D) Respaldo si dirección ya envió las boletas de prevTrim
+        // 3. RESPALDO ADMINISTRATIVO: Si dirección ya envió boletas oficiales
         let qCom = supabaseClient
             .from('comunicados')
             .select('id, titulo, mensaje')
@@ -17089,7 +17112,6 @@ window.isTrimestreHabilitado = async (trimestreNum, grupoId = null, materia = nu
         if (activePid) qCom = qCom.eq('plantel_id', activePid);
 
         const { data: coms } = await qCom.limit(200);
-
         const prevTrimRegex = new RegExp(`(Trimestre\\s*${prevTrim}|${prevTrim}[°º]\\s*Trimestre|Trimestre\\s*#?\\s*${prevTrim})`, 'i');
         const tieneEnvioPrevio = (coms || []).some(c => {
             return prevTrimRegex.test(c.titulo || '') || prevTrimRegex.test(c.mensaje || '');
@@ -19052,6 +19074,12 @@ window.cargarBoletasGrupo = async () => {
             const matEscaped = materiaClean.replace(/'/g, "\\'");
             const selectValEscaped = selectVal.replace(/'/g, "\\'");
 
+            // Validar si el trimestre previo está sellado
+            let trimPrevioHabilitado = true;
+            if (currentTrim > 1 && !isModoFinal && window.isTrimestreHabilitado) {
+                trimPrevioHabilitado = await window.isTrimestreHabilitado(currentTrim, gid || idVal, materiaClean, state.plantelId);
+            }
+
             if (tieneSolicitudAprobada) {
                 contenedorBoton.innerHTML = `
                     <span style="font-size:0.85rem; color:var(--success); font-weight:600;"><i class="fa-solid fa-circle-check"></i> Solicitud APROBADA por Dirección. Tienes permiso activo para capturar, modificar y sellar calificaciones.</span>
@@ -19080,6 +19108,13 @@ window.cargarBoletasGrupo = async () => {
                         <i class="fa-solid fa-calendar-plus"></i> Solicitar Apertura Extemporánea de Calificaciones
                     </button>
                 `;
+            } else if (!trimPrevioHabilitado) {
+                contenedorBoton.innerHTML = `
+                    <span style="font-size:0.85rem; color:var(--danger); font-weight:600;"><i class="fa-solid fa-lock"></i> Periodo Bloqueado: Para asentar calificaciones del ${currentTrim}° Trimestre, primero debes haber enviado y sellado las del ${currentTrim - 1}° Trimestre.</span>
+                    <button class="btn btn-outline btn-lg" disabled style="opacity:0.6; cursor:not-allowed; border-color:var(--danger); color:var(--danger);">
+                        <i class="fa-solid fa-lock"></i> Trimestre ${currentTrim}° Bloqueado
+                    </button>
+                `;
             } else {
                 contenedorBoton.innerHTML = `
                     <span style="font-size:0.85rem; color:var(--text-muted);">El sistema promedia los rubros de forma ponderada. Edita la calificación final si requieres realizar un ajuste definitivo.</span>
@@ -19103,6 +19138,17 @@ window.sellarYEnviarCalificaciones = async () => {
 
     const [idVal, materiaText] = selectVal.split('::');
     const materiaClean = (materiaText || '').trim();
+    const trimInt = parseInt(trim, 10);
+
+    // Validar si el trimestre previo está habilitado
+    if (trimInt > 1 && trimInt <= 3 && window.isTrimestreHabilitado) {
+        const isTec = idVal.startsWith('grado:');
+        const gid = isTec ? null : idVal;
+        const habilitado = await window.isTrimestreHabilitado(trimInt, gid || idVal, materiaClean, state.plantelId);
+        if (!habilitado) {
+            return alert(`⚠️ No puedes enviar calificaciones para el ${trimInt}° Trimestre sin antes haber asentado y sellado las del ${trimInt - 1}° Trimestre.`);
+        }
+    }
 
     // VALIDACIÓN DE PERIODO Y AUTORIZACIÓN (v112+)
     try {
@@ -19204,6 +19250,7 @@ window.sellarYEnviarCalificaciones = async () => {
         window._paseListaBloqueadoCache = {};
         window._evaluacionesGrupoBloqueadas = null;
         if (window.loadListasMaestro) window.loadListasMaestro();
+        if (window.loadActividadesMaestro) window.loadActividadesMaestro();
 
         alert("¡Calificaciones de " + trimName + " asentadas y selladas exitosamente!\nSe enviaron a Control Escolar para su validación administrativa.");
         window.cargarBoletasGrupo(); // Recargar tabla
@@ -22121,7 +22168,7 @@ window.checkPaseListaBloqueado = async (materia, grupoId, trimestre, forzar = fa
     try {
         if (!trimestre || trimestre === 'final') return "Trimestre no válido para pase de lista.";
         
-        const pId = await window._obtenerPlantelIdActivo();
+        const pId = state.plantelId || (window._obtenerPlantelIdActivo ? await window._obtenerPlantelIdActivo() : null);
         const cacheKey = `${materia}_${grupoId}_${trimestre}_${pId || ''}`;
         const now = Date.now();
         if (!forzar && window._paseListaBloqueadoCache[cacheKey]) {
@@ -22225,9 +22272,10 @@ window.checkPaseListaBloqueado = async (materia, grupoId, trimestre, forzar = fa
 
 window.getTrimestreActivoPaseLista = async (materia, grupoId) => {
     // Buscar el primer trimestre que no esté bloqueado (1, 2 o 3) Y que esté habilitado
+    const pId = state.plantelId || (window._obtenerPlantelIdActivo ? await window._obtenerPlantelIdActivo() : null);
     for (let trim = 1; trim <= 3; trim++) {
         if (window.isTrimestreHabilitado) {
-            const habilitado = await window.isTrimestreHabilitado(trim, grupoId, materia);
+            const habilitado = await window.isTrimestreHabilitado(trim, grupoId, materia, pId);
             if (!habilitado) break; // Si T2 no está habilitado, jamás avanzar a T2 ni a T3
         }
         const isBlocked = await window.checkPaseListaBloqueado(materia, grupoId, trim);
@@ -22808,7 +22856,8 @@ window.cargarRubrosParaActividad = async () => {
     const trimSelected = document.getElementById('actTrimestre')?.value || 1;
     const trimInt = parseInt(trimSelected, 10);
     if (trimInt > 1 && window.isTrimestreHabilitado) {
-        const habilitado = await window.isTrimestreHabilitado(trimInt, gid, mat);
+        const pId = state.plantelId || (window._obtenerPlantelIdActivo ? await window._obtenerPlantelIdActivo() : null);
+        const habilitado = await window.isTrimestreHabilitado(trimInt, gid, mat, pId);
         if (!habilitado) {
             alert(`El ${trimInt}° Trimestre aún no está habilitado para esta asignatura.\n\nSe activará automáticamente en cuanto selles y envíes las calificaciones oficiales del ${trimInt - 1}° Trimestre.`);
             document.getElementById('actTrimestre').value = "1";
@@ -23248,7 +23297,8 @@ window.sincronizarAsistenciaActividad = async ({ grupoId, materia, trimestre, ta
 
         const trim = parseInt(trimestre || window.currentTrimestre || 1, 10);
         if (trim > 1 && window.isTrimestreHabilitado) {
-            const habilitado = await window.isTrimestreHabilitado(trim, grupoId, materia);
+            const pId = state.plantelId || (window._obtenerPlantelIdActivo ? await window._obtenerPlantelIdActivo() : null);
+            const habilitado = await window.isTrimestreHabilitado(trim, grupoId, materia, pId);
             if (!habilitado) {
                 console.log(`[Asistencia] Omitiendo sincronización automática para T${trim}: aún no habilitado.`);
                 return;
