@@ -18933,8 +18933,18 @@ window.solicitarModificacionCalificaciones = async (materia, trimestre, grupoId,
     if(!motivo.trim()) return alert("Debes ingresar un motivo válido para realizar la solicitud.");
 
     try {
+        const u = await supabaseClient.auth.getUser();
+        const userId = u.data?.user?.id || state.user?.id;
+        if(!userId) throw new Error("No autenticado o sesión expirada");
+
+        let pId = state.plantelId;
+        if (!pId && userId) {
+            const { data: prof } = await supabaseClient.from('perfiles').select('plantel_id').eq('id', userId).maybeSingle();
+            if (prof?.plantel_id) pId = prof.plantel_id;
+        }
+
         const datosSol = await window.obtenerDatosSolicitanteActual();
-        const maestroNombre = datosSol.solicitante_nombre;
+        const maestroNombre = datosSol.solicitante_nombre || state.userName || 'Docente';
 
         const tipoAccion = isProrroga ? 'PRORROGA_CALIFICACIONES' : 'MODIFICACION_CALIFICACIONES';
         const tituloNotif = isProrroga 
@@ -18949,24 +18959,28 @@ window.solicitarModificacionCalificaciones = async (materia, trimestre, grupoId,
                 materia: materia,
                 trimestre: parseInt(trimestre),
                 grupo_id: grupoId,
-                maestro_id: u.data.user.id,
+                maestro_id: userId,
                 maestro_nombre: maestroNombre,
                 ...datosSol,
                 motivo: motivo.trim()
             },
             estado: 'pendiente',
-            plantel_id: state.plantelId
+            plantel_id: pId || state.plantelId
         }]);
 
         if(errReq) throw errReq;
 
-        await supabaseClient.from('comunicados').insert([{
-            autor_id: u.data.user.id,
-            titulo: tituloNotif,
-            mensaje: `El docente ${maestroNombre} ha solicitado ${isProrroga ? 'prórroga / apertura extemporánea' : 'apertura'} de calificaciones para el ${trimestre}° Trimestre en la materia ${materia}.\n\n📝 Motivo expresado: ${motivo.trim()}\n\nPor favor diríjase al módulo de Autorización de Movimientos para aprobar o rechazar esta solicitud.`,
-            audiencia: 'Admin',
-            plantel_id: state.plantelId
-        }]);
+        try {
+            await supabaseClient.from('comunicados').insert([{
+                autor_id: userId,
+                titulo: tituloNotif,
+                mensaje: `El docente ${maestroNombre} ha solicitado ${isProrroga ? 'prórroga / apertura extemporánea' : 'apertura'} de calificaciones para el ${trimestre}° Trimestre en la materia ${materia}.\n\n📝 Motivo expresado: ${motivo.trim()}\n\nPor favor diríjase al módulo de Autorización de Movimientos para aprobar o rechazar esta solicitud.`,
+                audiencia: 'Admin',
+                plantel_id: pId || state.plantelId
+            }]);
+        } catch(eCom) {
+            console.warn("No se pudo insertar comunicado de aviso a Admin:", eCom);
+        }
 
         alert(`✅ Tu solicitud de ${isProrroga ? 'prórroga' : 'modificación'} ha sido enviada con éxito a Administración.\nUna vez aprobada, podrás capturar y enviar las calificaciones.`);
         window.cargarBoletasGrupo();
