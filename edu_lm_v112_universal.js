@@ -5,7 +5,7 @@ const CONFIG = {
 };
 
 // Supabase Configuration
-console.log("%c>>> EDU-LM V224 UNIVERSAL CARGADA: VIGILANCIA HUMANA ACTIVA", "color: yellow; background: black; padding: 12px; font-weight: 1000; border: 2px solid yellow;");
+console.log("%c>>> EDU-LM V226 UNIVERSAL CARGADA: VIGILANCIA HUMANA ACTIVA", "color: yellow; background: black; padding: 12px; font-weight: 1000; border: 2px solid yellow;");
 const SUPABASE_URL = "https://eexgjaydpuioncenlsmv.supabase.co"; 
 const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVleGdqYXlkcHVpb25jZW5sc212Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQ4NTM0MDAsImV4cCI6MjEwMDQyOTQwMH0.vrJGn_Bg04OBBntL-w21-I27XuvO61HcUNrphMYYSlY";
 const SUPABASE_KEY = SUPABASE_ANON_KEY;
@@ -4136,6 +4136,7 @@ function renderApoyoDashboard() {
             <h3 style="margin-top:0; color:var(--success)"><i class="fa-solid fa-handshake"></i> Atención y Resolución</h3>
             
             <input type="hidden" id="atencionAlumnoId">
+            <input type="hidden" id="atencionCitatorioId">
             <div id="atencionAlumnoNombre" style="padding:12px; background:var(--page-bg); border-radius:12px; font-weight:600; margin-bottom:20px; border-left:4px solid var(--success);"></div>
 
             <div style="margin-bottom:15px;">
@@ -4143,9 +4144,39 @@ function renderApoyoDashboard() {
                 <textarea id="atencionProcedimiento" class="form-input" style="height:80px; border-radius:10px; resize:none;"></textarea>
             </div>
 
-            <div style="margin-bottom:20px;">
+            <div style="margin-bottom:18px;">
                 <label style="display:block; font-size:0.85rem; margin-bottom:5px; font-weight:600;">Compromisos Acordados:</label>
                 <textarea id="atencionCompromisos" class="form-input" style="height:80px; border-radius:10px; resize:none;"></textarea>
+            </div>
+
+            <!-- SECCIÓN OPCIONAL: SUSPENSIÓN ESCOLAR -->
+            <div style="background:#fff1f2; border:1px solid #fecdd3; border-radius:12px; padding:14px; margin-bottom:20px;">
+                <label style="display:flex; align-items:center; gap:10px; cursor:pointer; font-weight:700; color:#9f1239; margin-bottom:0; font-size:0.9rem;">
+                    <input type="checkbox" id="atencionHabilitarSuspension" style="width:18px; height:18px; accent-color:#e11d48; cursor:pointer;" onchange="window.toggleSeccionSuspensionAtencion(this)">
+                    <span><i class="fa-solid fa-user-slash text-danger"></i> ¿El alumno se va suspendido?</span>
+                </label>
+                
+                <div id="seccionCamposSuspension" style="display:none; margin-top:14px; padding-top:12px; border-top:1px dashed #f43f5e;">
+                    <p style="font-size:0.78rem; color:#881337; margin-bottom:12px; line-height:1.4;">
+                        <i class="fa-solid fa-circle-info"></i> Al habilitar esta opción, se marcará automáticamente la <b>falta por suspensión</b> en las listas de los profesores en los días seleccionados y se enviará un comunicado de aviso <b>únicamente a sus docentes</b>.
+                    </p>
+                    
+                    <div style="display:flex; gap:12px; margin-bottom:12px;">
+                        <div style="flex:1;">
+                            <label style="display:block; font-size:0.8rem; font-weight:600; color:#475569; margin-bottom:4px;">Desde (Fecha Inicio):</label>
+                            <input type="date" id="suspensionFechaInicio" class="form-input" style="border-radius:8px; background:white; font-size:0.85rem;">
+                        </div>
+                        <div style="flex:1;">
+                            <label style="display:block; font-size:0.8rem; font-weight:600; color:#475569; margin-bottom:4px;">Hasta (Fecha Fin):</label>
+                            <input type="date" id="suspensionFechaFin" class="form-input" style="border-radius:8px; background:white; font-size:0.85rem;">
+                        </div>
+                    </div>
+
+                    <div>
+                        <label style="display:block; font-size:0.8rem; font-weight:600; color:#475569; margin-bottom:4px;">Motivo / Especificación de la sanción:</label>
+                        <input type="text" id="suspensionMotivo" class="form-input" placeholder="Ej. Suspensión de 3 días por acumulación de reportes..." style="border-radius:8px; background:white; font-size:0.85rem;">
+                    </div>
+                </div>
             </div>
 
             <div style="display:flex; gap:10px;">
@@ -4484,9 +4515,39 @@ function renderApoyoReportes() {
                 <textarea id="atencionProcedimiento" class="form-input" placeholder="Detalla cómo se atendió al alumno..." style="height:100px; border-radius:10px; resize:none;"></textarea>
             </div>
 
-            <div style="margin-bottom:20px;">
+            <div style="margin-bottom:18px;">
                 <label style="display:block; font-size:0.85rem; margin-bottom:5px; font-weight:600;">Compromisos Acordados:</label>
                 <textarea id="atencionCompromisos" class="form-input" placeholder="Escribe los puntos acordados..." style="height:100px; border-radius:10px; resize:none;"></textarea>
+            </div>
+
+            <!-- SECCIÓN OPCIONAL: SUSPENSIÓN ESCOLAR -->
+            <div style="background:#fff1f2; border:1px solid #fecdd3; border-radius:12px; padding:14px; margin-bottom:20px;">
+                <label style="display:flex; align-items:center; gap:10px; cursor:pointer; font-weight:700; color:#9f1239; margin-bottom:0; font-size:0.9rem;">
+                    <input type="checkbox" id="atencionHabilitarSuspension" style="width:18px; height:18px; accent-color:#e11d48; cursor:pointer;" onchange="window.toggleSeccionSuspensionAtencion(this)">
+                    <span><i class="fa-solid fa-user-slash text-danger"></i> ¿El alumno se va suspendido?</span>
+                </label>
+                
+                <div id="seccionCamposSuspension" style="display:none; margin-top:14px; padding-top:12px; border-top:1px dashed #f43f5e;">
+                    <p style="font-size:0.78rem; color:#881337; margin-bottom:12px; line-height:1.4;">
+                        <i class="fa-solid fa-circle-info"></i> Al habilitar esta opción, se marcará automáticamente la <b>falta por suspensión</b> en las listas de los profesores en los días seleccionados y se enviará un comunicado de aviso <b>únicamente a sus docentes</b>.
+                    </p>
+                    
+                    <div style="display:flex; gap:12px; margin-bottom:12px;">
+                        <div style="flex:1;">
+                            <label style="display:block; font-size:0.8rem; font-weight:600; color:#475569; margin-bottom:4px;">Desde (Fecha Inicio):</label>
+                            <input type="date" id="suspensionFechaInicio" class="form-input" style="border-radius:8px; background:white; font-size:0.85rem;">
+                        </div>
+                        <div style="flex:1;">
+                            <label style="display:block; font-size:0.8rem; font-weight:600; color:#475569; margin-bottom:4px;">Hasta (Fecha Fin):</label>
+                            <input type="date" id="suspensionFechaFin" class="form-input" style="border-radius:8px; background:white; font-size:0.85rem;">
+                        </div>
+                    </div>
+
+                    <div>
+                        <label style="display:block; font-size:0.8rem; font-weight:600; color:#475569; margin-bottom:4px;">Motivo / Especificación de la sanción:</label>
+                        <input type="text" id="suspensionMotivo" class="form-input" placeholder="Ej. Suspensión de 3 días por acumulación de reportes..." style="border-radius:8px; background:white; font-size:0.85rem;">
+                    </div>
+                </div>
             </div>
 
             <div style="display:flex; gap:10px;">
@@ -7405,6 +7466,20 @@ window.toggleVistoCitatorio = async (citatorioId, nuevoEstado) => {
     }
 };
 
+window.toggleSeccionSuspensionAtencion = (chk) => {
+    const parent = chk.closest('#modalAtencionFoco') || chk.parentElement.parentElement;
+    const sec = parent ? parent.querySelector('#seccionCamposSuspension') : document.getElementById('seccionCamposSuspension');
+    if (!sec) return;
+    sec.style.display = chk.checked ? 'block' : 'none';
+    if (chk.checked) {
+        const inIni = parent.querySelector('#suspensionFechaInicio');
+        const inFin = parent.querySelector('#suspensionFechaFin');
+        const today = new Date().toLocaleDateString('en-CA');
+        if (inIni && !inIni.value) inIni.value = today;
+        if (inFin && !inFin.value) inFin.value = today;
+    }
+};
+
 window.abrirModalAtencionFoco = (id, nombre, citatorioId = null) => {
     const modals = document.querySelectorAll('#modalAtencionFoco');
     const infoCache = citatorioId && window._citatoriosDetallesCache ? window._citatoriosDetallesCache[citatorioId] : null;
@@ -7429,6 +7504,16 @@ window.abrirModalAtencionFoco = (id, nombre, citatorioId = null) => {
         }
         const inProc = m.querySelector('#atencionProcedimiento'); if(inProc) inProc.value = '';
         const inComp = m.querySelector('#atencionCompromisos'); if(inComp) inComp.value = '';
+
+        // Limpiar sección de suspensión
+        const chkSusp = m.querySelector('#atencionHabilitarSuspension');
+        if (chkSusp) chkSusp.checked = false;
+        const secSusp = m.querySelector('#seccionCamposSuspension');
+        if (secSusp) secSusp.style.display = 'none';
+        const inIni = m.querySelector('#suspensionFechaInicio'); if (inIni) inIni.value = '';
+        const inFin = m.querySelector('#suspensionFechaFin'); if (inFin) inFin.value = '';
+        const inMot = m.querySelector('#suspensionMotivo'); if (inMot) inMot.value = '';
+
         m.style.display = 'block';
     });
 };
@@ -7449,6 +7534,27 @@ window.guardarAtencionFoco = async () => {
         return;
     }
 
+    const chkSusp = activeModal.querySelector('#atencionHabilitarSuspension');
+    const esSuspension = chkSusp ? chkSusp.checked : false;
+    let suspInicio = '';
+    let suspFin = '';
+    let suspMotivo = '';
+
+    if (esSuspension) {
+        suspInicio = activeModal.querySelector('#suspensionFechaInicio')?.value || '';
+        suspFin = activeModal.querySelector('#suspensionFechaFin')?.value || '';
+        suspMotivo = (activeModal.querySelector('#suspensionMotivo')?.value || '').trim() || 'Suspensión temporal acordada en citatorio';
+
+        if (!suspInicio || !suspFin) {
+            alert("Por favor selecciona las fechas de inicio y fin para la suspensión del alumno.");
+            return;
+        }
+        if (suspInicio > suspFin) {
+            alert("La fecha de inicio de la suspensión no puede ser posterior a la fecha de fin.");
+            return;
+        }
+    }
+
     const btn = activeModal.querySelector('#btnConfirmarResolucion');
     const old = btn ? btn.innerHTML : '';
     if(btn) { btn.disabled = true; btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Procesando...'; }
@@ -7465,11 +7571,12 @@ window.guardarAtencionFoco = async () => {
         }
 
         // 1. Guardar en Seguimientos Sociales (TS)
+        const detalleCompleto = `PROCEDIMIENTO: ${proc}\n\nCOMPROMISOS: ${comp}${esSuspension ? `\n\n⚠️ SANCIÓN APLICADA: Suspensión escolar del ${suspInicio} al ${suspFin}.\nMOTIVO DE SUSPENSIÓN: ${suspMotivo}` : ''}`;
         const { error: errSeg } = await supabaseClient.from('seguimientos_sociales').insert([{
             alumno_id: aid,
             perfil_id: u.data.user.id,
-            asunto: 'Resolución de Citatorio / Incidencia',
-            detalle: `PROCEDIMIENTO: ${proc}\n\nCOMPROMISOS: ${comp}`,
+            asunto: esSuspension ? 'Resolución de Citatorio con Suspensión' : 'Resolución de Citatorio / Incidencia',
+            detalle: detalleCompleto,
             estado: 'finalizado',
             plantel_id: pId
         }]);
@@ -7479,11 +7586,41 @@ window.guardarAtencionFoco = async () => {
         const { error: errInt } = await supabaseClient.from('intervenciones_conducta').insert([{
             alumno_id: aid,
             maestro_id: u.data.user.id,
-            procedimiento: proc,
+            procedimiento: proc + (esSuspension ? ` [SUSPENSIÓN: ${suspInicio} a ${suspFin}]` : ''),
             compromisos: comp,
             plantel_id: pId
         }]);
         if(errInt) throw new Error('Error en intervenciones_conducta: ' + errInt.message);
+
+        // Si se aplicó suspensión: guardar en suspensiones_alumnos, marcar faltas en asistencias y notificar maestros
+        if (esSuspension) {
+            try {
+                const { error: errSuspTable } = await supabaseClient.from('suspensiones_alumnos').insert([{
+                    alumno_id: aid,
+                    autor_id: u.data.user.id,
+                    citatorio_id: cid || null,
+                    motivo: suspMotivo,
+                    fecha_inicio: suspInicio + 'T00:00:00Z',
+                    fecha_fin: suspFin + 'T23:59:59Z',
+                    plantel_id: pId
+                }]);
+                if (errSuspTable && errSuspTable.code !== '42P01') {
+                    console.warn("Aviso tabla suspensiones_alumnos:", errSuspTable.message);
+                }
+            } catch(eSuspT) {
+                console.warn("Error en registro tabla suspensiones:", eSuspT);
+            }
+
+            // Aplicar faltas automáticas por suspensión en listas del profesor
+            if (window.aplicarSuspensionAutomatica) {
+                await window.aplicarSuspensionAutomatica(aid, suspInicio, suspFin, suspMotivo, pId);
+            }
+
+            // Emitir comunicado confidencial SOLO a los maestros del alumno
+            if (window.notificarMaestrosSuspension) {
+                await window.notificarMaestrosSuspension(aid, suspMotivo, suspInicio, suspFin);
+            }
+        }
 
         // 3. Resolver reportes pendientes del alumno (ignorar si no hay ninguno)
         let queryRep = supabaseClient.from('reportes_conducta').update({ resuelto: true }).eq('alumno_id', aid);
@@ -7510,8 +7647,8 @@ window.guardarAtencionFoco = async () => {
         }]);
         if(errCom) console.warn('Advertencia al enviar comunicado al alumno:', errCom.message);
 
-        window.showToast("Atención registrada, citatorio archivado y reportes resueltos", "success");
-        document.getElementById('modalAtencionFoco').style.display = 'none';
+        window.showToast(esSuspension ? "Atención registrada, citatorio archivado, suspensión aplicada y maestros notificados." : "Atención registrada, citatorio archivado y reportes resueltos.", "success");
+        document.querySelectorAll('#modalAtencionFoco').forEach(m => m.style.display = 'none');
 
         // Refrescar vistas
         if(window.loadCitatoriosApoyo) window.loadCitatoriosApoyo();
@@ -7526,6 +7663,199 @@ window.guardarAtencionFoco = async () => {
             btn.disabled = false;
             btn.innerHTML = old;
         }
+    }
+};
+
+window.aplicarSuspensionAutomatica = async (alumnoId, inicio, fin, motivo, plantelId) => {
+    try {
+        console.log(">>> [SUSPENSIÓN AUTOMÁTICA] Procesando alumno:", alumnoId, "Rango:", inicio, "a", fin);
+        const pId = plantelId || state.plantelId;
+        const fInicioStr = (inicio || '').split('T')[0];
+        const fFinStr = (fin || '').split('T')[0];
+        if (!fInicioStr || !fFinStr || !alumnoId) return;
+
+        // 1. Obtener alumno para conocer su grupo y taller
+        const { data: al } = await supabaseClient.from('alumnos').select('id, grupo_id, grado, taller').eq('id', alumnoId).maybeSingle();
+        const gid = al?.grupo_id;
+
+        // 2. Determinar las materias del alumno a través de asignaciones_maestros
+        const { data: asigs } = await supabaseClient.from('asignaciones_maestros').select('materia, grupo_id, target_grado').eq('plantel_id', pId);
+        
+        let materiasAlumno = new Set();
+        if (asigs && al) {
+            const alGNorm = window._normalizarGradoParaPase ? window._normalizarGradoParaPase(al.grado) : String(al.grado || '').replace(/[°\s]/g, '');
+            const cleanAluTaller = window._normalizarTextoTaller ? window._normalizarTextoTaller(al.taller) : '';
+
+            asigs.forEach(a => {
+                const aGNorm = window._normalizarGradoParaPase ? window._normalizarGradoParaPase(a.target_grado) : String(a.target_grado || '').replace(/[°\s]/g, '');
+                const m = (a.materia || '').trim();
+                if (!m) return;
+                const isTaller = m.toLowerCase().includes('tecnolog') || m.toLowerCase().includes('taller') || !a.grupo_id;
+
+                if (isTaller) {
+                    const gradoCoincide = (aGNorm && alGNorm && aGNorm === alGNorm) || (a.grupo_id && gid && a.grupo_id === gid);
+                    if (gradoCoincide) {
+                        const cleanAsigTaller = window._normalizarTextoTaller ? window._normalizarTextoTaller(a.materia) : '';
+                        if (cleanAluTaller && cleanAsigTaller) {
+                            if (cleanAluTaller.includes(cleanAsigTaller) || cleanAsigTaller.includes(cleanAluTaller) || cleanAluTaller === cleanAsigTaller) {
+                                materiasAlumno.add(m);
+                            }
+                        } else if (!cleanAsigTaller) {
+                            materiasAlumno.add(m);
+                        }
+                    }
+                } else {
+                    if (a.grupo_id && gid && a.grupo_id === gid) {
+                        materiasAlumno.add(m);
+                    }
+                }
+            });
+        }
+
+        const listaMaterias = materiasAlumno.size > 0 ? Array.from(materiasAlumno) : ['General'];
+
+        // 3. Generar días hábiles (excluyendo fines de semana)
+        const fechasHabiles = [];
+        let curr = new Date(fInicioStr + 'T12:00:00');
+        const finDate = new Date(fFinStr + 'T12:00:00');
+        while (curr <= finDate) {
+            const day = curr.getDay(); // 0 domingo, 6 sábado
+            if (day !== 0 && day !== 6) {
+                fechasHabiles.push(curr.toISOString().split('T')[0]);
+            }
+            curr.setDate(curr.getDate() + 1);
+        }
+
+        // Obtener trimestre activo
+        const trimActivo = window._trimestreActivoParaPase || state.selectedMaestroTrimestre || 1;
+
+        // 4. Registrar o actualizar 'Falta por Suspensión' en asistencias
+        for (const fechaStr of fechasHabiles) {
+            for (const mat of listaMaterias) {
+                const { data: existente } = await supabaseClient.from('asistencias')
+                    .select('id, estado')
+                    .eq('alumno_id', alumnoId)
+                    .eq('materia', mat)
+                    .eq('fecha', fechaStr)
+                    .eq('plantel_id', pId)
+                    .maybeSingle();
+
+                if (existente) {
+                    await supabaseClient.from('asistencias')
+                        .update({ estado: 'Falta por Suspensión' })
+                        .eq('id', existente.id);
+                } else {
+                    await supabaseClient.from('asistencias').insert([{
+                        alumno_id: alumnoId,
+                        estado: 'Falta por Suspensión',
+                        materia: mat,
+                        grupo_id: gid || null,
+                        fecha: fechaStr,
+                        plantel_id: pId,
+                        trimestre: trimActivo
+                    }]);
+                }
+            }
+        }
+        console.log(`>>> [SUSPENSIÓN AUTOMÁTICA] Faltas por suspensión aplicadas para alumno ${alumnoId} en ${fechasHabiles.length} días hábiles.`);
+    } catch(e) {
+        console.error("Error en aplicarSuspensionAutomatica:", e);
+    }
+};
+
+window.notificarMaestrosSuspension = async (alumnoId, motivo, inicio, fin) => {
+    try {
+        const { data: al, error: alErr } = await supabaseClient.from('alumnos').select('id, nombre, grupo_id, grado, taller').eq('id', alumnoId).single();
+        if(alErr || !al) {
+            console.warn("No se pudo obtener el alumno para notificar suspensión.");
+            return;
+        }
+
+        const fInicio = new Date(inicio + 'T12:00:00').toLocaleDateString();
+        const fFin = new Date(fin + 'T12:00:00').toLocaleDateString();
+        const mensaje = `Se informa que el alumno(a) **${al.nombre}** se encuentra bajo **SUSPENSIÓN ESCOLAR** del **${fInicio}** al **${fFin}** derivada de resolución en Trabajo Social / Dirección.\n\nMotivo / Detalle: ${motivo}.\n\nEn las listas de asistencia aparecerá marcado con Falta por Suspensión. Favor de tomarlo en cuenta para el seguimiento de actividades académicas.`;
+
+        // Buscar a los maestros que realmente le dan clases
+        const { data: asig } = await supabaseClient.from('asignaciones_maestros').select('docente_email, grupo_id, target_grado, materia').eq('plantel_id', state.plantelId);
+        
+        let validEmails = new Set();
+        if (asig) {
+            const alGNorm = window._normalizarGradoParaPase ? window._normalizarGradoParaPase(al.grado) : String(al.grado || '').replace(/[°\s]/g, '');
+            const cleanAluTaller = window._normalizarTextoTaller ? window._normalizarTextoTaller(al.taller) : '';
+
+            asig.forEach(a => {
+                const aGNorm = window._normalizarGradoParaPase ? window._normalizarGradoParaPase(a.target_grado) : String(a.target_grado || '').replace(/[°\s]/g, '');
+                const m = (a.materia || '').toLowerCase().trim();
+                const isTaller = m.includes('tecnolog') || m.includes('taller') || !a.grupo_id;
+
+                if (isTaller) {
+                    const gradoCoincide = (aGNorm && alGNorm && aGNorm === alGNorm) || (a.grupo_id && al.grupo_id && a.grupo_id === al.grupo_id);
+                    if (gradoCoincide) {
+                        const cleanAsigTaller = window._normalizarTextoTaller ? window._normalizarTextoTaller(a.materia) : '';
+                        if (cleanAluTaller && cleanAsigTaller) {
+                            if (cleanAluTaller.includes(cleanAsigTaller) || cleanAsigTaller.includes(cleanAluTaller) || cleanAluTaller === cleanAsigTaller) {
+                                validEmails.add(a.docente_email);
+                            }
+                        } else if (!cleanAsigTaller) {
+                            validEmails.add(a.docente_email);
+                        }
+                    }
+                } else {
+                    if (a.grupo_id && al.grupo_id && a.grupo_id === al.grupo_id) {
+                        validEmails.add(a.docente_email);
+                    }
+                }
+            });
+        }
+
+        let teacherIds = [];
+        if (validEmails.size > 0) {
+            const emailList = Array.from(validEmails).filter(Boolean);
+            if (emailList.length > 0) {
+                const { data: perfsPerm } = await supabaseClient
+                    .from('perfiles_permitidos')
+                    .select('nombre, email')
+                    .in('email', emailList)
+                    .eq('plantel_id', state.plantelId);
+                    
+                const teacherNames = (perfsPerm || []).map(p => p.nombre).filter(Boolean);
+                if (teacherNames.length > 0) {
+                    const { data: perfs } = await supabaseClient
+                        .from('perfiles')
+                        .select('id, nombre')
+                        .in('nombre', teacherNames)
+                        .eq('plantel_id', state.plantelId);
+                    if (perfs && perfs.length > 0) {
+                        teacherIds = perfs.map(p => p.id);
+                    }
+                }
+            }
+        }
+
+        const tagTaller = al.taller ? ` [TALLER: ${al.taller}]` : '';
+        const tituloCom = `AVISO DE SUSPENSIÓN: ${al.nombre}${tagTaller}`;
+        const newComs = [];
+
+        // Insertar para cada maestro del alumno (INDIVIDUALMENTE)
+        teacherIds.forEach(tid => {
+            newComs.push({
+                autor_id: state.user.id,
+                titulo: tituloCom,
+                audiencia: 'Maestro_' + tid,
+                mensaje: mensaje,
+                plantel_id: state.plantelId
+            });
+        });
+
+        if (newComs.length > 0) {
+            const { error: comErr } = await supabaseClient.from('comunicados').insert(newComs);
+            if(comErr) console.warn("Fallo al guardar avisos de suspensión en BD: " + comErr.message);
+            else console.log(`>>> [AVISO SUSPENSIÓN] Notificados ${newComs.length} docentes.`);
+        } else {
+            console.warn("No se encontraron maestros para notificar suspensión.");
+        }
+    } catch(e) { 
+        console.error("Error al notificar maestros sobre suspensión:", e);
     }
 };
 
@@ -21525,11 +21855,27 @@ window.finalizarSesionAsistencia = async () => {
 
         const setJustificadosCierre = new Set((justMedHoyCierre || []).map(j => j.alumno_id));
 
+        // Consultar suspensiones activas para la fecha de hoy
+        let setSuspendidosCierre = new Set();
+        try {
+            const { data: suspHoyCierre } = await supabaseClient.from('suspensiones_alumnos')
+                .select('alumno_id')
+                .eq('plantel_id', state.plantelId)
+                .lte('fecha_inicio', `${hoy}T23:59:59Z`)
+                .gte('fecha_fin', `${hoy}T00:00:00Z`);
+            if (suspHoyCierre) {
+                setSuspendidosCierre = new Set(suspHoyCierre.map(s => s.alumno_id));
+            }
+        } catch(eSusp) {}
+
         const faltantesReales = [];
         const justificadosAuto = [];
+        const suspendidosAuto = [];
 
         faltantes.forEach(al => {
-            if (setJustificadosCierre.has(al.id)) {
+            if (setSuspendidosCierre.has(al.id)) {
+                suspendidosAuto.push(al);
+            } else if (setJustificadosCierre.has(al.id)) {
                 justificadosAuto.push(al);
             } else {
                 faltantesReales.push(al);
@@ -21556,6 +21902,16 @@ window.finalizarSesionAsistencia = async () => {
                 fecha: hoy,
                 plantel_id: state.plantelId,
                 trimestre: window._trimestreActivoParaPase || state.selectedMaestroTrimestre || 1
+            })),
+            ...suspendidosAuto.map(al => ({
+                alumno_id: al.id, 
+                registrador_id: u.data.user.id, 
+                estado: 'Falta por Suspensión', 
+                materia: materia,
+                grupo_id: grupoId.startsWith('grado:') ? null : grupoId,
+                fecha: hoy,
+                plantel_id: state.plantelId,
+                trimestre: window._trimestreActivoParaPase || state.selectedMaestroTrimestre || 1
             }))
         ];
 
@@ -21565,7 +21921,7 @@ window.finalizarSesionAsistencia = async () => {
 
         // 2. Enviar comunicados diferidos (Retardos y Faltas)
         const retardos = reg.filter(r => r.estado === 'Retardo').map(r => r.alumno_id);
-        const faltasExplicit = reg.filter(r => r.estado === 'Falta' && !setJustificadosCierre.has(r.alumno_id)).map(r => r.alumno_id);
+        const faltasExplicit = reg.filter(r => r.estado === 'Falta' && !setJustificadosCierre.has(r.alumno_id) && !setSuspendidosCierre.has(r.alumno_id)).map(r => r.alumno_id);
         // Garantizar que los alumnos con Asistencia o Justificada NUNCA reciban aviso de falta
         const presentesIds = new Set([
             ...reg.filter(r => r.estado === 'Asistencia' || r.estado === 'Justificada').map(r => r.alumno_id),
@@ -30019,6 +30375,19 @@ window.loadListaAsistenciaManual = async () => {
 
         const alumnosConJustificante = new Set((justMedHoyManual || []).map(j => j.alumno_id));
 
+        // Consultar suspensiones activas para la fecha de hoy
+        let setSuspendidosManual = new Set();
+        try {
+            const { data: suspHoyManual } = await supabaseClient.from('suspensiones_alumnos')
+                .select('alumno_id')
+                .eq('plantel_id', state.plantelId)
+                .lte('fecha_inicio', `${hoy}T23:59:59Z`)
+                .gte('fecha_fin', `${hoy}T00:00:00Z`);
+            if (suspHoyManual) {
+                setSuspendidosManual = new Set(suspHoyManual.map(s => s.alumno_id));
+            }
+        } catch(eSusp) {}
+
         const disabledState = (estadoSesion === 'cerrado' || estadoSesion === 'pendiente') ? 'disabled' : '';
         const disTodos = (estadoSesion === 'cerrado') ? 'disabled' : '';
 
@@ -30035,10 +30404,13 @@ window.loadListaAsistenciaManual = async () => {
         alumnos.forEach((al, index) => {
             const reg = asistMap[al.id];
             const tieneJustificanteActivo = alumnosConJustificante.has(al.id);
+            const tieneSuspensionActiva = setSuspendidosManual.has(al.id) || (reg && (reg.estado === 'Falta por Suspensión' || reg.estado === 'Suspensión'));
             let estadoActual = reg ? reg.estado : (estadoSesion === 'cerrado' ? 'Falta' : 'Pendiente');
             
-            // Si el alumno tiene justificante médico vigente para hoy y no está explícitamente marcado como Asistencia o Retardo:
-            if (tieneJustificanteActivo && (!reg || reg.estado === 'Falta' || reg.estado === 'Pendiente')) {
+            // Prioridad: Suspensión -> Justificante -> Registro
+            if (tieneSuspensionActiva && (!reg || reg.estado === 'Falta' || reg.estado === 'Pendiente' || reg.estado === 'Falta por Suspensión' || reg.estado === 'Suspensión')) {
+                estadoActual = 'Falta por Suspensión';
+            } else if (tieneJustificanteActivo && (!reg || reg.estado === 'Falta' || reg.estado === 'Pendiente')) {
                 estadoActual = 'Justificada';
             }
             
@@ -30048,28 +30420,27 @@ window.loadListaAsistenciaManual = async () => {
             if (estadoActual === 'Retardo') { colorBorder = 'var(--warning)'; bgColor = '#fef3c7'; }
             if (estadoActual === 'Falta') { colorBorder = 'var(--danger)'; bgColor = '#fee2e2'; }
             if (estadoActual === 'Justificada') { colorBorder = '#2563eb'; bgColor = '#eff6ff'; }
+            if (estadoActual === 'Falta por Suspensión') { colorBorder = '#b91c1c'; bgColor = '#fee2e2'; }
             
             // Si la sesión no ha iniciado, bloquear
             const opacityState = (estadoSesion === 'pendiente') ? 'opacity:0.6;' : '';
 
             // REGLAS DE ASISTENCIA:
-            // 1. Si la sesión está CERRADA: los botones A, R, F están bloqueados. SOLAMENTE se puede justificar.
-            // 2. Si la sesión está PENDIENTE: los botones están deshabilitados hasta abrir la sesión.
-            // 3. Si la sesión está ABIERTA: el maestro puede registrar y corregir libremente Asistencia, Retardo o Falta.
-            // 4. Si el alumno está JUSTIFICADO institucionalmente: se deshabilitan Falta y Retardo, pero el maestro puede marcar Asistencia si se presenta.
             const esCerrado = (estadoSesion === 'cerrado');
             const esPendiente = (estadoSesion === 'pendiente');
             const esJustificada = (estadoActual === 'Justificada');
+            const esSuspendido = (estadoActual === 'Falta por Suspensión');
 
-            const disA = (esCerrado || esPendiente) ? 'disabled' : '';
-            const disR = (esCerrado || esPendiente || esJustificada) ? 'disabled' : '';
-            const disF = (esCerrado || esPendiente || esJustificada) ? 'disabled' : '';
+            const disA = (esCerrado || esPendiente || esSuspendido) ? 'disabled' : '';
+            const disR = (esCerrado || esPendiente || esJustificada || esSuspendido) ? 'disabled' : '';
+            const disF = (esCerrado || esPendiente || esJustificada || esSuspendido) ? 'disabled' : '';
 
             html += `
             <div id="row_al_${al.id}" style="display:flex; justify-content:space-between; align-items:center; padding:12px; border:1px solid ${colorBorder}; background:${bgColor}; border-radius:8px; ${opacityState}">
                 <div style="flex:1;">
                     <div style="font-weight:600; font-size:0.95rem;">
                         ${index+1}. ${al.nombre}
+                        ${estadoActual === 'Falta por Suspensión' ? '<span class="badge" style="background:#b91c1c; color:white; font-size:0.7rem; margin-left:6px;"><i class="fa-solid fa-ban"></i> Falta por Suspensión</span>' : ''}
                         ${estadoActual === 'Justificada' ? '<span class="badge" style="background:#2563eb; color:white; font-size:0.7rem; margin-left:6px;"><i class="fa-solid fa-file-shield"></i> Justificada</span>' : ''}
                     </div>
                     <div style="font-size:0.75rem; color:var(--text-muted);">${al.matricula || 'Sin matrícula'}</div>
@@ -30077,7 +30448,7 @@ window.loadListaAsistenciaManual = async () => {
                 <div style="display:flex; gap:6px; align-items:center;">
                     <button id="btn_A_${al.id}" class="btn btn-sm ${estadoActual==='Asistencia'?'btn-primary':'btn-outline'}" onclick="window.marcarAsistenciaManual('${al.id}', 'Asistencia')" ${disA} style="padding:6px 10px;" title="Asistencia">A</button>
                     <button id="btn_R_${al.id}" class="btn btn-sm ${estadoActual==='Retardo'?'btn-warning':'btn-outline'}" onclick="window.marcarAsistenciaManual('${al.id}', 'Retardo')" ${disR} style="padding:6px 10px;" title="Retardo">R</button>
-                    <button id="btn_F_${al.id}" class="btn btn-sm ${estadoActual==='Falta'?'btn-danger':'btn-outline'}" onclick="window.marcarAsistenciaManual('${al.id}', 'Falta')" ${disF} style="padding:6px 10px;" title="Falta">F</button>
+                    <button id="btn_F_${al.id}" class="btn btn-sm ${(estadoActual==='Falta'||estadoActual==='Falta por Suspensión')?'btn-danger':'btn-outline'}" onclick="window.marcarAsistenciaManual('${al.id}', 'Falta')" ${disF} style="padding:6px 10px;" title="${esSuspendido?'Falta por Suspensión':'Falta'}">F</button>
                     ${(esCerrado || estadoActual === 'Falta' || esJustificada) ? `
                     <button id="btn_J_${al.id}" class="btn btn-sm ${estadoActual==='Justificada'?'btn-primary':'btn-outline'}" onclick="window.justificarFaltaDesdeAula('${al.id}')" style="padding:6px 10px; ${estadoActual==='Justificada'?'background:#2563eb; color:white; border-color:#2563eb;':'color:#2563eb; border-color:#2563eb;'}" title="${estadoActual==='Justificada'?'Inasistencia ya justificada':'Justificar Inasistencia'}">
                         <i class="fa-solid fa-file-shield"></i> ${estadoActual==='Justificada'?'Justificada':'Justificar'}
@@ -30137,6 +30508,11 @@ window.marcarAsistenciaManual = async (alumnoId, estado) => {
         // Si ya está justificada institucionalmente y se intenta cambiar, confirmar con el usuario
         if (existente && existente.estado === 'Justificada' && estado !== 'Justificada') {
             if (!confirm("Este alumno ya tiene una inasistencia JUSTIFICADA institucionalmente. ¿Deseas modificarla a " + estado + "?")) {
+                return;
+            }
+        }
+        if (existente && existente.estado === 'Falta por Suspensión' && estado !== 'Falta por Suspensión') {
+            if (!confirm("Este alumno cuenta con una FALTA POR SUSPENSIÓN oficial acordada en Dirección / Trabajo Social. ¿Deseas modificarla a " + estado + "?")) {
                 return;
             }
         }
@@ -30316,10 +30692,21 @@ window.marcarTodosAsistenciaManual = async () => {
             .gte('fecha_fin', `${hoy}T00:00:00Z`);
         const setJustificadosTodos = new Set((justMedHoyTodos || []).map(j => j.alumno_id));
 
+        // Consultar suspensiones activas para hoy
+        let setSuspendidosTodos = new Set();
+        try {
+            const { data: suspHoyTodos } = await supabaseClient.from('suspensiones_alumnos')
+                .select('alumno_id')
+                .eq('plantel_id', state.plantelId)
+                .lte('fecha_inicio', `${hoy}T23:59:59Z`)
+                .gte('fecha_fin', `${hoy}T00:00:00Z`);
+            if (suspHoyTodos) setSuspendidosTodos = new Set(suspHoyTodos.map(s => s.alumno_id));
+        } catch(eSuspTodos) {}
+
         // 4. Actualización Visual Inmediata (Optimistic UI)
         alumnos.forEach(al => {
             const reg = asistMap[al.id];
-            if ((reg && reg.estado === 'Justificada') || setJustificadosTodos.has(al.id)) return; // Respetar Justificadas
+            if ((reg && (reg.estado === 'Justificada' || reg.estado === 'Falta por Suspensión')) || setJustificadosTodos.has(al.id) || setSuspendidosTodos.has(al.id)) return; // Respetar Justificadas y Suspensiones
 
             const row = document.getElementById(`row_al_${al.id}`);
             const btnA = document.getElementById(`btn_A_${al.id}`);
@@ -30340,7 +30727,7 @@ window.marcarTodosAsistenciaManual = async () => {
 
         alumnos.forEach(al => {
             const reg = asistMap[al.id];
-            if ((reg && reg.estado === 'Justificada') || setJustificadosTodos.has(al.id)) return; // No sobreescribir Justificadas
+            if ((reg && (reg.estado === 'Justificada' || reg.estado === 'Falta por Suspensión')) || setJustificadosTodos.has(al.id) || setSuspendidosTodos.has(al.id)) return; // No sobreescribir Justificadas ni Suspensiones
 
             if (reg) {
                 if (reg.estado !== 'Asistencia') {
