@@ -5,7 +5,7 @@ const CONFIG = {
 };
 
 // Supabase Configuration
-console.log("%c>>> EDU-LM V226 UNIVERSAL CARGADA: VIGILANCIA HUMANA ACTIVA", "color: yellow; background: black; padding: 12px; font-weight: 1000; border: 2px solid yellow;");
+console.log("%c>>> EDU-LM V227 UNIVERSAL CARGADA: VIGILANCIA HUMANA ACTIVA", "color: yellow; background: black; padding: 12px; font-weight: 1000; border: 2px solid yellow;");
 const SUPABASE_URL = "https://eexgjaydpuioncenlsmv.supabase.co"; 
 const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVleGdqYXlkcHVpb25jZW5sc212Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQ4NTM0MDAsImV4cCI6MjEwMDQyOTQwMH0.vrJGn_Bg04OBBntL-w21-I27XuvO61HcUNrphMYYSlY";
 const SUPABASE_KEY = SUPABASE_ANON_KEY;
@@ -15563,6 +15563,26 @@ window._normalizarGrado = (gr) => {
     return m ? m[0] : '';
 };
 
+window._normalizarRubros = (rubros) => {
+    if (!Array.isArray(rubros)) return [];
+    return rubros.map(r => ({
+        normName: (r.name || '').trim().toLowerCase(),
+        cleanName: (r.name || '').trim(),
+        val: Number(r.val) || 0
+    })).sort((a, b) => a.normName.localeCompare(b.normName));
+};
+
+window._sonRubrosCoincidentes = (rubrosA, rubrosB) => {
+    if (!rubrosA || !rubrosB) return false;
+    const normA = window._normalizarRubros(rubrosA);
+    const normB = window._normalizarRubros(rubrosB);
+    if (normA.length !== normB.length) return false;
+    return normA.every((rA, idx) => {
+        const rB = normB[idx];
+        return rA.normName === rB.normName && Math.abs(rA.val - rB.val) < 0.01;
+    });
+};
+
 window._buscarMejorEncuadre = (encuadres, target) => {
     if(!encuadres || !Array.isArray(encuadres) || encuadres.length === 0 || !target) return null;
     const targetMat = (target.materia || '').trim();
@@ -15645,16 +15665,18 @@ window._renderOpcionesRubroModal = (encuadre, act) => {
     
     if(hasOfficialRubros) {
         rubrosHTML = encuadre.rubros.map((r) => {
-            const isCurrent = act.rubro_name === r.name;
-            const rValObj = JSON.stringify({ name: r.name, val: r.val }).replace(/"/g, '&quot;');
+            const cleanName = (r.name || '').trim();
+            const cleanVal = Number(r.val) || 0;
+            const isCurrent = (act.rubro_name || '').trim().toLowerCase() === cleanName.toLowerCase();
+            const rValObj = JSON.stringify({ name: cleanName, val: cleanVal }).replace(/"/g, '&quot;');
             return `
             <label style="display:flex; align-items:center; gap:12px; padding:12px; border:1px solid ${isCurrent ? 'var(--primary)' : 'var(--border)'}; border-radius:8px; cursor:pointer; background:${isCurrent ? '#f0f7ff' : '#fff'}; transition:all 0.15s ease;">
                 <input type="radio" name="optRubroAsignar" value="${rValObj}" ${isCurrent ? 'checked' : ''} onchange="window._toggleRubroSelectionMode('normal')" style="accent-color:var(--primary); transform:scale(1.15);">
                 <div style="flex:1;">
-                    <div style="font-weight:600; color:var(--text-main); font-size:0.95rem;">${r.name}</div>
-                    <div style="font-size:0.8rem; color:var(--text-muted);">Ponderación configurada: ${r.val}%</div>
+                    <div style="font-weight:600; color:var(--text-main); font-size:0.95rem;">${cleanName}</div>
+                    <div style="font-size:0.8rem; color:var(--text-muted);">Ponderación configurada: ${cleanVal}%</div>
                 </div>
-                <span class="badge" style="background:#fef3c7; color:#92400e; font-weight:700; font-size:0.85rem; padding:4px 8px; border-radius:6px;">${r.val}%</span>
+                <span class="badge" style="background:#fef3c7; color:#92400e; font-weight:700; font-size:0.85rem; padding:4px 8px; border-radius:6px;">${cleanVal}%</span>
             </label>`;
         }).join('');
     } else {
@@ -15664,7 +15686,8 @@ window._renderOpcionesRubroModal = (encuadre, act) => {
         </div>`;
     }
 
-    const isCustomCurrent = act.rubro_name && (!hasOfficialRubros || !encuadre.rubros.some(r => r.name === act.rubro_name));
+    const normActRubro = (act.rubro_name || '').trim().toLowerCase();
+    const isCustomCurrent = act.rubro_name && (!hasOfficialRubros || !encuadre.rubros.some(r => (r.name || '').trim().toLowerCase() === normActRubro));
     const isNoneCurrent = !act.rubro_name;
 
     rubrosHTML += `
@@ -16011,6 +16034,7 @@ window.guardarRubroActividad = async (actId) => {
                         .eq('maestro_id', act.maestro_id)
                         .eq('notificacion_enviada', true);
 
+                    const normRName = (rName || '').trim().toLowerCase();
                     for (const s of sibsMateria) {
                         const encS = window._buscarMejorEncuadre(encsMaestro, {
                             materia: s.materia,
@@ -16019,7 +16043,7 @@ window.guardarRubroActividad = async (actId) => {
                             trimestre: act.trimestre,
                             requireEnviado: true
                         });
-                        if (encS && encS.rubros && encS.rubros.some(r => r.name === rName)) {
+                        if (encS && encS.rubros && encS.rubros.some(r => (r.name || '').trim().toLowerCase() === normRName)) {
                             idsToUpdate.push(s.id);
                         }
                     }
@@ -16155,10 +16179,11 @@ window.confirmarCopiarActividad = async (actId) => {
                     trimestre: act.trimestre,
                     requireEnviado: true
                 });
-                const rMatch = encG?.rubros?.find(r => r.name === act.rubro_name);
+                const normActRubro = (act.rubro_name || '').trim().toLowerCase();
+                const rMatch = encG?.rubros?.find(r => (r.name || '').trim().toLowerCase() === normActRubro);
                 if (rMatch) {
-                    gRubroName = rMatch.name;
-                    gRubroPeso = rMatch.val;
+                    gRubroName = (rMatch.name || '').trim();
+                    gRubroPeso = Number(rMatch.val);
                 } else {
                     gRubroName = null;
                     gRubroPeso = null;
@@ -16299,10 +16324,11 @@ window.agregarActividad = async () => {
                    trimestre: trimVal,
                    requireEnviado: true
                });
-               const rubroEnGrupo = encGrupo?.rubros?.find(r => r.name === rubroName);
+               const normSelectedName = (rubroName || '').trim().toLowerCase();
+               const rubroEnGrupo = encGrupo?.rubros?.find(r => (r.name || '').trim().toLowerCase() === normSelectedName);
                if (rubroEnGrupo) {
-                   gRubroName = rubroEnGrupo.name;
-                   gRubroPeso = rubroEnGrupo.val;
+                   gRubroName = (rubroEnGrupo.name || '').trim();
+                   gRubroPeso = Number(rubroEnGrupo.val);
                } else {
                    gRubroName = null;
                    gRubroPeso = null;
@@ -23564,6 +23590,29 @@ window.cargarRubrosParaActividad = async () => {
             .eq('notificacion_enviada', true)
             .order('fecha_creacion', { ascending: false });
 
+        // Auto-sanitizar en segundo plano encuadres con espacios residuales en nombres de rubros o materia
+        if (Array.isArray(_encuadreArr)) {
+            _encuadreArr.forEach(enc => {
+                if (!enc || !enc.id || !Array.isArray(enc.rubros)) return;
+                let needsFix = false;
+                const cleanRubros = enc.rubros.map(r => {
+                    const tr = (r.name || '').trim();
+                    if (tr !== r.name) needsFix = true;
+                    return { ...r, name: tr, val: Number(r.val) || 0 };
+                });
+                const cleanMat = (enc.materia || '').trim();
+                if (cleanMat !== enc.materia) needsFix = true;
+                if (needsFix) {
+                    enc.rubros = cleanRubros;
+                    enc.materia = cleanMat;
+                    supabaseClient.from('encuadres').update({
+                        rubros: cleanRubros,
+                        materia: cleanMat
+                    }).eq('id', enc.id).then();
+                }
+            });
+        }
+
         if (isMultiGrupo) {
             let encuadresDeGrupos = [];
             for (const item of gruposList) {
@@ -23584,11 +23633,15 @@ window.cargarRubrosParaActividad = async () => {
 
             const todosTienenEncuadre = encuadresDeGrupos.every(e => e && e.rubros && e.rubros.length > 0);
             if (todosTienenEncuadre) {
-                const primerRubrosStr = JSON.stringify(encuadresDeGrupos[0].rubros.map(r => ({ name: r.name, val: r.val })));
-                const todosCoinciden = encuadresDeGrupos.every(e => JSON.stringify(e.rubros.map(r => ({ name: r.name, val: r.val }))) === primerRubrosStr);
+                const primerRubros = encuadresDeGrupos[0].rubros;
+                const todosCoinciden = encuadresDeGrupos.every(e => window._sonRubrosCoincidentes ? window._sonRubrosCoincidentes(e.rubros, primerRubros) : true);
                 if (todosCoinciden) {
-                    actR.innerHTML = '<option value="">No aplica (Extra)</option>' + encuadresDeGrupos[0].rubros.map(r => {
-                        return `<option value='${JSON.stringify({name:r.name, val:r.val})}'>${r.name} (${r.val}%)</option>`;
+                    const rubrosLimpios = (primerRubros || []).map(r => ({
+                        name: (r.name || '').trim(),
+                        val: Number(r.val) || 0
+                    }));
+                    actR.innerHTML = '<option value="">No aplica (Extra)</option>' + rubrosLimpios.map(r => {
+                        return `<option value='${JSON.stringify({name: r.name, val: r.val})}'>${r.name} (${r.val}%)</option>`;
                     }).join('');
                 } else {
                     actR.innerHTML = '<option value="">⚠️ Los grupos seleccionados tienen rubros distintos en su encuadre (Sin Rubro / Extra)</option>';
@@ -23606,8 +23659,12 @@ window.cargarRubrosParaActividad = async () => {
             });
 
             if(encuadre && encuadre.rubros && encuadre.rubros.length > 0) {
-                 actR.innerHTML = '<option value="">No aplica (Extra)</option>' + encuadre.rubros.map(r => {
-                     return `<option value='${JSON.stringify({name:r.name, val:r.val})}'>${r.name} (${r.val}%)</option>`;
+                 const rubrosLimpios = encuadre.rubros.map(r => ({
+                     name: (r.name || '').trim(),
+                     val: Number(r.val) || 0
+                 }));
+                 actR.innerHTML = '<option value="">No aplica (Extra)</option>' + rubrosLimpios.map(r => {
+                     return `<option value='${JSON.stringify({name: r.name, val: r.val})}'>${r.name} (${r.val}%)</option>`;
                  }).join('');
             } else {
                  actR.innerHTML = '<option value="">Sin encuadre oficial enviado para este grupo (No aplica / Extra)</option>';
@@ -23662,7 +23719,12 @@ window.cargarEncuadreActivo = async () => {
         const enc = (_encArr || []).find(e => window._matchMateriaEducativa ? window._matchMateriaEducativa(e.materia, mat) : (e.materia || '').trim().toLowerCase() === mat.toLowerCase()) || null;
         
         if (enc && enc.rubros) {
-            window.rubros = enc.rubros;
+            window.rubros = enc.rubros.map((r, idx) => ({
+                id: r.id || (Date.now() + idx),
+                name: (r.name || '').trim(),
+                val: Number(r.val) || 0,
+                color: r.color || 'var(--primary)'
+            }));
         } else {
             window.rubros = [
               {id: 1, name: 'Exámenes Generales', val: 40, color: 'var(--primary)'},
@@ -23887,12 +23949,20 @@ window.cargarEncuadreActivo = async () => {
         btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Enviando...';
 
         // 1. Guardar el encuadre
+        const cleanRubros = (window.rubros || []).map((r, idx) => ({
+            id: r.id || (Date.now() + idx),
+            name: (r.name || '').trim(),
+            val: Number(r.val) || 0,
+            color: r.color || 'var(--primary)'
+        }));
+        window.rubros = cleanRubros;
+
         const payloadEnc = {
             maestro_id: u.data.user.id,
             grupo_id: gid,
             target_grado: targetGrado,
-            materia: mat,
-            rubros: window.rubros,
+            materia: (mat || '').trim(),
+            rubros: cleanRubros,
             trimestre: window.currentTrimestre || 1,
             plantel_id: state.plantelId
         };
@@ -24261,7 +24331,8 @@ window.sincronizarAsistenciaActividadManual = async (grupoId, materia, trimestre
 
 window.agregarRubro = () => {
    let name = prompt('Nombre del nuevo rubro (Ej: Participación, Asistencia):');
-   if(name) {
+   if(name && name.trim()) {
+       name = name.trim();
        const color = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#14b8a6'][Math.floor(Math.random()*6)];
        window.rubros.push({id: Date.now(), name: name, val: 0, color: color});
        window.renderRubros();
@@ -31969,7 +32040,7 @@ window.actRenderGruposParaMateria = () => {
     }
     
     // Filtrar asignaciones de esta materia
-    const asigs = window.globalAsignacionesMaestro.filter(a => a.materia === matSel);
+    const asigs = window.globalAsignacionesMaestro.filter(a => window._matchMateriaEducativa ? window._matchMateriaEducativa(a.materia, matSel) : (a.materia || '').trim().toLowerCase() === (matSel || '').trim().toLowerCase());
     
     let options = '<option value="">-- Selecciona un Grupo --</option>';
     
@@ -31979,14 +32050,15 @@ window.actRenderGruposParaMateria = () => {
         // Para tecnología, las opciones ya son por grado
         asigs.forEach(a => {
             if(a.target_grado) {
-                options += `<option value="grado:${a.target_grado}|${a.materia}">Grado ${a.target_grado}</option>`;
+                const cMat = (a.materia || '').trim();
+                options += `<option value="grado:${a.target_grado}|${cMat}">Grado ${a.target_grado}</option>`;
             }
         });
     } else {
         // Grupos regulares
         if(asigs.length > 1) {
             // Opción para asignar a todos los grupos a la vez
-            const allVals = asigs.map(a => `${a.grupos.id}|${a.materia}`).join(',');
+            const allVals = asigs.map(a => `${a.grupos.id}|${(a.materia || '').trim()}`).join(',');
             options += `<option value="${allVals}">⭐ TODOS mis grupos de esta materia</option>`;
             
             // Opciones por grado
@@ -32007,7 +32079,7 @@ window.actRenderGruposParaMateria = () => {
                 gradosUnicos.sort().forEach(grado => {
                     const asigsGrado = gruposPorGrado[grado];
                     if(asigsGrado.length > 1) {
-                        const valsGrado = asigsGrado.map(a => `${a.grupos.id}|${a.materia}`).join(',');
+                        const valsGrado = asigsGrado.map(a => `${a.grupos.id}|${(a.materia || '').trim()}`).join(',');
                         options += `<option value="${valsGrado}">⭐ TODOS los grupos de ${grado}° de esta materia</option>`;
                     }
                 });
@@ -32016,7 +32088,7 @@ window.actRenderGruposParaMateria = () => {
         
         asigs.forEach(a => {
             if(a.grupos) {
-                options += `<option value="${a.grupos.id}|${a.materia}">${a.grupos.nombre}</option>`;
+                options += `<option value="${a.grupos.id}|${(a.materia || '').trim()}">${a.grupos.nombre}</option>`;
             }
         });
     }
