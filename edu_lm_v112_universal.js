@@ -7583,10 +7583,11 @@ window.guardarAtencionFoco = async () => {
         if(errSeg) throw new Error('Error en seguimientos_sociales: ' + errSeg.message);
         
         // 2. Guardar en Intervenciones Conducta (Para el expediente unificado)
+        const procTexto = proc + (esSuspension ? ` [SUSPENSIÓN ESCOLAR: del ${suspInicio} al ${suspFin} | Motivo: ${suspMotivo}]` : '');
         const { error: errInt } = await supabaseClient.from('intervenciones_conducta').insert([{
             alumno_id: aid,
             maestro_id: u.data.user.id,
-            procedimiento: proc + (esSuspension ? ` [SUSPENSIÓN: ${suspInicio} a ${suspFin}]` : ''),
+            procedimiento: procTexto,
             compromisos: comp,
             plantel_id: pId
         }]);
@@ -8120,6 +8121,18 @@ window.showAlumnoExpediente = async (idAlumno, context = 'completo') => {
             supabaseClient.from('fichas_salud').select('*').eq('alumno_id', id).order('fecha_envio', { ascending: false }).limit(1)
         ]);
 
+        let suspensiones = [];
+        try {
+            const { data: suspData } = await supabaseClient
+                .from('suspensiones_alumnos')
+                .select('*')
+                .eq('alumno_id', id)
+                .order('fecha_inicio', { ascending: false });
+            if (suspData) suspensiones = suspData;
+        } catch(eSusp) {
+            console.warn("Aviso al consultar suspensiones en expediente:", eSusp);
+        }
+
         const al = alRes.data;
         
         // Ordenamiento en JS para evitar crasheos si la DB renombró la columna de fecha
@@ -8222,6 +8235,30 @@ window.showAlumnoExpediente = async (idAlumno, context = 'completo') => {
                         }).join('') : '<p style="color:var(--text-muted); font-style:italic;">Sin reportes registrados.</p>'}
                     </div>
                 </section>
+
+                ${suspensiones.length > 0 ? `
+                <!-- Sección Suspensiones Escolares -->
+                <section>
+                    <h4 style="margin-bottom:12px; border-bottom:2px solid #b91c1c; padding-bottom:5px; color:#b91c1c;">
+                        <i class="fa-solid fa-user-slash"></i> Historial de Suspensiones Escolares
+                    </h4>
+                    <div style="display:flex; flex-direction:column; gap:10px;">
+                        ${suspensiones.map(s => {
+                            const fIni = s.fecha_inicio ? new Date(s.fecha_inicio).toLocaleDateString() : '';
+                            const fFin = s.fecha_fin ? new Date(s.fecha_fin).toLocaleDateString() : '';
+                            return `
+                            <div style="font-size:0.85rem; background:#fff1f2; border:1px solid #fecdd3; border-radius:8px; padding:10px; border-left:4px solid #b91c1c;">
+                                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
+                                    <b style="color:#9f1239;"><i class="fa-solid fa-ban"></i> Suspensión Escolar (${fIni} al ${fFin})</b>
+                                    <small style="color:var(--text-muted);">${s.creado_en ? new Date(s.creado_en).toLocaleDateString() : ''}</small>
+                                </div>
+                                <p style="margin:4px 0; color:#881337;"><strong>Motivo:</strong> ${s.motivo || 'No especificado'}</p>
+                            </div>
+                            `;
+                        }).join('')}
+                    </div>
+                </section>
+                ` : ''}
 
                 <!-- Sección Acuerdos -->
                 <section>
@@ -8377,6 +8414,16 @@ window.imprimirExpediente = async (idAlumno, modo = 'completo') => {
             supabaseClient.from('fichas_salud').select('*').eq('alumno_id', id).order('fecha_envio', { ascending: false }).limit(1)
         ]);
 
+        let suspensiones = [];
+        try {
+            const { data: suspData } = await supabaseClient
+                .from('suspensiones_alumnos')
+                .select('*')
+                .eq('alumno_id', id)
+                .order('fecha_inicio', { ascending: false });
+            if (suspData) suspensiones = suspData;
+        } catch(eSusp) {}
+
         const al = alRes.data;
         const reps = (repsRes.data || []).sort((a,b) => new Date(b.creado_en || b.fecha || b.created_at) - new Date(a.creado_en || a.fecha || a.created_at));
         const intervs = (intervsRes.data || []).sort((a,b) => new Date(b.creado_en || b.fecha || b.created_at) - new Date(a.creado_en || a.fecha || a.created_at));
@@ -8410,6 +8457,20 @@ window.imprimirExpediente = async (idAlumno, modo = 'completo') => {
                 <p><strong>Compromisos:</strong> ${i.compromisos}</p>
             </div>
         `).join('') : '<p class="text-muted">Sin intervenciones registradas.</p>';
+
+        let suspHtml = suspensiones.length > 0 ? suspensiones.map(s => {
+            const fIni = s.fecha_inicio ? new Date(s.fecha_inicio).toLocaleDateString() : '';
+            const fFin = s.fecha_fin ? new Date(s.fecha_fin).toLocaleDateString() : '';
+            return `
+            <div class="item-box grave" style="background:#fff1f2; border-left:4px solid #b91c1c;">
+                <div class="item-header">
+                    <strong style="color:#9f1239;">Suspensión Escolar (${fIni} al ${fFin})</strong>
+                    <span>${s.creado_en ? new Date(s.creado_en).toLocaleDateString() : ''}</span>
+                </div>
+                <p><strong>Motivo de la sanción:</strong> ${s.motivo || 'No especificado'}</p>
+            </div>
+            `;
+        }).join('') : '<p class="text-muted">Sin suspensiones registradas.</p>';
 
         printWindow.document.write(`
             <html>
@@ -8491,6 +8552,11 @@ window.imprimirExpediente = async (idAlumno, modo = 'completo') => {
                     ${(modo === 'completo' || modo === 'conducta') ? `
                         <div class="section-title">Historial de Conducta y Reportes</div>
                         ${repsHtml}
+
+                        ${suspensiones.length > 0 ? `
+                        <div class="section-title" style="color:#b91c1c; border-bottom-color:#fca5a5;">Suspensiones Escolares</div>
+                        ${suspHtml}
+                        ` : ''}
 
                         <div class="section-title">Intervenciones y Compromisos</div>
                         ${intervsHtml}
