@@ -19699,7 +19699,7 @@ window.cargarBoletasGrupo = async (forzarRecalculo = false) => {
         const materiaClean = materiaText.trim();
         const aluIds = alumnos.map(a => a.id);
         let histQuery = supabaseClient.from('calificaciones')
-            .select('alumno_id, calificacion, trimestre, materia_nombre')
+            .select('alumno_id, calificacion, trimestre, materia_nombre, fecha')
             .eq('plantel_id', state.plantelId)
             .in('alumno_id', aluIds);
             
@@ -19750,7 +19750,7 @@ window.cargarBoletasGrupo = async (forzarRecalculo = false) => {
         // Consultar solicitudes de modificación o prórroga (pendientes o aprobadas)
         const { data: reqs } = await supabaseClient
             .from('autorizaciones_movimientos')
-            .select('id, payload_json, tipo_accion, estado')
+            .select('id, payload_json, tipo_accion, estado, fecha_resolucion, creado_en')
             .eq('plantel_id', state.plantelId)
             .in('tipo_accion', ['MODIFICACION_CALIFICACIONES', 'PRORROGA_CALIFICACIONES'])
             .in('estado', ['pendiente', 'aprobada']);
@@ -19760,17 +19760,48 @@ window.cargarBoletasGrupo = async (forzarRecalculo = false) => {
         if (reqs && reqs.length > 0) {
             tieneSolicitudPendiente = reqs.some(r => 
                 r.estado === 'pendiente' &&
-                r.payload_json?.materia === materiaClean && 
-                r.payload_json?.trimestre === currentTrim && 
-                (r.payload_json?.grupo_id === gid || r.payload_json?.grupo_id === selectVal)
+                (r.payload_json?.materia || '').trim().toLowerCase() === materiaClean.toLowerCase() && 
+                parseInt(r.payload_json?.trimestre) === currentTrim && 
+                (r.payload_json?.grupo_id === gid || r.payload_json?.grupo_id === selectVal || (r.payload_json?.grupo_id || '').startsWith(gid))
             );
-            // La solicitud aprobada otorga permiso de edición para capturar, modificar y sellar
-            tieneSolicitudAprobada = reqs.some(r => 
+
+            // Una solicitud aprobada otorga permiso temporal de una sola vez para modificar y sellar.
+            // Si el docente ya selló las calificaciones después de la fecha en que se aprobó la solicitud (o si ya se consumió en la sesión),
+            // el permiso queda automáticamente consumido y el periodo vuelve a bloquearse.
+            const autAprobada = reqs.find(r => 
                 r.estado === 'aprobada' &&
                 (r.payload_json?.materia || '').trim().toLowerCase() === materiaClean.toLowerCase() && 
                 parseInt(r.payload_json?.trimestre) === currentTrim && 
                 (r.payload_json?.grupo_id === gid || r.payload_json?.grupo_id === selectVal || (r.payload_json?.grupo_id || '').startsWith(gid))
             );
+
+            if (autAprobada) {
+                const keyConsumo = `aut_consumida_${materiaClean}_${currentTrim}_${gid || targetGrado || ''}`;
+                let consumidaEnSesion = false;
+                try {
+                    const tConsumida = parseInt(sessionStorage.getItem(keyConsumo) || '0', 10);
+                    const tResolucion = autAprobada.fecha_resolucion ? new Date(autAprobada.fecha_resolucion).getTime() : 0;
+                    consumidaEnSesion = (tConsumida > 0 && tConsumida >= tResolucion);
+                } catch(eStorage) {}
+
+                // Comprobar si las calificaciones en historial ya fueron asentadas/selladas después de la aprobación
+                let yaSelladoDespues = false;
+                if (autAprobada.fecha_resolucion && historial && historial.length > 0) {
+                    const tResolucion = new Date(autAprobada.fecha_resolucion).getTime();
+                    // Si alguna calificación fue asentada con fecha posterior a la aprobación (+ 2 segundos de tolerancia), ya se consumió
+                    yaSelladoDespues = historial.some(h => {
+                        if (!h.fecha) return false;
+                        const tCalif = new Date(h.fecha).getTime();
+                        return tCalif > (tResolucion + 2000);
+                    });
+                }
+
+                if (consumidaEnSesion || yaSelladoDespues) {
+                    tieneSolicitudAprobada = false;
+                } else {
+                    tieneSolicitudAprobada = true;
+                }
+            }
         }
         
         // 4. Fetch Actividades y Evaluaciones
@@ -20053,6 +20084,7 @@ window.sellarYEnviarCalificaciones = async () => {
         let reprobados = []; // Para notificaciones automáticas en modo final
         const materiaClean = materiaText.trim();
 
+        const nowIso = new Date().toISOString();
         inputs.forEach(inp => {
             let calif = parseFloat(inp.value) || 0;
             
@@ -20079,6 +20111,7 @@ window.sellarYEnviarCalificaciones = async () => {
                 maestro_id: actUserId,
                 trimestre: parseInt(trim),
                 calificacion: calif,
+                fecha: nowIso,
                 plantel_id: state.plantelId
             });
 
@@ -20092,10 +20125,15 @@ window.sellarYEnviarCalificaciones = async () => {
         if(error) throw error;
         
         // Consumir / concluir cualquier permiso de prórroga o modificación aprobado previamente para esta materia/trimestre
+        const keyConsumo = `aut_consumida_${materiaClean}_${trim}_${gid || targetGrado || ''}`;
+        try {
+            sessionStorage.setItem(keyConsumo, Date.now().toString());
+        } catch(eStorage) {}
+
         try {
             await supabaseClient
                 .from('autorizaciones_movimientos')
-                .update({ estado: 'completada', fecha_resolucion: new Date().toISOString() })
+                .update({ estado: 'completada', fecha_resolucion: nowIso })
                 .eq('plantel_id', state.plantelId)
                 .in('tipo_accion', ['MODIFICACION_CALIFICACIONES', 'PRORROGA_CALIFICACIONES'])
                 .eq('estado', 'aprobada');
