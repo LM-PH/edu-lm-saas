@@ -19232,6 +19232,8 @@ window.cargarAlumnosLista = async () => {
         }
         
         tbody.innerHTML = htmlRows;
+    } catch(err) {
+        console.error("Error al cargar seguimiento:", err);
         const errMsg = err?.message || String(err);
         tbody.innerHTML = `<tr><td colspan="4" style="text-align:center; padding: 20px; color:var(--danger)">Error al cargar seguimiento: ${errMsg}</td></tr>`;
     }
