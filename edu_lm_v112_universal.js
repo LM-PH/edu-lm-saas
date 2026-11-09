@@ -18995,8 +18995,16 @@ window.cargarAlumnosLista = async () => {
                 if (val === null || val === undefined || isNaN(val)) return 0;
                 const num = parseFloat(val);
                 if (num <= 0) return 0;
-                if (num < 6.0) return parseFloat(num.toFixed(1)); // Calificación real reprobatoria sin forzar a 5
-                return Math.round(num); 
+                // Normatividad escolar SEP: Solamente las aprobatorias (>= 6.0) suben desde 0.5. Las reprobatorias (< 6.0) NUNCA suben.
+                if (num < 6.0) {
+                    return Math.floor(num); // 5.9 -> 5, 5.5 -> 5, 4.04 -> 4
+                }
+                const parteEntera = Math.floor(num);
+                const parteDecimal = parseFloat((num - parteEntera).toFixed(4));
+                if (parteDecimal >= 0.5) {
+                    return Math.min(10, parteEntera + 1); // 6.5 -> 7, 7.5 -> 8, 8.87 -> 9
+                }
+                return parteEntera; // 6.4 -> 6, 7.44 -> 7, 8.07 -> 8
             };
 
             const fmtGrade = (val) => {
@@ -19857,15 +19865,20 @@ window.cargarBoletasGrupo = async (forzarRecalculo = false) => {
                 currentSettledVal = historial?.find(h => h.alumno_id === al.id)?.calificacion;
             }
             
-            // Normatividad escolar SEP: cualquier calificación menor a 6.0 (ej. 5.9, 5.8) es reprobatoria y NO se redondea a 6.
+            // Normatividad escolar SEP: Solamente las calificaciones aprobatorias (>= 6.0) suben a partir de 0.5 en adelante. Las reprobatorias (< 6.0) NUNCA suben.
             const redondearCalificacionSep = (val) => {
                 if (val === null || val === undefined || isNaN(val)) return 0;
                 const num = parseFloat(val);
                 if (num <= 0) return 0;
                 if (num < 6.0) {
-                    return parseFloat(num.toFixed(1)); // Calificación real reprobatoria sin forzar a 5 (ej. 3.3)
+                    return Math.floor(num); // Reprobatoria: NUNCA sube a 6 (ej. 5.9 -> 5, 5.5 -> 5, 4.04 -> 4)
                 }
-                return Math.round(num); // Ej. 6.5 -> 7, 7.5 -> 8 (Aprobatorio)
+                const parteEntera = Math.floor(num);
+                const parteDecimal = parseFloat((num - parteEntera).toFixed(4));
+                if (parteDecimal >= 0.5) {
+                    return Math.min(10, parteEntera + 1); // Ej. 6.5 -> 7, 7.5 -> 8, 8.87 -> 9 (Aprobatorio)
+                }
+                return parteEntera; // Ej. 6.4 -> 6, 7.44 -> 7, 8.07 -> 8
             };
             window.redondearCalificacionSep = redondearCalificacionSep;
 
@@ -20043,8 +20056,19 @@ window.sellarYEnviarCalificaciones = async () => {
         inputs.forEach(inp => {
             let calif = parseFloat(inp.value) || 0;
             
-            // Calificación real asignada por el docente (ej. 3.3). En boletas oficiales SEP se reflejará el 5 reglamentario.
-            calif = parseFloat(calif.toFixed(1));
+            // Normatividad escolar SEP: Calificación oficial en números enteros.
+            // Aprobatorias (>= 6.0) suben al entero superior si decimal >= 0.5. Reprobatorias (< 6.0) NUNCA suben.
+            if (typeof window.redondearCalificacionSep === 'function') {
+                calif = window.redondearCalificacionSep(calif);
+            } else {
+                const num = parseFloat(calif);
+                if (num < 6.0) {
+                    calif = Math.floor(num);
+                } else {
+                    const entero = Math.floor(num);
+                    calif = ((num - entero) >= 0.5) ? Math.min(10, entero + 1) : entero;
+                }
+            }
             
             const alId = inp.getAttribute('data-alumno');
             
