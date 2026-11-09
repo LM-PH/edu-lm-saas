@@ -3614,7 +3614,7 @@ function renderMaestroActividades() {
          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
             <h3 style="margin:0;">Gestión de Actividades</h3>
             <div class="tabs" style="display:flex; background:var(--page-bg); padding:4px; border-radius:8px; gap:4px; align-items:center; flex-wrap:wrap;">
-                <select id="filtroTrimestreAct" class="form-select" style="margin:0; padding:4px 8px; font-size:0.8rem; width:120px;" onchange="window.loadActividadesMaestro()">
+                <select id="filtroTrimestreAct" class="form-select" style="margin:0; padding:4px 8px; font-size:0.8rem; width:120px;" onchange="window._trimestreActividadesManualSeleccionado = true; window.loadActividadesMaestro()">
                     <option value="1">1° Trimestre</option>
                     <option value="2">2° Trimestre</option>
                     <option value="3">3° Trimestre</option>
@@ -3822,7 +3822,7 @@ function renderMaestroCalificaciones() {
         </div>
         <div style="text-align:right;">
           <span style="font-size:0.8rem; color:var(--danger); display:block; margin-bottom:8px; font-weight:bold;">⚠️ Cierre del Sistema en breve</span>
-          <button class="btn btn-outline" style="border-color:var(--success); color:var(--success);" onclick="window.cargarBoletasGrupo()">
+          <button class="btn btn-outline" style="border-color:var(--success); color:var(--success);" onclick="window.cargarBoletasGrupo(true)">
              <i class="fa-solid fa-arrows-rotate"></i> Recalcular de Seguimiento
           </button>
         </div>
@@ -15328,6 +15328,16 @@ window.loadActividadesMaestro = async () => {
                 if (fOpt2) fOpt2.text = t2Hab ? '2° Trimestre' : '2° Trimestre (Bloqueado)';
                 if (fOpt3) fOpt3.text = t3Hab ? '3° Trimestre' : '3° Trimestre (Bloqueado)';
             }
+            // Auto-posicionar en 2° Trimestre si T2 ya está habilitado por envío previo y no se seleccionó manualmente
+            if (t2Hab && !window._trimestreActividadesManualSeleccionado) {
+                if (selFiltroTrim && selFiltroTrim.value === '1') {
+                    selFiltroTrim.value = '2';
+                }
+                if (selActTrim && selActTrim.value === '1') {
+                    selActTrim.value = '2';
+                    if (window.cargarRubrosParaActividad) window.cargarRubrosParaActividad();
+                }
+            }
         }
 
         // Fetch actividades del maestro filtradas por pestaña y trimestre
@@ -17931,23 +17941,31 @@ window._resolverActividadesYEvaluacionesGrupo = async ({
             console.warn("Error en actsQuery de _resolverActividadesYEvaluacionesGrupo:", e);
         }
 
-        // 2. BUSCAR EVALUACIONES DE ESTOS ALUMNOS (ordenadas para retener las más recientes)
+        // 2. BUSCAR EVALUACIONES DE ESTOS ALUMNOS (paginadas para retener todas sin límite de 1000)
         let studentEvals = [];
         if (alumnoIds.length > 0) {
             try {
                 const chunkSize = 100;
                 for (let i = 0; i < alumnoIds.length; i += chunkSize) {
                     const chunk = alumnoIds.slice(i, i + chunkSize);
-                    let qEvals = supabaseClient
-                        .from('evaluaciones_actividades')
-                        .select('actividad_id, alumno_id, calificacion, fecha_evaluacion')
-                        .in('alumno_id', chunk);
-                    if (activePid) qEvals = qEvals.eq('plantel_id', activePid);
-                    const { data: sEvals } = await qEvals
-                        .order('fecha_evaluacion', { ascending: false })
-                        .limit(4000);
-                    if (sEvals && sEvals.length > 0) {
-                        studentEvals.push(...sEvals);
+                    let offset = 0;
+                    const bSize = 1000;
+                    while (true) {
+                        let qEvals = supabaseClient
+                            .from('evaluaciones_actividades')
+                            .select('actividad_id, alumno_id, calificacion, fecha_evaluacion')
+                            .in('alumno_id', chunk);
+                        if (activePid) qEvals = qEvals.eq('plantel_id', activePid);
+                        const { data: sEvals } = await qEvals
+                            .order('fecha_evaluacion', { ascending: false })
+                            .range(offset, offset + bSize - 1);
+                        if (sEvals && sEvals.length > 0) {
+                            studentEvals.push(...sEvals);
+                            if (sEvals.length < bSize) break;
+                            offset += bSize;
+                        } else {
+                            break;
+                        }
                     }
                 }
             } catch(eEvals) {
@@ -17956,12 +17974,14 @@ window._resolverActividadesYEvaluacionesGrupo = async ({
         }
 
         // Reconciliación directa para actividad de Disciplina de la Profra. Felicia (b7f24be8-16f2-4759-8ad1-85129360bc16):
-        // Garantiza que las 43 evaluaciones registradas estén siempre disponibles para Español en su grupo 1°C
+        // Aplica EXCLUSIVAMENTE para el 1° Trimestre en su grupo 1°C (nunca contaminar 2° o 3° Trimestre)
+        const trimIntCurrent = isModoFinal ? 1 : parseInt(currentTrim || 1, 10);
+        const esPrimerTrimestre = (trimIntCurrent === 1 || isModoFinal);
         const esGrupoFelicia1C = (gid === '66b30955-29f1-4b4c-ae09-932d674d001c');
         const tieneEvalsB7 = studentEvals.some(se => se.actividad_id === 'b7f24be8-16f2-4759-8ad1-85129360bc16');
         const tieneActDisciplina = rawActs.some(a => norm(a.titulo).includes('discipli') || norm(a.rubro_name).includes('discipli'));
 
-        if (matchMateria('Español', materia) && (esGrupoFelicia1C || tieneEvalsB7 || tieneActDisciplina)) {
+        if (esPrimerTrimestre && matchMateria('Español', materia) && (esGrupoFelicia1C || tieneEvalsB7 || tieneActDisciplina)) {
             try {
                 let qB7 = supabaseClient
                     .from('evaluaciones_actividades')
@@ -17981,7 +18001,7 @@ window._resolverActividadesYEvaluacionesGrupo = async ({
                             titulo: 'Disciplina',
                             rubro_name: 'Disciplina',
                             rubro_peso: 20,
-                            trimestre: currentTrim || 1,
+                            trimestre: 1,
                             materia: materia || 'Español',
                             grupo_id: gid || '66b30955-29f1-4b4c-ae09-932d674d001c',
                             maestro_id: currentUserId || '10c724ae-6851-46b1-8717-b1b32b016c63'
@@ -18171,83 +18191,93 @@ window._resolverActividadesYEvaluacionesGrupo = async ({
         let evals = studentEvals.filter(e => actIds.includes(e.actividad_id));
 
         // Reconciliación especial para Disciplina:
-        // Asegurar que cualquier actividad de disciplina en la tabla tenga todas las evaluaciones de b7f24be8
-        acts.forEach(act => {
-            const isDiscipli = norm(act.titulo).includes('discipli') || norm(act.rubro_name).includes('discipli');
-            if (isDiscipli) {
-                if (!act.rubro_name || !act.rubro_peso) {
-                    act.rubro_name = 'Disciplina';
-                    act.rubro_peso = 20;
-                }
-                if (act.titulo !== 'Disciplina') {
-                    act.titulo = 'Disciplina';
-                }
+        // Asegurar que cualquier actividad de disciplina en la tabla tenga todas las evaluaciones de b7f24be8 (exclusivo para 1° Trimestre)
+        if (esPrimerTrimestre) {
+            acts.forEach(act => {
+                const isDiscipli = norm(act.titulo).includes('discipli') || norm(act.rubro_name).includes('discipli');
+                if (isDiscipli) {
+                    if (!act.rubro_name || !act.rubro_peso) {
+                        act.rubro_name = 'Disciplina';
+                        act.rubro_peso = 20;
+                    }
+                    if (act.titulo !== 'Disciplina') {
+                        act.titulo = 'Disciplina';
+                    }
 
-                const discEvals = studentEvals.filter(e => 
-                    e.actividad_id === 'b7f24be8-16f2-4759-8ad1-85129360bc16' || 
-                    e.actividad_id === act.id ||
-                    (rawActs.find(ra => ra.id === e.actividad_id && (norm(ra.titulo).includes('discipli') || norm(ra.rubro_name).includes('discipli'))))
-                );
+                    const discEvals = studentEvals.filter(e => 
+                        e.actividad_id === 'b7f24be8-16f2-4759-8ad1-85129360bc16' || 
+                        e.actividad_id === act.id ||
+                        (rawActs.find(ra => ra.id === e.actividad_id && (norm(ra.titulo).includes('discipli') || norm(ra.rubro_name).includes('discipli'))))
+                    );
 
-                if (discEvals.length > 0) {
-                    discEvals.forEach(de => {
-                        const existingIdx = evals.findIndex(e => e.alumno_id === de.alumno_id && e.actividad_id === act.id);
-                        if (existingIdx >= 0) {
-                            evals[existingIdx].calificacion = de.calificacion;
-                        } else {
-                            evals.push({
+                    if (discEvals.length > 0) {
+                        discEvals.forEach(de => {
+                            const existingIdx = evals.findIndex(e => e.alumno_id === de.alumno_id && e.actividad_id === act.id);
+                            if (existingIdx >= 0) {
+                                evals[existingIdx].calificacion = de.calificacion;
+                            } else {
+                                evals.push({
+                                    actividad_id: act.id,
+                                    alumno_id: de.alumno_id,
+                                    calificacion: de.calificacion,
+                                    fecha_evaluacion: de.fecha_evaluacion
+                                });
+                            }
+                        });
+
+                        // Si act.id es diferente de b7f24be8, sincronizar en Supabase permanentemente de forma segura
+                        if (act.id !== 'b7f24be8-16f2-4759-8ad1-85129360bc16') {
+                            const toUpsert = discEvals.map(de => ({
                                 actividad_id: act.id,
                                 alumno_id: de.alumno_id,
                                 calificacion: de.calificacion,
-                                fecha_evaluacion: de.fecha_evaluacion
-                            });
+                                fecha_evaluacion: de.fecha_evaluacion || new Date().toISOString(),
+                                plantel_id: pId
+                            }));
+                            safeBgQuery(
+                                supabaseClient.from('evaluaciones_actividades')
+                                    .upsert(toUpsert, { onConflict: 'actividad_id,alumno_id' })
+                            );
                         }
-                    });
-
-                    // Si act.id es diferente de b7f24be8, sincronizar en Supabase permanentemente de forma segura
-                    if (act.id !== 'b7f24be8-16f2-4759-8ad1-85129360bc16') {
-                        const toUpsert = discEvals.map(de => ({
-                            actividad_id: act.id,
-                            alumno_id: de.alumno_id,
-                            calificacion: de.calificacion,
-                            fecha_evaluacion: de.fecha_evaluacion || new Date().toISOString(),
-                            plantel_id: pId
-                        }));
-                        safeBgQuery(
-                            supabaseClient.from('evaluaciones_actividades')
-                                .upsert(toUpsert, { onConflict: 'actividad_id,alumno_id' })
-                        );
                     }
                 }
-            }
-        });
+            });
+        }
 
         // Consulta directa para las actividades consolidadas de esta materia.
-        // Garantiza que el 100% de las calificaciones (incluidas las recién evaluadas desde Gestión de Actividades o QR)
-        // se carguen de inmediato sin depender del corte de filas.
+        // Garantiza que el 100% de las calificaciones se carguen de inmediato sin depender de cortes de filas.
         if (actIds.length > 0) {
             try {
                 const chunkSize = 50;
                 for (let i = 0; i < actIds.length; i += chunkSize) {
                     const chunk = actIds.slice(i, i + chunkSize);
-                    const { data: directEvals } = await supabaseClient
-                        .from('evaluaciones_actividades')
-                        .select('alumno_id, actividad_id, calificacion, fecha_evaluacion')
-                        .in('actividad_id', chunk)
-                        .limit(5000);
-                    if (directEvals && directEvals.length > 0) {
-                        directEvals.forEach(de => {
-                            const existingIdx = evals.findIndex(e => e.actividad_id === de.actividad_id && e.alumno_id === de.alumno_id);
-                            if (existingIdx >= 0) {
-                                // Actualizar con la calificación válida de la consulta directa
-                                if (de.calificacion !== undefined && de.calificacion !== null && de.calificacion !== '') {
-                                    evals[existingIdx].calificacion = de.calificacion;
-                                    if (de.fecha_evaluacion) evals[existingIdx].fecha_evaluacion = de.fecha_evaluacion;
+                    let offset = 0;
+                    const bSize = 1000;
+                    while (true) {
+                        let qDir = supabaseClient
+                            .from('evaluaciones_actividades')
+                            .select('alumno_id, actividad_id, calificacion, fecha_evaluacion')
+                            .in('actividad_id', chunk);
+                        if (alumnoIds.length > 0) qDir = qDir.in('alumno_id', alumnoIds);
+                        if (activePid) qDir = qDir.eq('plantel_id', activePid);
+                        const { data: directEvals } = await qDir.range(offset, offset + bSize - 1);
+                        if (directEvals && directEvals.length > 0) {
+                            directEvals.forEach(de => {
+                                const existingIdx = evals.findIndex(e => e.actividad_id === de.actividad_id && e.alumno_id === de.alumno_id);
+                                if (existingIdx >= 0) {
+                                    if (de.calificacion !== undefined && de.calificacion !== null && de.calificacion !== '') {
+                                        evals[existingIdx].calificacion = de.calificacion;
+                                        if (de.fecha_evaluacion) evals[existingIdx].fecha_evaluacion = de.fecha_evaluacion;
+                                    }
+                                } else {
+                                    evals.push(de);
                                 }
-                            } else {
-                                evals.push(de);
-                            }
-                        });
+                            });
+                            if (directEvals.length < bSize) break;
+                            offset += bSize;
+                        } else {
+                            break;
+                        }
                     }
                 }
             } catch(eDir) {
@@ -19202,8 +19232,6 @@ window.cargarAlumnosLista = async () => {
         }
         
         tbody.innerHTML = htmlRows;
-    } catch(err) {
-        console.error("Error al cargar seguimiento:", err);
         const errMsg = err?.message || String(err);
         tbody.innerHTML = `<tr><td colspan="4" style="text-align:center; padding: 20px; color:var(--danger)">Error al cargar seguimiento: ${errMsg}</td></tr>`;
     }
@@ -19610,7 +19638,7 @@ window.loadGruposCalificacionesCarga = async () => {
     }
 };
 
-window.cargarBoletasGrupo = async () => {
+window.cargarBoletasGrupo = async (forzarRecalculo = false) => {
     const tbody = document.getElementById('tablaBoletasCuerpo');
     const cabecera = document.getElementById('tablaBoletasCabecera');
     const selectVal = document.getElementById('capturaCalificacionesGrupo').value;
@@ -19840,7 +19868,10 @@ window.cargarBoletasGrupo = async () => {
             window.redondearCalificacionSep = redondearCalificacionSep;
 
             const promRounded = redondearCalificacionSep(promFinalNum);
-            const displayVal = currentSettledVal !== undefined && currentSettledVal !== null ? currentSettledVal : promRounded;
+            let displayVal = currentSettledVal !== undefined && currentSettledVal !== null ? currentSettledVal : promRounded;
+            if (forzarRecalculo) {
+                displayVal = promRounded;
+            }
             
             // Bloqueo de inputs: si la solicitud fue APROBADA por el Director, se DESBLOQUEAN (isInputLocked = false).
             const isInputLocked = !tieneSolicitudAprobada && (tieneCalificacionesAsentadas || (esPeriodoExpiradoOBloqueado && !tieneSolicitudPendiente));
@@ -19871,6 +19902,10 @@ window.cargarBoletasGrupo = async () => {
         }
         
         tbody.innerHTML = htmlRows;
+
+        if (forzarRecalculo && window.showToast) {
+            window.showToast("Promedios recalculados desde el seguimiento con redondeo SEP", "success");
+        }
 
         // Actualizar contenedor del botón según estado de bloqueo
         const contenedorBoton = document.getElementById('contenedorBotonEnviarBoleta');
