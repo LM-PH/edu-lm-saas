@@ -5,7 +5,7 @@ const CONFIG = {
 };
 
 // Supabase Configuration
-console.log("%c>>> EDU-LM V228 UNIVERSAL CARGADA: VIGILANCIA HUMANA ACTIVA", "color: yellow; background: black; padding: 12px; font-weight: 1000; border: 2px solid yellow;");
+console.log("%c>>> EDU-LM V229 UNIVERSAL CARGADA: VIGILANCIA HUMANA ACTIVA", "color: yellow; background: black; padding: 12px; font-weight: 1000; border: 2px solid yellow;");
 const SUPABASE_URL = "https://eexgjaydpuioncenlsmv.supabase.co"; 
 const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVleGdqYXlkcHVpb25jZW5sc212Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQ4NTM0MDAsImV4cCI6MjEwMDQyOTQwMH0.vrJGn_Bg04OBBntL-w21-I27XuvO61HcUNrphMYYSlY";
 const SUPABASE_KEY = SUPABASE_ANON_KEY;
@@ -17078,6 +17078,7 @@ window.actualizarTabsTrimestresListas = async () => {
         const btns = document.querySelectorAll('#tabsTrimestresListas .t-btn');
         btns.forEach(b => {
             const txt = b.innerText || '';
+            const isActive = b.classList.contains('active');
             if (txt.includes('2° T')) {
                 if (!t2Hab) {
                     b.innerHTML = '<i class="fa-solid fa-lock" style="font-size:0.7rem; margin-right:3px; opacity:0.6;"></i> 2° T';
@@ -17098,6 +17099,12 @@ window.actualizarTabsTrimestresListas = async () => {
                     b.style.opacity = '1';
                     b.removeAttribute('title');
                 }
+            }
+            if (isActive) {
+                b.classList.add('active');
+                b.style.background = 'white';
+                b.style.border = '1px solid var(--border)';
+                b.style.color = 'var(--text-main)';
             }
         });
     }
@@ -17179,6 +17186,7 @@ window.loadListasMaestro = async (retryCount = 0) => {
 };
 
 window.cambiarTrimestreLista = async (trim, btn) => {
+    window._trimestreListaManualSeleccionado = true;
     if (typeof trim === 'number' && trim > 1 && window.isTrimestreHabilitado) {
         const rawVal = document.getElementById('listaMaestroGrupo')?.value || '';
         const parts = rawVal.includes('::') ? rawVal.split('::') : rawVal.split('|');
@@ -17651,18 +17659,30 @@ window.isTrimestreHabilitado = async (trimestreNum, grupoId = null, materia = nu
         materia = null;
     }
 
+    let gid = null;
+    let targetGrado = null;
+    let isTec = false;
+
     // Si grupoId contiene el formato compuesto id|materia o id::materia
-    if (typeof grupoId === "string") {
-        if (grupoId.includes("::")) {
-            const parts = grupoId.split("::");
-            grupoId = parts[0].trim();
+    if (typeof grupoId === "string" && grupoId.trim()) {
+        let rawG = grupoId.trim();
+        if (rawG.includes("::")) {
+            const parts = rawG.split("::");
+            rawG = parts[0].trim();
             if (!materia && parts[1]) materia = parts[1].trim();
-        } else if (grupoId.includes("|")) {
-            const parts = grupoId.split("|");
-            grupoId = parts[0].trim();
+        } else if (rawG.includes("|")) {
+            const parts = rawG.split("|");
+            rawG = parts[0].trim();
             if (!materia && parts[1]) materia = parts[1].trim();
         }
+        if (rawG.startsWith("grado:")) {
+            isTec = true;
+            targetGrado = rawG.replace("grado:", "").trim();
+        } else if (rawG) {
+            gid = rawG;
+        }
     }
+    const materiaClean = materia ? materia.trim() : null;
 
     try {
         // A) Respaldo: si el usuario es directivo/admin/master, siempre tiene acceso total
@@ -17704,16 +17724,26 @@ window.isTrimestreHabilitado = async (trimestreNum, grupoId = null, materia = nu
             let alumnoIds = [];
             if (isTec && targetGrado) {
                 const gSin = targetGrado.replace(/[°\s]/g, '');
-                let qAl = supabaseClient.from('alumnos').select('id, taller').eq('plantel_id', activePid).or(`grado.eq.${gSin},grado.eq.${gSin}°,grado.ilike.%${gSin}%`);
-                const { data: alms } = await qAl.limit(500);
+                let qAl = supabaseClient.from('alumnos').select('id, taller').or(`grado.eq.${gSin},grado.eq.${gSin}°,grado.ilike.%${gSin}%`);
+                if (activePid) qAl = qAl.eq('plantel_id', activePid);
+                let { data: alms } = await qAl.limit(500);
+                if ((!alms || alms.length === 0) && activePid) {
+                    const { data: almsFallback } = await supabaseClient.from('alumnos').select('id, taller').or(`grado.eq.${gSin},grado.eq.${gSin}°,grado.ilike.%${gSin}%`).limit(500);
+                    alms = almsFallback;
+                }
                 let filteredAlms = alms || [];
                 if (materiaClean && window._filtrarAlumnosPorTallerYGrado) {
                     filteredAlms = window._filtrarAlumnosPorTallerYGrado(filteredAlms, targetGrado, materiaClean);
                 }
                 alumnoIds = filteredAlms.map(a => a.id);
             } else if (gid) {
-                let qAl = supabaseClient.from('alumnos').select('id').eq('plantel_id', activePid).eq('grupo_id', gid);
-                const { data: alms } = await qAl.limit(200);
+                let qAl = supabaseClient.from('alumnos').select('id').eq('grupo_id', gid);
+                if (activePid) qAl = qAl.eq('plantel_id', activePid);
+                let { data: alms } = await qAl.limit(300);
+                if ((!alms || alms.length === 0) && activePid) {
+                    const { data: almsFallback } = await supabaseClient.from('alumnos').select('id').eq('grupo_id', gid).limit(300);
+                    alms = almsFallback;
+                }
                 alumnoIds = (alms || []).map(a => a.id);
             }
 
@@ -17724,20 +17754,32 @@ window.isTrimestreHabilitado = async (trimestreNum, grupoId = null, materia = nu
 
             let qCal = supabaseClient
                 .from('calificaciones')
-                .select('id, materia_nombre')
+                .select('id, materia_nombre, maestro_id')
                 .eq('trimestre', prevTrim)
-                .eq('maestro_id', currentUserId)
                 .in('alumno_id', alumnoIds);
             if (activePid) qCal = qCal.eq('plantel_id', activePid);
 
-            const { data: cList } = await qCal.limit(500);
+            let { data: cList } = await qCal.limit(1000);
+            if ((!cList || cList.length === 0) && activePid) {
+                const { data: cFallback } = await supabaseClient
+                    .from('calificaciones')
+                    .select('id, materia_nombre, maestro_id')
+                    .eq('trimestre', prevTrim)
+                    .in('alumno_id', alumnoIds)
+                    .limit(1000);
+                cList = cFallback;
+            }
+
             if (cList && cList.length > 0) {
                 if (materiaClean) {
                     const tieneCalifs = cList.some(c => {
+                        const mNombre = (c.materia_nombre || '').trim();
                         if (window._matchMateriaEducativa) {
-                            return window._matchMateriaEducativa(c.materia_nombre, materiaClean);
+                            return window._matchMateriaEducativa(mNombre, materiaClean);
                         }
-                        return (c.materia_nombre || '').trim().toLowerCase() === materiaClean.toLowerCase();
+                        const cleanC = mNombre.toLowerCase();
+                        const cleanM = materiaClean.toLowerCase();
+                        return cleanC === cleanM || cleanC.includes(cleanM) || cleanM.includes(cleanC);
                     });
                     return guardarEnCache(tieneCalifs);
                 } else {
@@ -17751,17 +17793,29 @@ window.isTrimestreHabilitado = async (trimestreNum, grupoId = null, materia = nu
         if (materiaClean) {
             let qCal = supabaseClient
                 .from('calificaciones')
-                .select('id, materia_nombre')
-                .eq('trimestre', prevTrim)
-                .eq('maestro_id', currentUserId);
+                .select('id, materia_nombre, maestro_id')
+                .eq('trimestre', prevTrim);
+            if (currentUserId) qCal = qCal.eq('maestro_id', currentUserId);
             if (activePid) qCal = qCal.eq('plantel_id', activePid);
 
-            const { data: cList } = await qCal.limit(1000);
+            let { data: cList } = await qCal.limit(1000);
+            if ((!cList || cList.length === 0) && activePid) {
+                let qCalFb = supabaseClient
+                    .from('calificaciones')
+                    .select('id, materia_nombre, maestro_id')
+                    .eq('trimestre', prevTrim);
+                if (currentUserId) qCalFb = qCalFb.eq('maestro_id', currentUserId);
+                const { data: cFallback } = await qCalFb.limit(1000);
+                cList = cFallback;
+            }
             const tieneCalifs = (cList || []).some(c => {
+                const mNombre = (c.materia_nombre || '').trim();
                 if (window._matchMateriaEducativa) {
                     return window._matchMateriaEducativa(c.materia_nombre, materiaClean);
                 }
-                return (c.materia_nombre || '').trim().toLowerCase() === materiaClean.toLowerCase();
+                const cleanC = mNombre.toLowerCase();
+                const cleanM = materiaClean.toLowerCase();
+                return cleanC === cleanM || cleanC.includes(cleanM) || cleanM.includes(cleanC);
             });
             return guardarEnCache(tieneCalifs);
         }
@@ -17770,11 +17824,17 @@ window.isTrimestreHabilitado = async (trimestreNum, grupoId = null, materia = nu
         let qDocCal = supabaseClient
             .from('calificaciones')
             .select('id')
-            .eq('trimestre', prevTrim)
-            .eq('maestro_id', currentUserId);
+            .eq('trimestre', prevTrim);
+        if (currentUserId) qDocCal = qDocCal.eq('maestro_id', currentUserId);
         if (activePid) qDocCal = qDocCal.eq('plantel_id', activePid);
 
-        const { data: docCalifs } = await qDocCal.limit(1);
+        let { data: docCalifs } = await qDocCal.limit(1);
+        if ((!docCalifs || docCalifs.length === 0) && activePid) {
+            let qFb = supabaseClient.from('calificaciones').select('id').eq('trimestre', prevTrim);
+            if (currentUserId) qFb = qFb.eq('maestro_id', currentUserId);
+            const { data: fbData } = await qFb.limit(1);
+            docCalifs = fbData;
+        }
         const tieneCalifsSelladas = !!(docCalifs && docCalifs.length > 0);
         return guardarEnCache(tieneCalifsSelladas);
 
@@ -18552,6 +18612,46 @@ window.cargarAlumnosLista = async () => {
     const [idPart, materia] = rawVal.split('|');
     const gid = isTec ? null : idPart;  
     const targetGrado = isTec ? idPart.replace('grado:', '').trim() : null;
+
+    // Si el docente no ha seleccionado manualmente un trimestre en esta sesión
+    // y el 1° T ya está sellado y enviado a Control Escolar, posicionar automáticamente en 2° Trimestre
+    if ((!state.selectedMaestroTrimestre || state.selectedMaestroTrimestre === 1) && !window._trimestreListaManualSeleccionado) {
+        if (window.checkPaseListaBloqueado && window.isTrimestreHabilitado) {
+            const t1Bloqueado = await window.checkPaseListaBloqueado(materia, rawVal, 1);
+            if (t1Bloqueado) {
+                const t2Hab = await window.isTrimestreHabilitado(2, idPart, materia, pId);
+                if (t2Hab) {
+                    const t2Bloqueado = await window.checkPaseListaBloqueado(materia, rawVal, 2);
+                    if (t2Bloqueado) {
+                        const t3Hab = await window.isTrimestreHabilitado(3, idPart, materia, pId);
+                        if (t3Hab) {
+                            state.selectedMaestroTrimestre = 3;
+                        } else {
+                            state.selectedMaestroTrimestre = 2;
+                        }
+                    } else {
+                        state.selectedMaestroTrimestre = 2;
+                    }
+
+                    const btns = document.querySelectorAll('#tabsTrimestresListas .t-btn');
+                    btns.forEach(b => {
+                        const txt = b.innerText || '';
+                        if (txt.includes(`${state.selectedMaestroTrimestre}° T`)) {
+                            b.style.background = 'white';
+                            b.style.border = '1px solid var(--border)';
+                            b.style.color = 'var(--text-main)';
+                            b.classList.add('active');
+                        } else {
+                            b.style.background = 'transparent';
+                            b.style.border = 'none';
+                            b.style.color = 'var(--text-muted)';
+                            b.classList.remove('active');
+                        }
+                    });
+                }
+            }
+        }
+    }
 
     if (window.actualizarTabsTrimestresListas) window.actualizarTabsTrimestresListas();
 
@@ -23731,8 +23831,54 @@ window.cargarEncuadreActivo = async () => {
     const targetGrado = isTec ? idPart.replace('grado:', '').trim() : null;
     title.innerText = `Configurando: ${sel.options[sel.selectedIndex].text}`;
     
+    const pId = state.plantelId || (window._obtenerPlantelIdActivo ? await window._obtenerPlantelIdActivo() : null);
+
+    // Auto-seleccionar 2° Trimestre si el 1° T ya está sellado y no se ha seleccionado trimestre manualmente
+    if ((!window.currentTrimestre || window.currentTrimestre === 1) && !window._encuadreTrimestreManual) {
+        const t1Bloqueado = window.checkPaseListaBloqueado ? await window.checkPaseListaBloqueado(mat, sel.value, 1) : false;
+        if (t1Bloqueado && window.isTrimestreHabilitado) {
+            const t2Hab = await window.isTrimestreHabilitado(2, idPart, mat, pId);
+            if (t2Hab) {
+                window.currentTrimestre = 2;
+                document.querySelectorAll('.btn-trimestre').forEach(b => {
+                    const t = b.getAttribute('data-trim') || '';
+                    if (t === '2') b.classList.add('active');
+                    else b.classList.remove('active');
+                });
+            }
+        }
+    }
+
+    if (window.isTrimestreHabilitado) {
+        const t2Hab = await window.isTrimestreHabilitado(2, idPart, mat, pId);
+        const t3Hab = await window.isTrimestreHabilitado(3, idPart, mat, pId);
+        document.querySelectorAll('.btn-trimestre').forEach(b => {
+            const t = b.getAttribute('data-trim') || '';
+            if (t === '2') {
+                if (!t2Hab) {
+                    b.innerHTML = '<i class="fa-solid fa-lock" style="font-size:0.8rem; margin-right:4px; opacity:0.6;"></i> 2° Trimestre';
+                    b.title = 'Bloqueado: se activará al sellar y enviar las calificaciones del 1° Trimestre a Control Escolar';
+                    b.style.opacity = '0.6';
+                } else {
+                    b.innerHTML = '2° Trimestre';
+                    b.removeAttribute('title');
+                    b.style.opacity = '1';
+                }
+            } else if (t === '3') {
+                if (!t3Hab) {
+                    b.innerHTML = '<i class="fa-solid fa-lock" style="font-size:0.8rem; margin-right:4px; opacity:0.6;"></i> 3° Trimestre';
+                    b.title = 'Bloqueado: se activará al sellar y enviar las calificaciones del 2° Trimestre a Control Escolar';
+                    b.style.opacity = '0.6';
+                } else {
+                    b.innerHTML = '3° Trimestre';
+                    b.removeAttribute('title');
+                    b.style.opacity = '1';
+                }
+            }
+        });
+    }
+
     if ((window.currentTrimestre || 1) > 1 && window.isTrimestreHabilitado) {
-        const pId = state.plantelId || (window._obtenerPlantelIdActivo ? await window._obtenerPlantelIdActivo() : null);
         const habilitado = await window.isTrimestreHabilitado(window.currentTrimestre, idPart, mat, pId);
         if (!habilitado) {
             window.currentTrimestre = 1;
@@ -23807,6 +23953,7 @@ window.cargarEncuadreActivo = async () => {
 
     window.currentTrimestre = 1;
     window.setTrimestre = async (tri, btn) => {
+        window._encuadreTrimestreManual = true;
         const triNum = parseInt(tri, 10);
         const sel = document.getElementById('encuadreGrupoMateria');
         if (triNum > 1 && window.isTrimestreHabilitado) {
