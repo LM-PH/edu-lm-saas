@@ -5,7 +5,7 @@ const CONFIG = {
 };
 
 // Supabase Configuration
-console.log("%c>>> EDU-LM V235 UNIVERSAL CARGADA: VIGILANCIA HUMANA ACTIVA", "color: yellow; background: black; padding: 12px; font-weight: 1000; border: 2px solid yellow;");
+console.log("%c>>> EDU-LM V236 UNIVERSAL CARGADA: VIGILANCIA HUMANA ACTIVA", "color: yellow; background: black; padding: 12px; font-weight: 1000; border: 2px solid yellow;");
 const SUPABASE_URL = "https://eexgjaydpuioncenlsmv.supabase.co"; 
 const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVleGdqYXlkcHVpb25jZW5sc212Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQ4NTM0MDAsImV4cCI6MjEwMDQyOTQwMH0.vrJGn_Bg04OBBntL-w21-I27XuvO61HcUNrphMYYSlY";
 const SUPABASE_KEY = SUPABASE_ANON_KEY;
@@ -2451,12 +2451,9 @@ function renderAdminCalificaciones() {
                <option value="resumen_admin">Resumen (Calif. Final y Asistencias)</option>
             </select>
          </div>
-         <div style="display:flex; gap:8px; margin-top:10px; flex-wrap:wrap;">
-            <button class="btn btn-outline" style="flex:1; min-width:130px; border-color:#6366f1; color:#6366f1;" onclick="window.imprimirLista(true)" title="Imprimir plantilla oficial en blanco (20 casillas de asistencia) con membrete">
-               <i class="fa-solid fa-print"></i> Imprimir Vacía
-            </button>
-            <button class="btn btn-primary" style="flex:1; min-width:130px;" onclick="window.imprimirLista(false)" title="Imprimir lista con calificaciones y asistencias">
-               <i class="fa-solid fa-print"></i> Imprimir Lista
+         <div style="margin-top:10px;">
+            <button class="btn btn-primary" style="width:100%;" onclick="window.imprimirLista(false)" title="Imprimir lista con calificaciones y asistencias">
+               <i class="fa-solid fa-print"></i> Imprimir Lista o Concentrado
             </button>
          </div>
       </div>
