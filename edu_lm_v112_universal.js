@@ -20016,13 +20016,14 @@ window.sellarYEnviarCalificaciones = async () => {
     if(!selectVal) return alert('Seleccione una materia/grupo primero.');
 
     const [idVal, materiaText] = selectVal.split('::');
+    const isTec = idVal.startsWith('grado:');
+    const gid = isTec ? null : idVal;
+    const targetGrado = isTec ? idVal.replace('grado:', '') : null;
     const materiaClean = (materiaText || '').trim();
     const trimInt = parseInt(trim, 10);
 
     // Validar si el trimestre previo está habilitado
     if (trimInt > 1 && trimInt <= 3 && window.isTrimestreHabilitado) {
-        const isTec = idVal.startsWith('grado:');
-        const gid = isTec ? null : idVal;
         const habilitado = await window.isTrimestreHabilitado(trimInt, gid || idVal, materiaClean, state.plantelId);
         if (!habilitado) {
             return alert(`⚠️ No puedes enviar calificaciones para el ${trimInt}° Trimestre sin antes haber asentado y sellado las del ${trimInt - 1}° Trimestre.`);
