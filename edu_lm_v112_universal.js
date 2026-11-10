@@ -5,7 +5,7 @@ const CONFIG = {
 };
 
 // Supabase Configuration
-console.log("%c>>> EDU-LM V229 UNIVERSAL CARGADA: VIGILANCIA HUMANA ACTIVA", "color: yellow; background: black; padding: 12px; font-weight: 1000; border: 2px solid yellow;");
+console.log("%c>>> EDU-LM V235 UNIVERSAL CARGADA: VIGILANCIA HUMANA ACTIVA", "color: yellow; background: black; padding: 12px; font-weight: 1000; border: 2px solid yellow;");
 const SUPABASE_URL = "https://eexgjaydpuioncenlsmv.supabase.co"; 
 const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVleGdqYXlkcHVpb25jZW5sc212Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQ4NTM0MDAsImV4cCI6MjEwMDQyOTQwMH0.vrJGn_Bg04OBBntL-w21-I27XuvO61HcUNrphMYYSlY";
 const SUPABASE_KEY = SUPABASE_ANON_KEY;
@@ -13412,6 +13412,38 @@ window._reconciliarMensajeBoleta = (mensajeTexto, byMateria = {}, realGradesFrom
     let countNotas = 0;
     
     lines.forEach(line => {
+        // Si ya está en el formato nuevo con Boleta y Real
+        const mMatchDual = line.match(/^(\s*•\s*)([^:]+)(\s*:\s*)Boleta:\s*([\d\.\-]+)\s*\|\s*Calif\.\s*Real:\s*([\d\.\-]+)(.*)$/i);
+        if (mMatchDual) {
+            const prefix = mMatchDual[1];
+            const matName = mMatchDual[2].trim();
+            const sepColon = mMatchDual[3];
+            let bVal = parseFloat(mMatchDual[4]);
+            let rVal = parseFloat(mMatchDual[5]);
+            const suffix = mMatchDual[6];
+            
+            const matNorm = norm(matName);
+            let realFromAct = null;
+            if (repTrim && realGradesFromActs[`${matNorm}_${repTrim}`]) {
+                realFromAct = realGradesFromActs[`${matNorm}_${repTrim}`].promFinalNum;
+            } else {
+                const matchActKey = Object.keys(realGradesFromActs).find(k => k.startsWith(matNorm + '_'));
+                if (matchActKey) realFromAct = realGradesFromActs[matchActKey].promFinalNum;
+            }
+            if (realFromAct !== null && !isNaN(realFromAct)) {
+                rVal = realFromAct;
+            }
+            
+            let boletaFinal = !isNaN(bVal) ? (bVal < 6.0 ? 5 : Math.round(bVal)) : (!isNaN(rVal) ? (rVal < 6.0 ? 5 : Math.round(rVal)) : 5);
+            let realFinalDisp = !isNaN(rVal) ? (Number.isInteger(rVal) ? rVal.toString() : rVal.toFixed(1)) : rVal;
+            
+            sumNotas += boletaFinal;
+            countNotas++;
+            newLines.push(`${prefix}${matName}${sepColon}Boleta: ${boletaFinal} | Calif. Real: ${realFinalDisp}${suffix}`);
+            return;
+        }
+
+        // Formato clásico: • Materia: 8.5
         const mMatch = line.match(/^(\s*•\s*)([^:]+)(\s*:\s*)([\d\.]+)(.*)$/);
         if (mMatch) {
             const prefix = mMatch[1];
@@ -13444,16 +13476,17 @@ window._reconciliarMensajeBoleta = (mensajeTexto, byMateria = {}, realGradesFrom
                 }
             }
             
-            if (realVal !== null && !isNaN(realVal)) {
-                calVal = realVal;
-            }
-            
-            sumNotas += calVal;
+            let finalReal = (realVal !== null && !isNaN(realVal)) ? realVal : calVal;
+            // En boleta oficial: mínimo 5 para reprobatorias (< 6.0), redondeo para aprobatorias
+            let boletaOficial = !isNaN(finalReal) ? (finalReal < 6.0 ? 5 : Math.round(finalReal)) : (!isNaN(calVal) ? (calVal < 6.0 ? 5 : Math.round(calVal)) : 5);
+            let realDisp = !isNaN(finalReal) ? (Number.isInteger(finalReal) ? finalReal.toString() : finalReal.toFixed(1)) : finalReal;
+
+            sumNotas += boletaOficial;
             countNotas++;
-            newLines.push(`${prefix}${matName}${sepColon}${calVal}${suffix}`);
-        } else if (line.includes('PROMEDIO GENERAL:') && countNotas > 0) {
+            newLines.push(`${prefix}${matName}${sepColon}Boleta: ${boletaOficial} | Calif. Real: ${realDisp}${suffix}`);
+        } else if ((line.includes('PROMEDIO GENERAL') || line.includes('PROMEDIO:')) && countNotas > 0) {
             const newProm = (sumNotas / countNotas).toFixed(1);
-            newLines.push(line.replace(/PROMEDIO GENERAL:\s*[\d\.]+/, `PROMEDIO GENERAL: ${newProm}`));
+            newLines.push(line.replace(/PROMEDIO[^:]*:\s*[\d\.]+/, `PROMEDIO GENERAL DE BOLETA: ${newProm}`));
         } else {
             newLines.push(line);
         }
@@ -13680,8 +13713,10 @@ window.loadBoletasAlumno = async () => {
                 const key = `${norm(nom)}_${t}`;
                 if (realGradesFromActs[key]) {
                     const rGrade = realGradesFromActs[key].promFinalNum;
-                    if ((parseFloat(gradeVal) === 5 && rGrade > 0 && rGrade < 6.0) || (rGrade > 0 && Math.abs(parseFloat(gradeVal) - rGrade) > 0.05)) {
-                        gradeVal = rGrade;
+                    if (rGrade !== undefined && rGrade !== null && !isNaN(rGrade)) {
+                        if ((parseFloat(gradeVal) === 5 && rGrade < 6.0) || Math.abs(parseFloat(gradeVal) - rGrade) > 0.05) {
+                            gradeVal = rGrade;
+                        }
                     }
                 }
                 byMateria[nom][t] = gradeVal;
@@ -13692,7 +13727,7 @@ window.loadBoletasAlumno = async () => {
         Object.values(realGradesFromActs).forEach(rg => {
             const t = parseInt(rg.trimestre);
             if (!trimestresOficialesEnviados.has(t)) return;
-            if (rg.promFinalNum > 0) {
+            if (rg.promFinalNum !== undefined && rg.promFinalNum !== null && !isNaN(rg.promFinalNum)) {
                 const nom = rg.materia;
                 trimestresDetectados.add(t);
                 if (!byMateria[nom]) byMateria[nom] = {};
@@ -13764,7 +13799,7 @@ window.loadBoletasAlumno = async () => {
             
             let headersHtml = '<th style="padding:14px 20px; font-size:0.85rem; color:var(--text-muted); text-align:left;">Materia</th>';
             trims.forEach(t => {
-                const label = t == 4 ? "Final" : `T${t}`;
+                const label = t == 4 ? "Final" : `Trimestre ${t}`;
                 headersHtml += `<th style="padding:14px; text-align:center; font-size:0.85rem; color:var(--text-muted);">${label}</th>`;
             });
             
@@ -13773,21 +13808,41 @@ window.loadBoletasAlumno = async () => {
             
             materiasKeys.forEach(mat => {
                 rowsHtml += `<tr style="border-bottom: 1px solid var(--border);">`;
-                rowsHtml += `<td style="padding:14px 20px; font-size:0.9rem; color:var(--text-main); font-weight:500;">${mat}</td>`;
+                rowsHtml += `<td style="padding:14px 20px; font-size:0.9rem; color:var(--text-main); font-weight:600;">${mat}</td>`;
                 
                 trims.forEach(t => {
                     const cal = byMateria[mat][t];
                     let boletaCal = '-';
-                    if (cal !== undefined) {
+                    let realCalDisp = '-';
+                    if (cal !== undefined && cal !== null && cal !== '') {
                         const num = parseFloat(cal);
-                        if (!isNaN(num) && num > 0) {
-                            // En concentrado de calificaciones se muestra el 5 oficial como en la boleta
+                        if (!isNaN(num)) {
+                            // En concentrado y boleta oficial la calificación mínima reprobatoria es 5 (NUNCA 0). Aprobatorias suben desde 0.5.
                             boletaCal = num < 6.0 ? 5 : Math.round(num);
+                            realCalDisp = Number.isInteger(num) ? num.toString() : num.toFixed(1);
                         } else {
                             boletaCal = cal;
+                            realCalDisp = cal;
                         }
                     }
-                    rowsHtml += `<td style="padding:14px; text-align:center; font-weight:800; color:var(--primary); font-size:1.1rem;">${boletaCal}</td>`;
+                    
+                    rowsHtml += `
+                        <td style="padding:12px 14px; text-align:center;" data-boleta="${boletaCal}" data-real="${realCalDisp}">
+                            ${boletaCal !== '-' ? `
+                                <div style="font-weight:900; color:var(--primary); font-size:1.15rem; line-height:1.1;">
+                                    ${boletaCal}
+                                </div>
+                                <div style="font-size:0.65rem; font-weight:700; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.5px; margin-top:2px;">
+                                    Boleta SEP
+                                </div>
+                                <div style="margin-top:4px;">
+                                    <span style="display:inline-block; font-size:0.75rem; font-weight:700; color:#334155; background:#f1f5f9; border:1px solid #e2e8f0; padding:2px 8px; border-radius:10px;">
+                                        Real: ${realCalDisp}
+                                    </span>
+                                </div>
+                            ` : `<span style="color:var(--text-muted);">-</span>`}
+                        </td>
+                    `;
                 });
                 
                 rowsHtml += `</tr>`;
@@ -13797,22 +13852,42 @@ window.loadBoletasAlumno = async () => {
             let lastTrimProm = 0;
             
             trims.forEach(t => {
-                let sum = 0;
+                let sumBoleta = 0;
+                let sumReal = 0;
                 let count = 0;
                 materiasKeys.forEach(mat => {
                     const cal = byMateria[mat][t];
-                    if(cal !== undefined) {
+                    if(cal !== undefined && cal !== null && cal !== '') {
                         const num = parseFloat(cal);
-                        if (!isNaN(num) && num > 0) {
+                        if (!isNaN(num)) {
                             const boletaVal = num < 6.0 ? 5 : Math.round(num);
-                            sum += boletaVal;
+                            sumBoleta += boletaVal;
+                            sumReal += num;
                             count++;
                         }
                     }
                 });
-                const prom = count > 0 ? (sum / count).toFixed(1) : '-';
-                if(count > 0) lastTrimProm = parseFloat(prom);
-                promediosRow += `<td style="padding:14px; text-align:center; font-weight:900; color:var(--text-main); font-size:1.1rem;">${prom}</td>`;
+                const promBoleta = count > 0 ? (sumBoleta / count).toFixed(1) : '-';
+                const promReal = count > 0 ? (sumReal / count).toFixed(1) : '-';
+                if(count > 0) lastTrimProm = parseFloat(promBoleta);
+
+                promediosRow += `
+                    <td style="padding:12px 14px; text-align:center;">
+                        ${promBoleta !== '-' ? `
+                            <div style="font-weight:900; color:var(--text-main); font-size:1.15rem; line-height:1.1;">
+                                ${promBoleta}
+                            </div>
+                            <div style="font-size:0.65rem; font-weight:700; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.5px; margin-top:2px;">
+                                Prom. Boleta
+                            </div>
+                            <div style="margin-top:4px;">
+                                <span style="display:inline-block; font-size:0.75rem; font-weight:700; color:#334155; background:#e2e8f0; border:1px solid #cbd5e1; padding:2px 8px; border-radius:10px;">
+                                    Prom. Real: ${promReal}
+                                </span>
+                            </div>
+                        ` : `<span style="color:var(--text-muted);">-</span>`}
+                    </td>
+                `;
             });
             promediosRow += '</tr>';
             
@@ -13828,8 +13903,13 @@ window.loadBoletasAlumno = async () => {
 
             tablesHtml = `
             <div class="card" style="padding:0; overflow:hidden; border-radius:18px; margin-bottom:24px; border:1px solid var(--border); box-shadow: 0 4px 12px rgba(0,0,0,0.03);">
-                <div style="background:var(--page-bg); padding:18px 20px; border-bottom:1px solid var(--border); display:flex; justify-content:space-between; align-items:center;">
-                   <h4 style="margin:0; font-size:1.1rem; font-weight:800; color:var(--primary);">Concentrado de Evaluaciones</h4>
+                <div style="background:var(--page-bg); padding:18px 20px; border-bottom:1px solid var(--border); display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">
+                   <div>
+                       <h4 style="margin:0; font-size:1.1rem; font-weight:800; color:var(--primary);">Concentrado de Evaluaciones</h4>
+                       <div style="font-size:0.75rem; color:var(--text-muted); margin-top:3px;">
+                           Visualización para padres y alumnos: <strong>Calificación Oficial de Boleta SEP</strong> (mínimo 5 oficial) y <strong>Calificación Real</strong> de evaluación continua.
+                       </div>
+                   </div>
                 </div>
                 <div style="overflow-x:auto;">
                     <table class="grades-table-pdf-source" data-trimestre="Todas" style="width:100%; border-collapse: collapse; min-width:300px;">
@@ -13941,15 +14021,27 @@ window.descargarBoletaPDF = async (aluId, nombre, matricula) => {
                 if (!isPromRow) {
                     cells.forEach((cell, idx) => {
                         if (idx > 0) {
-                            const rawText = cell.innerText.trim();
-                            const val = parseFloat(rawText);
-                            if (!isNaN(val) && val > 0) {
-                                // Normativa SEP: en boleta oficial si es < 6.0 se asienta 5 (mínima SEP). Si es >= 6.0 se redondea a entero.
-                                const sepVal = val < 6.0 ? 5 : Math.round(val);
-                                cell.innerText = sepVal.toString();
+                            const bVal = cell.getAttribute('data-boleta');
+                            const rVal = cell.getAttribute('data-real');
+                            if (bVal && bVal !== '-') {
+                                const numB = parseFloat(bVal);
+                                const sepVal = (!isNaN(numB)) ? (numB < 6.0 ? 5 : Math.round(numB)) : 5;
+                                cell.innerHTML = `<div style="font-weight:bold; font-size:13px;">${sepVal}</div><div style="font-size:8.5px; color:#555;">Real: ${rVal}</div>`;
                                 if (!colSums[idx]) { colSums[idx] = 0; colCounts[idx] = 0; }
                                 colSums[idx] += sepVal;
                                 colCounts[idx]++;
+                            } else {
+                                const rawText = cell.innerText.trim();
+                                const val = parseFloat(rawText);
+                                if (!isNaN(val)) {
+                                    const sepVal = val < 6.0 ? 5 : Math.round(val);
+                                    cell.innerText = sepVal.toString();
+                                    if (!colSums[idx]) { colSums[idx] = 0; colCounts[idx] = 0; }
+                                    colSums[idx] += sepVal;
+                                    colCounts[idx]++;
+                                } else {
+                                    cell.innerText = '-';
+                                }
                             }
                         }
                     });
@@ -13957,7 +14049,7 @@ window.descargarBoletaPDF = async (aluId, nombre, matricula) => {
                     // Recalcular promedios oficiales en la fila de PROMEDIO
                     cells.forEach((cell, idx) => {
                         if (idx > 0 && colCounts[idx] > 0) {
-                            cell.innerText = (colSums[idx] / colCounts[idx]).toFixed(1);
+                            cell.innerHTML = `<div style="font-weight:bold; font-size:13px;">${(colSums[idx] / colCounts[idx]).toFixed(1)}</div>`;
                         }
                     });
                 }
@@ -20638,7 +20730,7 @@ window.imprimirLista = async (esVacia = false, forzarOrientacion = null) => {
                     const numProm = parseFloat(rawTxt);
                     if (!isNaN(numProm)) {
                         let promVal = numProm;
-                        let promDisplay = (promVal > 0 && promVal < 6.0) ? '5.0' : promVal.toFixed(1);
+                        let promDisplay = (promVal < 6.0) ? '5.0' : promVal.toFixed(1);
                         td.innerHTML = `<span style="font-weight:bold; color:#1e40af;">${promDisplay}</span>`;
                         return;
                     }
@@ -20653,7 +20745,7 @@ window.imprimirLista = async (esVacia = false, forzarOrientacion = null) => {
                 const numVal = parseFloat(rawTxt);
                 if (!isNaN(numVal)) {
                     const isGrade = numVal >= 0 && numVal <= 10;
-                    const displayVal = (isGrade && numVal > 0 && numVal < 6.0) ? '5' : String(numVal);
+                    const displayVal = (isGrade && numVal < 6.0) ? '5' : String(numVal);
                     td.innerHTML = `<span style="font-weight:600;">${displayVal}</span>`;
                 } else {
                     td.textContent = rawTxt;
@@ -24952,10 +25044,10 @@ window.cargarSabanaGrupo = async () => {
                 if (isFinal) {
                     const getGrade = (t) => {
                         const cx = subjectCalifs.find(x => x.trimestre === t);
-                        if (!cx) return null;
+                        if (!cx || cx.calificacion === undefined || cx.calificacion === null || cx.calificacion === '') return null;
                         const num = Number(cx.calificacion);
-                        // En concentrado y boleta oficial la calificación mínima es 5
-                        return (!isNaN(num) && num > 0 && num < 6.0) ? 5 : (num >= 6.0 ? Math.round(num) : num);
+                        // En concentrado y boleta oficial la calificación mínima reprobatoria es 5 (NUNCA 0)
+                        return (!isNaN(num)) ? (num < 6.0 ? 5 : Math.round(num)) : null;
                     };
                     const t1 = getGrade(1);
                     const t2 = getGrade(2);
@@ -24973,13 +25065,15 @@ window.cargarSabanaGrupo = async () => {
                              <td style="color:var(--text-main); font-weight:bold; background:var(--surface-hover);">${subjectAvg}</td>`;
                 } else {
                     const cx = subjectCalifs.find(x => x.trimestre === trim);
-                    if(cx) {
+                    if(cx && cx.calificacion !== undefined && cx.calificacion !== null && cx.calificacion !== '') {
                         const num = Number(cx.calificacion);
-                        // En concentrado y boleta oficial la calificación mínima reprobatoria es 5
-                        const boletaCal = (!isNaN(num) && num > 0 && num < 6.0) ? 5 : (num >= 6.0 ? Math.round(num) : cx.calificacion);
+                        // En concentrado y boleta oficial la calificación mínima reprobatoria es 5 (NUNCA 0)
+                        const boletaCal = (!isNaN(num)) ? (num < 6.0 ? 5 : Math.round(num)) : '-';
                         cols += `<td style="color:var(--text-main)" data-real-calif="${cx.calificacion}">${boletaCal}</td>`;
-                        generalSum += Number(boletaCal);
-                        generalCount++;
+                        if (!isNaN(Number(boletaCal))) {
+                            generalSum += Number(boletaCal);
+                            generalCount++;
+                        }
                     } else {
                         cols += `<td style="color:var(--text-muted)">-</td>`;
                     }
@@ -25341,8 +25435,8 @@ window.notificarRevisionSabana = async () => {
             let materiasReprobadas = 0;
             for(let i = 1; i < row.cells.length - 1; i++) {
                 let materiaNombre = row.cells[i].getAttribute('data-full-materia') || headers[i] || `Materia ${i}`;
-                const calif = row.cells[i].getAttribute('data-real-calif') || row.cells[i].innerText.trim();
-                const califNum = parseFloat(calif) || 0;
+                const califReal = row.cells[i].getAttribute('data-real-calif');
+                const boletaCal = row.cells[i].innerText.trim();
                 
                 // v122: Agregar alias corto si es tecnología
                 if(/tecnología|tecnologia/gi.test(materiaNombre) && !materiaNombre.includes('(')) {
@@ -25352,8 +25446,17 @@ window.notificarRevisionSabana = async () => {
                     else if(/dibujo/gi.test(materiaNombre)) materiaNombre += " (TDT)";
                 }
 
-                desgloseMaterias += `• ${materiaNombre}: ${calif}\n`;
-                if(califNum > 0 && califNum < 6) materiasReprobadas++;
+                // Oficial SEP en boleta: no puede ser menor a 5 (nunca 0)
+                let bVal = boletaCal;
+                let numB = parseFloat(bVal);
+                if (!isNaN(numB) && numB < 6.0) bVal = '5';
+                
+                let rVal = (califReal !== null && califReal !== undefined && califReal !== '') ? califReal : boletaCal;
+                let numR = parseFloat(rVal);
+                let rValDisp = !isNaN(numR) ? (Number.isInteger(numR) ? numR.toString() : numR.toFixed(1)) : rVal;
+
+                desgloseMaterias += `• ${materiaNombre}: Boleta: ${bVal} | Calif. Real: ${rValDisp}\n`;
+                if (!isNaN(numB) && numB < 6.0) materiasReprobadas++;
             }
 
 
@@ -25398,7 +25501,7 @@ window.notificarRevisionSabana = async () => {
                 autor_id: uRes.data.user.id,
                 receptor_id: res.perfil_id, // Vinculación directa a la cuenta del alumno
                 titulo: tituloFinal,
-                mensaje: `Hola ${res.nombre}, se han validado tus calificaciones para el ${trim}.\n\nDETALLE POR MATERIA:\n${res.desglose}\nPROMEDIO GENERAL: ${res.promedio.toFixed(1)}${mensajeEspecial}\n\n📌 NOTA IMPORTANTE:\nEl día de la firma de boletas, se registrará tu firma electrónica utilizando el código QR del alumno. Por favor, asegúrate de presentarte con el QR para agilizar el proceso.`,
+                mensaje: `Hola ${res.nombre}, se han validado tus calificaciones para el ${trim}.\n\nDETALLE POR MATERIA (Boleta Oficial / Calificación Real):\n${res.desglose}\nPROMEDIO GENERAL DE BOLETA: ${res.promedio.toFixed(1)}${mensajeEspecial}\n\n📌 NOTA IMPORTANTE:\nEl día de la firma de boletas, se registrará tu firma electrónica utilizando el código QR del alumno. Por favor, asegúrate de presentarte con el QR para agilizar el proceso.`,
                 audiencia: `Alumno_${res.id}`,
                 tipo: 'reporte_academico_automatico',
                 plantel_id: state.plantelId
@@ -25987,12 +26090,17 @@ window.descargarBoletaAdminPDF = async (alumnoId, nombre, matricula) => {
             trims.forEach(t => {
                 const cal = byMateria[mat][t];
                 let calNum = parseFloat(cal);
-                // Normativa oficial SEP: En boleta oficial la calificación mínima reprobatoria es 5
+                // Normativa oficial SEP: En boleta oficial la calificación mínima reprobatoria es 5 (NUNCA 0)
                 let boletaCal = '-';
-                if (cal !== undefined && !isNaN(calNum) && calNum > 0) {
+                let realCal = '-';
+                if (cal !== undefined && !isNaN(calNum)) {
                     boletaCal = calNum < 6.0 ? 5 : Math.round(calNum);
+                    realCal = Number.isInteger(calNum) ? calNum.toString() : calNum.toFixed(1);
                 }
-                gradesHtml += `<td style="border: 1px solid #000; padding: 8px 10px; font-size: 12px; text-align: center;">${boletaCal}</td>`;
+                gradesHtml += `<td style="border: 1px solid #000; padding: 8px 10px; font-size: 12px; text-align: center;">
+                    <div style="font-weight:bold;">${boletaCal}</div>
+                    ${realCal !== '-' ? `<div style="font-size:9px; color:#555;">Real: ${realCal}</div>` : ''}
+                </td>`;
             });
             gradesHtml += `</tr>`;
         });
@@ -26001,9 +26109,9 @@ window.descargarBoletaAdminPDF = async (alumnoId, nombre, matricula) => {
         trims.forEach(t => {
             let sum = 0, count = 0;
             materiasKeys.forEach(mat => {
-                if(byMateria[mat][t] !== undefined) {
+                if(byMateria[mat] && byMateria[mat][t] !== undefined) {
                     let calNum = parseFloat(byMateria[mat][t]);
-                    if (!isNaN(calNum) && calNum > 0) {
+                    if (!isNaN(calNum)) {
                         let boletaVal = calNum < 6.0 ? 5 : Math.round(calNum);
                         sum += boletaVal;
                         count++;
