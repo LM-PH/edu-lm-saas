@@ -301,7 +301,7 @@ CREATE POLICY "Lectura general de comunicados" ON public.comunicados
 CREATE POLICY "Permitir creacion de comunicados" ON public.comunicados
     FOR INSERT
     WITH CHECK (
-        (SELECT rol FROM perfiles WHERE perfiles.id = auth.uid()) IN ('admin', 'directivo', 'apoyo')
+        (SELECT rol FROM perfiles WHERE perfiles.id = auth.uid()) IN ('admin', 'directivo', 'apoyo', 'maestro', 'secretaria_direccion', 'biblioteca')
     );
 
 -- =======================================================
