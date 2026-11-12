@@ -5,7 +5,7 @@ const CONFIG = {
 };
 
 // Supabase Configuration
-console.log("%c>>> EDU-LM V237 UNIVERSAL CARGADA: VIGILANCIA HUMANA ACTIVA", "color: yellow; background: black; padding: 12px; font-weight: 1000; border: 2px solid yellow;");
+console.log("%c>>> EDU-LM V238 UNIVERSAL CARGADA: VIGILANCIA HUMANA ACTIVA", "color: yellow; background: black; padding: 12px; font-weight: 1000; border: 2px solid yellow;");
 const SUPABASE_URL = "https://eexgjaydpuioncenlsmv.supabase.co"; 
 const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVleGdqYXlkcHVpb25jZW5sc212Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQ4NTM0MDAsImV4cCI6MjEwMDQyOTQwMH0.vrJGn_Bg04OBBntL-w21-I27XuvO61HcUNrphMYYSlY";
 const SUPABASE_KEY = SUPABASE_ANON_KEY;
@@ -19,6 +19,21 @@ window.getCleanLogoUrl = (url) => {
     if (url.includes('###CONN###')) return url.split('###CONN###')[0];
     if (url.startsWith('{') && url.endsWith('}')) return '';
     return url;
+};
+
+// Comparador institucional unificado para orden alfabético estricto de alumnos en español
+// Considera el nombre completo (primer apellido, segundo apellido y nombres), ignorando acentos y mayúsculas/minúsculas para el orden base
+window._compararNombresAlumnos = (a, b) => {
+    const getNom = (obj) => {
+        if (!obj) return '';
+        if (typeof obj === 'string') return obj;
+        return obj.nombre || obj.alumnos?.nombre || obj.nombre_completo || '';
+    };
+    const nomA = getNom(a).trim().replace(/\s+/g, ' ');
+    const nomB = getNom(b).trim().replace(/\s+/g, ' ');
+    const cmp = nomA.localeCompare(nomB, 'es', { sensitivity: 'base' });
+    if (cmp !== 0) return cmp;
+    return nomA.localeCompare(nomB, 'es');
 };
 
 const ADMIN_ROLES = ['admin', 'administrativo', 'master'];
@@ -4198,6 +4213,7 @@ window.buscarExpedienteGlobal = async (query) => {
             resDiv.style.display = 'block';
             return;
         }
+        data.sort(window._compararNombresAlumnos);
         resDiv.style.display = 'block';
         resDiv.innerHTML = data.map(a => `
             <div style="padding:12px; cursor:pointer; border-bottom:1px solid var(--border); display:flex; justify-content:space-between; align-items:center;" 
@@ -9304,7 +9320,7 @@ window.imprimirRegistroAccesos = async (fechaInputId = 'fechaAsistenciaApoyo', g
             const grpA = a.alumnos?.grupos?.nombre || '';
             const grpB = b.alumnos?.grupos?.nombre || '';
             if(grpA !== grpB) return grpA.localeCompare(grpB);
-            return (a.alumnos?.nombre || '').localeCompare(b.alumnos?.nombre || '');
+            return window._compararNombresAlumnos(a.alumnos, b.alumnos);
         });
 
         const { data: plantelData } = await supabaseClient.from('planteles').select('nombre, logo_url, cct').eq('id', pId).maybeSingle();
@@ -12186,7 +12202,7 @@ async function renderMasterGestionPerfiles() {
         };
         
         categorized.alumno.sort((a, b) => {
-            if (a.grupo === b.grupo) return (a.nombre || '').localeCompare(b.nombre || '', 'es', { sensitivity: 'base' });
+            if (a.grupo === b.grupo) return window._compararNombresAlumnos(a, b);
             return sortGroupNames(a.grupo || 'Sin Grupo', b.grupo || 'Sin Grupo');
         });
         
@@ -12244,7 +12260,7 @@ async function renderMasterGestionPerfiles() {
             const sortedGroupKeys = Object.keys(grouped).sort(sortGroupNames);
 
             const itemsHtml = sortedGroupKeys.map(g => {
-                grouped[g].sort((a, b) => (a.nombre || '').localeCompare(b.nombre || '', 'es', { sensitivity: 'base' }));
+                grouped[g].sort(window._compararNombresAlumnos);
                 const groupCards = grouped[g].map(u => renderUserRow(u)).join('');
                 return `
                 <div class="alumno-master-grupo" data-grupo="${g}" style="display:block; margin-top:24px;">
@@ -14994,6 +15010,7 @@ window.loadFirmantesEncuadre = async () => {
             const { data: rawAlumnos } = await supabaseClient.from('alumnos').select('id, nombre, matricula').eq('plantel_id', state.plantelId).eq('grupo_id', gid).order('nombre');
             alumnos = rawAlumnos || [];
         }
+        if (alumnos) alumnos.sort(window._compararNombresAlumnos);
 
         // 3. Obtener TODAS las firmas relacionadas a esos IDs
         const { data: firmasRaw } = await supabaseClient.from('firmas_encuadre')
@@ -15602,6 +15619,7 @@ window.finalizarActividad = async (id) => {
                 const { data: rawAlu } = await supabaseClient.from('alumnos').select('id, nombre, grado, taller').eq('plantel_id', act.plantel_id).order('nombre');
                 todosAlumnos = window._filtrarAlumnosPorTallerYGrado ? window._filtrarAlumnosPorTallerYGrado(rawAlu, act.target_grado, act.materia) : (rawAlu || []);
             }
+            if (todosAlumnos) todosAlumnos.sort(window._compararNombresAlumnos);
 
             // 3. Obtener quienes ya tienen calificación
             const { data: evaluados } = await supabaseClient.from('evaluaciones_actividades')
@@ -16897,7 +16915,7 @@ window.loadListaEvalManual = async () => {
             }
         }
 
-        alumnos.sort((a, b) => (a.nombre || '').localeCompare(b.nombre || ''));
+        alumnos.sort(window._compararNombresAlumnos);
         
         if (!alumnos || alumnos.length === 0) {
             contenedor.innerHTML = '<div style="text-align:center; padding: 20px; color:var(--text-muted)">No hay alumnos registrados que coincidan con este grupo o tecnología.</div>';
@@ -19082,6 +19100,8 @@ window.cargarAlumnosLista = async () => {
             rawAlumnos = todos || [];
         }
         
+        if (rawAlumnos) rawAlumnos.sort(window._compararNombresAlumnos);
+
         if(!rawAlumnos || rawAlumnos.length === 0) {
              cabecera.innerHTML = `<tr><th class="col-sticky-alumno" style="padding:12px;">Sin Alumnos</th></tr>`;
              tbody.innerHTML = '<tr><td style="text-align:center; padding: 20px; color:var(--text-muted)">Este grupo no tiene alumnos registrados.</td></tr>';
@@ -20029,6 +20049,8 @@ window.cargarBoletasGrupo = async (forzarRecalculo = false) => {
             rawAlumnos = todos || [];
         }
         
+        if (rawAlumnos) rawAlumnos.sort(window._compararNombresAlumnos);
+
         if(!rawAlumnos || rawAlumnos.length === 0) {
             tbody.innerHTML = `<tr><td colspan="${isModoFinal ? 7 : 5}" style="text-align:center; padding: 20px; color:var(--text-muted)">No hay alumnos vinculados.</td></tr>`;
             return;
@@ -23779,6 +23801,8 @@ window.openReporteModal = async () => {
             alumnos = data || [];
         }
         
+        if (alumnos) alumnos.sort(window._compararNombresAlumnos);
+
         const sel = document.getElementById('repAlumnoList');
         if(!alumnos || alumnos.length === 0) {
            sel.innerHTML = '<option value="">No hay alumnos en este grupo/tecnología</option>';
@@ -24666,6 +24690,7 @@ window.cargarEncuadreActivo = async () => {
             errAl = eAl;
             alumnos = rawAlumnos || [];
         }
+        if (alumnos) alumnos.sort(window._compararNombresAlumnos);
         if(errAl) {
             console.error(">>> [ENCUADRE] Error al consultar alumnos:", errAl);
             throw errAl;
@@ -24901,6 +24926,8 @@ window.sincronizarAsistenciaActividad = async ({ grupoId, materia, trimestre, ta
             const { data: rawAl } = await supabaseClient.from('alumnos').select('id, nombre').eq('plantel_id', state.plantelId).eq('grupo_id', gid).order('nombre');
             alumnos = rawAl || [];
         }
+
+        if (alumnos) alumnos.sort(window._compararNombresAlumnos);
 
         if (!alumnos || alumnos.length === 0) return;
         const studentIds = alumnos.map(a => a.id);
@@ -25260,6 +25287,8 @@ window.cargarSabanaGrupo = async () => {
             hold.innerHTML = '<div style="color:var(--warning); font-size:0.9rem;">No hay alumnos registrados en este grupo.</div>';
             return;
         }
+        
+        resAlums.data.sort(window._compararNombresAlumnos);
         
         const studentIds = resAlums.data.map(a => a.id);
         
@@ -25692,6 +25721,7 @@ window.notificarRevisionSabana = async () => {
 
         // Obtenemos los alumnos del grupo para tener sus IDs actuales y sus IDs de perfil (usuario)
         const { data: alums } = await supabaseClient.from('alumnos').select('id, nombre, perfil_id').eq('grupo_id', gid).order('nombre');
+        if (alums) alums.sort(window._compararNombresAlumnos);
         
         const headers = Array.from(tabla.querySelectorAll("thead th")).map(th => th.innerText.trim());
         // Función de normalización robusta: Sin acentos, minúsculas, sin espacios extra
@@ -31172,6 +31202,8 @@ window.loadListaAsistenciaManual = async () => {
             alumnos = alData || [];
         }
         
+        if (alumnos) alumnos.sort(window._compararNombresAlumnos);
+
         if (!alumnos || alumnos.length === 0) {
             contenedor.innerHTML = '<div style="text-align:center; padding: 20px; color:var(--text-muted)">No hay alumnos registrados en este grupo.</div>';
             return;
@@ -31490,6 +31522,8 @@ window.marcarTodosAsistenciaManual = async () => {
                 .order('nombre');
             alumnos = alData || [];
         }
+
+        if (alumnos) alumnos.sort(window._compararNombresAlumnos);
 
         if (alumnos.length === 0) {
             return alert("No hay alumnos registrados en este grupo.");
@@ -34563,7 +34597,7 @@ window.loadListasAdminPersonal = async (searchTerm = '') => {
         }
 
         // Ordenar por nombre (asumiendo Apellido Paterno al inicio)
-        itemsToRender.sort((a, b) => (a.nombre || '').localeCompare((b.nombre || ''), 'es', { sensitivity: 'base' }));
+        itemsToRender.sort(window._compararNombresAlumnos);
 
         totalCont.innerText = itemsToRender.length;
 
