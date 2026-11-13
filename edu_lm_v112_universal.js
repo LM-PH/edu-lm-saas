@@ -5,7 +5,7 @@ const CONFIG = {
 };
 
 // Supabase Configuration
-console.log("%c>>> EDU-LM V239 UNIVERSAL CARGADA: VIGILANCIA HUMANA ACTIVA", "color: yellow; background: black; padding: 12px; font-weight: 1000; border: 2px solid yellow;");
+console.log("%c>>> EDU-LM V240 UNIVERSAL CARGADA: VIGILANCIA HUMANA ACTIVA", "color: yellow; background: black; padding: 12px; font-weight: 1000; border: 2px solid yellow;");
 const SUPABASE_URL = "https://eexgjaydpuioncenlsmv.supabase.co"; 
 const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVleGdqYXlkcHVpb25jZW5sc212Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQ4NTM0MDAsImV4cCI6MjEwMDQyOTQwMH0.vrJGn_Bg04OBBntL-w21-I27XuvO61HcUNrphMYYSlY";
 const SUPABASE_KEY = SUPABASE_ANON_KEY;
@@ -18133,7 +18133,8 @@ window.isTrimestreCerrado = async (trimestreNum, grupoId = null, materia = null,
                 .select('id, payload_json, fecha_resolucion')
                 .eq('plantel_id', activePid)
                 .in('tipo_accion', ['MODIFICACION_CALIFICACIONES', 'PRORROGA_CALIFICACIONES'])
-                .eq('estado', 'aprobada');
+                .eq('estado', 'aprobada')
+                .order('creado_en', { ascending: false });
 
             const tienePermisoActivo = (reqsApp || []).some(r => {
                 if (parseInt(r.payload_json?.trimestre) !== trim) return false;
@@ -18142,7 +18143,12 @@ window.isTrimestreCerrado = async (trimestreNum, grupoId = null, materia = null,
                     const mMat = materiaClean.toLowerCase();
                     if (rMat !== mMat && !rMat.includes(mMat) && !mMat.includes(rMat)) return false;
                 }
-                if (gid && r.payload_json?.grupo_id && r.payload_json.grupo_id !== gid) return false;
+                const rGid = String(r.payload_json?.grupo_id || '').split('::')[0].split('|')[0].trim();
+                if (gid && rGid && rGid !== gid) return false;
+                if (targetGrado && rGid) {
+                    const rGrado = rGid.replace('grado:', '').trim();
+                    if (rGrado !== targetGrado) return false;
+                }
                 return true;
             });
 
@@ -20180,27 +20186,47 @@ window.cargarBoletasGrupo = async (forzarRecalculo = false) => {
             .select('id, payload_json, tipo_accion, estado, fecha_resolucion, creado_en')
             .eq('plantel_id', state.plantelId)
             .in('tipo_accion', ['MODIFICACION_CALIFICACIONES', 'PRORROGA_CALIFICACIONES'])
-            .in('estado', ['pendiente', 'aprobada']);
+            .in('estado', ['pendiente', 'aprobada'])
+            .order('creado_en', { ascending: false });
         
         let tieneSolicitudAprobada = false;
 
         if (reqs && reqs.length > 0) {
-            tieneSolicitudPendiente = reqs.some(r => 
-                r.estado === 'pendiente' &&
-                (r.payload_json?.materia || '').trim().toLowerCase() === materiaClean.toLowerCase() && 
-                parseInt(r.payload_json?.trimestre) === currentTrim && 
-                (r.payload_json?.grupo_id === gid || r.payload_json?.grupo_id === selectVal || (r.payload_json?.grupo_id || '').startsWith(gid))
-            );
+            tieneSolicitudPendiente = reqs.some(r => {
+                if (r.estado !== 'pendiente') return false;
+                const rMat = (r.payload_json?.materia || '').trim().toLowerCase();
+                const mMat = materiaClean.toLowerCase();
+                if (rMat !== mMat && !rMat.includes(mMat) && !mMat.includes(rMat)) return false;
+                if (parseInt(r.payload_json?.trimestre) !== currentTrim) return false;
+                const rGid = String(r.payload_json?.grupo_id || '').split('::')[0].split('|')[0].trim();
+                if (gid && rGid && rGid !== gid && r.payload_json?.grupo_id !== selectVal) return false;
+                if (targetGrado && rGid) {
+                    const rGrado = rGid.replace('grado:', '').trim();
+                    if (rGrado !== targetGrado) return false;
+                }
+                return true;
+            });
 
             // Una solicitud aprobada otorga permiso temporal de una sola vez para modificar y sellar.
             // Si el docente ya selló las calificaciones después de la fecha en que se aprobó la solicitud (o si ya se consumió en la sesión),
             // el permiso queda automáticamente consumido y el periodo vuelve a bloquearse.
-            const autAprobada = reqs.find(r => 
-                r.estado === 'aprobada' &&
-                (r.payload_json?.materia || '').trim().toLowerCase() === materiaClean.toLowerCase() && 
-                parseInt(r.payload_json?.trimestre) === currentTrim && 
-                (r.payload_json?.grupo_id === gid || r.payload_json?.grupo_id === selectVal || (r.payload_json?.grupo_id || '').startsWith(gid))
-            );
+            // Se filtra y toma la solicitud aprobada MÁS RECIENTE:
+            const autsAprobadas = reqs.filter(r => {
+                if (r.estado !== 'aprobada') return false;
+                const rMat = (r.payload_json?.materia || '').trim().toLowerCase();
+                const mMat = materiaClean.toLowerCase();
+                if (rMat !== mMat && !rMat.includes(mMat) && !mMat.includes(rMat)) return false;
+                if (parseInt(r.payload_json?.trimestre) !== currentTrim) return false;
+                const rGid = String(r.payload_json?.grupo_id || '').split('::')[0].split('|')[0].trim();
+                if (gid && rGid && rGid !== gid && r.payload_json?.grupo_id !== selectVal) return false;
+                if (targetGrado && rGid) {
+                    const rGrado = rGid.replace('grado:', '').trim();
+                    if (rGrado !== targetGrado) return false;
+                }
+                return true;
+            });
+
+            const autAprobada = autsAprobadas[0];
 
             if (autAprobada) {
                 const keyConsumo = `aut_consumida_${materiaClean}_${currentTrim}_${gid || targetGrado || ''}`;
@@ -20466,10 +20492,19 @@ window.sellarYEnviarCalificaciones = async () => {
             .in('tipo_accion', ['MODIFICACION_CALIFICACIONES', 'PRORROGA_CALIFICACIONES'])
             .eq('estado', 'aprobada');
 
-        const tieneSolicitudAprobada = (reqsApp || []).some(r => 
-            r.payload_json?.materia === materiaClean && 
-            r.payload_json?.trimestre === parseInt(trim)
-        );
+        const tieneSolicitudAprobada = (reqsApp || []).some(r => {
+            const rMat = (r.payload_json?.materia || '').trim().toLowerCase();
+            const mMat = materiaClean.toLowerCase();
+            if (rMat !== mMat && !rMat.includes(mMat) && !mMat.includes(rMat)) return false;
+            if (parseInt(r.payload_json?.trimestre) !== parseInt(trim)) return false;
+            const rGid = String(r.payload_json?.grupo_id || '').split('::')[0].split('|')[0].trim();
+            if (gid && rGid && rGid !== gid) return false;
+            if (targetGrado && rGid) {
+                const rGrado = rGid.replace('grado:', '').trim();
+                if (rGrado !== targetGrado) return false;
+            }
+            return true;
+        });
 
         if (!tieneSolicitudAprobada) {
             const { data: periodo } = await supabaseClient.from('periodos_calificaciones').select('*').eq('trimestre', trim).eq('plantel_id', state.plantelId).maybeSingle();
@@ -20559,12 +20594,37 @@ window.sellarYEnviarCalificaciones = async () => {
         } catch(eStorage) {}
 
         try {
-            await supabaseClient
+            const sysClient = window.getSystemSupabaseClient ? await window.getSystemSupabaseClient() : null;
+            const clientToUse = sysClient || supabaseClient;
+
+            const { data: autsParaCerrar } = await clientToUse
                 .from('autorizaciones_movimientos')
-                .update({ estado: 'completada', fecha_resolucion: nowIso })
+                .select('id, payload_json')
                 .eq('plantel_id', state.plantelId)
                 .in('tipo_accion', ['MODIFICACION_CALIFICACIONES', 'PRORROGA_CALIFICACIONES'])
                 .eq('estado', 'aprobada');
+
+            const idsCerrar = (autsParaCerrar || []).filter(r => {
+                const rMat = (r.payload_json?.materia || '').trim().toLowerCase();
+                const mMat = materiaClean.toLowerCase();
+                if (rMat !== mMat && !rMat.includes(mMat) && !mMat.includes(rMat)) return false;
+                if (parseInt(r.payload_json?.trimestre) !== parseInt(trim)) return false;
+                const rGid = String(r.payload_json?.grupo_id || '').split('::')[0].split('|')[0].trim();
+                if (gid && rGid && rGid !== gid) return false;
+                if (targetGrado && rGid) {
+                    const rGrado = rGid.replace('grado:', '').trim();
+                    if (rGrado !== targetGrado) return false;
+                }
+                return true;
+            }).map(r => r.id);
+
+            if (idsCerrar.length > 0) {
+                await clientToUse
+                    .from('autorizaciones_movimientos')
+                    .update({ estado: 'completada', fecha_resolucion: nowIso })
+                    .in('id', idsCerrar);
+                console.log(`>>> [AUTORIZACIÓN CONSUMIDA] Concluidas ${idsCerrar.length} autorizaciones.`);
+            }
         } catch(eConsumir) {
             console.error("Error al concluir autorización consumida:", eConsumir);
         }
@@ -20638,7 +20698,7 @@ window.solicitarModificacionCalificaciones = async (materia, trimestre, grupoId,
         if(errReq) throw errReq;
 
         try {
-            await supabaseClient.from('comunicados').insert([{
+            await window.insertarComunicadoSeguro([{
                 autor_id: userId,
                 titulo: tituloNotif,
                 mensaje: `El docente ${maestroNombre} ha solicitado ${isProrroga ? 'prórroga / apertura extemporánea' : 'apertura'} de calificaciones para el ${trimestre}° Trimestre en la materia ${materia}.\n\n📝 Motivo expresado: ${motivo.trim()}\n\nPor favor diríjase al módulo de Autorización de Movimientos para aprobar o rechazar esta solicitud.`,
