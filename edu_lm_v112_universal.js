@@ -5,7 +5,7 @@ const CONFIG = {
 };
 
 // Supabase Configuration
-console.log("%c>>> EDU-LM V240 UNIVERSAL CARGADA: VIGILANCIA HUMANA ACTIVA", "color: yellow; background: black; padding: 12px; font-weight: 1000; border: 2px solid yellow;");
+console.log("%c>>> EDU-LM V241 UNIVERSAL CARGADA: VIGILANCIA HUMANA ACTIVA", "color: yellow; background: black; padding: 12px; font-weight: 1000; border: 2px solid yellow;");
 const SUPABASE_URL = "https://eexgjaydpuioncenlsmv.supabase.co"; 
 const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVleGdqYXlkcHVpb25jZW5sc212Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQ4NTM0MDAsImV4cCI6MjEwMDQyOTQwMH0.vrJGn_Bg04OBBntL-w21-I27XuvO61HcUNrphMYYSlY";
 const SUPABASE_KEY = SUPABASE_ANON_KEY;
@@ -72,6 +72,126 @@ window.insertarComunicadoSeguro = async (payload) => {
     }
 
     return { data: null, error: new Error("No fue posible registrar la notificación de comunicado.") };
+};
+
+// Canal seguro para concluir / autosanar autorizaciones de calificaciones
+window.marcarAutorizacionComoCompletada = async ({
+    plantelId,
+    materia,
+    trimestre,
+    grupoId = null,
+    targetGrado = null,
+    maestroId = null,
+    autorizacionId = null,
+    fechaResolucion = new Date().toISOString()
+}) => {
+    try {
+        const pId = plantelId || state.plantelId;
+        const sysClient = window.getSystemSupabaseClient ? await window.getSystemSupabaseClient() : null;
+        const clientToUse = sysClient || supabaseClient;
+
+        let query = clientToUse
+            .from('autorizaciones_movimientos')
+            .select('id, payload_json, estado');
+
+        if (autorizacionId) {
+            query = query.eq('id', autorizacionId);
+        } else {
+            if (pId) query = query.eq('plantel_id', pId);
+            query = query
+                .in('tipo_accion', ['MODIFICACION_CALIFICACIONES', 'PRORROGA_CALIFICACIONES'])
+                .eq('estado', 'aprobada');
+        }
+
+        const { data: auts, error } = await query;
+        if (error || !auts || auts.length === 0) return { count: 0 };
+
+        const materiaClean = (materia || '').trim().toLowerCase();
+        const idsToUpdate = auts.filter(r => {
+            if (r.estado !== 'aprobada') return false;
+            if (autorizacionId && r.id === autorizacionId) return true;
+            if (materiaClean) {
+                const rMat = (r.payload_json?.materia || '').trim().toLowerCase();
+                if (rMat !== materiaClean && !rMat.includes(materiaClean) && !materiaClean.includes(rMat)) return false;
+            }
+            if (trimestre && parseInt(r.payload_json?.trimestre) !== parseInt(trimestre)) return false;
+            const rGid = String(r.payload_json?.grupo_id || '').split('::')[0].split('|')[0].trim();
+            if (grupoId && rGid && rGid !== grupoId) return false;
+            if (targetGrado && rGid) {
+                const rGrado = rGid.replace('grado:', '').trim();
+                if (rGrado !== targetGrado) return false;
+            }
+            return true;
+        }).map(r => r.id);
+
+        if (idsToUpdate.length > 0) {
+            const { error: updErr } = await clientToUse
+                .from('autorizaciones_movimientos')
+                .update({ estado: 'completada', fecha_resolucion: fechaResolucion })
+                .in('id', idsToUpdate);
+
+            if (updErr) {
+                console.warn("Fallo al actualizar con cliente primario, reintentando con cliente general:", updErr);
+                await supabaseClient
+                    .from('autorizaciones_movimientos')
+                    .update({ estado: 'completada', fecha_resolucion: fechaResolucion })
+                    .in('id', idsToUpdate);
+            }
+            console.log(`>>> [AUTORIZACIÓN COMPLETADA] Concluidas ${idsToUpdate.length} autorizaciones:`, idsToUpdate);
+            return { count: idsToUpdate.length, ids: idsToUpdate };
+        }
+        return { count: 0 };
+    } catch(err) {
+        console.error("Error en marcarAutorizacionComoCompletada:", err);
+        return { count: 0, error: err };
+    }
+};
+
+// Reconciliador proactivo para el panel Directivo / Admin
+window.autoReconciliarAutorizacionesCalificaciones = async (reqsList) => {
+    if (!reqsList || reqsList.length === 0) return reqsList;
+    try {
+        const aprobadasCalif = reqsList.filter(r => 
+            r.estado === 'aprobada' && 
+            ['MODIFICACION_CALIFICACIONES', 'PRORROGA_CALIFICACIONES'].includes(r.tipo_accion) &&
+            r.fecha_resolucion
+        );
+        if (aprobadasCalif.length === 0) return reqsList;
+
+        const sysClient = window.getSystemSupabaseClient ? await window.getSystemSupabaseClient() : null;
+        const clientToUse = sysClient || supabaseClient;
+
+        for (const r of aprobadasCalif) {
+            const mat = (r.payload_json?.materia || '').trim();
+            const trim = parseInt(r.payload_json?.trimestre || '1');
+            const tResolucion = new Date(r.fecha_resolucion).getTime();
+
+            // Buscar si hay calificaciones guardadas con fecha posterior a la fecha_resolucion
+            const { data: califsDespues } = await clientToUse
+                .from('calificaciones')
+                .select('fecha')
+                .eq('plantel_id', r.plantel_id || state.plantelId)
+                .eq('trimestre', trim)
+                .ilike('materia_nombre', `%${mat}%`)
+                .gt('fecha', new Date(tResolucion + 2000).toISOString())
+                .limit(1);
+
+            if (califsDespues && califsDespues.length > 0) {
+                const latestDate = califsDespues[0].fecha;
+                await clientToUse
+                    .from('autorizaciones_movimientos')
+                    .update({ estado: 'completada', fecha_resolucion: latestDate })
+                    .eq('id', r.id);
+
+                r.estado = 'completada';
+                r.fecha_resolucion = latestDate;
+                console.log(`>>> [AUTO-RECONCILIACIÓN] Autorización ${r.id} marcada automáticamente como completada.`);
+            }
+        }
+    } catch(err) {
+        console.warn("Aviso en autoReconciliarAutorizacionesCalificaciones:", err);
+    }
+    return reqsList;
 };
 
 // Global State
@@ -10929,6 +11049,11 @@ window.loadCalendarAutorizaciones = async (year, month) => {
 
         if (error) throw error;
 
+        // Auto-reconciliación proactiva: si alguna calificación ya fue sellada después de la aprobación, marcar completada
+        if (window.autoReconciliarAutorizacionesCalificaciones) {
+            await window.autoReconciliarAutorizacionesCalificaciones(allReqs || []);
+        }
+
         const dateMap = {};
         (allReqs || []).forEach(r => {
             if (r.creado_en) {
@@ -10979,11 +11104,13 @@ window.loadCalendarAutorizaciones = async (year, month) => {
             if (dayReqs.length > 0) {
                 const pend = dayReqs.filter(r => r.estado === 'pendiente').length;
                 const apr = dayReqs.filter(r => r.estado === 'aprobada').length;
+                const comp = dayReqs.filter(r => r.estado === 'completada').length;
                 const rech = dayReqs.filter(r => r.estado === 'rechazada').length;
 
                 dotsHtml = `
                 <div style="display:flex; gap:3px; justify-content:center; margin-top:4px; flex-wrap:wrap;">
-                    ${apr > 0 ? `<span style="font-size:0.65rem; background:#dcfce7; color:#166534; padding:1px 5px; border-radius:8px; font-weight:bold;" title="${apr} Aprobadas">🟢 ${apr}</span>` : ''}
+                    ${comp > 0 ? `<span style="font-size:0.65rem; background:#e0e7ff; color:#3730a3; padding:1px 5px; border-radius:8px; font-weight:bold;" title="${comp} Completadas">🔵 ${comp}</span>` : ''}
+                    ${apr > 0 ? `<span style="font-size:0.65rem; background:#dcfce7; color:#166534; padding:1px 5px; border-radius:8px; font-weight:bold;" title="${apr} Aprobadas en captura">🟢 ${apr}</span>` : ''}
                     ${rech > 0 ? `<span style="font-size:0.65rem; background:#fee2e2; color:#991b1b; padding:1px 5px; border-radius:8px; font-weight:bold;" title="${rech} Rechazadas">🔴 ${rech}</span>` : ''}
                     ${pend > 0 ? `<span style="font-size:0.65rem; background:#fef9c3; color:#854d0e; padding:1px 5px; border-radius:8px; font-weight:bold;" title="${pend} Pendientes">🟡 ${pend}</span>` : ''}
                 </div>`;
@@ -11002,7 +11129,8 @@ window.loadCalendarAutorizaciones = async (year, month) => {
             </div>
             
             <div style="margin-top:16px; display:flex; gap:16px; justify-content:center; font-size:0.75rem; color:var(--text-muted); flex-wrap:wrap;">
-                <span>🟢 Aprobadas</span>
+                <span>🔵 Completadas (Selladas)</span>
+                <span>🟢 Aprobadas (En captura)</span>
                 <span>🔴 Rechazadas</span>
                 <span>🟡 Pendientes por resolver</span>
             </div>
@@ -11058,9 +11186,16 @@ window.verDetalleDiaAutorizaciones = (dateKey) => {
     }
 
     const cardsHtml = reqs.map(r => {
-        const badgeColor = r.estado === 'aprobada' ? 'background:#dcfce7; color:#166534;' :
-                           (r.estado === 'rechazada' ? 'background:#fee2e2; color:#991b1b;' : 'background:#fef9c3; color:#854d0e;');
-        const statusIcon = r.estado === 'aprobada' ? 'fa-circle-check' : (r.estado === 'rechazada' ? 'fa-circle-xmark' : 'fa-hourglass-half');
+        const isComp = r.estado === 'completada';
+        const isApr = r.estado === 'aprobada';
+        const isRech = r.estado === 'rechazada';
+
+        const badgeColor = isComp ? 'background:#e0e7ff; color:#3730a3;' :
+                           (isApr ? 'background:#dcfce7; color:#166534;' :
+                           (isRech ? 'background:#fee2e2; color:#991b1b;' : 'background:#fef9c3; color:#854d0e;'));
+        const statusIcon = isComp ? 'fa-circle-check' :
+                           (isApr ? 'fa-lock-open' :
+                           (isRech ? 'fa-circle-xmark' : 'fa-hourglass-half'));
         const solInfo = window.obtenerSolicitanteInfo(r);
 
         return `
@@ -11075,7 +11210,7 @@ window.verDetalleDiaAutorizaciones = (dateKey) => {
             <div style="font-size:0.75rem; color:var(--text-muted); display:flex; gap:16px; flex-wrap:wrap; align-items:center;">
                 <span><i class="fa-solid fa-user-gear"></i> Solicitado por: <strong>${solInfo.fullDisplay}</strong></span>
                 <span><i class="fa-regular fa-clock"></i> Creado: ${new Date(r.creado_en).toLocaleString('es-MX')}</span>
-                ${r.fecha_resolucion ? `<span><i class="fa-solid fa-check-double"></i> Resuelto: ${new Date(r.fecha_resolucion).toLocaleString('es-MX')}</span>` : ''}
+                ${r.fecha_resolucion ? `<span><i class="fa-solid fa-check-double"></i> ${isComp ? 'Sellado/Completado' : 'Resuelto'}: ${new Date(r.fecha_resolucion).toLocaleString('es-MX')}</span>` : ''}
             </div>
         </div>`;
     }).join('');
@@ -11104,7 +11239,13 @@ window.loadHistorialAutorizaciones = async () => {
             .order('creado_en', { ascending: false });
 
         if (error) throw error;
-        window._allHistorialReqs = data || [];
+
+        // Auto-reconciliar autorizaciones aprobadas que ya fueron completadas
+        let listToRender = data || [];
+        if (window.autoReconciliarAutorizacionesCalificaciones) {
+            listToRender = await window.autoReconciliarAutorizacionesCalificaciones(listToRender);
+        }
+        window._allHistorialReqs = listToRender;
 
         window.renderHistorialAutorizacionesTabla(window._allHistorialReqs);
 
@@ -11126,8 +11267,10 @@ window.renderHistorialAutorizacionesTabla = (list) => {
     tbody.innerHTML = list.map(item => {
         const createdStr = item.creado_en ? new Date(item.creado_en).toLocaleString('es-MX', { dateStyle:'short', timeStyle:'short' }) : '-';
         const resStr = item.fecha_resolucion ? new Date(item.fecha_resolucion).toLocaleString('es-MX', { dateStyle:'short', timeStyle:'short' }) : '-';
-        const badgeStyle = item.estado === 'aprobada' ? 'background:#dcfce7; color:#166534;' :
-                           (item.estado === 'rechazada' ? 'background:#fee2e2; color:#991b1b;' : 'background:#fef9c3; color:#854d0e;');
+        const isComp = item.estado === 'completada';
+        const badgeStyle = isComp ? 'background:#e0e7ff; color:#3730a3;' :
+                           (item.estado === 'aprobada' ? 'background:#dcfce7; color:#166534;' :
+                           (item.estado === 'rechazada' ? 'background:#fee2e2; color:#991b1b;' : 'background:#fef9c3; color:#854d0e;'));
 
         const solInfo = window.obtenerSolicitanteInfo(item);
 
@@ -20251,6 +20394,18 @@ window.cargarBoletasGrupo = async (forzarRecalculo = false) => {
 
                 if (consumidaEnSesion || yaSelladoDespues) {
                     tieneSolicitudAprobada = false;
+                    // Auto-reconciliación proactiva: si la autorización seguía en 'aprobada' pero las calificaciones ya fueron asentadas después
+                    if (autAprobada.estado === 'aprobada' && yaSelladoDespues && window.marcarAutorizacionComoCompletada) {
+                        window.marcarAutorizacionComoCompletada({
+                            plantelId: state.plantelId,
+                            materia: materiaClean,
+                            trimestre: currentTrim,
+                            grupoId: gid,
+                            targetGrado: targetGrado,
+                            autorizacionId: autAprobada.id,
+                            fechaResolucion: autAprobada.fecha_resolucion || new Date().toISOString()
+                        }).catch(e => console.warn("Auto-reconciliación en segundo plano:", e));
+                    }
                 } else {
                     tieneSolicitudAprobada = true;
                 }
@@ -20594,36 +20749,16 @@ window.sellarYEnviarCalificaciones = async () => {
         } catch(eStorage) {}
 
         try {
-            const sysClient = window.getSystemSupabaseClient ? await window.getSystemSupabaseClient() : null;
-            const clientToUse = sysClient || supabaseClient;
-
-            const { data: autsParaCerrar } = await clientToUse
-                .from('autorizaciones_movimientos')
-                .select('id, payload_json')
-                .eq('plantel_id', state.plantelId)
-                .in('tipo_accion', ['MODIFICACION_CALIFICACIONES', 'PRORROGA_CALIFICACIONES'])
-                .eq('estado', 'aprobada');
-
-            const idsCerrar = (autsParaCerrar || []).filter(r => {
-                const rMat = (r.payload_json?.materia || '').trim().toLowerCase();
-                const mMat = materiaClean.toLowerCase();
-                if (rMat !== mMat && !rMat.includes(mMat) && !mMat.includes(rMat)) return false;
-                if (parseInt(r.payload_json?.trimestre) !== parseInt(trim)) return false;
-                const rGid = String(r.payload_json?.grupo_id || '').split('::')[0].split('|')[0].trim();
-                if (gid && rGid && rGid !== gid) return false;
-                if (targetGrado && rGid) {
-                    const rGrado = rGid.replace('grado:', '').trim();
-                    if (rGrado !== targetGrado) return false;
-                }
-                return true;
-            }).map(r => r.id);
-
-            if (idsCerrar.length > 0) {
-                await clientToUse
-                    .from('autorizaciones_movimientos')
-                    .update({ estado: 'completada', fecha_resolucion: nowIso })
-                    .in('id', idsCerrar);
-                console.log(`>>> [AUTORIZACIÓN CONSUMIDA] Concluidas ${idsCerrar.length} autorizaciones.`);
+            if (window.marcarAutorizacionComoCompletada) {
+                await window.marcarAutorizacionComoCompletada({
+                    plantelId: state.plantelId,
+                    materia: materiaClean,
+                    trimestre: parseInt(trim),
+                    grupoId: gid,
+                    targetGrado: targetGrado,
+                    maestroId: actUserId,
+                    fechaResolucion: nowIso
+                });
             }
         } catch(eConsumir) {
             console.error("Error al concluir autorización consumida:", eConsumir);
