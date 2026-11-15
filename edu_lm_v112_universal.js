@@ -5,7 +5,7 @@ const CONFIG = {
 };
 
 // Supabase Configuration
-console.log("%c>>> EDU-LM V242 UNIVERSAL CARGADA: VIGILANCIA HUMANA ACTIVA", "color: yellow; background: black; padding: 12px; font-weight: 1000; border: 2px solid yellow;");
+console.log("%c>>> EDU-LM V243 UNIVERSAL CARGADA: VIGILANCIA HUMANA ACTIVA", "color: yellow; background: black; padding: 12px; font-weight: 1000; border: 2px solid yellow;");
 const SUPABASE_URL = "https://eexgjaydpuioncenlsmv.supabase.co"; 
 const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVleGdqYXlkcHVpb25jZW5sc212Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQ4NTM0MDAsImV4cCI6MjEwMDQyOTQwMH0.vrJGn_Bg04OBBntL-w21-I27XuvO61HcUNrphMYYSlY";
 const SUPABASE_KEY = SUPABASE_ANON_KEY;
@@ -2477,16 +2477,17 @@ window.switchAdminCalificacionesTab = (tab) => {
 };
 
 window.handleAlcanceEstadisticaChange = () => {
-    const alcance = document.getElementById('adminAlcanceEstadisticaSel').value;
+    const alcance = document.getElementById('adminAlcanceEstadisticaSel')?.value;
     const gradoContainer = document.getElementById('adminGradoEstadisticaContainer');
     const grupoContainer = document.getElementById('adminGrupoEstadisticaContainer');
-    gradoContainer.style.display = 'none';
-    grupoContainer.style.display = 'none';
+    if (gradoContainer) gradoContainer.style.display = 'none';
+    if (grupoContainer) grupoContainer.style.display = 'none';
     
-    if(alcance === 'grado') {
-        gradoContainer.style.display = 'block';
-    } else if(alcance === 'grupo') {
-        grupoContainer.style.display = 'block';
+    if (alcance === 'grado') {
+        if (gradoContainer) gradoContainer.style.display = 'block';
+    } else if (alcance === 'grupo') {
+        if (grupoContainer) grupoContainer.style.display = 'block';
+        if (window.loadAdminEstadisticasFiltros) window.loadAdminEstadisticasFiltros();
     }
 };
 
@@ -25516,10 +25517,12 @@ window.loadAdminCalificacionesFiltros = async () => {
         if (pId) q = q.or('plantel_id.eq.' + pId + ',plantel_id.is.null');
         const { data: grupos, error } = await q;
         if(error) return console.error(error);
+        const optionsHtml = '<option value="">-- Selecciona un grupo --</option>' + 
+           (grupos || []).map(g => `<option value="${g.id}">${g.nombre}${g.turno ? ' - ' + g.turno : ''}</option>`).join('');
         const sel = document.getElementById('adminGrupoSel');
-        if(!sel) return;
-        sel.innerHTML = '<option value="">-- Selecciona un grupo --</option>' + 
-           (grupos || []).map(g => `<option value="${g.id}">${g.nombre} - ${g.turno}</option>`).join('');
+        if(sel) sel.innerHTML = optionsHtml;
+        const selEst = document.getElementById('adminGrupoEstadisticaSel');
+        if(selEst) selEst.innerHTML = optionsHtml;
     } catch(err) { console.error(err); }
 };
 
@@ -25703,18 +25706,37 @@ window.cargarSabanaGrupo = async () => {
 
 window.loadAdminEstadisticasFiltros = async () => {
     try {
+        const selGrupo = document.getElementById('adminGrupoEstadisticaSel');
+        if (!selGrupo) return;
+
+        // Si ya hay opciones válidas en el select de concentrado, copiarlas de inmediato
+        const selConcentrado = document.getElementById('adminGrupoSel');
+        if (selConcentrado && selConcentrado.options && selConcentrado.options.length > 1) {
+            selGrupo.innerHTML = selConcentrado.innerHTML;
+            return;
+        }
+
         const pId = state.plantelId || (window._obtenerPlantelIdActivo ? await window._obtenerPlantelIdActivo() : null);
-        let q = supabaseClient.from('grupos').select('id, nombre, grado, turno').order('nombre');
+        let q = supabaseClient.from('grupos').select('id, nombre, turno').order('nombre');
         if (pId) q = q.or('plantel_id.eq.' + pId + ',plantel_id.is.null');
         const { data: grupos, error } = await q;
-        if (error) console.error("Error al cargar grupos", error);
+        if (error) {
+            console.error("Error al cargar grupos estadistica", error);
+            selGrupo.innerHTML = '<option value="">Error al cargar grupos</option>';
+            return;
+        }
         
-        const selGrupo = document.getElementById('adminGrupoEstadisticaSel');
-        if (selGrupo && grupos) {
+        if (grupos && grupos.length > 0) {
             selGrupo.innerHTML = '<option value="">-- Selecciona un grupo --</option>' + 
                 grupos.map(g => `<option value="${g.id}">${g.nombre}${g.turno ? ' - ' + g.turno : ''}</option>`).join('');
+        } else {
+            selGrupo.innerHTML = '<option value="">No hay grupos registrados</option>';
         }
-    } catch(e) { console.error("Error al cargar grupos estadistica", e); }
+    } catch(e) { 
+        console.error("Error al cargar grupos estadistica", e);
+        const selGrupo = document.getElementById('adminGrupoEstadisticaSel');
+        if (selGrupo) selGrupo.innerHTML = '<option value="">Error al cargar grupos</option>';
+    }
 };
 
 window._activeStatsSubTab = 'materias';
