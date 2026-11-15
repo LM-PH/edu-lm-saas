@@ -5,7 +5,7 @@ const CONFIG = {
 };
 
 // Supabase Configuration
-console.log("%c>>> EDU-LM V241 UNIVERSAL CARGADA: VIGILANCIA HUMANA ACTIVA", "color: yellow; background: black; padding: 12px; font-weight: 1000; border: 2px solid yellow;");
+console.log("%c>>> EDU-LM V242 UNIVERSAL CARGADA: VIGILANCIA HUMANA ACTIVA", "color: yellow; background: black; padding: 12px; font-weight: 1000; border: 2px solid yellow;");
 const SUPABASE_URL = "https://eexgjaydpuioncenlsmv.supabase.co"; 
 const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVleGdqYXlkcHVpb25jZW5sc212Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQ4NTM0MDAsImV4cCI6MjEwMDQyOTQwMH0.vrJGn_Bg04OBBntL-w21-I27XuvO61HcUNrphMYYSlY";
 const SUPABASE_KEY = SUPABASE_ANON_KEY;
@@ -2467,6 +2467,7 @@ window.switchAdminCalificacionesTab = (tab) => {
         if(btnEstadisticas) { btnEstadisticas.className = 'btn btn-primary'; btnEstadisticas.style.background = ''; }
         const el = document.getElementById('view-estadisticas');
         if(el) { el.style.display = 'flex'; el.style.animation = 'fadeIn 0.4s'; }
+        if(window.loadAdminEstadisticasFiltros) window.loadAdminEstadisticasFiltros();
     } else if(tab === 'maestros') {
         if(btnMaestros) { btnMaestros.className = 'btn btn-primary'; btnMaestros.style.background = ''; }
         const el = document.getElementById('view-maestros');
@@ -2490,7 +2491,10 @@ window.handleAlcanceEstadisticaChange = () => {
 };
 
 function renderAdminCalificaciones() {
-  setTimeout(() => { if (window.loadAdminCalificacionesFiltros) window.loadAdminCalificacionesFiltros(); }, 100);
+  setTimeout(() => { 
+    if (window.loadAdminCalificacionesFiltros) window.loadAdminCalificacionesFiltros(); 
+    if (window.loadAdminEstadisticasFiltros) window.loadAdminEstadisticasFiltros();
+  }, 100);
   return `
     <div class="page-header" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:15px;">
       <div>
@@ -25699,16 +25703,94 @@ window.cargarSabanaGrupo = async () => {
 
 window.loadAdminEstadisticasFiltros = async () => {
     try {
-        const { data: grupos } = await supabaseClient.from('grupos')
-            .select('*')
-            .eq('plantel_id', state.plantelId)
-            .order('nombre');
+        const pId = state.plantelId || (window._obtenerPlantelIdActivo ? await window._obtenerPlantelIdActivo() : null);
+        let q = supabaseClient.from('grupos').select('id, nombre, grado, turno').order('nombre');
+        if (pId) q = q.or('plantel_id.eq.' + pId + ',plantel_id.is.null');
+        const { data: grupos, error } = await q;
+        if (error) console.error("Error al cargar grupos", error);
         
         const selGrupo = document.getElementById('adminGrupoEstadisticaSel');
-        if(selGrupo && grupos) {
-            selGrupo.innerHTML = grupos.map(g => `<option value="${g.id}">${g.nombre}</option>`).join('');
+        if (selGrupo && grupos) {
+            selGrupo.innerHTML = '<option value="">-- Selecciona un grupo --</option>' + 
+                grupos.map(g => `<option value="${g.id}">${g.nombre}${g.turno ? ' - ' + g.turno : ''}</option>`).join('');
         }
-    } catch(e) { console.error("Error al cargar grupos", e); }
+    } catch(e) { console.error("Error al cargar grupos estadistica", e); }
+};
+
+window._activeStatsSubTab = 'materias';
+
+window.switchStatsSubTab = (tab) => {
+    window._activeStatsSubTab = tab;
+    const btnMat = document.getElementById('btnStatsTabMaterias');
+    const btnAlu = document.getElementById('btnStatsTabAlumnos');
+    const viewMat = document.getElementById('statsSubViewMaterias');
+    const viewAlu = document.getElementById('statsSubViewAlumnos');
+    if (tab === 'materias') {
+        if (btnMat) { btnMat.className = 'btn btn-primary btn-sm'; btnMat.style.background = ''; }
+        if (btnAlu) { btnAlu.className = 'btn btn-outline btn-sm'; btnAlu.style.background = 'white'; }
+        if (viewMat) viewMat.style.display = 'block';
+        if (viewAlu) viewAlu.style.display = 'none';
+    } else {
+        if (btnAlu) { btnAlu.className = 'btn btn-primary btn-sm'; btnAlu.style.background = ''; }
+        if (btnMat) { btnMat.className = 'btn btn-outline btn-sm'; btnMat.style.background = 'white'; }
+        if (viewMat) viewMat.style.display = 'none';
+        if (viewAlu) viewAlu.style.display = 'block';
+    }
+};
+
+window.filtrarTablaAlumnosStats = (query) => {
+    const q = (query || '').toLowerCase().trim();
+    const rows = document.querySelectorAll('#tablaEstadisticasAlumnosBody tr');
+    rows.forEach(r => {
+        const text = r.getAttribute('data-search') || r.innerText.toLowerCase();
+        const matchesFilter = r.getAttribute('data-status-match') !== 'false';
+        if (text.includes(q) && matchesFilter) {
+            r.style.display = '';
+        } else {
+            r.style.display = 'none';
+        }
+    });
+};
+
+window.filtrarAlumnosPorEstado = (estado, btn) => {
+    const btns = document.querySelectorAll('.stats-filter-pill');
+    btns.forEach(b => {
+        b.className = 'btn btn-outline btn-sm stats-filter-pill';
+        b.style.background = 'white';
+    });
+    if (btn) {
+        btn.className = 'btn btn-primary btn-sm stats-filter-pill';
+        btn.style.background = '';
+    }
+    const searchVal = (document.getElementById('buscarAlumnoStatsInput')?.value || '').toLowerCase().trim();
+    const rows = document.querySelectorAll('#tablaEstadisticasAlumnosBody tr');
+    rows.forEach(r => {
+        const s = r.getAttribute('data-estado');
+        let matchStatus = true;
+        if (estado === 'con_reprobadas') {
+            matchStatus = (s === 'riesgo' || s === 'critico');
+        } else if (estado === 'aprobados') {
+            matchStatus = (s === 'regular');
+        } else if (estado === 'sin_calif') {
+            matchStatus = (s === 'sin_calif');
+        }
+        r.setAttribute('data-status-match', matchStatus ? 'true' : 'false');
+        const text = r.getAttribute('data-search') || r.innerText.toLowerCase();
+        if (matchStatus && text.includes(searchVal)) {
+            r.style.display = '';
+        } else {
+            r.style.display = 'none';
+        }
+    });
+};
+
+window.filtrarTablaMateriasStats = (query) => {
+    const q = (query || '').toLowerCase().trim();
+    const rows = document.querySelectorAll('#tablaEstadisticasAprobacionBody tr');
+    rows.forEach(r => {
+        const text = r.innerText.toLowerCase();
+        r.style.display = text.includes(q) ? '' : 'none';
+    });
 };
 
 window.generarEstadisticaAprobacion = async () => {
@@ -25719,177 +25801,524 @@ window.generarEstadisticaAprobacion = async () => {
     const grado = document.getElementById('adminGradoEstadisticaSel').value;
     const grupoId = document.getElementById('adminGrupoEstadisticaSel').value;
     
-    hold.innerHTML = '<p style="text-align:center; padding:20px;">Calculando estadísticas, por favor espere...</p>';
-    btnDownload.style.display = 'none';
+    if (alcance === 'grupo' && !grupoId) {
+        hold.innerHTML = '<div style="padding:20px; text-align:center; color:var(--warning);"><i class="fa-solid fa-triangle-exclamation" style="font-size:2rem; margin-bottom:10px;"></i><p>Por favor selecciona un grupo de la lista de filtros a la izquierda.</p></div>';
+        if (btnDownload) btnDownload.style.display = 'none';
+        return;
+    }
+
+    hold.innerHTML = '<div style="padding:40px; text-align:center;"><i class="fa-solid fa-spinner fa-spin" style="font-size:2.5rem; color:var(--primary); margin-bottom:15px;"></i><p style="color:var(--text-muted); font-size:1rem; font-weight:600;">Cargando todas las evaluaciones oficiales y procesando estadísticas...</p><p style="font-size:0.8rem; color:var(--text-muted);">Sincronizando todas las materias y todos los alumnos registrados.</p></div>';
+    if (btnDownload) btnDownload.style.display = 'none';
 
     try {
-        let query = supabaseClient.from('calificaciones')
-            .select('alumno_id, calificacion, materia_nombre, alumnos!inner(grado, grupo_id)')
-            .eq('plantel_id', state.plantelId);
+        const pId = state.plantelId || (window._obtenerPlantelIdActivo ? await window._obtenerPlantelIdActivo() : null);
 
-        if(trim !== 'Final') {
-            query = query.eq('trimestre', parseInt(trim));
-        }
+        // 1. Obtener conteo exacto de calificaciones que cumplen los filtros
+        let countQuery = supabaseClient.from('calificaciones')
+            .select('id, alumnos!inner(grado, grupo_id)', { count: 'exact', head: true });
+        if (pId) countQuery = countQuery.eq('plantel_id', pId);
+        if (trim !== 'Final') countQuery = countQuery.eq('trimestre', parseInt(trim));
+        if (alcance === 'grado') countQuery = countQuery.in('alumnos.grado', [grado, grado.replace('°', '')]);
+        else if (alcance === 'grupo') countQuery = countQuery.eq('alumnos.grupo_id', grupoId);
 
-        if(alcance === 'grado') {
-            query = query.eq('alumnos.grado', grado);
-        } else if(alcance === 'grupo') {
-            query = query.eq('alumnos.grupo_id', grupoId);
-        }
+        const { count, error: countErr } = await countQuery;
+        if (countErr) throw countErr;
 
-        const { data, error } = await query;
-
-        if(error) throw error;
-
-        if(!data || data.length === 0) {
-            hold.innerHTML = '<p style="text-align:center; padding:20px; color:var(--text-muted);">No se encontraron calificaciones para los filtros seleccionados.</p>';
+        if (!count || count === 0) {
+            hold.innerHTML = '<div style="text-align:center; padding:35px; color:var(--text-muted);"><i class="fa-solid fa-folder-open" style="font-size:3rem; margin-bottom:15px; opacity:0.4;"></i><p style="font-weight:600; font-size:1.1rem;">No se encontraron calificaciones oficiales</p><p style="font-size:0.85rem;">No hay registros para los filtros seleccionados (Trimestre: ' + trim + ', Alcance: ' + alcance + ').</p></div>';
             return;
         }
 
+        // 2. Cargar todas las páginas en paralelo (superando el límite de 1000 filas de PostgREST)
+        const pagePromises = [];
+        for (let from = 0; from < count; from += 1000) {
+            let q = supabaseClient.from('calificaciones')
+                .select('alumno_id, calificacion, materia_nombre, materia_id(nombre), trimestre, alumnos!inner(id, nombre, grado, grupo_id, grupos(nombre, turno))')
+                .range(from, from + 999);
+            if (pId) q = q.eq('plantel_id', pId);
+            if (trim !== 'Final') q = q.eq('trimestre', parseInt(trim));
+            if (alcance === 'grado') q = q.in('alumnos.grado', [grado, grado.replace('°', '')]);
+            else if (alcance === 'grupo') q = q.eq('alumnos.grupo_id', grupoId);
+            pagePromises.push(q);
+        }
+
+        // 3. Consultar alumnos inscritos en este alcance para asegurar cobertura de todos los alumnos
+        let alumsQuery = supabaseClient.from('alumnos')
+            .select('id, nombre, grado, grupo_id, grupos(nombre, turno)')
+            .order('nombre');
+        if (pId) alumsQuery = alumsQuery.or('plantel_id.eq.' + pId + ',plantel_id.is.null');
+        if (alcance === 'grado') alumsQuery = alumsQuery.in('grado', [grado, grado.replace('°', '')]);
+        else if (alcance === 'grupo') alumsQuery = alumsQuery.eq('grupo_id', grupoId);
+
+        const [results, alumsRes] = await Promise.all([
+            Promise.all(pagePromises),
+            alumsQuery
+        ]);
+
+        let califsData = [];
+        results.forEach(r => { if (r.data) califsData.push(...r.data); });
+
+        const scopeAlumnos = alumsRes.data || [];
+        const studentMap = {};
+
+        // Inicializar mapa de estudiantes con todos los alumnos inscritos en este alcance
+        scopeAlumnos.forEach(a => {
+            studentMap[a.id] = {
+                id: a.id,
+                nombre: a.nombre || 'Sin Nombre',
+                grado: a.grado || '-',
+                grupo: a.grupos?.nombre || '-',
+                evaluaciones: 0,
+                aprobadas: 0,
+                reprobadas: 0,
+                sumCalif: 0,
+                materiasReprobadas: []
+            };
+        });
+
+        // 4. Calcular métricas por materia y por alumno
+        const statsMateria = {};
+        let totalEvaluaciones = 0;
         let totalAprobados = 0;
         let totalReprobados = 0;
-        const statsMateria = {};
+        let sumAllCalifs = 0;
 
         if (trim === 'Final') {
             const alumnoMateriaMap = {};
-            data.forEach(row => {
-                const mat = row.materia_nombre || 'Sin Asignatura';
+            califsData.forEach(row => {
+                const calif = parseFloat(row.calificacion);
+                if (isNaN(calif)) return;
+                const rawMat = row.materia_nombre || (row.materia_id ? row.materia_id.nombre : 'Sin Asignatura');
+                const mat = rawMat.replace(/\s+/g, ' ').trim();
                 const key = `${row.alumno_id}_${mat}`;
                 if (!alumnoMateriaMap[key]) {
-                    alumnoMateriaMap[key] = { mat: mat, sum: 0, count: 0 };
+                    alumnoMateriaMap[key] = {
+                        alumno_id: row.alumno_id,
+                        mat: mat,
+                        sum: 0,
+                        count: 0,
+                        rowAlum: row.alumnos
+                    };
                 }
-                alumnoMateriaMap[key].sum += parseFloat(row.calificacion);
+                alumnoMateriaMap[key].sum += calif;
                 alumnoMateriaMap[key].count++;
             });
-            
+
             Object.values(alumnoMateriaMap).forEach(am => {
                 const mat = am.mat;
                 const prom = am.sum / am.count;
-                
-                if(!statsMateria[mat]) statsMateria[mat] = { total: 0, aprobados: 0, reprobados: 0 };
+                const isApr = prom >= 6.0;
+
+                if (!statsMateria[mat]) statsMateria[mat] = { total: 0, aprobados: 0, reprobados: 0, sumCalif: 0 };
                 statsMateria[mat].total++;
-                if (prom >= 6) {
-                    totalAprobados++;
+                statsMateria[mat].sumCalif += prom;
+                totalEvaluaciones++;
+                sumAllCalifs += prom;
+                if (isApr) {
                     statsMateria[mat].aprobados++;
+                    totalAprobados++;
                 } else {
-                    totalReprobados++;
                     statsMateria[mat].reprobados++;
+                    totalReprobados++;
+                }
+
+                const alId = am.alumno_id;
+                if (!studentMap[alId]) {
+                    studentMap[alId] = {
+                        id: alId,
+                        nombre: am.rowAlum?.nombre || 'Sin Nombre',
+                        grado: am.rowAlum?.grado || '-',
+                        grupo: am.rowAlum?.grupos?.nombre || '-',
+                        evaluaciones: 0,
+                        aprobadas: 0,
+                        reprobadas: 0,
+                        sumCalif: 0,
+                        materiasReprobadas: []
+                    };
+                }
+                studentMap[alId].evaluaciones++;
+                studentMap[alId].sumCalif += prom;
+                if (isApr) {
+                    studentMap[alId].aprobadas++;
+                } else {
+                    studentMap[alId].reprobadas++;
+                    studentMap[alId].materiasReprobadas.push({ materia: mat, calificacion: prom.toFixed(1) });
                 }
             });
         } else {
-            data.forEach(row => {
+            califsData.forEach(row => {
                 const calif = parseFloat(row.calificacion);
-                const mat = row.materia_nombre || 'Sin Asignatura';
-                
-                if(!statsMateria[mat]) statsMateria[mat] = { total: 0, aprobados: 0, reprobados: 0 };
-                
+                if (isNaN(calif)) return;
+                const rawMat = row.materia_nombre || (row.materia_id ? row.materia_id.nombre : 'Sin Asignatura');
+                const mat = rawMat.replace(/\s+/g, ' ').trim();
+                const isApr = calif >= 6.0;
+
+                if (!statsMateria[mat]) statsMateria[mat] = { total: 0, aprobados: 0, reprobados: 0, sumCalif: 0 };
                 statsMateria[mat].total++;
-                if(calif >= 6) {
-                    totalAprobados++;
+                statsMateria[mat].sumCalif += calif;
+                totalEvaluaciones++;
+                sumAllCalifs += calif;
+                if (isApr) {
                     statsMateria[mat].aprobados++;
+                    totalAprobados++;
                 } else {
-                    totalReprobados++;
                     statsMateria[mat].reprobados++;
+                    totalReprobados++;
+                }
+
+                const alId = row.alumno_id;
+                if (!studentMap[alId]) {
+                    studentMap[alId] = {
+                        id: alId,
+                        nombre: row.alumnos?.nombre || 'Sin Nombre',
+                        grado: row.alumnos?.grado || '-',
+                        grupo: row.alumnos?.grupos?.nombre || '-',
+                        evaluaciones: 0,
+                        aprobadas: 0,
+                        reprobadas: 0,
+                        sumCalif: 0,
+                        materiasReprobadas: []
+                    };
+                }
+                studentMap[alId].evaluaciones++;
+                studentMap[alId].sumCalif += calif;
+                if (isApr) {
+                    studentMap[alId].aprobadas++;
+                } else {
+                    studentMap[alId].reprobadas++;
+                    studentMap[alId].materiasReprobadas.push({ materia: mat, calificacion: calif });
                 }
             });
         }
 
-        const totalEvaluaciones = totalAprobados + totalReprobados;
-        const pctReprobacionGeneral = totalEvaluaciones > 0 ? ((totalReprobados / totalEvaluaciones) * 100).toFixed(1) : 0;
-        const pctAprobacionGeneral = totalEvaluaciones > 0 ? ((totalAprobados / totalEvaluaciones) * 100).toFixed(1) : 0;
+        // 5. Ordenar materias según prelación curricular SEP
+        const orderPriorityMap = [
+            { k: 'espanol', i: 1 }, { k: 'ingles', i: 2 }, { k: 'matematicas', i: 3 },
+            { k: 'ciencias', i: 4 }, { k: 'biologia', i: 4 }, { k: 'quimica', i: 4 }, { k: 'fisica', i: 4 },
+            { k: 'geografia', i: 5 }, { k: 'historia', i: 6 }, { k: 'formacion civica', i: 7 }, { k: 'f.c.', i: 7 },
+            { k: 'educacion fisica', i: 8 }, { k: 'edu. fisica', i: 8 }, { k: 'artes', i: 9 },
+            { k: 'tecnologia', i: 10 }, { k: 'taller', i: 10 }, { k: 'tutoria', i: 11 }, { k: 'integracion', i: 12 }
+        ];
+        const normalize = s => (s || '').toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+        const materiasSorted = Object.keys(statsMateria).sort((a, b) => {
+            const matA = normalize(a);
+            const matB = normalize(b);
+            let matchA = orderPriorityMap.find(x => matA.includes(x.k));
+            let matchB = orderPriorityMap.find(x => matB.includes(x.k));
+            let indexA = matchA ? matchA.i : 999;
+            let indexB = matchB ? matchB.i : 999;
+            if (indexA !== indexB) return indexA - indexB;
+            return matA.localeCompare(matB);
+        });
 
-        const materiasSorted = Object.keys(statsMateria).sort();
+        // 6. Preparar lista de alumnos ordenada
+        const studentsList = Object.values(studentMap);
+        if (window._compararNombresAlumnos) {
+            studentsList.sort(window._compararNombresAlumnos);
+        } else {
+            studentsList.sort((a, b) => a.nombre.localeCompare(b.nombre));
+        }
 
-        let tableRows = '';
+        studentsList.forEach(s => {
+            s.promedio = s.evaluaciones > 0 ? (s.sumCalif / s.evaluaciones).toFixed(1) : '-';
+        });
+
+        const totalAlumnosScope = studentsList.length;
+        const totalAlumnosEvaluados = studentsList.filter(s => s.evaluaciones > 0).length;
+        const conReprobadas = studentsList.filter(s => s.reprobadas > 0).length;
+        const regulares = studentsList.filter(s => s.evaluaciones > 0 && s.reprobadas === 0).length;
+        const sinCalifs = studentsList.filter(s => s.evaluaciones === 0).length;
+        const criticos = studentsList.filter(s => s.reprobadas >= 3).length;
+
+        const pctReprobacionGeneral = totalEvaluaciones > 0 ? ((totalReprobados / totalEvaluaciones) * 100).toFixed(1) : '0';
+        const pctAprobacionGeneral = totalEvaluaciones > 0 ? ((totalAprobados / totalEvaluaciones) * 100).toFixed(1) : '0';
+        const promedioGeneral = totalEvaluaciones > 0 ? (sumAllCalifs / totalEvaluaciones).toFixed(1) : '-';
+
+        // Guardar en memoria para descarga CSV
+        window._lastStatsData = {
+            trim,
+            alcance,
+            grado,
+            grupoId,
+            statsMateria,
+            materiasSorted,
+            studentsList,
+            totalEvaluaciones,
+            totalAprobados,
+            totalReprobados,
+            promedioGeneral
+        };
+
+        // 7. Armar filas de la tabla de materias
+        let tableMateriasRows = '';
         materiasSorted.forEach(m => {
             const s = statsMateria[m];
-            const pRep = s.total > 0 ? ((s.reprobados / s.total) * 100).toFixed(1) : 0;
-            const pApr = s.total > 0 ? ((s.aprobados / s.total) * 100).toFixed(1) : 0;
+            const pRep = s.total > 0 ? ((s.reprobados / s.total) * 100).toFixed(1) : '0';
+            const pApr = s.total > 0 ? ((s.aprobados / s.total) * 100).toFixed(1) : '0';
+            const prom = s.total > 0 ? (s.sumCalif / s.total).toFixed(1) : '-';
             
-            tableRows += `
+            tableMateriasRows += `
                 <tr>
-                    <td style="text-align:left; font-weight:bold;">${m}</td>
-                    <td>${s.total}</td>
-                    <td style="color:var(--success); font-weight:bold;">${s.aprobados} <span style="font-size:0.7rem; font-weight:normal; color:#166534;">(${pApr}%)</span></td>
-                    <td style="color:var(--danger); font-weight:bold;">${s.reprobados} <span style="font-size:0.7rem; font-weight:normal; color:#991b1b;">(${pRep}%)</span></td>
+                    <td style="text-align:left; font-weight:bold; color:var(--text-main);">${m}</td>
+                    <td><strong>${s.total}</strong></td>
+                    <td style="color:var(--success); font-weight:bold;">${s.aprobados} <span style="font-size:0.75rem; font-weight:normal; color:#166534; background:#dcfce7; padding:2px 6px; border-radius:10px;">${pApr}%</span></td>
+                    <td style="color:var(--danger); font-weight:bold;">${s.reprobados} <span style="font-size:0.75rem; font-weight:normal; color:#991b1b; background:#fee2e2; padding:2px 6px; border-radius:10px;">${pRep}%</span></td>
+                    <td style="font-weight:800; color:var(--primary);">${prom}</td>
                 </tr>
             `;
         });
 
+        // 8. Armar filas de la tabla de alumnos
+        let tableAlumnosRows = '';
+        studentsList.forEach((s, idx) => {
+            let estadoKey = 'regular';
+            let situacionBadge = `<span style="background:#dcfce7; color:#166534; padding:3px 9px; border-radius:12px; font-size:0.75rem; font-weight:bold; border:1px solid #bbf7d0;">Aprobado</span>`;
+            if (s.evaluaciones === 0) {
+                estadoKey = 'sin_calif';
+                situacionBadge = `<span style="background:#f1f5f9; color:#64748b; padding:3px 9px; border-radius:12px; font-size:0.75rem; font-weight:bold; border:1px solid #e2e8f0;">Sin Califs</span>`;
+            } else if (s.reprobadas >= 3) {
+                estadoKey = 'critico';
+                situacionBadge = `<span style="background:#fee2e2; color:#991b1b; padding:3px 9px; border-radius:12px; font-size:0.75rem; font-weight:bold; border:1px solid #fecaca;">Crítico (${s.reprobadas})</span>`;
+            } else if (s.reprobadas >= 1) {
+                estadoKey = 'riesgo';
+                situacionBadge = `<span style="background:#fef3c7; color:#92400e; padding:3px 9px; border-radius:12px; font-size:0.75rem; font-weight:bold; border:1px solid #fde68a;">En Riesgo (${s.reprobadas})</span>`;
+            }
+
+            const badgesHtml = s.materiasReprobadas && s.materiasReprobadas.length > 0 
+                ? s.materiasReprobadas.map(m => `<span style="display:inline-block; background:#fee2e2; color:#991b1b; border:1px solid #fecaca; padding:2px 7px; border-radius:8px; font-size:0.75rem; font-weight:600; margin:2px;">${m.materia} (${m.calificacion})</span>`).join(' ')
+                : `<span style="color:#16a34a; font-size:0.8rem; font-weight:500;"><i class="fa-solid fa-check"></i> Ninguna</span>`;
+
+            tableAlumnosRows += `
+                <tr data-estado="${estadoKey}" data-search="${s.nombre.toLowerCase()}">
+                    <td style="color:var(--text-muted); font-size:0.8rem;">${idx + 1}</td>
+                    <td style="text-align:left; font-weight:600; color:var(--text-main);">${s.nombre}</td>
+                    <td>${s.grupo || s.grado}</td>
+                    <td>${s.evaluaciones}</td>
+                    <td style="color:var(--success); font-weight:bold;">${s.aprobadas}</td>
+                    <td style="color:${s.reprobadas > 0 ? 'var(--danger)' : 'var(--text-muted)'}; font-weight:bold;">${s.reprobadas}</td>
+                    <td style="text-align:left;">${badgesHtml}</td>
+                    <td style="font-weight:800; font-size:0.95rem;">${s.promedio}</td>
+                    <td>${situacionBadge}</td>
+                </tr>
+            `;
+        });
+
+        // 9. Renderizar Dashboard Completo
         hold.innerHTML = `
-            <div style="display:flex; justify-content:space-around; width:100%; margin-bottom:20px; flex-wrap:wrap; gap:15px;">
-                <div style="text-align:center; background:#f8fafc; padding:15px; border-radius:12px; border:1px solid #e2e8f0; flex:1; min-width:150px;">
-                    <div style="font-size:2rem; font-weight:800; color:#0f172a;">${totalEvaluaciones}</div>
-                    <div style="font-size:0.8rem; color:#64748b; font-weight:600; text-transform:uppercase;">Evaluaciones</div>
+            <!-- TARJETAS RESUMEN KPI -->
+            <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(160px, 1fr)); gap:12px; width:100%; margin-bottom:20px;">
+                <div style="background:#f8fafc; padding:14px; border-radius:12px; border:1px solid #e2e8f0; text-align:center;">
+                    <div style="font-size:1.8rem; font-weight:800; color:#0f172a;">${totalAlumnosEvaluados} <span style="font-size:0.85rem; font-weight:normal; color:#64748b;">/ ${totalAlumnosScope}</span></div>
+                    <div style="font-size:0.75rem; color:#64748b; font-weight:700; text-transform:uppercase;">Alumnos Evaluados</div>
+                    <div style="font-size:0.7rem; color:#0f172a; margin-top:4px;">${totalEvaluaciones.toLocaleString()} calificaciones</div>
                 </div>
-                <div style="text-align:center; background:#f0fdf4; padding:15px; border-radius:12px; border:1px solid #bbf7d0; flex:1; min-width:150px;">
-                    <div style="font-size:2rem; font-weight:800; color:#166534;">${pctAprobacionGeneral}%</div>
-                    <div style="font-size:0.8rem; color:#15803d; font-weight:600; text-transform:uppercase;">Aprobación Total</div>
-                    <div style="font-size:0.7rem; color:#166534; margin-top:5px;">${totalAprobados} de ${totalEvaluaciones}</div>
+                <div style="background:#f0fdf4; padding:14px; border-radius:12px; border:1px solid #bbf7d0; text-align:center;">
+                    <div style="font-size:1.8rem; font-weight:800; color:#166534;">${pctAprobacionGeneral}%</div>
+                    <div style="font-size:0.75rem; color:#15803d; font-weight:700; text-transform:uppercase;">Aprobación Total</div>
+                    <div style="font-size:0.7rem; color:#166534; margin-top:4px;">${totalAprobados.toLocaleString()} aprobadas</div>
                 </div>
-                <div style="text-align:center; background:#fef2f2; padding:15px; border-radius:12px; border:1px solid #fecaca; flex:1; min-width:150px;">
-                    <div style="font-size:2rem; font-weight:800; color:#991b1b;">${pctReprobacionGeneral}%</div>
-                    <div style="font-size:0.8rem; color:#b91c1c; font-weight:600; text-transform:uppercase;">Reprobación Total</div>
-                    <div style="font-size:0.7rem; color:#991b1b; margin-top:5px;">${totalReprobados} de ${totalEvaluaciones}</div>
+                <div style="background:#fef2f2; padding:14px; border-radius:12px; border:1px solid #fecaca; text-align:center;">
+                    <div style="font-size:1.8rem; font-weight:800; color:#991b1b;">${pctReprobacionGeneral}%</div>
+                    <div style="font-size:0.75rem; color:#b91c1c; font-weight:700; text-transform:uppercase;">Reprobación Total</div>
+                    <div style="font-size:0.7rem; color:#991b1b; margin-top:4px;">${totalReprobados.toLocaleString()} reprobadas</div>
+                </div>
+                <div style="background:#eff6ff; padding:14px; border-radius:12px; border:1px solid #bfdbfe; text-align:center;">
+                    <div style="font-size:1.8rem; font-weight:800; color:#1e40af;">${promedioGeneral}</div>
+                    <div style="font-size:0.75rem; color:#1d4ed8; font-weight:700; text-transform:uppercase;">Promedio General</div>
+                    <div style="font-size:0.7rem; color:#1e40af; margin-top:4px;">${materiasSorted.length} asignaturas oficiales</div>
+                </div>
+                <div style="background:#fffbeb; padding:14px; border-radius:12px; border:1px solid #fde68a; text-align:center;">
+                    <div style="font-size:1.8rem; font-weight:800; color:#b45309;">${conReprobadas}</div>
+                    <div style="font-size:0.75rem; color:#b45309; font-weight:700; text-transform:uppercase;">Alumnos en Riesgo</div>
+                    <div style="font-size:0.7rem; color:#b45309; margin-top:4px;">${criticos} con 3+ materias</div>
                 </div>
             </div>
 
-            <div style="width:100%; overflow-x:auto;">
-                <table class="risk-table" style="width:100%; min-width:600px;" id="tablaEstadisticasAprobacion">
-                    <thead>
-                        <tr>
-                            <th style="text-align:left;">Asignatura</th>
-                            <th>Total Eval.</th>
-                            <th>Aprobados (>=6)</th>
-                            <th>Reprobados (<6)</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        ${tableRows}
-                    </tbody>
-                </table>
+            <!-- NAVEGACIÓN SUBTABS -->
+            <div style="display:flex; justify-content:space-between; align-items:center; width:100%; border-bottom:2px solid var(--border); padding-bottom:10px; margin-bottom:16px; flex-wrap:wrap; gap:10px;">
+                <div style="display:flex; gap:8px;">
+                    <button id="btnStatsTabMaterias" class="btn btn-primary btn-sm" onclick="window.switchStatsSubTab('materias')">
+                        <i class="fa-solid fa-book"></i> Por Asignatura (${materiasSorted.length} Materias)
+                    </button>
+                    <button id="btnStatsTabAlumnos" class="btn btn-outline btn-sm" style="background:white;" onclick="window.switchStatsSubTab('alumnos')">
+                        <i class="fa-solid fa-user-graduate"></i> Detalle por Alumno (${studentsList.length} Alumnos)
+                    </button>
+                </div>
+            </div>
+
+            <!-- SUB-VISTA 1: TABLA POR MATERIAS -->
+            <div id="statsSubViewMaterias" style="width:100%;">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; flex-wrap:wrap; gap:10px;">
+                    <input type="text" class="form-input form-input-sm" style="max-width:280px;" placeholder="Filtrar asignatura..." onkeyup="window.filtrarTablaMateriasStats(this.value)">
+                    <button class="btn btn-outline btn-sm" onclick="window.descargarEstadisticaCSV()">
+                        <i class="fa-solid fa-file-csv"></i> Descargar CSV Asignaturas
+                    </button>
+                </div>
+                <div style="width:100%; overflow-x:auto; border:1px solid var(--border); border-radius:8px;">
+                    <table class="risk-table" style="width:100%; min-width:650px;" id="tablaEstadisticasAprobacion">
+                        <thead>
+                            <tr>
+                                <th style="text-align:left;">Asignatura</th>
+                                <th>Alumnos Eval.</th>
+                                <th>Aprobados (>=6)</th>
+                                <th>Reprobados (<6)</th>
+                                <th>Promedio</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tablaEstadisticasAprobacionBody">
+                            ${tableMateriasRows}
+                        </tbody>
+                        <tfoot>
+                            <tr style="background:#f8fafc; font-weight:bold;">
+                                <td style="text-align:left;">TOTAL GENERAL</td>
+                                <td>${totalEvaluaciones.toLocaleString()}</td>
+                                <td style="color:var(--success);">${totalAprobados.toLocaleString()} (${pctAprobacionGeneral}%)</td>
+                                <td style="color:var(--danger);">${totalReprobados.toLocaleString()} (${pctReprobacionGeneral}%)</td>
+                                <td style="color:var(--primary); font-size:1.05rem;">${promedioGeneral}</td>
+                            </tr>
+                        </tfoot>
+                    </table>
+                </div>
+            </div>
+
+            <!-- SUB-VISTA 2: TABLA POR ALUMNOS -->
+            <div id="statsSubViewAlumnos" style="width:100%; display:none;">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; flex-wrap:wrap; gap:10px;">
+                    <div style="display:flex; gap:6px; flex-wrap:wrap;">
+                        <button class="btn btn-primary btn-sm stats-filter-pill" onclick="window.filtrarAlumnosPorEstado('todos', this)">Todos (${studentsList.length})</button>
+                        <button class="btn btn-outline btn-sm stats-filter-pill" style="background:white;" onclick="window.filtrarAlumnosPorEstado('con_reprobadas', this)">
+                            <i class="fa-solid fa-triangle-exclamation" style="color:var(--danger);"></i> Con Reprobadas (${conReprobadas})
+                        </button>
+                        <button class="btn btn-outline btn-sm stats-filter-pill" style="background:white;" onclick="window.filtrarAlumnosPorEstado('aprobados', this)">
+                            <i class="fa-solid fa-circle-check" style="color:var(--success);"></i> 100% Aprobados (${regulares})
+                        </button>
+                        ${sinCalifs > 0 ? `<button class="btn btn-outline btn-sm stats-filter-pill" style="background:white;" onclick="window.filtrarAlumnosPorEstado('sin_calif', this)">Sin Calificaciones (${sinCalifs})</button>` : ''}
+                    </div>
+                    <div style="display:flex; gap:8px;">
+                        <input type="text" id="buscarAlumnoStatsInput" class="form-input form-input-sm" style="max-width:240px;" placeholder="Buscar alumno por nombre..." onkeyup="window.filtrarTablaAlumnosStats(this.value)">
+                        <button class="btn btn-outline btn-sm" onclick="window.descargarEstadisticaAlumnosCSV()">
+                            <i class="fa-solid fa-file-csv"></i> Descargar CSV Alumnos
+                        </button>
+                    </div>
+                </div>
+                <div style="width:100%; overflow-x:auto; border:1px solid var(--border); border-radius:8px; max-height:600px;">
+                    <table class="risk-table" style="width:100%; min-width:800px;" id="tablaEstadisticasAlumnos">
+                        <thead>
+                            <tr style="position:sticky; top:0; background:#f8fafc; z-index:2;">
+                                <th style="width:40px;">#</th>
+                                <th style="text-align:left;">Estudiante</th>
+                                <th>Grado/Grupo</th>
+                                <th>Eval.</th>
+                                <th>Aprobadas</th>
+                                <th>Reprobadas</th>
+                                <th style="text-align:left;">Materias Reprobadas (<6)</th>
+                                <th>Promedio</th>
+                                <th>Situación</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tablaEstadisticasAlumnosBody">
+                            ${tableAlumnosRows}
+                        </tbody>
+                    </table>
+                </div>
             </div>
         `;
-        
-        btnDownload.style.display = 'inline-flex';
+
+        if (btnDownload) btnDownload.style.display = 'inline-flex';
+        window._activeStatsSubTab = 'materias';
     } catch(err) {
-        console.error(err);
-        hold.innerHTML = '<p style="text-align:center; color:var(--danger);">Error al calcular estadísticas. Intente de nuevo.</p>';
+        console.error("Error al calcular estadísticas completas:", err);
+        hold.innerHTML = '<div style="padding:20px; text-align:center; color:var(--danger);"><i class="fa-solid fa-circle-exclamation" style="font-size:2rem; margin-bottom:10px;"></i><p>Ocurrió un error al calcular las estadísticas completas. Intente nuevamente.</p></div>';
     }
 };
 
 window.descargarEstadisticaCSV = () => {
-    const table = document.getElementById('tablaEstadisticasAprobacion');
-    if(!table) return;
+    if (window._activeStatsSubTab === 'alumnos') {
+        window.descargarEstadisticaAlumnosCSV();
+        return;
+    }
+    const data = window._lastStatsData;
+    if (!data || !data.materiasSorted || data.materiasSorted.length === 0) {
+        const table = document.getElementById('tablaEstadisticasAprobacion');
+        if (!table) return;
+        try {
+            const rows = Array.from(table.querySelectorAll('tr'));
+            let csvContent = "\uFEFF"; 
+            rows.forEach(row => {
+                const cols = Array.from(row.querySelectorAll('th, td'));
+                const rowData = cols.map(col => {
+                    let text = col.innerText.replace(/\n/g, ' ').replace(/"/g, '""');
+                    return `"${text}"`;
+                }).join(',');
+                csvContent += rowData + "\n";
+            });
+            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement("a");
+            const alcance = document.getElementById('adminAlcanceEstadisticaSel')?.value || 'reporte';
+            link.setAttribute("href", url);
+            link.setAttribute("download", `Estadisticas_Asignaturas_${alcance}.csv`);
+            link.style.visibility = 'hidden';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        } catch(e) { console.error("Error desc CSV", e); }
+        return;
+    }
 
     try {
-        const rows = Array.from(table.querySelectorAll('tr'));
-        let csvContent = "\uFEFF"; 
-        
-        rows.forEach(row => {
-            const cols = Array.from(row.querySelectorAll('th, td'));
-            const rowData = cols.map(col => {
-                let text = col.innerText.replace(/\n/g, ' ').replace(/"/g, '""');
-                return `"${text}"`;
-            }).join(',');
-            csvContent += rowData + "\n";
+        let csv = "\uFEFF";
+        csv += `"Asignatura","Total Evaluaciones","Aprobados (>=6)","% Aprobación","Reprobados (<6)","% Reprobación","Promedio"\n`;
+        data.materiasSorted.forEach(m => {
+            const s = data.statsMateria[m];
+            const pApr = s.total > 0 ? ((s.aprobados / s.total) * 100).toFixed(1) : '0';
+            const pRep = s.total > 0 ? ((s.reprobados / s.total) * 100).toFixed(1) : '0';
+            const prom = s.total > 0 ? (s.sumCalif / s.total).toFixed(1) : '-';
+            csv += `"${m}","${s.total}","${s.aprobados}","${pApr}%","${s.reprobados}","${pRep}%","${prom}"\n`;
         });
-
-        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+        const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
         const url = URL.createObjectURL(blob);
         const link = document.createElement("a");
-        
-        const alcance = document.getElementById('adminAlcanceEstadisticaSel').value;
-        const nombreArchivo = `Estadisticas_Aprobacion_${alcance}.csv`;
-        
+        const alcance = data.alcance || 'reporte';
+        const trim = data.trim || 'T';
         link.setAttribute("href", url);
-        link.setAttribute("download", nombreArchivo);
+        link.setAttribute("download", `Estadistica_Aprobacion_Asignaturas_${alcance}_Trim${trim}.csv`);
         link.style.visibility = 'hidden';
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
-        
-    } catch(e) { console.error("Error desc CSV", e); }
+    } catch(e) { console.error("Error desc CSV Asignaturas", e); }
+};
+
+window.descargarEstadisticaAlumnosCSV = () => {
+    const data = window._lastStatsData;
+    if (!data || !data.studentsList || data.studentsList.length === 0) {
+        if (window.showToast) window.showToast("No hay lista de alumnos para descargar.", "warning");
+        return;
+    }
+    try {
+        let csv = "\uFEFF";
+        csv += `"No.","Nombre Completo","Grado","Grupo","Evaluaciones Totales","Aprobadas","Reprobadas","Promedio General","Materias Reprobadas","Situación Académica"\n`;
+        data.studentsList.forEach((s, idx) => {
+            const materiasRepStr = (s.materiasReprobadas || []).map(r => `${r.materia} (${r.calificacion})`).join('; ');
+            let situacion = 'Aprobado';
+            if (s.evaluaciones === 0) situacion = 'Sin Calificaciones';
+            else if (s.reprobadas >= 3) situacion = 'Crítico (3+ Reprobadas)';
+            else if (s.reprobadas >= 1) situacion = 'En Riesgo (1-2 Reprobadas)';
+            csv += `"${idx + 1}","${s.nombre.replace(/"/g, '""')}","${s.grado}","${s.grupo}","${s.evaluaciones}","${s.aprobadas}","${s.reprobadas}","${s.promedio}","${materiasRepStr.replace(/"/g, '""')}","${situacion}"\n`;
+        });
+        const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        const alcance = data.alcance || 'reporte';
+        const trim = data.trim || 'T';
+        link.setAttribute("href", url);
+        link.setAttribute("download", `Estadistica_Aprobacion_Alumnos_${alcance}_Trim${trim}.csv`);
+        link.style.visibility = 'hidden';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    } catch(e) { console.error("Error desc CSV Alumnos", e); }
 };
 
 window.exportarSabanaCalificaciones = () => {
