@@ -5,7 +5,7 @@ const CONFIG = {
 };
 
 // Supabase Configuration
-console.log("%c>>> EDU-LM V247 UNIVERSAL CARGADA: VIGILANCIA HUMANA ACTIVA", "color: yellow; background: black; padding: 12px; font-weight: 1000; border: 2px solid yellow;");
+console.log("%c>>> EDU-LM V248 UNIVERSAL CARGADA: VIGILANCIA HUMANA ACTIVA", "color: yellow; background: black; padding: 12px; font-weight: 1000; border: 2px solid yellow;");
 const SUPABASE_URL = "https://eexgjaydpuioncenlsmv.supabase.co"; 
 const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVleGdqYXlkcHVpb25jZW5sc212Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQ4NTM0MDAsImV4cCI6MjEwMDQyOTQwMH0.vrJGn_Bg04OBBntL-w21-I27XuvO61HcUNrphMYYSlY";
 const SUPABASE_KEY = SUPABASE_ANON_KEY;
@@ -15867,11 +15867,16 @@ window.loadActividadesMaestro = async () => {
                     <i class="fa-solid fa-tag"></i> Asignar Rubro
                 </button>`;
 
+            const btnRenombrar = `<button class="btn btn-outline" style="border-color:#64748b; color:#334155; font-size:0.8rem; padding:6px 12px;" onclick="window.abrirModalEditarNombreActividad('${act.id}')" title="Modificar nombre o descripción de la actividad">
+                <i class="fa-solid fa-pen-to-square"></i> Renombrar
+            </button>`;
+
             const actionButtons = isFinalizada ? 
                 `<div style="display:flex; gap:8px; flex-wrap:wrap;">
                     <button class="btn btn-outline" style="border-color:var(--primary); color:var(--primary); font-size:0.8rem; padding:6px 12px;" onclick="window.reabrirActividad('${act.id}')">
                         <i class="fa-solid fa-rotate-left"></i> Reabrir
                     </button>
+                    ${btnRenombrar}
                     ${btnRubro}
                     <button class="btn btn-outline" style="border-color:var(--primary); color:var(--primary); font-size:0.8rem; padding:6px 12px;" onclick="window.abrirModalCopiarActividad('${act.id}')">
                         <i class="fa-solid fa-copy"></i> Asignar a grupos
@@ -15890,6 +15895,7 @@ window.loadActividadesMaestro = async () => {
                             <i class="fa-solid fa-qrcode"></i> Evaluar QR
                         </button>
                     `}
+                    ${btnRenombrar}
                     ${btnRubro}
                     <button class="btn btn-outline" style="border-color:var(--primary); color:var(--primary); font-size:0.8rem; padding:6px 12px;" onclick="window.abrirModalCopiarActividad('${act.id}')">
                         <i class="fa-solid fa-copy"></i> Asignar a grupos
@@ -15908,6 +15914,9 @@ window.loadActividadesMaestro = async () => {
                    <div style="flex:1; min-width:260px;">
                       <div style="display:flex; gap:10px; align-items:center; margin-bottom:6px; flex-wrap:wrap;">
                         <span style="font-weight:bold; font-size:1.15rem; color:var(--text-main);">${act.titulo}</span>
+                        <button class="btn btn-outline btn-xs" onclick="window.abrirModalEditarNombreActividad('${act.id}')" title="Modificar nombre de la actividad" style="font-size:0.75rem; padding:2px 8px; border-color:#cbd5e1; color:#475569; border-radius:6px; cursor:pointer; display:inline-flex; align-items:center; gap:4px; background:white;">
+                          <i class="fa-solid fa-pen-to-square"></i> Modificar Nombre
+                        </button>
                         ${autoBadge}
                         <span class="badge" style="background:#f0fdf4; color:#166534; border: 1px solid #166534; font-size:0.7rem;">${act.materia}</span>
                       </div>
@@ -16706,6 +16715,216 @@ window.reabrirActividad = async (id) => {
     } catch(err) {
         console.error(err);
         alert("Error al reabrir actividad.");
+    }
+};
+
+window.abrirModalEditarNombreActividad = async (actId, currentTitulo, currentDesc, isFromListas = false) => {
+    try {
+        const modalId = 'modalEditarNombreActividad';
+        let existing = document.getElementById(modalId);
+        if (existing) existing.remove();
+
+        // 1. Obtener detalles actualizados de la actividad
+        const { data: act, error: errAct } = await supabaseClient.from('actividades_maestro')
+            .select('id, titulo, descripcion, materia, grupo_id, target_grado, trimestre, maestro_id, plantel_id, grupos(nombre)')
+            .eq('id', actId)
+            .single();
+
+        if (errAct || !act) {
+            return alert("Error al cargar la información de la actividad: " + (errAct?.message || "No encontrada"));
+        }
+
+        // 2. Conteo de evaluaciones existentes
+        const { data: evalsData } = await supabaseClient.from('evaluaciones_actividades')
+            .select('id')
+            .eq('actividad_id', actId);
+        const evalCount = evalsData ? evalsData.length : 0;
+
+        // 3. Buscar actividades hermanas (mismo maestro, materia, trimestre y título en otros grupos)
+        let siblingActs = [];
+        try {
+            const pId = act.plantel_id || state.plantelId;
+            let qSibs = supabaseClient.from('actividades_maestro')
+                .select('id, materia, grupo_id, target_grado, grupos(nombre)')
+                .eq('maestro_id', act.maestro_id)
+                .eq('trimestre', act.trimestre)
+                .eq('titulo', act.titulo)
+                .neq('id', act.id);
+            if (pId) qSibs = qSibs.eq('plantel_id', pId);
+            const { data: sibs } = await qSibs;
+            if (sibs && sibs.length > 0) {
+                siblingActs = sibs.filter(s => {
+                    return window._matchMateriaEducativa ? window._matchMateriaEducativa(s.materia, act.materia) : (s.materia || '').trim().toLowerCase() === (act.materia || '').trim().toLowerCase();
+                });
+            }
+        } catch(e) {
+            console.warn("No se pudieron consultar actividades hermanas:", e);
+        }
+
+        window._modalEditActHermanosIds = siblingActs.map(s => s.id);
+
+        const grupoNombre = act.grupos ? act.grupos.nombre : (act.target_grado ? `${act.target_grado}° Grado (Tecnología)` : 'Grupo');
+
+        // Checkbox para actualizar grupos hermanos si existen
+        let siblingCheckHTML = '';
+        if (siblingActs.length > 0) {
+            const nombresGruposSibs = siblingActs.map(s => s.grupos?.nombre || (s.target_grado ? `${s.target_grado}° Grado` : 'Otro grupo')).join(', ');
+            siblingCheckHTML = `
+                <div style="margin-top:14px; padding:12px; background:#fefce8; border:1px solid #fef08a; border-radius:8px;">
+                    <label style="display:flex; align-items:flex-start; gap:10px; cursor:pointer; margin:0; font-size:0.85rem; color:#854d0e;">
+                        <input type="checkbox" id="modalEditActAplicarHermanos" style="margin-top:3px; cursor:pointer;" checked>
+                        <span>
+                            <strong>Actualizar también en otros ${siblingActs.length} grupo(s):</strong><br>
+                            <span style="color:#a16207; font-size:0.8rem;">(${nombresGruposSibs}) que comparten este mismo nombre y trimestre.</span>
+                        </span>
+                    </label>
+                </div>
+            `;
+        }
+
+        const div = document.createElement('div');
+        div.id = modalId;
+        div.className = 'modal-backdrop';
+        div.style = 'display:flex; position:fixed; z-index:10000; left:0; top:0; width:100%; height:100%; background:rgba(0,0,0,0.55); backdrop-filter:blur(4px); justify-content:center; align-items:center; padding:15px; box-sizing:border-box;';
+
+        const safeTitulo = (act.titulo || '').replace(/"/g, '&quot;');
+        const safeDesc = (act.descripcion || '').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+        div.innerHTML = `
+            <div class="modal-content" style="max-width:520px; width:100%; padding:24px; background:white; border-radius:14px; box-shadow:0 15px 35px rgba(0,0,0,0.18); position:relative; overflow-y:auto; max-height:90vh;">
+                <button onclick="document.getElementById('${modalId}').remove()" style="position:absolute; right:15px; top:15px; background:none; border:none; color:var(--text-muted); font-size:1.3rem; cursor:pointer; line-height:1;" title="Cerrar">&times;</button>
+                
+                <div style="display:flex; align-items:center; gap:10px; margin-bottom:6px;">
+                    <div style="width:38px; height:38px; border-radius:8px; background:#eff6ff; display:flex; align-items:center; justify-content:center; color:#2563eb; font-size:1.15rem; flex-shrink:0;">
+                        <i class="fa-solid fa-pen-to-square"></i>
+                    </div>
+                    <div>
+                        <h3 style="margin:0; font-size:1.2rem; color:var(--text-main);">Modificar Nombre de Actividad</h3>
+                        <div style="font-size:0.8rem; color:var(--text-muted);">${act.materia} • ${grupoNombre} • ${act.trimestre}° Trimestre</div>
+                    </div>
+                </div>
+
+                <div style="margin-top:16px;">
+                    <label class="form-label" style="font-weight:600; font-size:0.9rem; color:var(--text-main); margin-bottom:6px; display:block;">
+                        Nombre o Título de la Actividad *
+                    </label>
+                    <input type="text" id="modalEditActTitulo" class="form-input" value="${safeTitulo}" placeholder="Ej. Mapa conceptual Ecosistemas" style="width:100%; font-size:0.95rem; font-weight:600; box-sizing:border-box;" autofocus onkeydown="if(event.key === 'Enter'){ event.preventDefault(); window.guardarModificacionNombreActividad('${act.id}', ${isFromListas}); }">
+                </div>
+
+                <div style="margin-top:14px;">
+                    <label class="form-label" style="font-weight:600; font-size:0.85rem; color:var(--text-muted); margin-bottom:6px; display:block;">
+                        Descripción o Indicaciones (Opcional)
+                    </label>
+                    <textarea id="modalEditActDesc" class="form-input" rows="3" placeholder="Detalles o instrucciones de la actividad..." style="width:100%; font-size:0.85rem; box-sizing:border-box;">${safeDesc}</textarea>
+                </div>
+
+                <!-- Aviso de conservación de calificaciones -->
+                <div style="margin-top:14px; padding:12px; background:${evalCount > 0 ? '#f0fdf4' : '#f8fafc'}; border:1px solid ${evalCount > 0 ? '#bbf7d0' : '#e2e8f0'}; border-radius:8px; font-size:0.82rem; color:${evalCount > 0 ? '#166534' : '#64748b'}; display:flex; gap:10px; align-items:flex-start;">
+                    <i class="fa-solid ${evalCount > 0 ? 'fa-circle-check' : 'fa-circle-info'}" style="color:${evalCount > 0 ? '#16a34a' : '#0284c7'}; font-size:1.1rem; margin-top:2px; flex-shrink:0;"></i>
+                    <div>
+                        ${evalCount > 0 ? 
+                            `<strong>Calificaciones 100% conservadas:</strong> Esta actividad ya tiene <strong>${evalCount} alumno(s) evaluado(s)</strong>. Al corregir el nombre, todas sus calificaciones y registros se mantendrán intactos sin necesidad de volver a evaluar.` : 
+                            `Al guardar los cambios, el nuevo nombre se actualizará de inmediato en tus listas de cotejo, tareas y seguimiento escolar.`}
+                    </div>
+                </div>
+
+                ${siblingCheckHTML}
+
+                <div style="display:flex; gap:12px; margin-top:20px;">
+                    <button id="btnGuardarEditNombreAct" class="btn btn-primary" style="flex:1; display:flex; align-items:center; justify-content:center; gap:8px;" onclick="window.guardarModificacionNombreActividad('${act.id}', ${isFromListas})">
+                        <i class="fa-solid fa-floppy-disk"></i> Guardar Cambios
+                    </button>
+                    <button class="btn btn-outline" style="flex:1;" onclick="document.getElementById('${modalId}').remove()">
+                        Cancelar
+                    </button>
+                </div>
+            </div>
+        `;
+
+        document.body.appendChild(div);
+
+        setTimeout(() => {
+            const input = document.getElementById('modalEditActTitulo');
+            if (input) {
+                input.focus();
+                input.select();
+            }
+        }, 100);
+
+    } catch(err) {
+        console.error("Error al abrir modal de edición de actividad:", err);
+        alert("Error al abrir modal: " + (err.message || err));
+    }
+};
+
+window.guardarModificacionNombreActividad = async (actId, isFromListas = false) => {
+    const btn = document.getElementById('btnGuardarEditNombreAct');
+    const inputTitulo = document.getElementById('modalEditActTitulo');
+    const inputDesc = document.getElementById('modalEditActDesc');
+    const checkHermanos = document.getElementById('modalEditActAplicarHermanos');
+
+    const nuevoTitulo = inputTitulo ? inputTitulo.value.trim() : '';
+    const nuevaDesc = inputDesc ? inputDesc.value.trim() : '';
+
+    if (!nuevoTitulo) {
+        alert("Por favor ingresa un nombre o título para la actividad.");
+        if (inputTitulo) inputTitulo.focus();
+        return;
+    }
+
+    try {
+        if (btn) {
+            btn.disabled = true;
+            btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Guardando...';
+        }
+
+        const aplicarHermanos = checkHermanos ? checkHermanos.checked : false;
+        const targetIds = [actId];
+        if (aplicarHermanos && window._modalEditActHermanosIds && Array.isArray(window._modalEditActHermanosIds)) {
+            window._modalEditActHermanosIds.forEach(id => {
+                if (id && !targetIds.includes(id)) targetIds.push(id);
+            });
+        }
+
+        const updatePayload = {
+            titulo: nuevoTitulo,
+            descripcion: nuevaDesc
+        };
+
+        const { error } = await supabaseClient.from('actividades_maestro')
+            .update(updatePayload)
+            .in('id', targetIds);
+
+        if (error) throw error;
+
+        // Cerrar modal
+        const modal = document.getElementById('modalEditarNombreActividad');
+        if (modal) modal.remove();
+
+        const toastMsg = targetIds.length > 1 
+            ? `Nombre de actividad actualizado en ${targetIds.length} grupos exitosamente.` 
+            : "Nombre de la actividad modificado correctamente.";
+        if (window.showToast) window.showToast(toastMsg, "success");
+        else alert(toastMsg);
+
+        // Refrescar vistas pertinentes
+        if (window.loadActividadesMaestro) {
+            window.loadActividadesMaestro();
+        }
+        if (isFromListas || (window.cargarAlumnosLista && document.getElementById('listaMaestroCabecera'))) {
+            if (window.cargarAlumnosLista) window.cargarAlumnosLista();
+        }
+        if (window.loadListasMaestro) {
+            window.loadListasMaestro();
+        }
+
+    } catch (err) {
+        console.error("Error al actualizar nombre de actividad:", err);
+        alert("Error al actualizar la actividad: " + (err.message || err));
+        if (btn) {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fa-solid fa-floppy-disk"></i> Guardar Cambios';
+        }
     }
 };
 
@@ -19491,11 +19710,16 @@ window.cargarAlumnosLista = async () => {
                             ? `${a.rubro_name} (${a?.rubro_peso || 0}%)` 
                             : (a?.rubro_peso && Number(a.rubro_peso) > 10 ? `Rubro (${a.rubro_peso}%)` : extraLabel);
                         const titleRubro = a?.rubro_name ? `${a.rubro_name} (${a?.rubro_peso || 0}%)` : (a?.rubro_peso && Number(a.rubro_peso) > 0 ? (Number(a.rubro_peso) <= 10 ? `Extra (+${a.rubro_peso} pts directos)` : `Rubro (${a.rubro_peso}%)`) : 'Sin Rubro');
-                        return `<th style="padding:12px; text-align:center; max-width:110px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;" title="${a?.titulo || ''} - ${titleRubro}">
-                            <button class="btn btn-outline" style="border-color:var(--primary); color:var(--primary); font-size:0.6rem; padding:2px 4px; margin-bottom:4px; width:100%; display:flex; align-items:center; justify-content:center; gap:4px; border-radius:4px;" onclick="window.evaluarActividadMasiva('${a?.id || ''}', '${actTituloSafe}')" title="Asignar misma calificación a todos">
-                                <i class="fa-solid fa-bolt"></i> Masivo
-                            </button>
-                            <div style="font-weight:600; overflow:hidden; text-overflow:ellipsis;">${a?.titulo || 'Actividad'}</div>
+                        return `<th style="padding:12px; text-align:center; max-width:120px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;" title="${a?.titulo || ''} - ${titleRubro}">
+                            <div style="display:flex; gap:3px; margin-bottom:4px; align-items:center;">
+                                <button class="btn btn-outline" style="border-color:var(--primary); color:var(--primary); font-size:0.6rem; padding:2px 4px; flex:1; display:flex; align-items:center; justify-content:center; gap:3px; border-radius:4px;" onclick="window.evaluarActividadMasiva('${a?.id || ''}', '${actTituloSafe}')" title="Asignar misma calificación a todos">
+                                    <i class="fa-solid fa-bolt"></i> Masivo
+                                </button>
+                                <button class="btn btn-outline" style="border-color:#cbd5e1; color:#475569; font-size:0.6rem; padding:2px 5px; border-radius:4px; background:white;" onclick="window.abrirModalEditarNombreActividad('${a?.id || ''}', null, null, true)" title="Modificar nombre de la actividad">
+                                    <i class="fa-solid fa-pen-to-square"></i>
+                                </button>
+                            </div>
+                            <div style="font-weight:600; overflow:hidden; text-overflow:ellipsis; cursor:pointer;" onclick="window.abrirModalEditarNombreActividad('${a?.id || ''}', null, null, true)" title="Click para modificar nombre: ${a?.titulo || ''}">${a?.titulo || 'Actividad'}</div>
                             <span style="font-size:0.7rem; color:var(--text-muted); font-weight:normal; display:block; overflow:hidden; text-overflow:ellipsis;">${rubroSubtext}</span>
                         </th>`;
                     }).join('')
