@@ -5,7 +5,7 @@ const CONFIG = {
 };
 
 // Supabase Configuration
-console.log("%c>>> EDU-LM V245 UNIVERSAL CARGADA: VIGILANCIA HUMANA ACTIVA", "color: yellow; background: black; padding: 12px; font-weight: 1000; border: 2px solid yellow;");
+console.log("%c>>> EDU-LM V246 UNIVERSAL CARGADA: VIGILANCIA HUMANA ACTIVA", "color: yellow; background: black; padding: 12px; font-weight: 1000; border: 2px solid yellow;");
 const SUPABASE_URL = "https://eexgjaydpuioncenlsmv.supabase.co"; 
 const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVleGdqYXlkcHVpb25jZW5sc212Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQ4NTM0MDAsImV4cCI6MjEwMDQyOTQwMH0.vrJGn_Bg04OBBntL-w21-I27XuvO61HcUNrphMYYSlY";
 const SUPABASE_KEY = SUPABASE_ANON_KEY;
@@ -15,6 +15,21 @@ window._esMateriaNoEvaluable = (nombre) => {
     if (!nombre) return false;
     const norm = String(nombre).toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
     return norm.includes("integracion") || norm.includes("tutoria");
+};
+
+// Truncamiento oficial SEP a 1 decimal sin redondeo (ej. 8.666 -> 8.6, 9.99 -> 9.9)
+window._truncarUnDecimal = (num) => {
+    if (num === null || num === undefined || num === '') return '-';
+    const n = parseFloat(num);
+    if (isNaN(n)) return '-';
+    const truncated = Math.floor((n + 1e-9) * 10) / 10;
+    return truncated.toFixed(1);
+};
+window._truncarUnDecimalNum = (num) => {
+    if (num === null || num === undefined || num === '') return 0;
+    const n = parseFloat(num);
+    if (isNaN(n)) return 0;
+    return parseFloat((Math.floor((n + 1e-9) * 10) / 10).toFixed(1));
 };
 
 const supabaseClient = window.supabase ? window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY) : null;
@@ -2611,7 +2626,7 @@ function renderAdminCalificaciones() {
 
          <div style="margin-top:16px; padding:12px; border-radius:8px; background:#f8fafc; border:1px solid #e2e8f0; font-size:0.75rem; color:#64748b; line-height:1.4;">
             <i class="fa-solid fa-circle-info" style="color:var(--primary); margin-right:4px;"></i>
-            <strong>Normativa Oficial SEP:</strong> Las asignaturas de <em>Integración Curricular</em> y <em>Tutoría</em> no se consideran en el cálculo del promedio general.
+            <strong>Normativa Oficial SEP:</strong> Las asignaturas de <em>Integración Curricular</em> y <em>Tutoría</em> no se consideran en el promedio general. Los promedios se expresan con el primer decimal sin redondeo (truncados).
          </div>
       </div>
 
@@ -13794,10 +13809,10 @@ window._reconciliarMensajeBoleta = (mensajeTexto, byMateria = {}, realGradesFrom
             }
             newLines.push(`${prefix}${matName}${sepColon}Boleta: ${boletaOficial} | Calif. Real: ${realDisp}${suffix}`);
         } else if ((line.includes('PROMEDIO GENERAL') || line.includes('PROMEDIO:')) && countNotas > 0) {
-            const newProm = (sumNotas / countNotas).toFixed(1);
+            const newProm = window._truncarUnDecimal ? window._truncarUnDecimal(sumNotas / countNotas) : (sumNotas / countNotas).toFixed(1);
             newLines.push(line.replace(/PROMEDIO[^:]*:\s*[\d\.]+/, `PROMEDIO GENERAL DE BOLETA: ${newProm}`));
         } else if (/promedio de\s*[\d\.]+/i.test(line) && countNotas > 0) {
-            const newProm = (sumNotas / countNotas).toFixed(1);
+            const newProm = window._truncarUnDecimal ? window._truncarUnDecimal(sumNotas / countNotas) : (sumNotas / countNotas).toFixed(1);
             newLines.push(line.replace(/promedio de\s*[\d\.]+/i, `promedio de ${newProm}`));
         } else {
             newLines.push(line);
@@ -14199,8 +14214,8 @@ window.loadBoletasAlumno = async () => {
                         }
                     }
                 });
-                const promBoleta = count > 0 ? (sumBoleta / count).toFixed(1) : '-';
-                const promReal = count > 0 ? (sumReal / count).toFixed(1) : '-';
+                const promBoleta = count > 0 ? (window._truncarUnDecimal ? window._truncarUnDecimal(sumBoleta / count) : (sumBoleta / count).toFixed(1)) : '-';
+                const promReal = count > 0 ? (window._truncarUnDecimal ? window._truncarUnDecimal(sumReal / count) : (sumReal / count).toFixed(1)) : '-';
                 if(count > 0) lastTrimProm = parseFloat(promBoleta);
 
                 promediosRow += `
@@ -14386,7 +14401,7 @@ window.descargarBoletaPDF = async (aluId, nombre, matricula) => {
                     // Recalcular promedios oficiales en la fila de PROMEDIO
                     cells.forEach((cell, idx) => {
                         if (idx > 0) {
-                            cell.innerHTML = colCounts[idx] > 0 ? `<div style="font-weight:bold; font-size:13px;">${(colSums[idx] / colCounts[idx]).toFixed(1)}</div>` : '-';
+                            cell.innerHTML = colCounts[idx] > 0 ? `<div style="font-weight:bold; font-size:13px;">${window._truncarUnDecimal ? window._truncarUnDecimal(colSums[idx] / colCounts[idx]) : (colSums[idx] / colCounts[idx]).toFixed(1)}</div>` : '-';
                         }
                     });
                 }
@@ -25775,7 +25790,7 @@ window.cargarSabanaGrupo = async () => {
                 }
             });
 
-            const promX = generalCount > 0 ? (generalSum/generalCount).toFixed(1) : '-';
+            const promX = generalCount > 0 ? (window._truncarUnDecimal ? window._truncarUnDecimal(generalSum/generalCount) : (generalSum/generalCount).toFixed(1)) : '-';
             if (promX !== '-') {
                 studentAvgsList.push({ nombre: al.nombre, promedio: parseFloat(promX) });
             }
@@ -25853,9 +25868,9 @@ window.cargarSabanaGrupo = async () => {
                             <div>
                                 <div style="font-weight:800; font-size:0.95rem; color:#92400e;">🏆 Mejores Promedios del Grupo — ${gNombre} (${trimRaw})</div>
                                 <div style="font-size:0.8rem; color:#475569; display:flex; gap:14px; flex-wrap:wrap; margin-top:4px;">
-                                    <span>🥇 <strong>1er Lugar (${p1.toFixed(1)}):</strong> <strong style="color:#854d0e;">${n1}</strong></span>
-                                    ${p2 !== null ? `<span>🥈 <strong>2do Lugar (${p2.toFixed(1)}):</strong> <strong style="color:#334155;">${n2}</strong></span>` : ''}
-                                    ${p3 !== null ? `<span>🥉 <strong>3er Lugar (${p3.toFixed(1)}):</strong> <strong style="color:#9a3412;">${n3}</strong></span>` : ''}
+                                    <span>🥇 <strong>1er Lugar (${window._truncarUnDecimal ? window._truncarUnDecimal(p1) : p1.toFixed(1)}):</strong> <strong style="color:#854d0e;">${n1}</strong></span>
+                                    ${p2 !== null ? `<span>🥈 <strong>2do Lugar (${window._truncarUnDecimal ? window._truncarUnDecimal(p2) : p2.toFixed(1)}):</strong> <strong style="color:#334155;">${n2}</strong></span>` : ''}
+                                    ${p3 !== null ? `<span>🥉 <strong>3er Lugar (${window._truncarUnDecimal ? window._truncarUnDecimal(p3) : p3.toFixed(1)}):</strong> <strong style="color:#9a3412;">${n3}</strong></span>` : ''}
                                 </div>
                             </div>
                         </div>
@@ -26018,7 +26033,7 @@ window.calcularMejoresPromediosGrupo = async () => {
                         }
                     });
                     if (count > 0) {
-                        const subjectAvg = parseFloat((sum / count).toFixed(1));
+                        const subjectAvg = window._truncarUnDecimalNum ? window._truncarUnDecimalNum(sum / count) : parseFloat((sum / count).toFixed(1));
                         generalSum += subjectAvg;
                         generalCount++;
                     }
@@ -26039,7 +26054,7 @@ window.calcularMejoresPromediosGrupo = async () => {
             }
 
             if (generalCount > 0) {
-                const prom = parseFloat((generalSum / generalCount).toFixed(1));
+                const prom = window._truncarUnDecimalNum ? window._truncarUnDecimalNum(generalSum / generalCount) : parseFloat((generalSum / generalCount).toFixed(1));
                 rankedStudents.push({
                     id: al.id,
                     nombre: al.nombre,
@@ -26087,7 +26102,7 @@ window.calcularMejoresPromediosGrupo = async () => {
                     <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:12px;">
                         <span style="font-size:2.2rem; line-height:1;">${medalEmoji}</span>
                         <div style="text-align:right;">
-                            <div style="font-size:1.8rem; font-weight:900; color:${colorText}; line-height:1;">${promVal.toFixed(1)}</div>
+                            <div style="font-size:1.8rem; font-weight:900; color:${colorText}; line-height:1;">${window._truncarUnDecimal ? window._truncarUnDecimal(promVal) : promVal.toFixed(1)}</div>
                             <div style="font-size:0.7rem; font-weight:700; color:${colorText}; text-transform:uppercase; letter-spacing:0.5px;">Promedio</div>
                         </div>
                     </div>
@@ -26127,7 +26142,7 @@ window.calcularMejoresPromediosGrupo = async () => {
                 <tr style="border-bottom:1px solid var(--border);">
                     <td style="padding:10px 14px; text-align:center;">${badgePlace}</td>
                     <td style="padding:10px 14px; font-weight:600; text-align:left; color:var(--text-main);">${s.nombre}</td>
-                    <td style="padding:10px 14px; text-align:center; font-weight:900; font-size:1.05rem; color:var(--primary);">${s.promedio.toFixed(1)}</td>
+                    <td style="padding:10px 14px; text-align:center; font-weight:900; font-size:1.05rem; color:var(--primary);">${window._truncarUnDecimal ? window._truncarUnDecimal(s.promedio) : s.promedio.toFixed(1)}</td>
                     <td style="padding:10px 14px; text-align:center; color:var(--text-muted); font-size:0.85rem;">${s.materiasEvaluadas} asignaturas</td>
                 </tr>
             `;
@@ -26161,7 +26176,7 @@ window.calcularMejoresPromediosGrupo = async () => {
             </div>
             
             <div style="margin-top:16px; font-size:0.75rem; color:#64748b; font-style:italic;">
-                * Criterio oficial SEP: El cálculo del promedio excluye materias formativas no evaluables numéricamente (Integración Curricular y Tutoría). En caso de empate en promedio, los alumnos comparten el mismo lugar de honor.
+                * Criterio oficial SEP: El cálculo del promedio excluye materias formativas no evaluables numéricamente (Integración Curricular y Tutoría) y se expresa truncado con el primer decimal sin redondeo. En caso de empate en promedio, los alumnos comparten el mismo lugar de honor.
             </div>
         `;
     } catch(err) {
@@ -26207,7 +26222,7 @@ window.imprimirCuadroDeHonorPDF = async () => {
                             ${medal} ${placeText}
                         </span>
                         <span style="font-size: 20px; font-weight: 900; color: ${color};">
-                            ${avgVal.toFixed(1)}
+                            ${window._truncarUnDecimal ? window._truncarUnDecimal(avgVal) : avgVal.toFixed(1)}
                         </span>
                     </div>
                     <ul style="margin: 0; padding-left: 20px; font-size: 14px; font-weight: bold; color: #111;">
@@ -26265,7 +26280,7 @@ window.imprimirCuadroDeHonorPDF = async () => {
                     </div>
 
                     <div style="font-size: 10px; color: #555; font-style: italic; margin-top: 10px;">
-                        * Conforme al Acuerdo Secretarial SEP, el promedio de aprovechamiento se determina exclusivamente a partir de las asignaturas evaluables numéricamente (excluyendo Integración Curricular y Tutoría).
+                        * Conforme al Acuerdo Secretarial SEP, el promedio de aprovechamiento se determina exclusivamente a partir de las asignaturas evaluables numéricamente (excluyendo Integración Curricular y Tutoría) y se expresa con un solo decimal sin redondeo (truncado).
                     </div>
 
                     <div class="signatures">
@@ -26654,7 +26669,7 @@ window.generarEstadisticaAprobacion = async () => {
         }
 
         studentsList.forEach(s => {
-            s.promedio = s.evaluaciones > 0 ? (s.sumCalif / s.evaluaciones).toFixed(1) : '-';
+            s.promedio = s.evaluaciones > 0 ? (window._truncarUnDecimal ? window._truncarUnDecimal(s.sumCalif / s.evaluaciones) : (s.sumCalif / s.evaluaciones).toFixed(1)) : '-';
         });
 
         const totalAlumnosScope = studentsList.length;
@@ -26666,7 +26681,7 @@ window.generarEstadisticaAprobacion = async () => {
 
         const pctReprobacionGeneral = totalEvaluaciones > 0 ? ((totalReprobados / totalEvaluaciones) * 100).toFixed(1) : '0';
         const pctAprobacionGeneral = totalEvaluaciones > 0 ? ((totalAprobados / totalEvaluaciones) * 100).toFixed(1) : '0';
-        const promedioGeneral = totalEvaluaciones > 0 ? (sumAllCalifs / totalEvaluaciones).toFixed(1) : '-';
+        const promedioGeneral = totalEvaluaciones > 0 ? (window._truncarUnDecimal ? window._truncarUnDecimal(sumAllCalifs / totalEvaluaciones) : (sumAllCalifs / totalEvaluaciones).toFixed(1)) : '-';
 
         // Guardar en memoria para descarga CSV
         window._lastStatsData = {
@@ -26689,7 +26704,7 @@ window.generarEstadisticaAprobacion = async () => {
             const s = statsMateria[m];
             const pRep = s.total > 0 ? ((s.reprobados / s.total) * 100).toFixed(1) : '0';
             const pApr = s.total > 0 ? ((s.aprobados / s.total) * 100).toFixed(1) : '0';
-            const prom = s.total > 0 ? (s.sumCalif / s.total).toFixed(1) : '-';
+            const prom = s.total > 0 ? (window._truncarUnDecimal ? window._truncarUnDecimal(s.sumCalif / s.total) : (s.sumCalif / s.total).toFixed(1)) : '-';
             
             tableMateriasRows += `
                 <tr>
@@ -26907,7 +26922,7 @@ window.descargarEstadisticaCSV = () => {
             const s = data.statsMateria[m];
             const pApr = s.total > 0 ? ((s.aprobados / s.total) * 100).toFixed(1) : '0';
             const pRep = s.total > 0 ? ((s.reprobados / s.total) * 100).toFixed(1) : '0';
-            const prom = s.total > 0 ? (s.sumCalif / s.total).toFixed(1) : '-';
+            const prom = s.total > 0 ? (window._truncarUnDecimal ? window._truncarUnDecimal(s.sumCalif / s.total) : (s.sumCalif / s.total).toFixed(1)) : '-';
             csv += `"${m}","${s.total}","${s.aprobados}","${pApr}%","${s.reprobados}","${pRep}%","${prom}"\n`;
         });
         const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
@@ -27095,8 +27110,8 @@ window.notificarRevisionSabana = async () => {
 
             const cellProm = parseFloat(row.cells[row.cells.length - 1].innerText);
             const promedio = countNotasBoleta > 0 
-                ? parseFloat((sumNotasBoleta / countNotasBoleta).toFixed(1)) 
-                : (!isNaN(cellProm) ? cellProm : 0);
+                ? (window._truncarUnDecimalNum ? window._truncarUnDecimalNum(sumNotasBoleta / countNotasBoleta) : parseFloat((sumNotasBoleta / countNotasBoleta).toFixed(1))) 
+                : (!isNaN(cellProm) ? (window._truncarUnDecimalNum ? window._truncarUnDecimalNum(cellProm) : cellProm) : 0);
 
 
             const aluMatch = alums.find(a => norm(a.nombre) === norm(nombreAlumno));
@@ -27121,7 +27136,7 @@ window.notificarRevisionSabana = async () => {
         for (const res of results) {
             let mensajeEspecial = "";
             let tituloFinal = `BOLETA DIGITAL: ${trim}`;
-            const prom = parseFloat(res.promedio.toFixed(1));
+            const prom = window._truncarUnDecimalNum ? window._truncarUnDecimalNum(res.promedio) : parseFloat(res.promedio.toFixed(1));
             
             // Lógica solicitada por el usuario v128
             if (prom <= 5.9) {
@@ -27140,7 +27155,7 @@ window.notificarRevisionSabana = async () => {
                 autor_id: uRes.data.user.id,
                 receptor_id: res.perfil_id, // Vinculación directa a la cuenta del alumno
                 titulo: tituloFinal,
-                mensaje: `Hola ${res.nombre}, se han validado tus calificaciones para el ${trim}.\n\nDETALLE POR MATERIA (Boleta Oficial / Calificación Real):\n${res.desglose}\nPROMEDIO GENERAL DE BOLETA: ${res.promedio.toFixed(1)}${mensajeEspecial}\n\n📌 NOTA IMPORTANTE:\nEl día de la firma de boletas, se registrará tu firma electrónica utilizando el código QR del alumno. Por favor, asegúrate de presentarte con el QR para agilizar el proceso.`,
+                mensaje: `Hola ${res.nombre}, se han validado tus calificaciones para el ${trim}.\n\nDETALLE POR MATERIA (Boleta Oficial / Calificación Real):\n${res.desglose}\nPROMEDIO GENERAL DE BOLETA: ${window._truncarUnDecimal ? window._truncarUnDecimal(res.promedio) : res.promedio.toFixed(1)}${mensajeEspecial}\n\n📌 NOTA IMPORTANTE:\nEl día de la firma de boletas, se registrará tu firma electrónica utilizando el código QR del alumno. Por favor, asegúrate de presentarte con el QR para agilizar el proceso.`,
                 audiencia: `Alumno_${res.id}`,
                 tipo: 'reporte_academico_automatico',
                 plantel_id: state.plantelId
@@ -27766,7 +27781,7 @@ window.descargarBoletaAdminPDF = async (alumnoId, nombre, matricula) => {
                     }
                 }
             });
-            const prom = count > 0 ? (sum/count).toFixed(1) : '-';
+            const prom = count > 0 ? (window._truncarUnDecimal ? window._truncarUnDecimal(sum/count) : (sum/count).toFixed(1)) : '-';
             promediosRow += `<td style="border: 1px solid #000; padding: 8px 10px; font-size: 12px; text-align: center; font-weight: bold; background-color: #f8fafc;">${prom}</td>`;
         });
         promediosRow += `</tr>`;
