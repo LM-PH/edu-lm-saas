@@ -5,10 +5,17 @@ const CONFIG = {
 };
 
 // Supabase Configuration
-console.log("%c>>> EDU-LM V243 UNIVERSAL CARGADA: VIGILANCIA HUMANA ACTIVA", "color: yellow; background: black; padding: 12px; font-weight: 1000; border: 2px solid yellow;");
+console.log("%c>>> EDU-LM V244 UNIVERSAL CARGADA: VIGILANCIA HUMANA ACTIVA", "color: yellow; background: black; padding: 12px; font-weight: 1000; border: 2px solid yellow;");
 const SUPABASE_URL = "https://eexgjaydpuioncenlsmv.supabase.co"; 
 const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVleGdqYXlkcHVpb25jZW5sc212Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQ4NTM0MDAsImV4cCI6MjEwMDQyOTQwMH0.vrJGn_Bg04OBBntL-w21-I27XuvO61HcUNrphMYYSlY";
 const SUPABASE_KEY = SUPABASE_ANON_KEY;
+
+// Materias curriculares no evaluables numéricamente para promedio general según normativa SEP (ej. Integración Curricular y Tutoría)
+window._esMateriaNoEvaluable = (nombre) => {
+    if (!nombre) return false;
+    const norm = String(nombre).toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
+    return norm.includes("integracion") || norm.includes("tutoria");
+};
 
 const supabaseClient = window.supabase ? window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY) : null;
 // supabaseClient eliminado por seguridad (V112 Blindada)
@@ -13659,8 +13666,12 @@ window._reconciliarMensajeBoleta = (mensajeTexto, byMateria = {}, realGradesFrom
             let boletaFinal = !isNaN(bVal) ? (bVal < 6.0 ? 5 : Math.round(bVal)) : (!isNaN(rVal) ? (rVal < 6.0 ? 5 : Math.round(rVal)) : 5);
             let realFinalDisp = !isNaN(rVal) ? (Number.isInteger(rVal) ? rVal.toString() : rVal.toFixed(1)) : rVal;
             
-            sumNotas += boletaFinal;
-            countNotas++;
+            // Integración Curricular y Tutoría no deben sumarse al promedio
+            const noEval = window._esMateriaNoEvaluable ? window._esMateriaNoEvaluable(matName) : false;
+            if (!noEval) {
+                sumNotas += boletaFinal;
+                countNotas++;
+            }
             newLines.push(`${prefix}${matName}${sepColon}Boleta: ${boletaFinal} | Calif. Real: ${realFinalDisp}${suffix}`);
             return;
         }
@@ -13703,12 +13714,19 @@ window._reconciliarMensajeBoleta = (mensajeTexto, byMateria = {}, realGradesFrom
             let boletaOficial = !isNaN(finalReal) ? (finalReal < 6.0 ? 5 : Math.round(finalReal)) : (!isNaN(calVal) ? (calVal < 6.0 ? 5 : Math.round(calVal)) : 5);
             let realDisp = !isNaN(finalReal) ? (Number.isInteger(finalReal) ? finalReal.toString() : finalReal.toFixed(1)) : finalReal;
 
-            sumNotas += boletaOficial;
-            countNotas++;
+            // Integración Curricular y Tutoría no deben sumarse al promedio
+            const noEval = window._esMateriaNoEvaluable ? window._esMateriaNoEvaluable(matName) : false;
+            if (!noEval) {
+                sumNotas += boletaOficial;
+                countNotas++;
+            }
             newLines.push(`${prefix}${matName}${sepColon}Boleta: ${boletaOficial} | Calif. Real: ${realDisp}${suffix}`);
         } else if ((line.includes('PROMEDIO GENERAL') || line.includes('PROMEDIO:')) && countNotas > 0) {
             const newProm = (sumNotas / countNotas).toFixed(1);
             newLines.push(line.replace(/PROMEDIO[^:]*:\s*[\d\.]+/, `PROMEDIO GENERAL DE BOLETA: ${newProm}`));
+        } else if (/promedio de\s*[\d\.]+/i.test(line) && countNotas > 0) {
+            const newProm = (sumNotas / countNotas).toFixed(1);
+            newLines.push(line.replace(/promedio de\s*[\d\.]+/i, `promedio de ${newProm}`));
         } else {
             newLines.push(line);
         }
@@ -14026,11 +14044,30 @@ window.loadBoletasAlumno = async () => {
             });
             
             let rowsHtml = '';
-            const materiasKeys = Object.keys(byMateria).sort((a,b) => a.localeCompare(b));
+            const orderPriorityMap = [
+                {k:'espanol',i:1},{k:'ingles',i:2},{k:'matematicas',i:3},
+                {k:'ciencias',i:4},{k:'biologia',i:4},{k:'quimica',i:4},{k:'fisica',i:4},
+                {k:'geografia',i:5},{k:'historia',i:6},{k:'formacion civica',i:7},{k:'f.c.',i:7},
+                {k:'educacion fisica',i:8},{k:'edu. fisica',i:8},
+                {k:'artes',i:9},{k:'tecnologia',i:10},{k:'taller',i:10},
+                {k:'tutoria',i:11},{k:'integracion',i:12}
+            ];
+            const normalize = s => (s||'').toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+            const materiasKeys = Object.keys(byMateria).sort((a,b) => {
+                const matA = normalize(a);
+                const matB = normalize(b);
+                let matchA = orderPriorityMap.find(x => matA.includes(x.k));
+                let matchB = orderPriorityMap.find(x => matB.includes(x.k));
+                let indexA = matchA ? matchA.i : 999;
+                let indexB = matchB ? matchB.i : 999;
+                if (indexA !== indexB) return indexA - indexB;
+                return matA.localeCompare(matB);
+            });
             
             materiasKeys.forEach(mat => {
+                const noEval = window._esMateriaNoEvaluable ? window._esMateriaNoEvaluable(mat) : false;
                 rowsHtml += `<tr style="border-bottom: 1px solid var(--border);">`;
-                rowsHtml += `<td style="padding:14px 20px; font-size:0.9rem; color:var(--text-main); font-weight:600;">${mat}</td>`;
+                rowsHtml += `<td style="padding:14px 20px; font-size:0.9rem; color:var(--text-main); font-weight:600;">${mat}${noEval ? ' <span style="font-size:0.75rem; color:var(--text-muted); font-weight:normal; font-style:italic;">(No evaluable para promedio)</span>' : ''}</td>`;
                 
                 trims.forEach(t => {
                     const cal = byMateria[mat][t];
@@ -14078,6 +14115,7 @@ window.loadBoletasAlumno = async () => {
                 let sumReal = 0;
                 let count = 0;
                 materiasKeys.forEach(mat => {
+                    if (window._esMateriaNoEvaluable && window._esMateriaNoEvaluable(mat)) return;
                     const cal = byMateria[mat][t];
                     if(cal !== undefined && cal !== null && cal !== '') {
                         const num = parseFloat(cal);
@@ -14239,6 +14277,7 @@ window.descargarBoletaPDF = async (aluId, nombre, matricula) => {
                 const cells = Array.from(tr.querySelectorAll('td'));
                 const firstCellText = (cells[0]?.innerText || '').trim().toUpperCase();
                 const isPromRow = firstCellText.includes('PROMEDIO');
+                const isNoEval = window._esMateriaNoEvaluable ? window._esMateriaNoEvaluable(firstCellText) : false;
                 
                 if (!isPromRow) {
                     cells.forEach((cell, idx) => {
@@ -14249,18 +14288,22 @@ window.descargarBoletaPDF = async (aluId, nombre, matricula) => {
                                 const numB = parseFloat(bVal);
                                 const sepVal = (!isNaN(numB)) ? (numB < 6.0 ? 5 : Math.round(numB)) : 5;
                                 cell.innerHTML = `<div style="font-weight:bold; font-size:13px;">${sepVal}</div><div style="font-size:8.5px; color:#555;">Real: ${rVal}</div>`;
-                                if (!colSums[idx]) { colSums[idx] = 0; colCounts[idx] = 0; }
-                                colSums[idx] += sepVal;
-                                colCounts[idx]++;
+                                if (!isNoEval) {
+                                    if (!colSums[idx]) { colSums[idx] = 0; colCounts[idx] = 0; }
+                                    colSums[idx] += sepVal;
+                                    colCounts[idx]++;
+                                }
                             } else {
                                 const rawText = cell.innerText.trim();
                                 const val = parseFloat(rawText);
                                 if (!isNaN(val)) {
                                     const sepVal = val < 6.0 ? 5 : Math.round(val);
                                     cell.innerText = sepVal.toString();
-                                    if (!colSums[idx]) { colSums[idx] = 0; colCounts[idx] = 0; }
-                                    colSums[idx] += sepVal;
-                                    colCounts[idx]++;
+                                    if (!isNoEval) {
+                                        if (!colSums[idx]) { colSums[idx] = 0; colCounts[idx] = 0; }
+                                        colSums[idx] += sepVal;
+                                        colCounts[idx]++;
+                                    }
                                 } else {
                                     cell.innerText = '-';
                                 }
@@ -14270,8 +14313,8 @@ window.descargarBoletaPDF = async (aluId, nombre, matricula) => {
                 } else {
                     // Recalcular promedios oficiales en la fila de PROMEDIO
                     cells.forEach((cell, idx) => {
-                        if (idx > 0 && colCounts[idx] > 0) {
-                            cell.innerHTML = `<div style="font-weight:bold; font-size:13px;">${(colSums[idx] / colCounts[idx]).toFixed(1)}</div>`;
+                        if (idx > 0) {
+                            cell.innerHTML = colCounts[idx] > 0 ? `<div style="font-weight:bold; font-size:13px;">${(colSums[idx] / colCounts[idx]).toFixed(1)}</div>` : '-';
                         }
                     });
                 }
@@ -25577,7 +25620,14 @@ window.cargarSabanaGrupo = async () => {
             else matSet.add(mName);
         });
         const materiasObj = Array.from(matSet);
-        const orderPriorityMap = [{k:'espanol',i:1},{k:'ingles',i:2},{k:'matematicas',i:3},{k:'ciencias',i:4},{k:'biologia',i:4},{k:'quimica',i:4},{k:'educacion fisica',i:8},{k:'edu. fisica',i:8},{k:'fisica',i:4},{k:'geografia',i:5},{k:'historia',i:6},{k:'formacion civica',i:7},{k:'f.c.',i:7},{k:'artes',i:9},{k:'tecnologia',i:10}];
+        const orderPriorityMap = [
+            {k:'espanol',i:1},{k:'ingles',i:2},{k:'matematicas',i:3},
+            {k:'ciencias',i:4},{k:'biologia',i:4},{k:'quimica',i:4},{k:'fisica',i:4},
+            {k:'geografia',i:5},{k:'historia',i:6},{k:'formacion civica',i:7},{k:'f.c.',i:7},
+            {k:'educacion fisica',i:8},{k:'edu. fisica',i:8},
+            {k:'artes',i:9},{k:'tecnologia',i:10},{k:'taller',i:10},
+            {k:'tutoria',i:11},{k:'integracion',i:12}
+        ];
         const normalize = s => s.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
         materiasObj.sort((a, b) => {
             const matA = normalize(a);
@@ -25623,7 +25673,8 @@ window.cargarSabanaGrupo = async () => {
                     if(t2 !== null) { sum += t2; count++; }
                     if(t3 !== null) { sum += t3; count++; }
                     const subjectAvg = count > 0 ? (sum / count).toFixed(1) : '-';
-                    if (count > 0) { generalSum += Number(subjectAvg); generalCount++; }
+                    const noEval = window._esMateriaNoEvaluable ? window._esMateriaNoEvaluable(mName) : false;
+                    if (count > 0 && !noEval) { generalSum += Number(subjectAvg); generalCount++; }
 
                     cols += `<td style="font-size:0.85rem; color:var(--text-muted);">${t1 !== null ? t1 : '-'}</td>
                              <td style="font-size:0.85rem; color:var(--text-muted);">${t2 !== null ? t2 : '-'}</td>
@@ -25631,17 +25682,18 @@ window.cargarSabanaGrupo = async () => {
                              <td style="color:var(--text-main); font-weight:bold; background:var(--surface-hover);">${subjectAvg}</td>`;
                 } else {
                     const cx = subjectCalifs.find(x => x.trimestre === trim);
+                    const noEval = window._esMateriaNoEvaluable ? window._esMateriaNoEvaluable(mName) : false;
                     if(cx && cx.calificacion !== undefined && cx.calificacion !== null && cx.calificacion !== '') {
                         const num = Number(cx.calificacion);
                         // En concentrado y boleta oficial la calificación mínima reprobatoria es 5 (NUNCA 0)
                         const boletaCal = (!isNaN(num)) ? (num < 6.0 ? 5 : Math.round(num)) : '-';
-                        cols += `<td style="color:var(--text-main)" data-real-calif="${cx.calificacion}">${boletaCal}</td>`;
-                        if (!isNaN(Number(boletaCal))) {
+                        cols += `<td style="color:var(--text-main)" data-real-calif="${cx.calificacion}" data-full-materia="${mName}">${boletaCal}</td>`;
+                        if (!isNaN(Number(boletaCal)) && !noEval) {
                             generalSum += Number(boletaCal);
                             generalCount++;
                         }
                     } else {
-                        cols += `<td style="color:var(--text-muted)">-</td>`;
+                        cols += `<td style="color:var(--text-muted)" data-full-materia="${mName}">-</td>`;
                     }
                 }
             });
@@ -25930,18 +25982,25 @@ window.generarEstadisticaAprobacion = async () => {
                 const mat = am.mat;
                 const prom = am.sum / am.count;
                 const isApr = prom >= 6.0;
+                const noEval = window._esMateriaNoEvaluable ? window._esMateriaNoEvaluable(mat) : false;
 
                 if (!statsMateria[mat]) statsMateria[mat] = { total: 0, aprobados: 0, reprobados: 0, sumCalif: 0 };
                 statsMateria[mat].total++;
                 statsMateria[mat].sumCalif += prom;
-                totalEvaluaciones++;
-                sumAllCalifs += prom;
+
+                if (!noEval) {
+                    totalEvaluaciones++;
+                    sumAllCalifs += prom;
+                    if (isApr) {
+                        totalAprobados++;
+                    } else {
+                        totalReprobados++;
+                    }
+                }
                 if (isApr) {
                     statsMateria[mat].aprobados++;
-                    totalAprobados++;
                 } else {
                     statsMateria[mat].reprobados++;
-                    totalReprobados++;
                 }
 
                 const alId = am.alumno_id;
@@ -25958,13 +26017,15 @@ window.generarEstadisticaAprobacion = async () => {
                         materiasReprobadas: []
                     };
                 }
-                studentMap[alId].evaluaciones++;
-                studentMap[alId].sumCalif += prom;
-                if (isApr) {
-                    studentMap[alId].aprobadas++;
-                } else {
-                    studentMap[alId].reprobadas++;
-                    studentMap[alId].materiasReprobadas.push({ materia: mat, calificacion: prom.toFixed(1) });
+                if (!noEval) {
+                    studentMap[alId].evaluaciones++;
+                    studentMap[alId].sumCalif += prom;
+                    if (isApr) {
+                        studentMap[alId].aprobadas++;
+                    } else {
+                        studentMap[alId].reprobadas++;
+                        studentMap[alId].materiasReprobadas.push({ materia: mat, calificacion: prom.toFixed(1) });
+                    }
                 }
             });
         } else {
@@ -25974,18 +26035,25 @@ window.generarEstadisticaAprobacion = async () => {
                 const rawMat = row.materia_nombre || (row.materia_id ? row.materia_id.nombre : 'Sin Asignatura');
                 const mat = rawMat.replace(/\s+/g, ' ').trim();
                 const isApr = calif >= 6.0;
+                const noEval = window._esMateriaNoEvaluable ? window._esMateriaNoEvaluable(mat) : false;
 
                 if (!statsMateria[mat]) statsMateria[mat] = { total: 0, aprobados: 0, reprobados: 0, sumCalif: 0 };
                 statsMateria[mat].total++;
                 statsMateria[mat].sumCalif += calif;
-                totalEvaluaciones++;
-                sumAllCalifs += calif;
+
+                if (!noEval) {
+                    totalEvaluaciones++;
+                    sumAllCalifs += calif;
+                    if (isApr) {
+                        totalAprobados++;
+                    } else {
+                        totalReprobados++;
+                    }
+                }
                 if (isApr) {
                     statsMateria[mat].aprobados++;
-                    totalAprobados++;
                 } else {
                     statsMateria[mat].reprobados++;
-                    totalReprobados++;
                 }
 
                 const alId = row.alumno_id;
@@ -26002,13 +26070,15 @@ window.generarEstadisticaAprobacion = async () => {
                         materiasReprobadas: []
                     };
                 }
-                studentMap[alId].evaluaciones++;
-                studentMap[alId].sumCalif += calif;
-                if (isApr) {
-                    studentMap[alId].aprobadas++;
-                } else {
-                    studentMap[alId].reprobadas++;
-                    studentMap[alId].materiasReprobadas.push({ materia: mat, calificacion: calif });
+                if (!noEval) {
+                    studentMap[alId].evaluaciones++;
+                    studentMap[alId].sumCalif += calif;
+                    if (isApr) {
+                        studentMap[alId].aprobadas++;
+                    } else {
+                        studentMap[alId].reprobadas++;
+                        studentMap[alId].materiasReprobadas.push({ materia: mat, calificacion: calif });
+                    }
                 }
             });
         }
@@ -26440,10 +26510,12 @@ window.notificarRevisionSabana = async () => {
         // 1. Recopilar y Categorizar Datos
         for (const row of rows) {
             const nombreAlumno = row.cells[0].innerText.trim();
-            const promedio = parseFloat(row.cells[row.cells.length - 1].innerText) || 0;
             
             let desgloseMaterias = "";
             let materiasReprobadas = 0;
+            let sumNotasBoleta = 0;
+            let countNotasBoleta = 0;
+
             for(let i = 1; i < row.cells.length - 1; i++) {
                 let materiaNombre = row.cells[i].getAttribute('data-full-materia') || headers[i] || `Materia ${i}`;
                 const califReal = row.cells[i].getAttribute('data-real-calif');
@@ -26467,8 +26539,22 @@ window.notificarRevisionSabana = async () => {
                 let rValDisp = !isNaN(numR) ? (Number.isInteger(numR) ? numR.toString() : numR.toFixed(1)) : rVal;
 
                 desgloseMaterias += `• ${materiaNombre}: Boleta: ${bVal} | Calif. Real: ${rValDisp}\n`;
-                if (!isNaN(numB) && numB < 6.0) materiasReprobadas++;
+                
+                // Integración Curricular y Tutoría NO se consideran en el promedio ni como reprobadas
+                const noEval = window._esMateriaNoEvaluable ? window._esMateriaNoEvaluable(materiaNombre) : false;
+                if (!noEval) {
+                    if (!isNaN(numB)) {
+                        sumNotasBoleta += (numB < 6.0 ? 5 : Math.round(numB));
+                        countNotasBoleta++;
+                    }
+                    if (!isNaN(numB) && numB < 6.0) materiasReprobadas++;
+                }
             }
+
+            const cellProm = parseFloat(row.cells[row.cells.length - 1].innerText);
+            const promedio = countNotasBoleta > 0 
+                ? parseFloat((sumNotasBoleta / countNotasBoleta).toFixed(1)) 
+                : (!isNaN(cellProm) ? cellProm : 0);
 
 
             const aluMatch = alums.find(a => norm(a.nombre) === norm(nombreAlumno));
@@ -27083,7 +27169,14 @@ window.descargarBoletaAdminPDF = async (alumnoId, nombre, matricula) => {
         });
         gradesHtml += `</tr></thead><tbody>`;
 
-        const orderPriorityMap = [{k:'espanol',i:1},{k:'ingles',i:2},{k:'matematicas',i:3},{k:'ciencias',i:4},{k:'biologia',i:4},{k:'quimica',i:4},{k:'educacion fisica',i:8},{k:'edu. fisica',i:8},{k:'fisica',i:4},{k:'geografia',i:5},{k:'historia',i:6},{k:'formacion civica',i:7},{k:'f.c.',i:7},{k:'artes',i:9},{k:'tecnologia',i:10}];
+        const orderPriorityMap = [
+            {k:'espanol',i:1},{k:'ingles',i:2},{k:'matematicas',i:3},
+            {k:'ciencias',i:4},{k:'biologia',i:4},{k:'quimica',i:4},{k:'fisica',i:4},
+            {k:'geografia',i:5},{k:'historia',i:6},{k:'formacion civica',i:7},{k:'f.c.',i:7},
+            {k:'educacion fisica',i:8},{k:'edu. fisica',i:8},
+            {k:'artes',i:9},{k:'tecnologia',i:10},{k:'taller',i:10},
+            {k:'tutoria',i:11},{k:'integracion',i:12}
+        ];
         const normalize = s => s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
         const materiasKeys = Object.keys(byMateria).sort((a,b) => {
             const matA = normalize(a);
@@ -27097,7 +27190,8 @@ window.descargarBoletaAdminPDF = async (alumnoId, nombre, matricula) => {
         });
 
         materiasKeys.forEach(mat => {
-            gradesHtml += `<tr><td style="border: 1px solid #000; padding: 8px 10px; font-size: 12px; text-align: left;">${mat}</td>`;
+            const noEval = window._esMateriaNoEvaluable ? window._esMateriaNoEvaluable(mat) : false;
+            gradesHtml += `<tr><td style="border: 1px solid #000; padding: 8px 10px; font-size: 12px; text-align: left;">${mat}${noEval ? ' <span style="font-size:10px; color:#64748b; font-style:italic;">(No evaluable para promedio)</span>' : ''}</td>`;
             trims.forEach(t => {
                 const cal = byMateria[mat][t];
                 let calNum = parseFloat(cal);
@@ -27120,6 +27214,7 @@ window.descargarBoletaAdminPDF = async (alumnoId, nombre, matricula) => {
         trims.forEach(t => {
             let sum = 0, count = 0;
             materiasKeys.forEach(mat => {
+                if (window._esMateriaNoEvaluable && window._esMateriaNoEvaluable(mat)) return;
                 if(byMateria[mat] && byMateria[mat][t] !== undefined) {
                     let calNum = parseFloat(byMateria[mat][t]);
                     if (!isNaN(calNum)) {
