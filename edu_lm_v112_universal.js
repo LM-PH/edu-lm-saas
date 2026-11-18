@@ -5,7 +5,7 @@ const CONFIG = {
 };
 
 // Supabase Configuration
-console.log("%c>>> EDU-LM V246 UNIVERSAL CARGADA: VIGILANCIA HUMANA ACTIVA", "color: yellow; background: black; padding: 12px; font-weight: 1000; border: 2px solid yellow;");
+console.log("%c>>> EDU-LM V247 UNIVERSAL CARGADA: VIGILANCIA HUMANA ACTIVA", "color: yellow; background: black; padding: 12px; font-weight: 1000; border: 2px solid yellow;");
 const SUPABASE_URL = "https://eexgjaydpuioncenlsmv.supabase.co"; 
 const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVleGdqYXlkcHVpb25jZW5sc212Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQ4NTM0MDAsImV4cCI6MjEwMDQyOTQwMH0.vrJGn_Bg04OBBntL-w21-I27XuvO61HcUNrphMYYSlY";
 const SUPABASE_KEY = SUPABASE_ANON_KEY;
@@ -1385,7 +1385,7 @@ function renderSidebar() {
       { name: 'Bitácora de Maestro', path: '/maestro/bitacora', icon: 'fa-book-journal-whills' },
       { name: 'Reportes Escolares', path: '/maestro/reportes', icon: 'fa-file-signature' },
       { name: 'Avisos Oficiales', path: '/maestro/comunicados', icon: 'fa-bullhorn' },
-      { name: 'Enviar Avisos (Grupos)', path: '/maestro/enviar_comunicados', icon: 'fa-paper-plane' },
+      { name: 'Enviar Avisos', path: '/maestro/enviar_comunicados', icon: 'fa-paper-plane' },
     ],
     apoyo: [
       { name: 'Focos Rojos', path: '/apoyo/dashboard', icon: 'fa-triangle-exclamation' },
@@ -31853,8 +31853,8 @@ function renderMaestroEnviarComunicados() {
   }, 100);
   return `
     <div class="page-header">
-      <h2 class="page-title">Enviar Comunicados a Grupos</h2>
-      <p class="page-subtitle">Panel para enviar avisos y notificaciones a los alumnos de tus grupos asignados.</p>
+      <h2 class="page-title">Enviar Avisos y Comunicados</h2>
+      <p class="page-subtitle">Panel para enviar avisos y notificaciones a grupos completos o a un alumno en específico.</p>
     </div>
 
     <div style="display:flex; gap:24px; flex-wrap:wrap;">
@@ -31867,27 +31867,108 @@ function renderMaestroEnviarComunicados() {
           <input type="text" id="inMaestroComTitulo" class="form-input" placeholder="Ej: Traer material para laboratorio">
         </div>
 
-        <div class="form-group">
-          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; flex-wrap:wrap; gap:6px;">
-            <label class="form-label" style="margin:0; font-weight:700;">
-              <i class="fa-solid fa-users text-primary"></i> Audiencia Destino (Selecciona uno o varios grupos)
+        <!-- Selector de Tipo de Destinatario: Grupos o Alumno Individual -->
+        <div class="form-group" style="margin-bottom:18px;">
+          <label class="form-label" style="font-weight:700; margin-bottom:8px;">
+            <i class="fa-solid fa-bullseye text-primary"></i> Modalidad de Envío
+          </label>
+          <div style="display:flex; gap:10px; flex-wrap:wrap;">
+            <button type="button" id="btnModoAvisoGrupos" class="btn btn-primary" onclick="window.cambiarModoDestinatarioMaestro('grupos')" style="flex:1; min-width:160px; justify-content:center; font-weight:700;">
+              <i class="fa-solid fa-users"></i> Grupos Completos
+            </button>
+            <button type="button" id="btnModoAvisoIndividual" class="btn btn-outline" onclick="window.cambiarModoDestinatarioMaestro('individual')" style="flex:1; min-width:160px; justify-content:center; font-weight:700; background:white;">
+              <i class="fa-solid fa-user"></i> Alumno Individual
+            </button>
+          </div>
+        </div>
+
+        <!-- Sección 1: Audiencia por Grupos -->
+        <div id="seccionDestinoGrupos">
+          <div class="form-group">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; flex-wrap:wrap; gap:6px;">
+              <label class="form-label" style="margin:0; font-weight:700;">
+                <i class="fa-solid fa-users text-primary"></i> Audiencia Destino (Selecciona uno o varios grupos)
+              </label>
+              <div style="display:flex; gap:6px;">
+                <button type="button" class="btn btn-outline btn-xs" onclick="window.seleccionarTodosGruposMaestro(true)" style="font-size:0.75rem; padding:3px 8px; border-radius:6px;">
+                  <i class="fa-solid fa-check-double"></i> Marcar todos
+                </button>
+                <button type="button" class="btn btn-outline btn-xs" onclick="window.seleccionarTodosGruposMaestro(false)" style="font-size:0.75rem; padding:3px 8px; border-radius:6px;">
+                  <i class="fa-solid fa-xmark"></i> Desmarcar
+                </button>
+              </div>
+            </div>
+            <div id="contenedorGruposMaestro" style="max-height:190px; overflow-y:auto; border:1px solid var(--border); border-radius:10px; padding:10px; background:var(--page-bg); display:grid; grid-template-columns:repeat(auto-fill, minmax(210px, 1fr)); gap:8px;">
+              <div style="text-align:center; padding:20px; color:var(--text-muted); grid-column:1/-1;">
+                <i class="fa-solid fa-spinner fa-spin"></i> Cargando tus grupos asignados...
+              </div>
+            </div>
+            <div id="resumenGruposSeleccionados" style="margin-top:6px; font-size:0.8rem; color:var(--text-muted); font-weight:500;">
+              <i class="fa-solid fa-circle-info"></i> Selecciona los grupos a los que deseas enviar el aviso.
+            </div>
+          </div>
+        </div>
+
+        <!-- Sección 2: Audiencia a Alumno Individual -->
+        <div id="seccionDestinoIndividual" style="display:none; background:#f8fafc; border:1px solid var(--border); border-radius:12px; padding:16px; margin-bottom:18px;">
+          <div style="font-weight:800; font-size:0.95rem; color:var(--primary); margin-bottom:12px; display:flex; align-items:center; gap:8px;">
+            <i class="fa-solid fa-user-tag"></i> Aviso Personalizado para un Alumno en Especial
+          </div>
+
+          <div style="display:flex; gap:12px; flex-wrap:wrap; margin-bottom:12px;">
+            <div style="flex:1; min-width:210px;">
+              <label class="form-label" style="font-weight:700; font-size:0.85rem; margin-bottom:4px;">
+                <i class="fa-solid fa-layer-group text-primary"></i> 1. Grupo en Especial:
+              </label>
+              <select id="selMaestroGrupoIndividual" class="form-select" onchange="window.alCambiarGrupoIndividualMaestro()" style="margin:0; background:white;">
+                <option value="">Cargando grupos...</option>
+              </select>
+            </div>
+            <div style="flex:2; min-width:260px; position:relative;">
+              <label class="form-label" style="font-weight:700; font-size:0.85rem; margin-bottom:4px;">
+                <i class="fa-solid fa-magnifying-glass text-primary"></i> 2. Ingresar Nombre del Alumno: <span style="font-weight:normal; color:var(--text-muted); font-size:0.75rem;">(se predetermina al escribir)</span>
+              </label>
+              <div style="position:relative;">
+                <input type="text" id="inBuscarAlumnoAviso" class="form-input" placeholder="Escribe el nombre del alumno aquí..." autocomplete="off" oninput="window.filtrarAlumnosAvisoIndividual(this.value)" style="padding-left:36px; margin:0; background:white;">
+                <i class="fa-solid fa-user" style="position:absolute; left:12px; top:50%; transform:translateY(-50%); color:var(--text-muted); font-size:0.85rem;"></i>
+              </div>
+              <div id="resSugerenciasAlumnosAviso" style="display:none; position:absolute; top:100%; left:0; right:0; background:white; border:1px solid var(--border); border-radius:8px; box-shadow:0 10px 25px rgba(0,0,0,0.12); max-height:220px; overflow-y:auto; z-index:1000; margin-top:4px;"></div>
+            </div>
+          </div>
+
+          <div style="margin-bottom:12px;">
+            <label class="form-label" style="font-weight:600; font-size:0.8rem; color:var(--text-muted); margin-bottom:4px;">
+              O selecciónalo desde el listado del grupo:
             </label>
-            <div style="display:flex; gap:6px;">
-              <button type="button" class="btn btn-outline btn-xs" onclick="window.seleccionarTodosGruposMaestro(true)" style="font-size:0.75rem; padding:3px 8px; border-radius:6px;">
-                <i class="fa-solid fa-check-double"></i> Marcar todos
-              </button>
-              <button type="button" class="btn btn-outline btn-xs" onclick="window.seleccionarTodosGruposMaestro(false)" style="font-size:0.75rem; padding:3px 8px; border-radius:6px;">
-                <i class="fa-solid fa-xmark"></i> Desmarcar
+            <select id="selMaestroAlumnoIndividual" class="form-select" onchange="window.alSeleccionarAlumnoDropdownMaestro(this.value)" style="margin:0; background:white; font-size:0.85rem;">
+              <option value="">-- Selecciona un grupo arriba para ver a sus alumnos --</option>
+            </select>
+          </div>
+
+          <!-- Tarjeta de confirmación del Alumno Predeterminado -->
+          <div id="cardAlumnoAvisoPredeterminado" style="display:none; background:white; border:2px solid #86efac; border-radius:10px; padding:12px 14px; box-shadow:0 2px 8px rgba(22,163,74,0.08); margin-top:10px;">
+            <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">
+              <div style="display:flex; align-items:center; gap:12px;">
+                <div style="width:40px; height:40px; border-radius:50%; background:#dcfce7; color:#15803d; display:flex; align-items:center; justify-content:center; font-weight:800; font-size:1.15rem; flex-shrink:0;">
+                  <i class="fa-solid fa-user-check"></i>
+                </div>
+                <div>
+                  <div style="font-size:0.72rem; text-transform:uppercase; font-weight:800; color:#15803d; letter-spacing:0.5px;">
+                    <i class="fa-solid fa-circle-check"></i> Alumno Destinatario Predeterminado
+                  </div>
+                  <div id="nomAlumnoPredeterminado" style="font-weight:800; font-size:1.05rem; color:var(--text-main);">Nombre del Alumno</div>
+                  <div id="metaAlumnoPredeterminado" style="font-size:0.8rem; color:var(--text-muted); margin-top:2px;">Matrícula: 12345 | Grupo: 1°A</div>
+                </div>
+              </div>
+              <button type="button" class="btn btn-outline btn-xs" onclick="window.limpiarAlumnoPredeterminadoMaestro()" style="color:#dc2626; border-color:#fca5a5; background:#fff;">
+                <i class="fa-solid fa-xmark"></i> Quitar selección
               </button>
             </div>
           </div>
-          <div id="contenedorGruposMaestro" style="max-height:190px; overflow-y:auto; border:1px solid var(--border); border-radius:10px; padding:10px; background:var(--page-bg); display:grid; grid-template-columns:repeat(auto-fill, minmax(210px, 1fr)); gap:8px;">
-            <div style="text-align:center; padding:20px; color:var(--text-muted); grid-column:1/-1;">
-              <i class="fa-solid fa-spinner fa-spin"></i> Cargando tus grupos asignados...
-            </div>
-          </div>
-          <div id="resumenGruposSeleccionados" style="margin-top:6px; font-size:0.8rem; color:var(--text-muted); font-weight:500;">
-            <i class="fa-solid fa-circle-info"></i> Selecciona los grupos a los que deseas enviar el aviso.
+          
+          <div id="alertaSinAlumnoAviso" style="font-size:0.8rem; color:#b45309; background:#fffbeb; border:1px solid #fde68a; padding:10px 14px; border-radius:8px; display:flex; align-items:center; gap:10px; margin-top:8px;">
+            <i class="fa-solid fa-circle-info" style="font-size:1.1rem; flex-shrink:0;"></i>
+            <span>Ingresa el nombre del alumno o elígelo de la lista. El alumno <strong>aparecerá predeterminado automáticamente</strong> al ingresar su nombre para que el aviso sea únicamente para él.</span>
           </div>
         </div>
 
@@ -31979,6 +32060,16 @@ window.loadMaestroAvisosGrupos = async () => {
                 }
             });
             const finalGroups = Array.from(uniqueMap.values());
+            window._maestroGruposList = finalGroups;
+            const selInd = document.getElementById('selMaestroGrupoIndividual');
+            if (selInd) {
+                selInd.innerHTML = `
+                    <option value="">-- Todos mis grupos (o selecciona uno) --</option>
+                    ${finalGroups.map(g => `
+                        <option value="${g.id}|${g.materia || ''}|${g.nombre}">${g.nombre} - ${g.materia || 'General'} ${g.isTec ? '(Taller)' : ''}</option>
+                    `).join('')}
+                `;
+            }
 
             if (finalGroups.length === 0) {
                 cont.innerHTML = '<div style="text-align:center; padding:15px; color:var(--text-muted); grid-column:1/-1;">No se encontraron grupos asignados activos.</div>';
@@ -32075,18 +32166,336 @@ window.mostrarArchivosSeleccionadosMaestro = (input) => {
     `;
 };
 
+// ==========================================
+// MÓDULO: AVISOS INDIVIDUALES A ALUMNOS
+// ==========================================
+window._modoDestinatarioMaestro = 'grupos';
+window._alumnoIndividualSeleccionado = null;
+window._alumnosCacheGrupo = {};
+window._allAlumnosMaestroCache = null;
+
+window.cambiarModoDestinatarioMaestro = (modo) => {
+    window._modoDestinatarioMaestro = modo;
+    const btnGrupos = document.getElementById('btnModoAvisoGrupos');
+    const btnInd = document.getElementById('btnModoAvisoIndividual');
+    const secGrupos = document.getElementById('seccionDestinoGrupos');
+    const secInd = document.getElementById('seccionDestinoIndividual');
+    const btnPub = document.getElementById('btnPublicarMaestroComunicado');
+
+    if (modo === 'individual') {
+        if (btnGrupos) { btnGrupos.className = 'btn btn-outline'; btnGrupos.style.background = 'white'; }
+        if (btnInd) { btnInd.className = 'btn btn-primary'; btnInd.style.background = ''; }
+        if (secGrupos) secGrupos.style.display = 'none';
+        if (secInd) secInd.style.display = 'block';
+
+        if (window._alumnoIndividualSeleccionado) {
+            const primerNombre = window._alumnoIndividualSeleccionado.nombre ? window._alumnoIndividualSeleccionado.nombre.split(' ')[0] : 'Alumno';
+            if (btnPub) btnPub.innerHTML = `<i class="fa-solid fa-paper-plane"></i> Enviar Aviso a ${primerNombre}`;
+        } else {
+            if (btnPub) btnPub.innerHTML = `<i class="fa-solid fa-paper-plane"></i> Enviar Aviso Individual`;
+        }
+
+        const selAlu = document.getElementById('selMaestroAlumnoIndividual');
+        if (selAlu && selAlu.options.length <= 1) {
+            window.alCambiarGrupoIndividualMaestro();
+        }
+    } else {
+        if (btnGrupos) { btnGrupos.className = 'btn btn-primary'; btnGrupos.style.background = ''; }
+        if (btnInd) { btnInd.className = 'btn btn-outline'; btnInd.style.background = 'white'; }
+        if (secGrupos) secGrupos.style.display = 'block';
+        if (secInd) secInd.style.display = 'none';
+        if (btnPub) btnPub.innerHTML = `<i class="fa-solid fa-paper-plane"></i> Enviar a Alumnos`;
+    }
+};
+
+window.alCambiarGrupoIndividualMaestro = async () => {
+    const selG = document.getElementById('selMaestroGrupoIndividual');
+    const selAlu = document.getElementById('selMaestroAlumnoIndividual');
+    const inBus = document.getElementById('inBuscarAlumnoAviso');
+    if (!selAlu) return;
+
+    selAlu.innerHTML = '<option value="">Cargando alumnos...</option>';
+    const valG = selG ? selG.value : '';
+
+    let list = [];
+    if (valG) {
+        const [gid, mat, gnom] = valG.split('|');
+        list = await window.obtenerAlumnosGrupoCache(gid, mat, gnom);
+        selAlu.innerHTML = `
+            <option value="">-- Seleccionar alumno de ${gnom} (${list.length} alumnos) --</option>
+            ${list.map(a => `<option value="${a.id}">${a.nombre} ${a.matricula ? `(${a.matricula})` : ''}</option>`).join('')}
+        `;
+    } else {
+        list = await window.obtenerAlumnosTodosGruposMaestro();
+        selAlu.innerHTML = `
+            <option value="">-- Selecciona un alumno de tus grupos (${list.length} alumnos) --</option>
+            ${list.map(a => `<option value="${a.id}">${a.nombre} [${a.grupo_nombre || 'Grupo'}]</option>`).join('')}
+        `;
+    }
+    window._currentAlumnosIndividualList = list;
+
+    if (inBus && inBus.value.trim().length >= 2) {
+        window.filtrarAlumnosAvisoIndividual(inBus.value);
+    }
+};
+
+window.obtenerAlumnosGrupoCache = async (gid, mat, gnom) => {
+    if (!gid || gid === 'null' || gid === 'undefined') return [];
+    if (window._alumnosCacheGrupo[gid]) return window._alumnosCacheGrupo[gid];
+
+    try {
+        const pId = state.plantelId || (window._obtenerPlantelIdActivo ? await window._obtenerPlantelIdActivo() : null);
+        let qAl = supabaseClient.from('alumnos')
+            .select('id, nombre, matricula, grupo_id, grado, taller, perfil_id, grupos(nombre)')
+            .eq('grupo_id', gid)
+            .order('nombre');
+        if (pId) qAl = qAl.eq('plantel_id', pId);
+        const { data, error } = await qAl;
+        if (error) throw error;
+
+        let res = (data || []).map(a => ({
+            id: a.id,
+            nombre: a.nombre,
+            matricula: a.matricula || '',
+            grupo_id: a.grupo_id,
+            grupo_nombre: a.grupos ? a.grupos.nombre : gnom,
+            perfil_id: a.perfil_id,
+            materia: mat
+        }));
+        if (window._compararNombresAlumnos) res.sort(window._compararNombresAlumnos);
+        window._alumnosCacheGrupo[gid] = res;
+        return res;
+    } catch(err) {
+        console.error("Error al cargar alumnos de grupo:", err);
+        return [];
+    }
+};
+
+window.obtenerAlumnosTodosGruposMaestro = async () => {
+    if (window._allAlumnosMaestroCache) return window._allAlumnosMaestroCache;
+    try {
+        const gIds = [...new Set((window._maestroGruposList || []).map(g => g.id).filter(Boolean))];
+        if (gIds.length === 0) return [];
+        const pId = state.plantelId || (window._obtenerPlantelIdActivo ? await window._obtenerPlantelIdActivo() : null);
+        let q = supabaseClient.from('alumnos')
+            .select('id, nombre, matricula, grupo_id, grado, taller, perfil_id, grupos(nombre)')
+            .in('grupo_id', gIds)
+            .order('nombre');
+        if (pId) q = q.eq('plantel_id', pId);
+        const { data, error } = await q;
+        if (error) throw error;
+
+        let res = (data || []).map(a => {
+            const grpObj = (window._maestroGruposList || []).find(g => g.id === a.grupo_id);
+            return {
+                id: a.id,
+                nombre: a.nombre,
+                matricula: a.matricula || '',
+                grupo_id: a.grupo_id,
+                grupo_nombre: a.grupos ? a.grupos.nombre : (grpObj ? grpObj.nombre : ''),
+                perfil_id: a.perfil_id,
+                materia: grpObj ? grpObj.materia : ''
+            };
+        });
+        if (window._compararNombresAlumnos) res.sort(window._compararNombresAlumnos);
+        window._allAlumnosMaestroCache = res;
+        return res;
+    } catch(err) {
+        console.error("Error al cargar alumnos de todos los grupos:", err);
+        return [];
+    }
+};
+
+window.filtrarAlumnosAvisoIndividual = async (queryRaw) => {
+    const query = String(queryRaw || '').toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
+    const dropdown = document.getElementById('resSugerenciasAlumnosAviso');
+    if (!dropdown) return;
+
+    if (!query || query.length < 2) {
+        dropdown.style.display = 'none';
+        dropdown.innerHTML = '';
+        return;
+    }
+
+    const selG = document.getElementById('selMaestroGrupoIndividual');
+    const valG = selG ? selG.value : '';
+    let poolAlumnos = [];
+
+    if (valG) {
+        const [gid, mat, gnom] = valG.split('|');
+        poolAlumnos = await window.obtenerAlumnosGrupoCache(gid, mat, gnom);
+    } else {
+        poolAlumnos = await window.obtenerAlumnosTodosGruposMaestro();
+    }
+
+    const norm = (str) => String(str || '').toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
+
+    const matches = poolAlumnos.filter(a => {
+        const nom = norm(a.nombre);
+        const mat = norm(a.matricula);
+        return nom.includes(query) || mat.includes(query);
+    });
+
+    if (matches.length === 0) {
+        dropdown.style.display = 'block';
+        dropdown.innerHTML = `
+            <div style="padding:12px; text-align:center; color:var(--text-muted); font-size:0.85rem;">
+                No se encontraron alumnos coincidentes con "<strong>${queryRaw}</strong>".
+            </div>
+        `;
+        return;
+    }
+
+    // Regla solicitada: "que el alumno aparezca como predeterminado al ingresar el nombre"
+    const topMatch = matches[0];
+    window.seleccionarAlumnoPredeterminado(topMatch, true);
+
+    dropdown.style.display = 'block';
+    dropdown.innerHTML = `
+        <div style="padding:6px 12px; background:#f8fafc; font-size:0.75rem; font-weight:700; color:#475569; border-bottom:1px solid var(--border); display:flex; justify-content:space-between; align-items:center;">
+            <span><i class="fa-solid fa-users-viewfinder"></i> ${matches.length} coincidencia(s)</span>
+            <span style="font-size:0.7rem; color:#16a34a; font-weight:bold;">✔ 1er resultado predeterminado</span>
+        </div>
+        ${matches.map((a, idx) => {
+            const esTop = idx === 0;
+            return `
+                <div style="padding:10px 14px; border-bottom:1px solid #f1f5f9; cursor:pointer; display:flex; justify-content:space-between; align-items:center; background:${esTop ? '#f0fdf4' : 'white'};" 
+                     onmousedown="window.seleccionarAlumnoPredeterminadoDesdeClick('${a.id}')"
+                     onmouseover="this.style.background='#f8fafc'" 
+                     onmouseout="this.style.background='${esTop ? '#f0fdf4' : 'white'}'">
+                    <div>
+                        <div style="font-weight:700; font-size:0.9rem; color:var(--text-main);">
+                            ${esTop ? '<i class="fa-solid fa-circle-check" style="color:#16a34a; margin-right:4px;"></i>' : ''}${a.nombre}
+                        </div>
+                        <div style="font-size:0.75rem; color:var(--text-muted); margin-top:2px;">
+                            Grupo: <strong>${a.grupo_nombre || 'N/A'}</strong> ${a.matricula ? `| Matrícula: ${a.matricula}` : ''}
+                        </div>
+                    </div>
+                    ${esTop ? '<span class="badge" style="background:#dcfce7; color:#15803d; font-size:0.7rem; font-weight:bold;">Predeterminado</span>' : '<span style="font-size:0.75rem; color:var(--primary); font-weight:600;"><i class="fa-solid fa-arrow-pointer"></i> Elegir</span>'}
+                </div>
+            `;
+        }).join('')}
+    `;
+};
+
+window.seleccionarAlumnoPredeterminado = (alumno, desdeInput = false) => {
+    if (!alumno) return;
+    window._alumnoIndividualSeleccionado = alumno;
+
+    const card = document.getElementById('cardAlumnoAvisoPredeterminado');
+    const alerta = document.getElementById('alertaSinAlumnoAviso');
+    const nomEl = document.getElementById('nomAlumnoPredeterminado');
+    const metaEl = document.getElementById('metaAlumnoPredeterminado');
+    const btnPub = document.getElementById('btnPublicarMaestroComunicado');
+    const selAlu = document.getElementById('selMaestroAlumnoIndividual');
+    const selG = document.getElementById('selMaestroGrupoIndividual');
+    const inBus = document.getElementById('inBuscarAlumnoAviso');
+
+    if (card) card.style.display = 'block';
+    if (alerta) alerta.style.display = 'none';
+    if (nomEl) nomEl.innerText = alumno.nombre;
+    if (metaEl) {
+        metaEl.innerText = `Matrícula: ${alumno.matricula || 'Sin matrícula'} | Grupo: ${alumno.grupo_nombre || 'N/A'}${alumno.materia ? ` | ${alumno.materia}` : ''}`;
+    }
+
+    if (!desdeInput && inBus) {
+        inBus.value = alumno.nombre;
+    }
+
+    if (selG && alumno.grupo_id && (!selG.value || !selG.value.includes(alumno.grupo_id))) {
+        for (let i = 0; i < selG.options.length; i++) {
+            if (selG.options[i].value.includes(alumno.grupo_id)) {
+                selG.selectedIndex = i;
+                break;
+            }
+        }
+    }
+
+    if (selAlu) {
+        let optExists = Array.from(selAlu.options).some(o => o.value === alumno.id);
+        if (!optExists) {
+            const newOpt = document.createElement('option');
+            newOpt.value = alumno.id;
+            newOpt.text = `${alumno.nombre} [${alumno.grupo_nombre || 'Grupo'}]`;
+            selAlu.add(newOpt);
+        }
+        selAlu.value = alumno.id;
+    }
+
+    if (btnPub && window._modoDestinatarioMaestro === 'individual') {
+        const primerNombre = alumno.nombre ? alumno.nombre.split(' ')[0] : 'Alumno';
+        btnPub.innerHTML = `<i class="fa-solid fa-paper-plane"></i> Enviar Aviso a ${primerNombre}`;
+    }
+};
+
+window.seleccionarAlumnoPredeterminadoDesdeClick = (alumnoId) => {
+    const pool = (window._currentAlumnosIndividualList || []).concat(window._allAlumnosMaestroCache || []);
+    const al = pool.find(a => a.id === alumnoId);
+    if (al) {
+        window.seleccionarAlumnoPredeterminado(al, false);
+    }
+    const dropdown = document.getElementById('resSugerenciasAlumnosAviso');
+    if (dropdown) dropdown.style.display = 'none';
+};
+
+window.alSeleccionarAlumnoDropdownMaestro = (alumnoId) => {
+    if (!alumnoId) {
+        window.limpiarAlumnoPredeterminadoMaestro();
+        return;
+    }
+    const pool = (window._currentAlumnosIndividualList || []).concat(window._allAlumnosMaestroCache || []);
+    const al = pool.find(a => a.id === alumnoId);
+    if (al) {
+        window.seleccionarAlumnoPredeterminado(al, false);
+    }
+};
+
+window.limpiarAlumnoPredeterminadoMaestro = () => {
+    window._alumnoIndividualSeleccionado = null;
+    const card = document.getElementById('cardAlumnoAvisoPredeterminado');
+    const alerta = document.getElementById('alertaSinAlumnoAviso');
+    const inBus = document.getElementById('inBuscarAlumnoAviso');
+    const selAlu = document.getElementById('selMaestroAlumnoIndividual');
+    const btnPub = document.getElementById('btnPublicarMaestroComunicado');
+
+    if (card) card.style.display = 'none';
+    if (alerta) alerta.style.display = 'flex';
+    if (inBus) inBus.value = '';
+    if (selAlu) selAlu.value = '';
+    if (btnPub && window._modoDestinatarioMaestro === 'individual') {
+        btnPub.innerHTML = `<i class="fa-solid fa-paper-plane"></i> Enviar Aviso Individual`;
+    }
+};
+
+if (!window._listenerCerrarSugerenciasMaestro) {
+    window._listenerCerrarSugerenciasMaestro = true;
+    document.addEventListener('click', (e) => {
+        const dropdown = document.getElementById('resSugerenciasAlumnosAviso');
+        const input = document.getElementById('inBuscarAlumnoAviso');
+        if (dropdown && dropdown.style.display !== 'none') {
+            if (!dropdown.contains(e.target) && e.target !== input) {
+                dropdown.style.display = 'none';
+            }
+        }
+    });
+}
+
 window.publicarComunicadoMaestro = async () => {
     const btn = document.getElementById('btnPublicarMaestroComunicado');
     const titulo = document.getElementById('inMaestroComTitulo').value.trim();
     const msg = document.getElementById('inMaestroComMensaje').value.trim();
     const fInp = document.getElementById('inMaestroComArchivo');
-    const chks = Array.from(document.querySelectorAll('.chk-maestro-grupo:checked'));
+    const esIndividual = window._modoDestinatarioMaestro === 'individual';
+    const chks = esIndividual ? [] : Array.from(document.querySelectorAll('.chk-maestro-grupo:checked'));
     
     if(!titulo || !msg) {
         return alert("Por favor escribe el título y el mensaje detallado del comunicado.");
     }
-    if(chks.length === 0) {
+    if(!esIndividual && chks.length === 0) {
         return alert("Por favor selecciona al menos un grupo destinatario.");
+    }
+    if(esIndividual && !window._alumnoIndividualSeleccionado) {
+        return alert("Por favor ingresa el nombre de un alumno o selecciónalo de la lista para predeterminar el destinatario.");
     }
     
     btn.disabled = true;
@@ -32150,7 +32559,48 @@ window.publicarComunicadoMaestro = async () => {
             fallbackTextoArchivos = '\n\n📎 Archivos adjuntos:\n' + uploadedDocs.map(d => `• ${d.name}: ${d.url}`).join('\n');
         }
 
-        // 3. Crear inserts diferenciando materias regulares de talleres/tecnologías
+        // 3. Envío individual a un alumno en especial
+        if (esIndividual) {
+            const alum = window._alumnoIndividualSeleccionado;
+            const selG = document.getElementById('selMaestroGrupoIndividual');
+            let materia = alum.materia;
+            if (!materia && selG && selG.value) {
+                const parts = selG.value.split('|');
+                if (parts.length > 1 && parts[1]) materia = parts[1];
+            }
+            if (!materia) materia = 'General';
+            const mensajeCompuesto = `De: Prof. ${maestroNombre}\nMateria: ${materia}\n\n${msg}${fallbackTextoArchivos}`;
+
+            const insertRow = {
+                autor_id: uRes.data.user.id,
+                tipo: 'AvisoMaestro',
+                titulo: titulo,
+                mensaje: mensajeCompuesto,
+                audiencia: `Alumno_${alum.id}`,
+                archivo_url: fileUrl,
+                plantel_id: state.plantelId
+            };
+            if (alum.perfil_id) {
+                insertRow.receptor_id = alum.perfil_id;
+            }
+
+            const { error: errIns } = await supabaseClient.from('comunicados').insert([insertRow]);
+            if (errIns) throw errIns;
+
+            window.showToast(`Aviso individual enviado exitosamente a ${alum.nombre}.`, "success");
+
+            // Limpiar campos
+            document.getElementById('inMaestroComTitulo').value = '';
+            document.getElementById('inMaestroComMensaje').value = '';
+            fInp.value = '';
+            const listArchivos = document.getElementById('listaArchivosSeleccionadosMaestro');
+            if (listArchivos) listArchivos.innerHTML = '';
+            window.limpiarAlumnoPredeterminadoMaestro();
+            window.loadComunicadosEnviadosMaestro();
+            return;
+        }
+
+        // 4. Crear inserts diferenciando materias regulares de talleres/tecnologías
         const inserts = [];
         let totalDestinatariosTaller = 0;
         let gruposAfectados = 0;
@@ -32283,11 +32733,15 @@ window.loadComunicadosEnviadosMaestro = async () => {
         });
         
         const groupIds = [];
+        const alumnoIds = [];
         itemsAgrupados.forEach(c => {
             c.audiencias.forEach(aud => {
                 if (aud && aud.startsWith('Grupo_')) {
                     const id = aud.replace('Grupo_', '');
                     if (id && id.length > 10) groupIds.push(id);
+                } else if (aud && aud.startsWith('Alumno_')) {
+                    const id = aud.replace('Alumno_', '');
+                    if (id && id.length > 10) alumnoIds.push(id);
                 }
             });
         });
@@ -32296,6 +32750,19 @@ window.loadComunicadosEnviadosMaestro = async () => {
             const { data: grps } = await supabaseClient.from('grupos').select('id, nombre').in('id', groupIds);
             if (grps) {
                 grps.forEach(g => groupsMap[g.id] = g.nombre);
+            }
+        }
+        let alumnosMap = {};
+        if (alumnoIds.length > 0) {
+            const { data: als } = await supabaseClient.from('alumnos').select('id, nombre, matricula, grupos(nombre)').in('id', [...new Set(alumnoIds)]);
+            if (als) {
+                als.forEach(a => {
+                    alumnosMap[a.id] = {
+                        nombre: a.nombre,
+                        matricula: a.matricula || '',
+                        grupo: a.grupos ? a.grupos.nombre : ''
+                    };
+                });
             }
         }
 
@@ -32322,7 +32789,16 @@ window.loadComunicadosEnviadosMaestro = async () => {
             const totalAlumnos = c.audiencias.length;
 
             if (esPorAlumno) {
-                audLabel = totalAlumnos > 1 ? `Taller (${totalAlumnos} alumnos)` : 'Alumno Específico';
+                if (totalAlumnos === 1) {
+                    const aId = c.audiencia.replace('Alumno_', '');
+                    if (alumnosMap[aId]) {
+                        audLabel = `<strong style="color:var(--primary);"><i class="fa-solid fa-user"></i> ${alumnosMap[aId].nombre}</strong> ${alumnosMap[aId].grupo ? `(${alumnosMap[aId].grupo})` : ''}`;
+                    } else {
+                        audLabel = 'Alumno Específico';
+                    }
+                } else {
+                    audLabel = `Taller (${totalAlumnos} alumnos)`;
+                }
             } else if (c.audiencia && c.audiencia.startsWith('Grupo_')) {
                 const gId = c.audiencia.replace('Grupo_', '');
                 audLabel = groupsMap[gId] ? 'Grupo: ' + groupsMap[gId] : 'Grupo (ID): ' + gId.substring(0,6) + '...';
