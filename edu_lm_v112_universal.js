@@ -5,7 +5,7 @@ const CONFIG = {
 };
 
 // Supabase Configuration
-console.log("%c>>> EDU-LM V244 UNIVERSAL CARGADA: VIGILANCIA HUMANA ACTIVA", "color: yellow; background: black; padding: 12px; font-weight: 1000; border: 2px solid yellow;");
+console.log("%c>>> EDU-LM V245 UNIVERSAL CARGADA: VIGILANCIA HUMANA ACTIVA", "color: yellow; background: black; padding: 12px; font-weight: 1000; border: 2px solid yellow;");
 const SUPABASE_URL = "https://eexgjaydpuioncenlsmv.supabase.co"; 
 const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVleGdqYXlkcHVpb25jZW5sc212Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQ4NTM0MDAsImV4cCI6MjEwMDQyOTQwMH0.vrJGn_Bg04OBBntL-w21-I27XuvO61HcUNrphMYYSlY";
 const SUPABASE_KEY = SUPABASE_ANON_KEY;
@@ -2457,19 +2457,25 @@ window.cargarMateriasMaestroAdmin = async (docenteEmail) => {
 
 window.switchAdminCalificacionesTab = (tab) => {
     const btnConcentrado = document.getElementById('btn-tab-concentrado');
+    const btnMejores = document.getElementById('btn-tab-mejores');
     const btnEstadisticas = document.getElementById('btn-tab-estadisticas');
     const btnMaestros = document.getElementById('btn-tab-maestros');
     
-    const allBtns = [btnConcentrado, btnEstadisticas, btnMaestros].filter(Boolean);
+    const allBtns = [btnConcentrado, btnMejores, btnEstadisticas, btnMaestros].filter(Boolean);
     allBtns.forEach(b => { b.className = 'btn btn-outline'; b.style.background = 'white'; });
 
-    const allViews = ['view-concentrado','view-estadisticas', 'view-maestros'];
+    const allViews = ['view-concentrado', 'view-mejores', 'view-estadisticas', 'view-maestros'];
     allViews.forEach(v => { const el = document.getElementById(v); if(el) el.style.display = 'none'; });
 
     if(tab === 'concentrado') {
         if(btnConcentrado) { btnConcentrado.className = 'btn btn-primary'; btnConcentrado.style.background = ''; }
         const el = document.getElementById('view-concentrado');
         if(el) el.style.display = 'flex';
+    } else if(tab === 'mejores') {
+        if(btnMejores) { btnMejores.className = 'btn btn-primary'; btnMejores.style.background = ''; }
+        const el = document.getElementById('view-mejores');
+        if(el) { el.style.display = 'flex'; el.style.animation = 'fadeIn 0.4s'; }
+        if(window.initMejoresPromediosView) window.initMejoresPromediosView();
     } else if(tab === 'estadisticas') {
         if(btnEstadisticas) { btnEstadisticas.className = 'btn btn-primary'; btnEstadisticas.style.background = ''; }
         const el = document.getElementById('view-estadisticas');
@@ -2502,6 +2508,7 @@ function renderAdminCalificaciones() {
   setTimeout(() => { 
     if (window.loadAdminCalificacionesFiltros) window.loadAdminCalificacionesFiltros(); 
     if (window.loadAdminEstadisticasFiltros) window.loadAdminEstadisticasFiltros();
+    if (window.initMejoresPromediosView) window.initMejoresPromediosView();
   }, 100);
   return `
     <div class="page-header" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:15px;">
@@ -2511,6 +2518,7 @@ function renderAdminCalificaciones() {
       </div>
       <div style="display:flex; gap:10px; flex-wrap:wrap;">
           <button id="btn-tab-concentrado" class="btn btn-primary" onclick="window.switchAdminCalificacionesTab('concentrado')"><i class="fa-solid fa-list-check"></i> Concentrado por Grupo</button>
+          <button id="btn-tab-mejores" class="btn btn-outline" onclick="window.switchAdminCalificacionesTab('mejores')" style="background:white;"><i class="fa-solid fa-trophy"></i> Mejores Promedios</button>
           <button id="btn-tab-estadisticas" class="btn btn-outline" onclick="window.switchAdminCalificacionesTab('estadisticas')" style="background:white;"><i class="fa-solid fa-chart-pie"></i> Estadística de Aprobación</button>
           <button id="btn-tab-maestros" class="btn btn-outline" onclick="window.switchAdminCalificacionesTab('maestros')" style="background:white;"><i class="fa-solid fa-chalkboard-user"></i> Reportes por Maestro</button>
       </div>
@@ -2550,6 +2558,7 @@ function renderAdminCalificaciones() {
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; flex-wrap:wrap; gap:16px;">
           <h3 style="margin:0;">Concentrado de Calificaciones Consolidadas</h3>
         </div>
+        <div id="resumenMejoresPromediosSabana"></div>
         <div style="overflow-x:auto;" id="adminCalificacionesTablaHolder">
            <div style="color:var(--text-muted); font-size:0.9rem;">
               Seleccione un grupo y trimestre en los filtros de la izquierda...
@@ -2562,6 +2571,69 @@ function renderAdminCalificaciones() {
            <button class="btn btn-success" style="border-color:var(--success); color:white;" onclick="window.exportarSabanaCalificaciones()">
               <i class="fa-solid fa-file-excel"></i> Descargar Sábana (CSV/Excel)
            </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- VISTA: MEJORES PROMEDIOS (CUADRO DE HONOR) -->
+    <div id="view-mejores" style="display:none; gap:24px; flex-wrap:wrap;">
+      <div class="card" style="flex:1; min-width:320px; align-self: flex-start;">
+         <div style="display:flex; align-items:center; gap:10px; margin-bottom:12px;">
+            <div style="width:36px; height:36px; border-radius:10px; background:#fef3c7; color:#d97706; display:flex; align-items:center; justify-content:center;">
+               <i class="fa-solid fa-trophy" style="font-size:1.1rem;"></i>
+            </div>
+            <h3 style="margin:0;">Cuadro de Honor</h3>
+         </div>
+         <p style="font-size:0.85rem; color:var(--text-muted); margin-bottom:16px;">
+            Visualiza el ranking de los <strong>3 mejores promedios</strong> por grupo (1er, 2do y 3er lugar). En caso de empate, se mostrarán todos los alumnos en dicha posición.
+         </p>
+         
+         <div class="form-group">
+            <label class="form-label">Trimestre</label>
+            <select class="form-select" id="adminTrimestreMejoresSel" onchange="window.calcularMejoresPromediosGrupo()">
+                <option value="Trimestre 1">Trimestre 1</option>
+                <option value="Trimestre 2">Trimestre 2</option>
+                <option value="Trimestre 3">Trimestre 3</option>
+                <option value="Calificación Final">Calificación Final</option>
+            </select>
+         </div>
+         
+         <div class="form-group">
+            <label class="form-label">Grado y Grupo</label>
+            <select class="form-select" id="adminGrupoMejoresSel" onchange="window.calcularMejoresPromediosGrupo()">
+               <option value="">Cargando grupos...</option>
+            </select>
+         </div>
+
+         <button class="btn btn-primary" style="width:100%; margin-top:10px;" onclick="window.calcularMejoresPromediosGrupo()">
+            <i class="fa-solid fa-medal"></i> Consultar Mejores Promedios
+         </button>
+
+         <div style="margin-top:16px; padding:12px; border-radius:8px; background:#f8fafc; border:1px solid #e2e8f0; font-size:0.75rem; color:#64748b; line-height:1.4;">
+            <i class="fa-solid fa-circle-info" style="color:var(--primary); margin-right:4px;"></i>
+            <strong>Normativa Oficial SEP:</strong> Las asignaturas de <em>Integración Curricular</em> y <em>Tutoría</em> no se consideran en el cálculo del promedio general.
+         </div>
+      </div>
+
+      <div class="card" style="flex:3; min-width:400px; width: 100%;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; flex-wrap:wrap; gap:12px;">
+          <div>
+             <h3 style="margin:0;" id="mejoresPromediosTitulo">Cuadro de Honor y Excelencia Académica</h3>
+             <div style="font-size:0.8rem; color:var(--text-muted); margin-top:2px;" id="mejoresPromediosSubtitulo">Selecciona un grupo para generar el podio.</div>
+          </div>
+          <div id="btnContainerImprimirCuadroHonor" style="display:none;">
+             <button class="btn btn-outline" style="border-color:#eab308; color:#a16207; font-weight:bold;" onclick="window.imprimirCuadroDeHonorPDF()">
+                <i class="fa-solid fa-print"></i> Imprimir Cuadro de Honor (PDF)
+             </button>
+          </div>
+        </div>
+        
+        <div id="mejoresPromediosContenido" style="min-height:300px; display:flex; flex-direction:column; justify-content:center; align-items:center; text-align:center;">
+           <i class="fa-solid fa-award" style="font-size:3.5rem; color:#cbd5e1; margin-bottom:15px;"></i>
+           <h4 style="margin:0 0 6px 0; color:var(--text-main);">Sin grupo seleccionado</h4>
+           <p style="color:var(--text-muted); font-size:0.85rem; max-width:400px; margin:0 auto;">
+              Elige el trimestre y grupo en el panel izquierdo para calcular el 1er, 2do y 3er mejor promedio de los alumnos.
+           </p>
         </div>
       </div>
     </div>
@@ -25566,6 +25638,8 @@ window.loadAdminCalificacionesFiltros = async () => {
         if(sel) sel.innerHTML = optionsHtml;
         const selEst = document.getElementById('adminGrupoEstadisticaSel');
         if(selEst) selEst.innerHTML = optionsHtml;
+        const selMejores = document.getElementById('adminGrupoMejoresSel');
+        if(selMejores) selMejores.innerHTML = optionsHtml;
     } catch(err) { console.error(err); }
 };
 
@@ -25642,9 +25716,12 @@ window.cargarSabanaGrupo = async () => {
 
         if (materiasObj.length === 0) {
             hold.innerHTML = '<div style="color:var(--text-muted); font-size:0.9rem;">Los maestros de este grupo aún no han enviado sus actas de calificación.</div>';
+            const bHolder = document.getElementById('resumenMejoresPromediosSabana');
+            if (bHolder) bHolder.innerHTML = '';
             return;
         }
 
+        const studentAvgsList = [];
         resAlums.data.forEach(al => {
             const misC = (califs || []).filter(c => c.alumno_id === al.id);
             let cols = '';
@@ -25699,6 +25776,9 @@ window.cargarSabanaGrupo = async () => {
             });
 
             const promX = generalCount > 0 ? (generalSum/generalCount).toFixed(1) : '-';
+            if (promX !== '-') {
+                studentAvgsList.push({ nombre: al.nombre, promedio: parseFloat(promX) });
+            }
             htmlRows += `
                <tr>
                  <td style="text-align:left; font-weight:bold; position:sticky; left:0; background:white; z-index:1; border-right:1px solid var(--border);">${al.nombre}</td>
@@ -25748,11 +25828,473 @@ window.cargarSabanaGrupo = async () => {
           </div>
         `;
         
+        // Banner resumen de los mejores promedios en la cabecera de la sábana
+        const bannerHolder = document.getElementById('resumenMejoresPromediosSabana');
+        if (bannerHolder) {
+            const distinctTop = [...new Set(studentAvgsList.map(s => s.promedio))].sort((a,b) => b - a);
+            if (distinctTop.length > 0) {
+                const p1 = distinctTop[0];
+                const p2 = distinctTop.length > 1 ? distinctTop[1] : null;
+                const p3 = distinctTop.length > 2 ? distinctTop[2] : null;
+
+                const n1 = studentAvgsList.filter(s => s.promedio === p1).map(s => s.nombre).join(', ');
+                const n2 = p2 !== null ? studentAvgsList.filter(s => s.promedio === p2).map(s => s.nombre).join(', ') : '';
+                const n3 = p3 !== null ? studentAvgsList.filter(s => s.promedio === p3).map(s => s.nombre).join(', ') : '';
+
+                const selG = document.getElementById('adminGrupoSel');
+                const gNombre = selG ? selG.options[selG.selectedIndex]?.text : 'Grupo';
+
+                bannerHolder.innerHTML = `
+                    <div style="background: linear-gradient(135deg, #fffbeb 0%, #ffffff 100%); border: 1px solid #fde68a; border-radius: 12px; padding: 14px 18px; margin-bottom: 18px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px; box-shadow: 0 2px 8px rgba(245,158,11,0.06);">
+                        <div style="display:flex; align-items:center; gap:12px;">
+                            <div style="width:40px; height:40px; border-radius:12px; background:#fef3c7; color:#d97706; display:flex; align-items:center; justify-content:center; font-size:1.3rem; flex-shrink:0;">
+                                <i class="fa-solid fa-trophy"></i>
+                            </div>
+                            <div>
+                                <div style="font-weight:800; font-size:0.95rem; color:#92400e;">🏆 Mejores Promedios del Grupo — ${gNombre} (${trimRaw})</div>
+                                <div style="font-size:0.8rem; color:#475569; display:flex; gap:14px; flex-wrap:wrap; margin-top:4px;">
+                                    <span>🥇 <strong>1er Lugar (${p1.toFixed(1)}):</strong> <strong style="color:#854d0e;">${n1}</strong></span>
+                                    ${p2 !== null ? `<span>🥈 <strong>2do Lugar (${p2.toFixed(1)}):</strong> <strong style="color:#334155;">${n2}</strong></span>` : ''}
+                                    ${p3 !== null ? `<span>🥉 <strong>3er Lugar (${p3.toFixed(1)}):</strong> <strong style="color:#9a3412;">${n3}</strong></span>` : ''}
+                                </div>
+                            </div>
+                        </div>
+                        <button class="btn btn-sm" style="background:#fef3c7; border:1px solid #fde047; color:#92400e; font-weight:700; border-radius:8px; cursor:pointer;" onclick="window.switchAdminCalificacionesTab('mejores'); setTimeout(() => { const selM = document.getElementById('adminGrupoMejoresSel'); if(selM) selM.value='${gid}'; const selT = document.getElementById('adminTrimestreMejoresSel'); if(selT) selT.value='${trimRaw}'; window.calcularMejoresPromediosGrupo(); }, 100);">
+                            <i class="fa-solid fa-medal"></i> Ver Cuadro de Honor
+                        </button>
+                    </div>
+                `;
+            } else {
+                bannerHolder.innerHTML = '';
+            }
+        }
+
         // Mostrar botón de notificación si hay datos
         if(document.getElementById('btnNotifBoletas')) document.getElementById('btnNotifBoletas').style.display = 'inline-block';
     } catch(err) {
         console.error(err);
         hold.innerHTML = '<div style="color:var(--danger); font-size:0.9rem;">Ocurrió un error inesperado al armar la sábana.</div>';
+        const bHolder = document.getElementById('resumenMejoresPromediosSabana');
+        if (bHolder) bHolder.innerHTML = '';
+    }
+};
+
+/* ========================================================
+   MÓDULO: CUADRO DE HONOR Y MEJORES PROMEDIOS POR GRUPO
+   ======================================================== */
+
+window.initMejoresPromediosView = async () => {
+    try {
+        const selMejores = document.getElementById('adminGrupoMejoresSel');
+        if (!selMejores) return;
+
+        const selConcentrado = document.getElementById('adminGrupoSel');
+        if (selConcentrado && selConcentrado.options && selConcentrado.options.length > 1) {
+            selMejores.innerHTML = selConcentrado.innerHTML;
+            if (selConcentrado.value) {
+                selMejores.value = selConcentrado.value;
+            }
+        } else {
+            const pId = window._obtenerPlantelIdActivo ? await window._obtenerPlantelIdActivo() : state.plantelId;
+            let q = supabaseClient.from('grupos').select('id, nombre, turno').order('nombre');
+            if (pId) q = q.or('plantel_id.eq.' + pId + ',plantel_id.is.null');
+            const { data: grupos } = await q;
+            if (grupos) {
+                selMejores.innerHTML = '<option value="">-- Selecciona un grupo --</option>' +
+                    grupos.map(g => `<option value="${g.id}">${g.nombre}${g.turno ? ' - ' + g.turno : ''}</option>`).join('');
+            }
+        }
+
+        const selTrimConc = document.getElementById('adminTrimestreSel');
+        const selTrimMejores = document.getElementById('adminTrimestreMejoresSel');
+        if (selTrimConc && selTrimMejores && selTrimConc.value) {
+            selTrimMejores.value = selTrimConc.value;
+        }
+
+        if (selMejores.value) {
+            window.calcularMejoresPromediosGrupo();
+        }
+    } catch(e) {
+        console.error("Error al inicializar vista de mejores promedios:", e);
+    }
+};
+
+window.calcularMejoresPromediosGrupo = async () => {
+    const selGrupo = document.getElementById('adminGrupoMejoresSel');
+    const selTrim = document.getElementById('adminTrimestreMejoresSel');
+    const cont = document.getElementById('mejoresPromediosContenido');
+    const btnPrint = document.getElementById('btnContainerImprimirCuadroHonor');
+    const subTitle = document.getElementById('mejoresPromediosSubtitulo');
+    
+    if (!selGrupo || !selTrim || !cont) return;
+    
+    const gid = selGrupo.value;
+    const grupoNombre = selGrupo.selectedIndex >= 0 ? selGrupo.options[selGrupo.selectedIndex].text : '';
+    const trimRaw = selTrim.value;
+    
+    if (!gid) {
+        cont.innerHTML = `
+            <div style="padding:40px; text-align:center; color:var(--text-muted);">
+                <i class="fa-solid fa-arrow-left" style="font-size:2rem; margin-bottom:12px; color:var(--primary);"></i>
+                <h4 style="margin:0 0 6px 0; color:var(--text-main);">Por favor selecciona un grupo</h4>
+                <p style="margin:0; font-size:0.85rem;">Elige el grupo y trimestre en el panel de la izquierda para calcular el ranking.</p>
+            </div>
+        `;
+        if (btnPrint) btnPrint.style.display = 'none';
+        return;
+    }
+
+    if (subTitle) subTitle.innerText = `${grupoNombre} — ${trimRaw}`;
+    cont.innerHTML = `
+        <div style="padding:50px; text-align:center; color:var(--text-muted);">
+            <i class="fa-solid fa-spinner fa-spin fa-2x" style="color:var(--primary); margin-bottom:12px;"></i>
+            <div style="font-weight:600;">Calculando los mejores promedios de ${grupoNombre}...</div>
+            <div style="font-size:0.8rem; margin-top:4px;">Excluyendo asignaturas formativas no evaluables (Integración Curricular y Tutoría)...</div>
+        </div>
+    `;
+
+    try {
+        const isFinal = trimRaw === 'Calificación Final' || trimRaw === 'final';
+        const trim = isFinal ? 4 : parseInt(trimRaw.replace(/\D/g, ''));
+        const trimFilter = isFinal ? [1, 2, 3] : [trim];
+
+        // 1. Obtener alumnos del grupo
+        const { data: alums, error: errAlums } = await supabaseClient
+            .from('alumnos')
+            .select('id, nombre, matricula, grado')
+            .eq('grupo_id', gid)
+            .order('nombre');
+
+        if (errAlums) throw errAlums;
+        if (!alums || alums.length === 0) {
+            cont.innerHTML = `<div class="alert alert-warning" style="margin:20px;">No se encontraron alumnos registrados en ${grupoNombre}.</div>`;
+            if (btnPrint) btnPrint.style.display = 'none';
+            return;
+        }
+
+        if (window._compararNombresAlumnos) alums.sort(window._compararNombresAlumnos);
+
+        // 2. Obtener calificaciones del grupo
+        const aluIds = alums.map(a => a.id);
+        const { data: califs, error: errCalifs } = await supabaseClient
+            .from('calificaciones')
+            .select('alumno_id, calificacion, trimestre, materia_nombre, materia_id(nombre)')
+            .in('alumno_id', aluIds)
+            .in('trimestre', trimFilter);
+
+        if (errCalifs) throw errCalifs;
+        if (!califs || califs.length === 0) {
+            cont.innerHTML = `<div style="padding:40px; text-align:center; color:var(--text-muted);">Los maestros de este grupo aún no han enviado sus actas de calificación para ${trimRaw}.</div>`;
+            if (btnPrint) btnPrint.style.display = 'none';
+            return;
+        }
+
+        // 3. Calcular promedio de cada alumno (excluyendo Integración Curricular y Tutoría)
+        const rankedStudents = [];
+        alums.forEach(al => {
+            const misC = (califs || []).filter(c => c.alumno_id === al.id);
+            let generalSum = 0;
+            let generalCount = 0;
+
+            if (isFinal) {
+                const byMat = {};
+                misC.forEach(c => {
+                    const mName = c.materia_nombre || (c.materia_id && c.materia_id.nombre) || 'Materia';
+                    if (window._esMateriaNoEvaluable && window._esMateriaNoEvaluable(mName)) return;
+                    if (!byMat[mName]) byMat[mName] = {};
+                    byMat[mName][c.trimestre] = c.calificacion;
+                });
+
+                Object.keys(byMat).forEach(mName => {
+                    let sum = 0, count = 0;
+                    [1, 2, 3].forEach(t => {
+                        const cal = byMat[mName][t];
+                        if (cal !== undefined && cal !== null && cal !== '') {
+                            const num = parseFloat(cal);
+                            if (!isNaN(num)) {
+                                sum += (num < 6.0 ? 5 : Math.round(num));
+                                count++;
+                            }
+                        }
+                    });
+                    if (count > 0) {
+                        const subjectAvg = parseFloat((sum / count).toFixed(1));
+                        generalSum += subjectAvg;
+                        generalCount++;
+                    }
+                });
+            } else {
+                misC.forEach(c => {
+                    const mName = c.materia_nombre || (c.materia_id && c.materia_id.nombre) || 'Materia';
+                    if (window._esMateriaNoEvaluable && window._esMateriaNoEvaluable(mName)) return;
+                    if (c.calificacion !== undefined && c.calificacion !== null && c.calificacion !== '') {
+                        const num = parseFloat(c.calificacion);
+                        if (!isNaN(num)) {
+                            const boletaCal = num < 6.0 ? 5 : Math.round(num);
+                            generalSum += boletaCal;
+                            generalCount++;
+                        }
+                    }
+                });
+            }
+
+            if (generalCount > 0) {
+                const prom = parseFloat((generalSum / generalCount).toFixed(1));
+                rankedStudents.push({
+                    id: al.id,
+                    nombre: al.nombre,
+                    matricula: al.matricula || '',
+                    grado: al.grado || '',
+                    promedio: prom,
+                    materiasEvaluadas: generalCount
+                });
+            }
+        });
+
+        if (rankedStudents.length === 0) {
+            cont.innerHTML = `<div style="padding:40px; text-align:center; color:var(--text-muted);">No se encontraron calificaciones numéricas válidas para promediar en ${trimRaw}.</div>`;
+            if (btnPrint) btnPrint.style.display = 'none';
+            return;
+        }
+
+        // 4. Identificar los 3 mejores promedios únicos (1er, 2do y 3er lugar)
+        const distinctAvgs = [...new Set(rankedStudents.map(s => s.promedio))].sort((a, b) => b - a);
+        const p1 = distinctAvgs[0];
+        const p2 = distinctAvgs.length > 1 ? distinctAvgs[1] : null;
+        const p3 = distinctAvgs.length > 2 ? distinctAvgs[2] : null;
+
+        const lugar1 = rankedStudents.filter(s => s.promedio === p1);
+        const lugar2 = p2 !== null ? rankedStudents.filter(s => s.promedio === p2) : [];
+        const lugar3 = p3 !== null ? rankedStudents.filter(s => s.promedio === p3) : [];
+
+        // Guardar para impresión
+        window._lastCuadroDeHonorData = {
+            grupoNombre,
+            trimRaw,
+            p1, p2, p3,
+            lugar1, lugar2, lugar3,
+            allRanked: rankedStudents.sort((a,b) => b.promedio - a.promedio)
+        };
+
+        if (btnPrint) btnPrint.style.display = 'inline-block';
+
+        // Renderizar Tarjeta de Podio
+        const renderPlaceCard = (placeNum, medalEmoji, colorBorder, colorBg, colorText, title, promVal, studentList) => {
+            if (promVal === null || !studentList || studentList.length === 0) return '';
+            const isTie = studentList.length > 1;
+            return `
+                <div style="flex:1; min-width:240px; background:${colorBg}; border:2px solid ${colorBorder}; border-radius:16px; padding:20px; display:flex; flex-direction:column; box-shadow:0 4px 15px rgba(0,0,0,0.03); position:relative; overflow:hidden;">
+                    <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:12px;">
+                        <span style="font-size:2.2rem; line-height:1;">${medalEmoji}</span>
+                        <div style="text-align:right;">
+                            <div style="font-size:1.8rem; font-weight:900; color:${colorText}; line-height:1;">${promVal.toFixed(1)}</div>
+                            <div style="font-size:0.7rem; font-weight:700; color:${colorText}; text-transform:uppercase; letter-spacing:0.5px;">Promedio</div>
+                        </div>
+                    </div>
+                    <div style="font-size:0.85rem; font-weight:800; color:${colorText}; text-transform:uppercase; letter-spacing:1px; margin-bottom:10px;">
+                        ${title} ${isTie ? `<span style="background:${colorBorder}30; color:${colorText}; font-size:0.7rem; padding:2px 7px; border-radius:10px; margin-left:6px; font-weight:bold;">Empate (${studentList.length})</span>` : ''}
+                    </div>
+                    <div style="display:flex; flex-direction:column; gap:8px; margin-top:auto;">
+                        ${studentList.map(st => `
+                            <div style="background:white; border:1px solid ${colorBorder}50; border-radius:10px; padding:10px 12px; display:flex; justify-content:space-between; align-items:center;">
+                                <div style="font-weight:700; font-size:0.9rem; color:#1e293b;">${st.nombre}</div>
+                                <span style="font-size:0.7rem; color:#64748b; font-weight:600;">${st.materiasEvaluadas} mats.</span>
+                            </div>
+                        `).join('')}
+                    </div>
+                </div>
+            `;
+        };
+
+        const podiumHtml = `
+            <div style="display:flex; gap:16px; flex-wrap:wrap; margin-bottom:28px;">
+                ${renderPlaceCard(1, '🥇', '#eab308', '#fefce8', '#854d0e', '1er Lugar (Mejor Promedio)', p1, lugar1)}
+                ${p2 !== null ? renderPlaceCard(2, '🥈', '#94a3b8', '#f8fafc', '#334155', '2do Lugar', p2, lugar2) : ''}
+                ${p3 !== null ? renderPlaceCard(3, '🥉', '#f97316', '#fff7ed', '#9a3412', '3er Lugar', p3, lugar3) : ''}
+            </div>
+        `;
+
+        // Tabla general de todo el grupo ordenada por promedio
+        const sortedAll = [...rankedStudents].sort((a,b) => b.promedio - a.promedio);
+        let tableRows = '';
+        sortedAll.forEach((s, idx) => {
+            let badgePlace = `<span style="font-weight:700; color:#64748b;">#${idx + 1}</span>`;
+            if (s.promedio === p1) badgePlace = `<span style="background:#fef3c7; color:#854d0e; padding:3px 9px; border-radius:12px; font-size:0.75rem; font-weight:900; border:1px solid #fde047;">🥇 1er Lugar</span>`;
+            else if (p2 !== null && s.promedio === p2) badgePlace = `<span style="background:#f1f5f9; color:#334155; padding:3px 9px; border-radius:12px; font-size:0.75rem; font-weight:900; border:1px solid #cbd5e1;">🥈 2do Lugar</span>`;
+            else if (p3 !== null && s.promedio === p3) badgePlace = `<span style="background:#fff7ed; color:#9a3412; padding:3px 9px; border-radius:12px; font-size:0.75rem; font-weight:900; border:1px solid #fed7aa;">🥉 3er Lugar</span>`;
+
+            tableRows += `
+                <tr style="border-bottom:1px solid var(--border);">
+                    <td style="padding:10px 14px; text-align:center;">${badgePlace}</td>
+                    <td style="padding:10px 14px; font-weight:600; text-align:left; color:var(--text-main);">${s.nombre}</td>
+                    <td style="padding:10px 14px; text-align:center; font-weight:900; font-size:1.05rem; color:var(--primary);">${s.promedio.toFixed(1)}</td>
+                    <td style="padding:10px 14px; text-align:center; color:var(--text-muted); font-size:0.85rem;">${s.materiasEvaluadas} asignaturas</td>
+                </tr>
+            `;
+        });
+
+        cont.innerHTML = `
+            ${podiumHtml}
+            
+            <div style="border:1px solid var(--border); border-radius:14px; overflow:hidden; background:white; margin-top:10px;">
+                <div style="background:#f8fafc; padding:14px 18px; border-bottom:1px solid var(--border); display:flex; justify-content:space-between; align-items:center;">
+                    <div style="font-weight:700; font-size:0.9rem; color:var(--text-main);">
+                        <i class="fa-solid fa-list-ol"></i> Tabla General de Promedios del Grupo (${sortedAll.length} alumnos evaluados)
+                    </div>
+                    <span style="font-size:0.75rem; color:#64748b;">Ordenados de mayor a menor</span>
+                </div>
+                <div style="overflow-x:auto;">
+                    <table style="width:100%; border-collapse:collapse; text-align:left;">
+                        <thead>
+                            <tr style="background:#f1f5f9; font-size:0.75rem; text-transform:uppercase; color:#64748b; letter-spacing:0.5px;">
+                                <th style="padding:10px 14px; text-align:center; width:120px;">Posición</th>
+                                <th style="padding:10px 14px;">Alumno</th>
+                                <th style="padding:10px 14px; text-align:center; width:130px;">Promedio</th>
+                                <th style="padding:10px 14px; text-align:center; width:160px;">Evaluaciones</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${tableRows}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            
+            <div style="margin-top:16px; font-size:0.75rem; color:#64748b; font-style:italic;">
+                * Criterio oficial SEP: El cálculo del promedio excluye materias formativas no evaluables numéricamente (Integración Curricular y Tutoría). En caso de empate en promedio, los alumnos comparten el mismo lugar de honor.
+            </div>
+        `;
+    } catch(err) {
+        console.error("Error al calcular mejores promedios:", err);
+        cont.innerHTML = `<div class="alert alert-danger" style="margin:20px;">Error al calcular los promedios: ${err.message}</div>`;
+        if (btnPrint) btnPrint.style.display = 'none';
+    }
+};
+
+window.imprimirCuadroDeHonorPDF = async () => {
+    const data = window._lastCuadroDeHonorData;
+    if (!data) return alert("Primero genera el cálculo de mejores promedios.");
+
+    try {
+        const printWindow = window.open('', '_blank');
+        const currentYear = new Date().getFullYear();
+        const cicloEscolar = (new Date().getMonth() >= 7) ? `${currentYear} - ${currentYear + 1}` : `${currentYear - 1} - ${currentYear}`;
+
+        let pId = state && state.plantelId;
+        if (!pId && typeof window._obtenerPlantelIdActivo === 'function') {
+            pId = await window._obtenerPlantelIdActivo();
+        }
+        if (!pId) pId = window.currentUserProfile?.plantel_id || state.user?.user_metadata?.plantel_id;
+
+        let plantelName = CONFIG.schoolName;
+        let plantelLogo = null;
+        try {
+            if (pId) {
+                const { data: pt } = await supabaseClient.from('planteles').select('nombre, logo_url, cct').eq('id', pId).maybeSingle();
+                if (pt && pt.nombre) plantelName = pt.nombre + (pt.cct ? ' — C.C.T. ' + pt.cct : '');
+                if (pt && pt.logo_url) plantelLogo = window.getCleanLogoUrl(pt.logo_url);
+            }
+        } catch(e) {}
+
+        const directorName = await window.obtenerNombreDirector(pId);
+
+        const renderHonorBox = (medal, placeText, avgVal, students, bg, border, color) => {
+            if (!students || students.length === 0) return '';
+            return `
+                <div style="border: 2px solid ${border}; background: ${bg}; border-radius: 12px; padding: 16px; margin-bottom: 16px; page-break-inside: avoid;">
+                    <div style="display:flex; justify-content:space-between; align-items:center; border-bottom: 1px solid ${border}80; padding-bottom: 8px; margin-bottom: 10px;">
+                        <span style="font-size: 16px; font-weight: bold; color: ${color}; text-transform: uppercase;">
+                            ${medal} ${placeText}
+                        </span>
+                        <span style="font-size: 20px; font-weight: 900; color: ${color};">
+                            ${avgVal.toFixed(1)}
+                        </span>
+                    </div>
+                    <ul style="margin: 0; padding-left: 20px; font-size: 14px; font-weight: bold; color: #111;">
+                        ${students.map(s => `<li style="margin-bottom: 4px;">${s.nombre}</li>`).join('')}
+                    </ul>
+                </div>
+            `;
+        };
+
+        printWindow.document.write(`
+            <html>
+                <head>
+                    <title>Cuadro de Honor - ${data.grupoNombre} - ${data.trimRaw}</title>
+                    <style>
+                        body { font-family: 'Segoe UI', Arial, sans-serif; padding: 40px; color: #111; line-height: 1.4; margin: 0; }
+                        .header { text-align: center; margin-bottom: 25px; border-bottom: 4px double #1e3a8a; padding-bottom: 20px; }
+                        .header h1 { margin: 0; color: #1e3a8a; font-size: 22px; text-transform: uppercase; letter-spacing: 1px; }
+                        .header h2 { margin: 6px 0 0 0; color: #b45309; font-size: 18px; font-weight: 900; letter-spacing: 1px; text-transform: uppercase; }
+                        .header h3 { margin: 4px 0 0 0; color: #555; font-size: 13px; font-weight: normal; }
+                        .logo-img { max-height: 75px; margin-bottom: 10px; object-fit: contain; }
+                        .meta-info { display: flex; justify-content: space-between; margin-bottom: 25px; font-size: 13px; background: #f8fafc; padding: 12px 18px; border: 1px solid #cbd5e1; border-radius: 8px; }
+                        .signatures { display: flex; justify-content: space-around; margin-top: 60px; page-break-inside: avoid; }
+                        .signature-box { text-align: center; width: 240px; }
+                        .signature-line { border-bottom: 1px solid #000; height: 50px; margin-bottom: 8px; }
+                        .signature-title { font-size: 12px; font-weight: bold; color: #111; text-transform: uppercase; }
+                        .footer { margin-top: 40px; font-size: 10px; color: #666; text-align: center; border-top: 1px solid #cbd5e1; padding-top: 10px; }
+                        @media print {
+                            body { padding: 0; margin: 15px; }
+                        }
+                    </style>
+                </head>
+                <body>
+                    <div class="header">
+                        ${plantelLogo ? `<img src="${plantelLogo}" class="logo-img" alt="Logo">` : ''}
+                        <h1>${plantelName.toUpperCase()}</h1>
+                        <h2>🏆 CUADRO DE HONOR Y EXCELENCIA ACADÉMICA</h2>
+                        <h3>RECONOCIMIENTO AL MÉRITO Y DESEMPEÑO ESCOLAR</h3>
+                    </div>
+
+                    <div class="meta-info">
+                        <div><strong>Grupo:</strong> ${data.grupoNombre}</div>
+                        <div><strong>Periodo:</strong> ${data.trimRaw}</div>
+                        <div><strong>Ciclo Escolar:</strong> ${cicloEscolar}</div>
+                        <div><strong>Emisión:</strong> ${new Date().toLocaleDateString('es-MX', { year:'numeric', month:'long', day:'numeric' })}</div>
+                    </div>
+
+                    <div style="margin-bottom: 25px;">
+                        <p style="font-size: 14px; line-height: 1.5; text-align: justify; margin-bottom: 20px;">
+                            La Dirección Escolar y el Personal Docente otorgan el presente reconocimiento de honor a los alumnos que han demostrado excelencia, constancia y disciplina académica, alcanzando los más altos promedios del grupo:
+                        </p>
+
+                        ${renderHonorBox('🥇', 'Primer Lugar (Mejor Promedio)', data.p1, data.lugar1, '#fefce8', '#eab308', '#854d0e')}
+                        ${data.p2 !== null ? renderHonorBox('🥈', 'Segundo Lugar', data.p2, data.lugar2, '#f8fafc', '#94a3b8', '#334155') : ''}
+                        ${data.p3 !== null ? renderHonorBox('🥉', 'Tercer Lugar', data.p3, data.lugar3, '#fff7ed', '#f97316', '#9a3412') : ''}
+                    </div>
+
+                    <div style="font-size: 10px; color: #555; font-style: italic; margin-top: 10px;">
+                        * Conforme al Acuerdo Secretarial SEP, el promedio de aprovechamiento se determina exclusivamente a partir de las asignaturas evaluables numéricamente (excluyendo Integración Curricular y Tutoría).
+                    </div>
+
+                    <div class="signatures">
+                        <div class="signature-box">
+                            <div class="signature-line"></div>
+                            <div class="signature-title">${directorName}</div>
+                            <div style="font-size:10px; color:#555;">Dirección del Plantel</div>
+                        </div>
+                        <div class="signature-box">
+                            <div class="signature-line"></div>
+                            <div class="signature-title">Tutor(a) / Asesor(a) de Grupo</div>
+                            <div style="font-size:10px; color:#555;">Comité Técnico Pedagógico</div>
+                        </div>
+                    </div>
+
+                    <div class="footer">
+                        Documento oficial emitido mediante la Plataforma de Control Escolar ${CONFIG.appName}.
+                    </div>
+
+                    <script>
+                        setTimeout(() => { window.print(); }, 800);
+                    </script>
+                </body>
+            </html>
+        `);
+        printWindow.document.close();
+    } catch(e) {
+        console.error("Error al imprimir cuadro de honor:", e);
+        alert("Error al generar la vista de impresión: " + e.message);
     }
 };
 
