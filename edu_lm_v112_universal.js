@@ -5,7 +5,7 @@ const CONFIG = {
 };
 
 // Supabase Configuration
-console.log("%c>>> EDU-LM V248 UNIVERSAL CARGADA: VIGILANCIA HUMANA ACTIVA", "color: yellow; background: black; padding: 12px; font-weight: 1000; border: 2px solid yellow;");
+console.log("%c>>> EDU-LM V249 UNIVERSAL CARGADA: VIGILANCIA HUMANA ACTIVA", "color: yellow; background: black; padding: 12px; font-weight: 1000; border: 2px solid yellow;");
 const SUPABASE_URL = "https://eexgjaydpuioncenlsmv.supabase.co"; 
 const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVleGdqYXlkcHVpb25jZW5sc212Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQ4NTM0MDAsImV4cCI6MjEwMDQyOTQwMH0.vrJGn_Bg04OBBntL-w21-I27XuvO61HcUNrphMYYSlY";
 const SUPABASE_KEY = SUPABASE_ANON_KEY;
@@ -4198,11 +4198,12 @@ function renderMaestroBitacora() {
 // ========================
 function renderApoyoRiesgoAcademico() {
   window._riesgoActitudinalLoadedOnce = false;
+  window._suspensionesLoadedOnce = false;
   setTimeout(() => { if(window.loadApoyoRiesgoFiltros) window.loadApoyoRiesgoFiltros(); }, 100);
   return `
     <div class="page-header">
-      <h2 class="page-title"><i class="fa-solid fa-chart-line" style="color:var(--primary); margin-right:8px;"></i>Riesgo Académico y Riesgo Actitudinal</h2>
-      <p class="page-subtitle">Detección y seguimiento integral: materias reprobadas, reportes conductuales y atención prioritaria.</p>
+      <h2 class="page-title"><i class="fa-solid fa-chart-line" style="color:var(--primary); margin-right:8px;"></i>Riesgo Académico, Conductual y Suspensiones</h2>
+      <p class="page-subtitle">Detección y seguimiento integral: materias reprobadas, reportes conductuales, atención prioritaria y análisis de suspensiones escolares.</p>
     </div>
 
     <!-- Pestañas de Navegación -->
@@ -4212,6 +4213,9 @@ function renderApoyoRiesgoAcademico() {
       </button>
       <button id="tabBtnRiesgoActitudinal" class="btn" onclick="window.cambiarTabRiesgo('actitudinal')" style="font-weight:700; background:transparent; color:var(--text-muted); border:1px solid transparent; border-bottom:3px solid transparent; border-radius:8px 8px 0 0; padding:10px 18px; display:flex; align-items:center; gap:8px; cursor:pointer;">
         <i class="fa-solid fa-triangle-exclamation" style="color:var(--warning);"></i> Riesgo Actitudinal (Reportes e Incidencias)
+      </button>
+      <button id="tabBtnSuspensiones" class="btn" onclick="window.cambiarTabRiesgo('suspensiones')" style="font-weight:700; background:transparent; color:var(--text-muted); border:1px solid transparent; border-bottom:3px solid transparent; border-radius:8px 8px 0 0; padding:10px 18px; display:flex; align-items:center; gap:8px; cursor:pointer;">
+        <i class="fa-solid fa-ban" style="color:var(--danger);"></i> Análisis de Suspensiones por Trimestre
       </button>
     </div>
 
@@ -4352,6 +4356,77 @@ function renderApoyoRiesgoAcademico() {
              <div style="text-align:center; padding:40px; color:var(--text-muted);">
                <i class="fa-solid fa-clipboard-user" style="font-size:3rem; margin-bottom:15px; color:var(--border);"></i>
                <p>Ajusta los filtros y haz clic en "Analizar Reportes" para ver las estadísticas de incidencias y los alumnos detectados.</p>
+             </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Pestaña 3: ANÁLISIS DE SUSPENSIONES POR TRIMESTRE -->
+    <div id="panelSuspensiones" style="display:none;">
+      <div style="display:flex; gap:24px; flex-wrap:wrap; align-items:flex-start;">
+        <div class="card" style="flex:1; min-width:320px; align-self:flex-start;">
+           <h3 style="margin-bottom:12px"><i class="fa-solid fa-filter"></i> Filtros de Suspensiones</h3>
+           
+           <div class="form-group">
+              <label class="form-label">Trimestre</label>
+              <select class="form-select" id="suspTrimestreSel">
+                  <option value="Todos">Todos los Trimestres (Ciclo Completo)</option>
+                  <option value="1">Trimestre 1 (Ago - Nov)</option>
+                  <option value="2">Trimestre 2 (Dic - Mar)</option>
+                  <option value="3">Trimestre 3 (Abr - Jul)</option>
+              </select>
+           </div>
+
+           <div class="form-group">
+              <label class="form-label">Grado</label>
+              <select class="form-select" id="suspGradoSel" onchange="window.handleSuspGradoChange()">
+                  <option value="Todos">Toda la Escuela</option>
+                  <option value="1°">1° Grado</option>
+                  <option value="2°">2° Grado</option>
+                  <option value="3°">3° Grado</option>
+              </select>
+           </div>
+
+           <div class="form-group" id="suspGrupoContainer" style="display:none;">
+              <label class="form-label">Grupo</label>
+              <select class="form-select" id="suspGrupoSel">
+                 <option value="Todos">Todos los grupos del grado</option>
+              </select>
+           </div>
+
+           <div class="form-group">
+              <label class="form-label">Estado de la Suspensión</label>
+              <select class="form-select" id="suspEstadoSel">
+                  <option value="Todos">Todas las Suspensiones (Activas e Históricas)</option>
+                  <option value="vigente">Solo Suspendidos Hoy (Vigentes actualmente)</option>
+                  <option value="concluida">Solo Suspensiones Concluidas / Históricas</option>
+              </select>
+           </div>
+
+           <button class="btn btn-primary" style="width:100%; margin-top:10px;" onclick="window.loadApoyoSuspensionesData()">
+              <i class="fa-solid fa-magnifying-glass-chart"></i> Analizar Suspensiones
+           </button>
+        </div>
+
+        <div class="card" style="flex:3; min-width:400px; width:100%;">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; flex-wrap:wrap; gap:10px;">
+            <div>
+              <h3 style="margin:0;"><i class="fa-solid fa-ban" style="color:var(--danger);"></i> Análisis y Monitoreo de Suspensiones Escolares</h3>
+              <p style="margin:4px 0 0 0; font-size:0.8rem; color:var(--text-muted);">Estadísticas de suspensiones aplicadas por trimestre, comparativa histórica y control de alumnos con sanción disciplinaria.</p>
+            </div>
+            <div style="display:flex; gap:8px; align-items:center;">
+              <span id="suspTotalBadge" class="badge" style="background:var(--danger); color:white; display:none;">0 suspendidos</span>
+              <button class="btn btn-outline btn-sm" id="btnImprimirSuspensiones" style="display:none;" onclick="window.imprimirReporteSuspensiones()">
+                <i class="fa-solid fa-print"></i> Imprimir Reporte de Suspensiones
+              </button>
+            </div>
+          </div>
+          
+          <div id="suspensionesDataContainer" style="min-height:300px;">
+             <div style="text-align:center; padding:40px; color:var(--text-muted);">
+               <i class="fa-solid fa-ban" style="font-size:3rem; margin-bottom:15px; color:var(--border);"></i>
+               <p>Ajusta los filtros y haz clic en "Analizar Suspensiones" para ver las estadísticas por trimestre y la lista de alumnos sancionados.</p>
              </div>
           </div>
         </div>
@@ -5427,7 +5502,32 @@ window.loadApoyoRiesgoFiltros = async () => {
         
         window._riesgoGruposCacheados = grupos || [];
         if (window.handleRiesgoActGradoChange) window.handleRiesgoActGradoChange();
+        if (window.handleSuspGradoChange) window.handleSuspGradoChange();
     } catch(e) { console.error("Error cargando grupos riesgo", e); }
+};
+
+window.handleSuspGradoChange = () => {
+    const grado = document.getElementById('suspGradoSel') ? document.getElementById('suspGradoSel').value : 'Todos';
+    const container = document.getElementById('suspGrupoContainer');
+    const selGrupo = document.getElementById('suspGrupoSel');
+    if (!container || !selGrupo) return;
+    
+    if(grado === 'Todos') {
+        container.style.display = 'none';
+        selGrupo.value = 'Todos';
+    } else {
+        container.style.display = 'block';
+        const numGrado = (grado + '').replace(/[^0-9]/g, '');
+        const filtrados = (window._riesgoGruposCacheados || []).filter(g => {
+            const numG = (g.nombre + '').replace(/[^0-9]/g, '');
+            return numGrado ? (numG === numGrado) : g.nombre.startsWith(grado);
+        });
+        let html = '<option value="Todos">Todos los grupos del grado</option>';
+        filtrados.forEach(g => {
+            html += `<option value="${g.id}">${g.nombre}</option>`;
+        });
+        selGrupo.innerHTML = html;
+    }
 };
 
 window.handleRiesgoGradoChange = () => {
@@ -5599,38 +5699,38 @@ window.cambiarTabRiesgo = (tab) => {
     window._activeRiesgoTab = tab;
     const tabAcad = document.getElementById('tabBtnRiesgoAcademico');
     const tabAct = document.getElementById('tabBtnRiesgoActitudinal');
+    const tabSusp = document.getElementById('tabBtnSuspensiones');
     const panelAcad = document.getElementById('panelRiesgoAcademico');
     const panelAct = document.getElementById('panelRiesgoActitudinal');
+    const panelSusp = document.getElementById('panelSuspensiones');
+
+    const deseleccionar = (btn) => {
+        if (!btn) return;
+        btn.style.background = 'transparent';
+        btn.style.color = 'var(--text-muted)';
+        btn.style.borderBottom = '3px solid transparent';
+        btn.style.borderColor = 'transparent';
+    };
+    const seleccionar = (btn) => {
+        if (!btn) return;
+        btn.style.background = 'white';
+        btn.style.color = 'var(--primary)';
+        btn.style.borderBottom = '3px solid var(--primary)';
+        btn.style.borderColor = 'var(--border) var(--border) var(--primary) var(--border)';
+    };
+
+    deseleccionar(tabAcad);
+    deseleccionar(tabAct);
+    deseleccionar(tabSusp);
+    if(panelAcad) panelAcad.style.display = 'none';
+    if(panelAct) panelAct.style.display = 'none';
+    if(panelSusp) panelSusp.style.display = 'none';
 
     if(tab === 'academico') {
-        if(tabAcad) {
-            tabAcad.style.background = 'white';
-            tabAcad.style.color = 'var(--primary)';
-            tabAcad.style.borderBottom = '3px solid var(--primary)';
-            tabAcad.style.borderColor = 'var(--border) var(--border) var(--primary) var(--border)';
-        }
-        if(tabAct) {
-            tabAct.style.background = 'transparent';
-            tabAct.style.color = 'var(--text-muted)';
-            tabAct.style.borderBottom = '3px solid transparent';
-            tabAct.style.borderColor = 'transparent';
-        }
+        seleccionar(tabAcad);
         if(panelAcad) panelAcad.style.display = 'flex';
-        if(panelAct) panelAct.style.display = 'none';
-    } else {
-        if(tabAct) {
-            tabAct.style.background = 'white';
-            tabAct.style.color = 'var(--primary)';
-            tabAct.style.borderBottom = '3px solid var(--primary)';
-            tabAct.style.borderColor = 'var(--border) var(--border) var(--primary) var(--border)';
-        }
-        if(tabAcad) {
-            tabAcad.style.background = 'transparent';
-            tabAcad.style.color = 'var(--text-muted)';
-            tabAcad.style.borderBottom = '3px solid transparent';
-            tabAcad.style.borderColor = 'transparent';
-        }
-        if(panelAcad) panelAcad.style.display = 'none';
+    } else if(tab === 'actitudinal') {
+        seleccionar(tabAct);
         if(panelAct) panelAct.style.display = 'block';
 
         // Inicializar filtros si no se ha hecho
@@ -5641,6 +5741,20 @@ window.cambiarTabRiesgo = (tab) => {
             window._riesgoActitudinalLoadedOnce = true;
             if(window.loadApoyoRiesgoActitudinalData) {
                 window.loadApoyoRiesgoActitudinalData();
+            }
+        }
+    } else if(tab === 'suspensiones') {
+        seleccionar(tabSusp);
+        if(panelSusp) panelSusp.style.display = 'block';
+
+        // Inicializar selector de grupo para suspensiones
+        if(window.handleSuspGradoChange) window.handleSuspGradoChange();
+
+        // Auto-ejecutar análisis de suspensiones la primera vez que se entra a la pestaña
+        if(!window._suspensionesLoadedOnce) {
+            window._suspensionesLoadedOnce = true;
+            if(window.loadApoyoSuspensionesData) {
+                window.loadApoyoSuspensionesData();
             }
         }
     }
@@ -5903,6 +6017,20 @@ window.loadApoyoRiesgoActitudinalData = async () => {
             btnPrint.style.display = 'inline-flex';
         }
 
+        // Consultar cantidad de suspensiones para el periodo seleccionado
+        let totalSuspTrim = 0;
+        try {
+            let sq = supabaseClient.from('suspensiones_alumnos').select('id, fecha_inicio');
+            if (pId) sq = sq.eq('plantel_id', pId);
+            const { data: sData } = await sq;
+            if (sData) {
+                totalSuspTrim = sData.filter(s => {
+                    if (trim === 'Todos') return true;
+                    return obtenerTrimestreReporte(s.fecha_inicio) === parseInt(trim);
+                }).length;
+            }
+        } catch(e) {}
+
         // 5. Construir Shell HTML (KPIs + Barra Proporcional + Filtros Tipo + Selector Subvista)
         let shellHtml = `
             <!-- Panel Estadístico de Reportes -->
@@ -5940,6 +6068,18 @@ window.loadApoyoRiesgoActitudinalData = async () => {
                     <div style="display:flex; align-items:baseline; gap:8px;">
                         <span style="font-size:1.8rem; font-weight:800; color:#991b1b;">${totalPrioritarios}</span>
                         <span style="font-size:0.75rem; color:var(--text-muted);">urgentes</span>
+                    </div>
+                </div>
+
+                <!-- Suspendidos -->
+                <div onclick="window.cambiarTabRiesgo('suspensiones')" style="cursor:pointer; background:white; border:1px solid #fecaca; border-left:5px solid #b91c1c; border-radius:12px; padding:12px 16px; box-shadow:var(--shadow-sm); transition:transform 0.15s;" onmouseover="this.style.transform='translateY(-2px)'" onmouseout="this.style.transform='none'" title="Clic para ir al análisis de suspensiones por trimestre">
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
+                        <span style="font-size:0.75rem; font-weight:700; color:#991b1b; text-transform:uppercase;">Suspendidos</span>
+                        <i class="fa-solid fa-ban" style="color:#b91c1c;"></i>
+                    </div>
+                    <div style="display:flex; align-items:baseline; gap:8px;">
+                        <span style="font-size:1.8rem; font-weight:800; color:#7f1d1d;">${totalSuspTrim}</span>
+                        <span style="font-size:0.75rem; color:var(--text-muted);">${trim === 'Todos' ? 'en ciclo' : `en Trim. ${trim}`}</span>
                     </div>
                 </div>
 
@@ -6561,6 +6701,810 @@ window.imprimirReporteRiesgoActitudinal = async () => {
                 <div style="width:240px; border-top:1px solid #333; padding-top:5px;">
                     <div style="font-weight:bold; font-size:12px;">${directorName}</div>
                     <div style="font-size:10px; color:#555; text-transform:uppercase;">Dirección Escolar / Director(a)</div>
+                </div>
+            </div>
+            <script>window.onload = () => { window.print(); };<\/script>
+        </body>
+        </html>
+    `);
+    printWin.document.close();
+};
+
+// ========================================================
+// MÓDULO: ANÁLISIS DE SUSPENSIONES POR TRIMESTRE (TRABAJO SOCIAL / DIRECCIÓN)
+// ========================================================
+window.loadApoyoSuspensionesData = async () => {
+    const hold = document.getElementById('suspensionesDataContainer');
+    const badge = document.getElementById('suspTotalBadge');
+    const btnPrint = document.getElementById('btnImprimirSuspensiones');
+    if (!hold) return;
+
+    const trimSel = document.getElementById('suspTrimestreSel')?.value || 'Todos';
+    const gradoSel = document.getElementById('suspGradoSel')?.value || 'Todos';
+    const grupoSel = document.getElementById('suspGrupoSel') ? document.getElementById('suspGrupoSel').value : 'Todos';
+    const estadoSel = document.getElementById('suspEstadoSel')?.value || 'Todos';
+
+    hold.innerHTML = '<p style="text-align:center; padding:40px;"><i class="fa-solid fa-spinner fa-spin" style="font-size:1.8rem; color:var(--primary); margin-bottom:10px; display:block;"></i> Consultando suspensiones escolares y calculando métricas por trimestre...</p>';
+    if (badge) badge.style.display = 'none';
+    if (btnPrint) btnPrint.style.display = 'none';
+
+    try {
+        let pId = state.plantelId || window.currentUserProfile?.plantel_id || state.user?.user_metadata?.plantel_id;
+        if (!pId) {
+            const uid = state.user?.id || (await supabaseClient.auth.getUser())?.data?.user?.id;
+            if (uid) {
+                try {
+                    const { data: prof } = await supabaseClient.from('perfiles').select('plantel_id').eq('id', uid).maybeSingle();
+                    if (prof?.plantel_id) pId = prof.plantel_id;
+                } catch(e) {}
+            }
+        }
+
+        // 1. Obtener alumnos del plantel (para asociar grado, grupo y matrícula)
+        let alumnosQuery = supabaseClient.from('alumnos')
+            .select('id, nombre, matricula, grado, grupo_id, grupos(id, nombre)')
+            .limit(10000);
+        if (pId) alumnosQuery = alumnosQuery.eq('plantel_id', pId);
+
+        const { data: alumnosData, error: errAl } = await alumnosQuery;
+        if (errAl) throw errAl;
+
+        const mapAlumnosById = {};
+        const statsPorGrado = {};
+        const statsPorGrupo = {};
+
+        (alumnosData || []).forEach(al => {
+            const gNom = (al.grado || 'S/G').trim();
+            if (!statsPorGrado[gNom]) {
+                statsPorGrado[gNom] = { grado: gNom, totalAlumnos: 0, t1: 0, t2: 0, t3: 0, totalSusp: 0, alumnosUnicos: new Set(), diasTotales: 0 };
+            }
+            statsPorGrado[gNom].totalAlumnos++;
+
+            const grpId = al.grupo_id || 'sin_grupo';
+            const grpNom = al.grupos ? al.grupos.nombre : 'Sin grupo';
+            if (!statsPorGrupo[grpId]) {
+                statsPorGrupo[grpId] = { id: grpId, nombre: grpNom, grado: gNom, totalAlumnos: 0, t1: 0, t2: 0, t3: 0, totalSusp: 0, alumnosUnicos: new Set(), diasTotales: 0 };
+            }
+            statsPorGrupo[grpId].totalAlumnos++;
+
+            mapAlumnosById[al.id] = {
+                id: al.id,
+                nombre: al.nombre || 'Alumno',
+                matricula: al.matricula || '---',
+                grado: al.grado || '',
+                grupo: grpNom,
+                grupo_id: al.grupo_id
+            };
+        });
+
+        // 2. Cargar periodos para delimitación exacta de trimestres
+        let periodosMap = {};
+        try {
+            let pq = supabaseClient.from('periodos_calificaciones').select('*');
+            if (pId) pq = pq.eq('plantel_id', pId);
+            const { data: pData } = await pq;
+            if (pData) pData.forEach(p => { periodosMap[p.trimestre] = p; });
+        } catch(e) {}
+
+        const calcularTrimestre = (dateStr) => {
+            if (!dateStr) return 1;
+            const d = new Date(dateStr);
+            if (isNaN(d.getTime())) return 1;
+            const p1 = periodosMap[1]?.fecha_limite ? new Date(periodosMap[1].fecha_limite) : null;
+            const p2 = periodosMap[2]?.fecha_limite ? new Date(periodosMap[2].fecha_limite) : null;
+            const p3 = periodosMap[3]?.fecha_limite ? new Date(periodosMap[3].fecha_limite) : null;
+            if (p1 && !isNaN(p1.getTime()) && d <= p1) return 1;
+            if (p2 && !isNaN(p2.getTime()) && p1 && d > p1 && d <= p2) return 2;
+            if (p3 && !isNaN(p3.getTime()) && p2 && d > p2 && d <= p3) return 3;
+            const m = d.getMonth();
+            if (m >= 7 && m <= 10) return 1; // Ago - Nov
+            if (m === 11 || m <= 2) return 2; // Dic - Mar
+            return 3; // Abr - Jul
+        };
+
+        // 3. Consultar suspensiones registradas en suspensiones_alumnos
+        let suspQuery = supabaseClient.from('suspensiones_alumnos')
+            .select('*, perfiles(nombre)')
+            .order('fecha_inicio', { ascending: false });
+        if (pId) suspQuery = suspQuery.eq('plantel_id', pId);
+
+        const { data: rawSusp, error: errSusp } = await suspQuery;
+        if (errSusp && errSusp.code !== '42P01') console.warn("Error en suspensiones_alumnos:", errSusp);
+
+        // 4. Consultar también intervenciones_conducta con [SUSPENSIÓN para asegurar captura total
+        let rawIntervs = [];
+        try {
+            let intQuery = supabaseClient.from('intervenciones_conducta')
+                .select('*, perfiles(nombre)')
+                .or('procedimiento.ilike.%SUSPENSIÓN%,compromisos.ilike.%SUSPENSIÓN%');
+            if (pId) intQuery = intQuery.eq('plantel_id', pId);
+            const { data: dInt } = await intQuery;
+            if (dInt) rawIntervs = dInt;
+        } catch(eInt) {}
+
+        // Fecha de hoy local en formato YYYY-MM-DD
+        const now = new Date();
+        const hoy = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`;
+
+        // Unificar y desduplicar suspensiones
+        const suspensionesList = [];
+        const seenKeys = new Set();
+
+        (rawSusp || []).forEach(s => {
+            const al = mapAlumnosById[s.alumno_id] || { nombre: 'Alumno', matricula: '---', grado: 'S/G', grupo: 'Sin grupo' };
+            const fIni = String(s.fecha_inicio || s.creado_en || '').split('T')[0];
+            const fFin = String(s.fecha_fin || s.fecha_inicio || '').split('T')[0];
+            const trim = calcularTrimestre(fIni);
+
+            let dias = 1;
+            if (fIni && fFin) {
+                const diff = Math.round((new Date(fFin + 'T12:00:00') - new Date(fIni + 'T12:00:00')) / (1000 * 60 * 60 * 24)) + 1;
+                dias = diff > 0 ? diff : 1;
+            }
+
+            const esVigente = fIni <= hoy && fFin >= hoy;
+            const esConcluida = fFin < hoy;
+            const esProgramada = fIni > hoy;
+
+            const key = `${s.alumno_id}_${fIni}_${fFin}`;
+            seenKeys.add(key);
+
+            suspensionesList.push({
+                id: s.id,
+                alumno_id: s.alumno_id,
+                alumno_nombre: al.nombre,
+                alumno_matricula: al.matricula,
+                grado: al.grado,
+                grupo: al.grupo,
+                grupo_id: al.grupo_id,
+                motivo: s.motivo || 'Suspensión por conducta / indisciplina',
+                fecha_inicio: fIni,
+                fecha_fin: fFin,
+                trimestre: trim,
+                dias: dias,
+                esVigente: esVigente,
+                esConcluida: esConcluida,
+                esProgramada: esProgramada,
+                autor: s.perfiles?.nombre || 'Trabajo Social / Dirección',
+                creado_en: s.creado_en
+            });
+        });
+
+        // Integrar intervenciones que no estén ya en suspensiones_alumnos
+        (rawIntervs || []).forEach(iv => {
+            const proc = iv.procedimiento || '';
+            const matchRango = proc.match(/del\s+([0-9]{4}-[0-9]{2}-[0-9]{2})\s+al\s+([0-9]{4}-[0-9]{2}-[0-9]{2})/i);
+            const matchMotivo = proc.match(/Motivo:\s*([^\]]+)/i);
+
+            const fIni = matchRango ? matchRango[1] : (iv.creado_en ? iv.creado_en.split('T')[0] : '');
+            const fFin = matchRango ? matchRango[2] : fIni;
+            const motivo = matchMotivo ? matchMotivo[1].trim() : (iv.compromisos || 'Suspensión acordada en citatorio');
+
+            const key = `${iv.alumno_id}_${fIni}_${fFin}`;
+            if (seenKeys.has(key)) return;
+            seenKeys.add(key);
+
+            const al = mapAlumnosById[iv.alumno_id] || { nombre: 'Alumno', matricula: '---', grado: 'S/G', grupo: 'Sin grupo' };
+            const trim = calcularTrimestre(fIni);
+
+            let dias = 1;
+            if (fIni && fFin) {
+                const diff = Math.round((new Date(fFin + 'T12:00:00') - new Date(fIni + 'T12:00:00')) / (1000 * 60 * 60 * 24)) + 1;
+                dias = diff > 0 ? diff : 1;
+            }
+
+            const esVigente = fIni <= hoy && fFin >= hoy;
+            const esConcluida = fFin < hoy;
+            const esProgramada = fIni > hoy;
+
+            suspensionesList.push({
+                id: iv.id,
+                alumno_id: iv.alumno_id,
+                alumno_nombre: al.nombre,
+                alumno_matricula: al.matricula,
+                grado: al.grado,
+                grupo: al.grupo,
+                grupo_id: al.grupo_id,
+                motivo: motivo,
+                fecha_inicio: fIni,
+                fecha_fin: fFin,
+                trimestre: trim,
+                dias: dias,
+                esVigente: esVigente,
+                esConcluida: esConcluida,
+                esProgramada: esProgramada,
+                autor: iv.perfiles?.nombre || 'Trabajo Social / Dirección',
+                creado_en: iv.creado_en
+            });
+        });
+
+        // Métricas Globales antes de filtros de vista
+        let totalGeneral = suspensionesList.length;
+        let totalVigentesHoy = suspensionesList.filter(s => s.esVigente).length;
+        let totalT1 = suspensionesList.filter(s => s.trimestre === 1).length;
+        let totalT2 = suspensionesList.filter(s => s.trimestre === 2).length;
+        let totalT3 = suspensionesList.filter(s => s.trimestre === 3).length;
+        let setAlumnosUnicosTotal = new Set(suspensionesList.map(s => s.alumno_id));
+        let totalDiasGeneral = suspensionesList.reduce((acc, s) => acc + s.dias, 0);
+
+        // Agregaciones a statsPorGrado y statsPorGrupo
+        suspensionesList.forEach(s => {
+            const gNom = (s.grado || 'S/G').trim();
+            if (statsPorGrado[gNom]) {
+                statsPorGrado[gNom].totalSusp++;
+                statsPorGrado[gNom].alumnosUnicos.add(s.alumno_id);
+                statsPorGrado[gNom].diasTotales += s.dias;
+                if (s.trimestre === 1) statsPorGrado[gNom].t1++;
+                else if (s.trimestre === 2) statsPorGrado[gNom].t2++;
+                else if (s.trimestre === 3) statsPorGrado[gNom].t3++;
+            }
+
+            const grpId = s.grupo_id || 'sin_grupo';
+            if (statsPorGrupo[grpId]) {
+                statsPorGrupo[grpId].totalSusp++;
+                statsPorGrupo[grpId].alumnosUnicos.add(s.alumno_id);
+                statsPorGrupo[grpId].diasTotales += s.dias;
+                if (s.trimestre === 1) statsPorGrupo[grpId].t1++;
+                else if (s.trimestre === 2) statsPorGrupo[grpId].t2++;
+                else if (s.trimestre === 3) statsPorGrupo[grpId].t3++;
+            }
+        });
+
+        // Filtrar según controles del usuario
+        let suspensionesFiltradas = suspensionesList.filter(s => {
+            if (trimSel !== 'Todos' && s.trimestre !== parseInt(trimSel)) return false;
+            if (gradoSel !== 'Todos') {
+                const numGrado = gradoSel.replace(/[^0-9]/g, '');
+                const alGrado = String(s.grado || '').replace(/[^0-9]/g, '');
+                if (numGrado && alGrado !== numGrado) return false;
+            }
+            if (grupoSel !== 'Todos' && s.grupo_id !== grupoSel) return false;
+            if (estadoSel === 'vigente' && !s.esVigente) return false;
+            if (estadoSel === 'concluida' && !s.esConcluida) return false;
+            return true;
+        });
+
+        suspensionesFiltradas.sort((a, b) => new Date(b.fecha_inicio || b.creado_en) - new Date(a.fecha_inicio || a.creado_en));
+
+        // Cachear datos calculados
+        window._suspensionesCacheados = {
+            suspensiones: suspensionesFiltradas,
+            todasSuspensiones: suspensionesList,
+            statsPorGrado,
+            statsPorGrupo,
+            trimSel, gradoSel, grupoSel, estadoSel,
+            totalGeneral, totalVigentesHoy, totalT1, totalT2, totalT3,
+            alumnosUnicosCount: setAlumnosUnicosTotal.size,
+            totalDiasGeneral
+        };
+
+        window._subvistaSuspensionesActiva = window._subvistaSuspensionesActiva || 'alumnos';
+
+        if (badge) {
+            badge.style.display = 'inline-block';
+            badge.innerText = `${suspensionesFiltradas.length} suspensión(es) detectada(s)`;
+        }
+        if (btnPrint && suspensionesFiltradas.length > 0) {
+            btnPrint.style.display = 'inline-flex';
+        }
+
+        // Porcentajes para barras
+        const pctT1 = totalGeneral > 0 ? ((totalT1 / totalGeneral) * 100).toFixed(1) : '0.0';
+        const pctT2 = totalGeneral > 0 ? ((totalT2 / totalGeneral) * 100).toFixed(1) : '0.0';
+        const pctT3 = totalGeneral > 0 ? ((totalT3 / totalGeneral) * 100).toFixed(1) : '0.0';
+
+        // Tendencia T2 vs T1
+        let tendenciaHtml = '';
+        if (totalT1 > 0 && totalT2 > 0) {
+            if (totalT2 > totalT1) {
+                tendenciaHtml = `<span class="badge" style="background:#fee2e2; color:#991b1b; font-weight:700;"><i class="fa-solid fa-arrow-trend-up"></i> Incremento en T2 (+${totalT2 - totalT1})</span>`;
+            } else if (totalT2 < totalT1) {
+                tendenciaHtml = `<span class="badge" style="background:#f0fdf4; color:#15803d; font-weight:700;"><i class="fa-solid fa-arrow-trend-down"></i> Reducción en T2 (-${totalT1 - totalT2})</span>`;
+            } else {
+                tendenciaHtml = `<span class="badge" style="background:#f8fafc; color:#475569; font-weight:700;"><i class="fa-solid fa-equals"></i> Estable</span>`;
+            }
+        }
+
+        // Renderizar Shell HTML
+        let html = `
+            <!-- Grid de Métricas Principales (KPIs) -->
+            <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap:14px; margin-bottom:18px;">
+                <!-- 1. Suspendidos Hoy (Vigentes) -->
+                <div style="background:white; border:1px solid #fecaca; border-left:5px solid #dc2626; border-radius:12px; padding:12px 16px; box-shadow:var(--shadow-sm);">
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
+                        <span style="font-size:0.75rem; font-weight:700; color:#b91c1c; text-transform:uppercase;">Suspendidos Hoy</span>
+                        <i class="fa-solid fa-ban" style="color:#dc2626;"></i>
+                    </div>
+                    <div style="display:flex; align-items:baseline; gap:8px;">
+                        <span style="font-size:1.8rem; font-weight:800; color:#991b1b;">${totalVigentesHoy}</span>
+                        <span style="font-size:0.75rem; color:${totalVigentesHoy>0?'#b91c1c':'var(--text-muted)'}; font-weight:${totalVigentesHoy>0?'700':'normal'};">${totalVigentesHoy>0?'No deben asistir':'Ninguno hoy'}</span>
+                    </div>
+                </div>
+
+                <!-- 2. Trimestre 1 -->
+                <div style="background:white; border:1px solid #bfdbfe; border-left:5px solid #2563eb; border-radius:12px; padding:12px 16px; box-shadow:var(--shadow-sm);">
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
+                        <span style="font-size:0.75rem; font-weight:700; color:#1e40af; text-transform:uppercase;">Trimestre 1</span>
+                        <span class="badge" style="background:#eff6ff; color:#2563eb; font-weight:bold; font-size:0.75rem;">${pctT1}%</span>
+                    </div>
+                    <div style="display:flex; align-items:baseline; gap:8px;">
+                        <span style="font-size:1.8rem; font-weight:800; color:#1e3a8a;">${totalT1}</span>
+                        <span style="font-size:0.75rem; color:var(--text-muted);">Ago - Nov</span>
+                    </div>
+                </div>
+
+                <!-- 3. Trimestre 2 -->
+                <div style="background:white; border:1px solid #fed7aa; border-left:5px solid #f97316; border-radius:12px; padding:12px 16px; box-shadow:var(--shadow-sm);">
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
+                        <span style="font-size:0.75rem; font-weight:700; color:#c2410c; text-transform:uppercase;">Trimestre 2</span>
+                        <span class="badge" style="background:#fff7ed; color:#f97316; font-weight:bold; font-size:0.75rem;">${pctT2}%</span>
+                    </div>
+                    <div style="display:flex; align-items:baseline; gap:8px;">
+                        <span style="font-size:1.8rem; font-weight:800; color:#9a3412;">${totalT2}</span>
+                        <span style="font-size:0.75rem; color:var(--text-muted);">Dic - Mar</span>
+                    </div>
+                </div>
+
+                <!-- 4. Trimestre 3 -->
+                <div style="background:white; border:1px solid #e9d5ff; border-left:5px solid #9333ea; border-radius:12px; padding:12px 16px; box-shadow:var(--shadow-sm);">
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
+                        <span style="font-size:0.75rem; font-weight:700; color:#7e22ce; text-transform:uppercase;">Trimestre 3</span>
+                        <span class="badge" style="background:#faf5ff; color:#9333ea; font-weight:bold; font-size:0.75rem;">${pctT3}%</span>
+                    </div>
+                    <div style="display:flex; align-items:baseline; gap:8px;">
+                        <span style="font-size:1.8rem; font-weight:800; color:#6b21a8;">${totalT3}</span>
+                        <span style="font-size:0.75rem; color:var(--text-muted);">Abr - Jul</span>
+                    </div>
+                </div>
+
+                <!-- 5. Total Acumulado en el Ciclo -->
+                <div style="background:white; border:1px solid #e2e8f0; border-left:5px solid #475569; border-radius:12px; padding:12px 16px; box-shadow:var(--shadow-sm);">
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
+                        <span style="font-size:0.75rem; font-weight:700; color:#334155; text-transform:uppercase;">Total Ciclo</span>
+                        <i class="fa-solid fa-scale-balanced" style="color:#64748b;"></i>
+                    </div>
+                    <div style="display:flex; align-items:baseline; gap:8px;">
+                        <span style="font-size:1.8rem; font-weight:800; color:#0f172a;">${totalGeneral}</span>
+                        <span style="font-size:0.75rem; color:var(--text-muted);">${setAlumnosUnicosTotal.size} alumnos únicos (${totalDiasGeneral} días)</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Barra Visual Comparativa entre Trimestres -->
+            <div style="background:white; border:1px solid var(--border); border-radius:12px; padding:14px 16px; margin-bottom:18px;">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; flex-wrap:wrap; gap:8px;">
+                    <span style="font-size:0.82rem; font-weight:700; color:var(--text-main); display:flex; align-items:center; gap:8px;">
+                        <i class="fa-solid fa-chart-column" style="color:var(--primary);"></i> Comparativa Cuantitativa de Suspensiones por Trimestre
+                    </span>
+                    <div style="display:flex; gap:8px; align-items:center;">
+                        ${tendenciaHtml}
+                        <span style="font-size:0.75rem; color:var(--text-muted);">Total Acumulado: <strong>${totalGeneral} suspensiones</strong></span>
+                    </div>
+                </div>
+                <div style="height:18px; width:100%; border-radius:8px; overflow:hidden; display:flex; background:#f1f5f9; box-shadow:inset 0 1px 2px rgba(0,0,0,0.06);">
+                    <div style="width:${pctT1}%; background:#2563eb; transition:width 0.4s;" title="Trimestre 1: ${pctT1}% (${totalT1} suspensiones)"></div>
+                    <div style="width:${pctT2}%; background:#f97316; transition:width 0.4s;" title="Trimestre 2: ${pctT2}% (${totalT2} suspensiones)"></div>
+                    <div style="width:${pctT3}%; background:#9333ea; transition:width 0.4s;" title="Trimestre 3: ${pctT3}% (${totalT3} suspensiones)"></div>
+                </div>
+                <div style="display:flex; justify-content:space-around; flex-wrap:wrap; gap:10px; margin-top:8px; font-size:0.78rem;">
+                    <span><span style="display:inline-block; width:10px; height:10px; background:#2563eb; border-radius:2px; margin-right:4px;"></span> <strong>Trimestre 1:</strong> ${totalT1} (${pctT1}%)</span>
+                    <span><span style="display:inline-block; width:10px; height:10px; background:#f97316; border-radius:2px; margin-right:4px;"></span> <strong>Trimestre 2:</strong> ${totalT2} (${pctT2}%)</span>
+                    <span><span style="display:inline-block; width:10px; height:10px; background:#9333ea; border-radius:2px; margin-right:4px;"></span> <strong>Trimestre 3:</strong> ${totalT3} (${pctT3}%)</span>
+                </div>
+            </div>
+
+            <!-- Selector de Subvista (Alumnos vs Matriz Comparativa) -->
+            <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px; margin-bottom:16px; padding-bottom:10px; border-bottom:1px solid var(--border);">
+                <div style="font-size:0.85rem; font-weight:700; color:var(--text-main);">
+                    <span>Mostrando: <strong>${suspensionesFiltradas.length}</strong> registro(s)</span>
+                    ${trimSel !== 'Todos' ? `<span class="badge" style="margin-left:6px; background:#eff6ff; color:#2563eb;">Trimestre ${trimSel}</span>` : ''}
+                    ${estadoSel === 'vigente' ? `<span class="badge" style="margin-left:6px; background:#fee2e2; color:#991b1b;">Solo Vigentes Hoy</span>` : ''}
+                </div>
+
+                <div style="display:flex; background:var(--page-bg); padding:3px; border-radius:8px; border:1px solid var(--border);">
+                    <button id="subtabBtnSuspAlumnos" class="btn btn-sm" onclick="window.cambiarSubvistaSuspensiones('alumnos')" style="font-size:0.8rem; font-weight:700; border-radius:6px; padding:5px 12px; cursor:pointer;">
+                        <i class="fa-solid fa-users"></i> Alumnos Sancionados (<span id="contBadgeSuspAlumnosTab">${suspensionesFiltradas.length}</span>)
+                    </button>
+                    <button id="subtabBtnSuspComparativa" class="btn btn-sm" onclick="window.cambiarSubvistaSuspensiones('comparativa')" style="font-size:0.8rem; font-weight:700; border-radius:6px; padding:5px 12px; cursor:pointer;">
+                        <i class="fa-solid fa-table-columns"></i> Comparativa por Trimestre (Grados y Grupos)
+                    </button>
+                </div>
+            </div>
+
+            <!-- Contenedor Subvista 1: Lista de Alumnos Sancionados -->
+            <div id="contenedorSubvistaSuspAlumnos"></div>
+
+            <!-- Contenedor Subvista 2: Matriz Comparativa por Trimestre -->
+            <div id="contenedorSubvistaSuspComparativa" style="display:none;"></div>
+        `;
+
+        hold.innerHTML = html;
+
+        // Renderizar ambas subvistas
+        window.renderTablaAlumnosSuspensiones(suspensionesFiltradas);
+        window.renderTablaComparativaSuspensiones();
+        window.cambiarSubvistaSuspensiones(window._subvistaSuspensionesActiva);
+
+    } catch(err) {
+        console.error("Error en loadApoyoSuspensionesData:", err);
+        hold.innerHTML = `<p style="text-align:center; color:var(--danger); padding:20px;"><i class="fa-solid fa-triangle-exclamation"></i> Error al calcular el análisis de suspensiones: ${err.message || err}</p>`;
+    }
+};
+
+window.renderTablaAlumnosSuspensiones = (lista) => {
+    const cont = document.getElementById('contenedorSubvistaSuspAlumnos');
+    if (!cont) return;
+
+    if (!lista || lista.length === 0) {
+        cont.innerHTML = `
+            <div style="text-align:center; padding:35px 20px; background:var(--page-bg); border-radius:12px; border:1px dashed var(--border);">
+                <i class="fa-solid fa-circle-check" style="font-size:2.5rem; color:var(--success); margin-bottom:10px; display:block;"></i>
+                <h4 style="margin:0 0 6px 0; color:var(--text-main);">Sin suspensiones registradas</h4>
+                <p style="margin:0; font-size:0.85rem; color:var(--text-muted);">No se encontraron alumnos con suspensión escolar bajo los filtros seleccionados.</p>
+            </div>
+        `;
+        return;
+    }
+
+    let rowsHtml = lista.map(s => {
+        let estadoBadge = '';
+        if (s.esVigente) {
+            estadoBadge = `<span class="badge" style="background:#fee2e2; color:#991b1b; font-weight:800; border:1px solid #ef4444; font-size:0.75rem;"><i class="fa-solid fa-ban"></i> SUSPENDIDO HOY</span>`;
+        } else if (s.esConcluida) {
+            estadoBadge = `<span class="badge" style="background:#f1f5f9; color:#475569; font-weight:600; border:1px solid #cbd5e1; font-size:0.75rem;"><i class="fa-solid fa-check"></i> Concluida</span>`;
+        } else {
+            estadoBadge = `<span class="badge" style="background:#fef3c7; color:#92400e; font-weight:600; border:1px solid #fcd34d; font-size:0.75rem;"><i class="fa-solid fa-clock"></i> Próxima</span>`;
+        }
+
+        const fIniDisplay = s.fecha_inicio ? new Date(s.fecha_inicio + 'T12:00:00').toLocaleDateString('es-MX', { day:'2-digit', month:'short', year:'numeric' }) : '---';
+        const fFinDisplay = s.fecha_fin ? new Date(s.fecha_fin + 'T12:00:00').toLocaleDateString('es-MX', { day:'2-digit', month:'short', year:'numeric' }) : '---';
+
+        return `
+            <tr style="border-bottom:1px solid var(--border); ${s.esVigente ? 'background:#fff5f5;' : ''}">
+                <td style="padding:10px 12px; font-weight:600;">
+                    <div>${s.alumno_nombre}</div>
+                    <div style="font-size:0.72rem; color:var(--text-muted); font-weight:normal;">Matrícula: ${s.alumno_matricula}</div>
+                </td>
+                <td style="padding:10px 12px; white-space:nowrap;">
+                    <span class="badge" style="background:var(--page-bg); border:1px solid var(--border); color:var(--text-main);">${s.grado} - ${s.grupo}</span>
+                </td>
+                <td style="padding:10px 12px; text-align:center; white-space:nowrap;">
+                    <span class="badge" style="background:${s.trimestre===1?'#dbeafe':(s.trimestre===2?'#fed7aa':'#f3e8ff')}; color:${s.trimestre===1?'#1e40af':(s.trimestre===2?'#9a3412':'#6b21a8')}; font-weight:700;">
+                        Trimestre ${s.trimestre}
+                    </span>
+                </td>
+                <td style="padding:10px 12px; font-size:0.82rem; white-space:nowrap;">
+                    <div><strong>${fIniDisplay}</strong> al <strong>${fFinDisplay}</strong></div>
+                    <div style="font-size:0.72rem; color:var(--text-muted);">${s.dias} día(s) hábil(es)</div>
+                </td>
+                <td style="padding:10px 12px; text-align:center; white-space:nowrap;">
+                    ${estadoBadge}
+                </td>
+                <td style="padding:10px 12px; max-width:260px; font-size:0.82rem; color:var(--text-main);">
+                    ${s.motivo}
+                    <div style="font-size:0.7rem; color:var(--text-muted); margin-top:2px;">Por: ${s.autor}</div>
+                </td>
+                <td style="padding:10px 12px; text-align:center; white-space:nowrap;">
+                    <button class="btn btn-outline btn-xs" style="border-color:var(--primary); color:var(--primary);" onclick="window.showAlumnoExpediente('${s.alumno_id}', 'conducta')">
+                        <i class="fa-solid fa-folder-open"></i> Ver Expediente
+                    </button>
+                </td>
+            </tr>
+        `;
+    }).join('');
+
+    cont.innerHTML = `
+        <div style="overflow-x:auto;">
+            <table class="risk-table" style="width:100%; border-collapse:collapse;">
+                <thead>
+                    <tr style="border-bottom:2px solid var(--border);">
+                        <th style="padding:10px 12px; text-align:left;">Alumno</th>
+                        <th style="padding:10px 12px; text-align:left;">Grado y Grupo</th>
+                        <th style="padding:10px 12px; text-align:center;">Trimestre</th>
+                        <th style="padding:10px 12px; text-align:left;">Periodo Sanción</th>
+                        <th style="padding:10px 12px; text-align:center;">Estatus Actual</th>
+                        <th style="padding:10px 12px; text-align:left;">Motivo de la Suspensión</th>
+                        <th style="padding:10px 12px; text-align:center;">Acciones</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${rowsHtml}
+                </tbody>
+            </table>
+        </div>
+    `;
+};
+
+window.renderTablaComparativaSuspensiones = () => {
+    const data = window._suspensionesCacheados;
+    const cont = document.getElementById('contenedorSubvistaSuspComparativa');
+    if (!data || !cont) return;
+
+    const { statsPorGrado, statsPorGrupo, totalGeneral } = data;
+    const gradosArr = Object.values(statsPorGrado).sort((a, b) => a.grado.localeCompare(b.grado, undefined, { numeric: true }));
+    const gruposArr = Object.values(statsPorGrupo).sort((a, b) => a.nombre.localeCompare(b.nombre, undefined, { numeric: true }));
+
+    // Grados
+    let filasGradosHtml = gradosArr.map(g => {
+        const tasa = g.totalAlumnos > 0 ? ((g.alumnosUnicos.size / g.totalAlumnos) * 100).toFixed(1) : '0.0';
+        const pctGeneral = totalGeneral > 0 ? ((g.totalSusp / totalGeneral) * 100).toFixed(1) : '0.0';
+        const colorTasa = parseFloat(tasa) > 10 ? 'var(--danger)' : (parseFloat(tasa) > 5 ? '#f59e0b' : 'var(--success)');
+
+        return `
+            <tr style="border-bottom:1px solid var(--border);">
+                <td style="padding:10px 12px; font-weight:700;">
+                    <span class="badge" style="background:var(--page-bg); border:1px solid var(--border); color:var(--text-main);">${g.grado}</span>
+                </td>
+                <td style="padding:10px 12px; text-align:center;">${g.totalAlumnos}</td>
+                <td style="padding:10px 12px; text-align:center; font-weight:700; color:#1e40af;">${g.t1}</td>
+                <td style="padding:10px 12px; text-align:center; font-weight:700; color:#c2410c;">${g.t2}</td>
+                <td style="padding:10px 12px; text-align:center; font-weight:700; color:#7e22ce;">${g.t3}</td>
+                <td style="padding:10px 12px; text-align:center; font-weight:800; font-size:1.05rem;">${g.totalSusp}</td>
+                <td style="padding:10px 12px; text-align:center; font-weight:600;">${g.alumnosUnicos.size}</td>
+                <td style="padding:10px 12px; text-align:center; font-weight:700; color:${colorTasa};">${tasa}%</td>
+                <td style="padding:10px 12px; text-align:center;">${g.diasTotales}</td>
+                <td style="padding:10px 12px; text-align:center; font-weight:700;">${pctGeneral}%</td>
+            </tr>
+        `;
+    }).join('');
+
+    // Grupos
+    let filasGruposHtml = gruposArr.map(grp => {
+        const tasa = grp.totalAlumnos > 0 ? ((grp.alumnosUnicos.size / grp.totalAlumnos) * 100).toFixed(1) : '0.0';
+        const pctGeneral = totalGeneral > 0 ? ((grp.totalSusp / totalGeneral) * 100).toFixed(1) : '0.0';
+        const colorTasa = parseFloat(tasa) > 10 ? 'var(--danger)' : (parseFloat(tasa) > 5 ? '#f59e0b' : 'var(--success)');
+
+        return `
+            <tr style="border-bottom:1px solid var(--border);">
+                <td style="padding:10px 12px; font-weight:700;">
+                    <span class="badge" style="background:var(--page-bg); border:1px solid var(--border); color:var(--text-main); font-size:0.85rem;">${grp.nombre}</span>
+                </td>
+                <td style="padding:10px 12px; text-align:center;">${grp.grado}</td>
+                <td style="padding:10px 12px; text-align:center;">${grp.totalAlumnos}</td>
+                <td style="padding:10px 12px; text-align:center; font-weight:700; color:#1e40af;">${grp.t1}</td>
+                <td style="padding:10px 12px; text-align:center; font-weight:700; color:#c2410c;">${grp.t2}</td>
+                <td style="padding:10px 12px; text-align:center; font-weight:700; color:#7e22ce;">${grp.t3}</td>
+                <td style="padding:10px 12px; text-align:center; font-weight:800; font-size:1.05rem;">${grp.totalSusp}</td>
+                <td style="padding:10px 12px; text-align:center; font-weight:600;">${grp.alumnosUnicos.size}</td>
+                <td style="padding:10px 12px; text-align:center; font-weight:700; color:${colorTasa};">${tasa}%</td>
+                <td style="padding:10px 12px; text-align:center;">${grp.diasTotales}</td>
+                <td style="padding:10px 12px; text-align:center; font-weight:700;">${pctGeneral}%</td>
+            </tr>
+        `;
+    }).join('');
+
+    cont.innerHTML = `
+        <!-- Tabla por Grado -->
+        <div style="background:white; border:1px solid var(--border); border-radius:12px; padding:16px; margin-bottom:20px;">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; flex-wrap:wrap; gap:8px;">
+                <h4 style="margin:0; font-size:0.95rem; color:var(--text-main); display:flex; align-items:center; gap:8px;">
+                    <i class="fa-solid fa-graduation-cap" style="color:var(--primary);"></i> Comparativa de Suspensiones por Grado (T1 vs T2 vs T3)
+                </h4>
+                <span style="font-size:0.75rem; color:var(--text-muted);">(% Incidencia = Alumnos sancionados ÷ Matrícula)</span>
+            </div>
+            <div style="overflow-x:auto;">
+                <table style="width:100%; border-collapse:collapse; font-size:0.85rem;">
+                    <thead>
+                        <tr style="border-bottom:2px solid var(--border); text-align:center; background:#f8fafc;">
+                            <th style="padding:8px 10px; text-align:left;">Grado</th>
+                            <th style="padding:8px 10px;">Matrícula</th>
+                            <th style="padding:8px 10px; color:#1e40af;">Trimestre 1</th>
+                            <th style="padding:8px 10px; color:#c2410c;">Trimestre 2</th>
+                            <th style="padding:8px 10px; color:#7e22ce;">Trimestre 3</th>
+                            <th style="padding:8px 10px;">Total Suspensiones</th>
+                            <th style="padding:8px 10px;">Alumnos Sancionados</th>
+                            <th style="padding:8px 10px;">% Incidencia</th>
+                            <th style="padding:8px 10px;">Días Acumulados</th>
+                            <th style="padding:8px 10px;">% Plantel</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${filasGradosHtml || '<tr><td colspan="10" style="text-align:center; padding:15px; color:var(--text-muted);">Sin datos de grados.</td></tr>'}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Tabla por Grupo -->
+        <div style="background:white; border:1px solid var(--border); border-radius:12px; padding:16px;">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; flex-wrap:wrap; gap:8px;">
+                <h4 style="margin:0; font-size:0.95rem; color:var(--text-main); display:flex; align-items:center; gap:8px;">
+                    <i class="fa-solid fa-users" style="color:var(--primary);"></i> Desglose Trimestral por Grupo
+                </h4>
+                <span style="font-size:0.75rem; color:var(--text-muted);">Comparativa detallada salón por salón</span>
+            </div>
+            <div style="overflow-x:auto;">
+                <table style="width:100%; border-collapse:collapse; font-size:0.85rem;">
+                    <thead>
+                        <tr style="border-bottom:2px solid var(--border); text-align:center; background:#f8fafc;">
+                            <th style="padding:8px 10px; text-align:left;">Grupo</th>
+                            <th style="padding:8px 10px;">Grado</th>
+                            <th style="padding:8px 10px;">Matrícula</th>
+                            <th style="padding:8px 10px; color:#1e40af;">Trimestre 1</th>
+                            <th style="padding:8px 10px; color:#c2410c;">Trimestre 2</th>
+                            <th style="padding:8px 10px; color:#7e22ce;">Trimestre 3</th>
+                            <th style="padding:8px 10px;">Total Suspensiones</th>
+                            <th style="padding:8px 10px;">Alumnos Sancionados</th>
+                            <th style="padding:8px 10px;">% Incidencia</th>
+                            <th style="padding:8px 10px;">Días Acumulados</th>
+                            <th style="padding:8px 10px;">% Plantel</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${filasGruposHtml || '<tr><td colspan="11" style="text-align:center; padding:15px; color:var(--text-muted);">Sin datos de grupos.</td></tr>'}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    `;
+};
+
+window.cambiarSubvistaSuspensiones = (sub) => {
+    window._subvistaSuspensionesActiva = sub;
+    const btnAlu = document.getElementById('subtabBtnSuspAlumnos');
+    const btnComp = document.getElementById('subtabBtnSuspComparativa');
+    const contAlu = document.getElementById('contenedorSubvistaSuspAlumnos');
+    const contComp = document.getElementById('contenedorSubvistaSuspComparativa');
+
+    if (sub === 'alumnos') {
+        if (btnAlu) {
+            btnAlu.style.background = 'white';
+            btnAlu.style.color = 'var(--text-main)';
+            btnAlu.style.border = '1px solid var(--border)';
+            btnAlu.style.boxShadow = 'var(--shadow-sm)';
+        }
+        if (btnComp) {
+            btnComp.style.background = 'transparent';
+            btnComp.style.color = 'var(--text-muted)';
+            btnComp.style.border = 'none';
+            btnComp.style.boxShadow = 'none';
+        }
+        if (contAlu) contAlu.style.display = 'block';
+        if (contComp) contComp.style.display = 'none';
+    } else {
+        if (btnComp) {
+            btnComp.style.background = 'white';
+            btnComp.style.color = 'var(--text-main)';
+            btnComp.style.border = '1px solid var(--border)';
+            btnComp.style.boxShadow = 'var(--shadow-sm)';
+        }
+        if (btnAlu) {
+            btnAlu.style.background = 'transparent';
+            btnAlu.style.color = 'var(--text-muted)';
+            btnAlu.style.border = 'none';
+            btnAlu.style.boxShadow = 'none';
+        }
+        if (contAlu) contAlu.style.display = 'none';
+        if (contComp) contComp.style.display = 'block';
+    }
+};
+
+window.imprimirReporteSuspensiones = async () => {
+    const directorName = await window.obtenerNombreDirector();
+    const data = window._suspensionesCacheados;
+    if (!data || !data.suspensiones || data.suspensiones.length === 0) return alert("No hay datos de suspensiones para imprimir.");
+
+    const printWin = window.open('', '_blank');
+    if (!printWin) return alert("Por favor permite las ventanas emergentes en tu navegador.");
+
+    const plantNom = state.plantelNombre || window.currentUserProfile?.planteles?.nombre || 'Escuela Secundaria';
+    const fechaImp = new Date().toLocaleDateString('es-MX', { year:'numeric', month:'long', day:'numeric' });
+    const trimLabel = data.trimSel === 'Todos' ? 'Todos los Trimestres (Ciclo Completo)' : `Trimestre ${data.trimSel}`;
+    const gradoLabel = data.gradoSel === 'Todos' ? 'Toda la Escuela' : `${data.gradoSel}`;
+
+    const { statsPorGrado, statsPorGrupo, totalGeneral, totalT1, totalT2, totalT3, totalVigentesHoy, totalDiasGeneral } = data;
+    const gradosArr = Object.values(statsPorGrado || {}).sort((a, b) => a.grado.localeCompare(b.grado, undefined, { numeric: true }));
+
+    let filasGradosHtml = gradosArr.map(g => {
+        const tasa = g.totalAlumnos > 0 ? ((g.alumnosUnicos.size / g.totalAlumnos) * 100).toFixed(1) : '0.0';
+        return `
+            <tr>
+                <td style="padding:6px; border:1px solid #ccc; font-weight:bold;">${g.grado}</td>
+                <td style="padding:6px; border:1px solid #ccc; text-align:center;">${g.totalAlumnos}</td>
+                <td style="padding:6px; border:1px solid #ccc; text-align:center;">${g.t1}</td>
+                <td style="padding:6px; border:1px solid #ccc; text-align:center;">${g.t2}</td>
+                <td style="padding:6px; border:1px solid #ccc; text-align:center;">${g.t3}</td>
+                <td style="padding:6px; border:1px solid #ccc; text-align:center; font-weight:bold;">${g.totalSusp}</td>
+                <td style="padding:6px; border:1px solid #ccc; text-align:center;">${g.alumnosUnicos.size}</td>
+                <td style="padding:6px; border:1px solid #ccc; text-align:center; font-weight:bold;">${tasa}%</td>
+                <td style="padding:6px; border:1px solid #ccc; text-align:center;">${g.diasTotales}</td>
+            </tr>
+        `;
+    }).join('');
+
+    let filasAlumnosHtml = data.suspensiones.map(s => {
+        const estText = s.esVigente ? 'SUSPENDIDO HOY' : (s.esConcluida ? 'Concluida' : 'Próxima');
+        const fIni = s.fecha_inicio ? new Date(s.fecha_inicio + 'T12:00:00').toLocaleDateString('es-MX', { day:'2-digit', month:'short' }) : '---';
+        const fFin = s.fecha_fin ? new Date(s.fecha_fin + 'T12:00:00').toLocaleDateString('es-MX', { day:'2-digit', month:'short', year:'numeric' }) : '---';
+        return `
+            <tr>
+                <td style="padding:6px; border:1px solid #ccc; font-weight:bold;">${s.alumno_nombre}<br><small style="color:#666;">Mat: ${s.alumno_matricula}</small></td>
+                <td style="padding:6px; border:1px solid #ccc; text-align:center;">${s.grado} - ${s.grupo}</td>
+                <td style="padding:6px; border:1px solid #ccc; text-align:center; font-weight:bold;">Trimestre ${s.trimestre}</td>
+                <td style="padding:6px; border:1px solid #ccc; font-size:11px;">Del ${fIni} al ${fFin} (${s.dias} d.)</td>
+                <td style="padding:6px; border:1px solid #ccc; text-align:center; font-weight:bold; color:${s.esVigente?'#dc2626':'#333'};">${estText}</td>
+                <td style="padding:6px; border:1px solid #ccc; font-size:11px;">${s.motivo}</td>
+            </tr>
+        `;
+    }).join('');
+
+    printWin.document.write(`
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <title>Reporte de Suspensiones Escolares - ${plantNom}</title>
+            <style>
+                body { font-family: Arial, sans-serif; margin: 25px; color: #111; font-size: 12px; }
+                .header { text-align: center; border-bottom: 2px solid #333; padding-bottom: 10px; margin-bottom: 15px; }
+                .kpi-container { display: flex; gap: 10px; justify-content: space-between; margin-bottom: 18px; }
+                .kpi-box { border: 1px solid #ccc; border-radius: 6px; padding: 10px; text-align: center; flex: 1; background: #f9fafb; }
+                .kpi-box strong { font-size: 18px; display: block; color: #111; margin-bottom: 2px; }
+                table { width: 100%; border-collapse: collapse; margin-bottom: 18px; }
+                th { background: #f1f5f9; padding: 6px; border: 1px solid #ccc; font-size: 11px; text-transform: uppercase; }
+                @media print { body { margin: 10mm; } }
+            </style>
+        </head>
+        <body>
+            <div class="header">
+                <h2 style="margin:0; text-transform:uppercase;">${plantNom}</h2>
+                <h3 style="margin:4px 0; color:#b91c1c;">INFORME ESTADÍSTICO DE SUSPENSIONES ESCOLARES</h3>
+                <p style="margin:2px 0; font-size:11px; color:#555;">Filtro: ${trimLabel} | Cobertura: ${gradoLabel} | Emisión: ${fechaImp}</p>
+            </div>
+
+            <!-- Resumen de Métricas -->
+            <div class="kpi-container">
+                <div class="kpi-box" style="border-top:3px solid #dc2626;"><strong style="color:#b91c1c;">${totalVigentesHoy}</strong>Suspendidos Hoy</div>
+                <div class="kpi-box" style="border-top:3px solid #2563eb;"><strong>${totalT1}</strong>Trimestre 1</div>
+                <div class="kpi-box" style="border-top:3px solid #f97316;"><strong>${totalT2}</strong>Trimestre 2</div>
+                <div class="kpi-box" style="border-top:3px solid #9333ea;"><strong>${totalT3}</strong>Trimestre 3</div>
+                <div class="kpi-box" style="border-top:3px solid #475569;"><strong>${totalGeneral}</strong>Total Ciclo (${totalDiasGeneral} días)</div>
+            </div>
+
+            <h4>1. Distribución de Suspensiones por Grado</h4>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Grado</th>
+                        <th>Matrícula</th>
+                        <th>Trimestre 1</th>
+                        <th>Trimestre 2</th>
+                        <th>Trimestre 3</th>
+                        <th>Total Susp.</th>
+                        <th>Alumnos Sancionados</th>
+                        <th>% Incidencia</th>
+                        <th>Días Acumulados</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${filasGradosHtml}
+                </tbody>
+            </table>
+
+            <h4>2. Nómina Oficial de Alumnos con Suspensión Escolar</h4>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Alumno</th>
+                        <th>Grado y Gpo</th>
+                        <th>Trimestre</th>
+                        <th>Periodo de Sanción</th>
+                        <th>Estatus</th>
+                        <th>Motivo Oficial de la Sanción</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${filasAlumnosHtml}
+                </tbody>
+            </table>
+
+            <div style="margin-top:40px; display:flex; justify-content:space-around; text-align:center;">
+                <div style="width:240px; border-top:1px solid #333; padding-top:5px;">
+                    <div style="font-weight:bold; font-size:12px;">Trabajo Social / Orientación</div>
+                    <div style="font-size:10px; color:#555; text-transform:uppercase;">Seguimiento y Registro</div>
+                </div>
+                <div style="width:240px; border-top:1px solid #333; padding-top:5px;">
+                    <div style="font-weight:bold; font-size:12px;">${directorName}</div>
+                    <div style="font-size:10px; color:#555; text-transform:uppercase;">Dirección Escolar / Vo.Bo.</div>
                 </div>
             </div>
             <script>window.onload = () => { window.print(); };<\/script>
@@ -8884,12 +9828,78 @@ window.imprimirExpediente = async (idAlumno, modo = 'completo') => {
 };
 
 function renderApoyoSalud() {
+  setTimeout(() => {
+      if(window.loadHistorialSalud) window.loadHistorialSalud();
+      if(window.loadJustificantesVigentesHoy) window.loadJustificantesVigentesHoy();
+  }, 100);
+
+  const fechaHoyDisplay = new Date().toLocaleDateString('es-MX', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+  const fechaHoyCapitalizada = fechaHoyDisplay.charAt(0).toUpperCase() + fechaHoyDisplay.slice(1);
+
   return `
-    <div class="page-header">
-      <h2 class="page-title">Expediente de Salud y Accidentes</h2>
-      <p class="page-subtitle">Control Médico, Padecimientos crónicos y Seguimiento de Incidentes.</p>
+    <div class="page-header" style="display:flex; justify-content:space-between; align-items:flex-start; flex-wrap:wrap; gap:12px;">
+      <div>
+        <h2 class="page-title"><i class="fa-solid fa-notes-medical" style="color:var(--primary); margin-right:8px;"></i>Expediente de Salud y Justificantes</h2>
+        <p class="page-subtitle">Control Médico, Padecimientos crónicos, Incidentes y Seguimiento de Justificantes Médicos Vigentes.</p>
+      </div>
+      <div style="display:flex; gap:8px; align-items:center;">
+        <span class="badge" style="background:var(--page-bg); border:1px solid var(--border); color:var(--text-main); font-size:0.85rem; padding:6px 14px; border-radius:20px;">
+           <i class="fa-regular fa-calendar-days text-primary"></i> ${fechaHoyCapitalizada}
+        </span>
+      </div>
     </div>
     
+    <!-- SECCIÓN: JUSTIFICANTES MÉDICOS VIGENTES AL DÍA (CONTROL DE ASISTENCIA A CLASES) -->
+    <div class="card shadow-sm" style="margin-bottom: 24px; border-top: 4px solid #0284c7; background: white;">
+       <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px; margin-bottom:14px; border-bottom:1px solid var(--border); padding-bottom:12px;">
+          <div>
+             <h3 style="margin:0; display:flex; align-items:center; gap:8px; color:#0369a1; font-size:1.15rem;">
+                <i class="fa-solid fa-clipboard-check" style="color:#0284c7;"></i> Control de Asistencia: Justificantes Médicos Vigentes Hoy
+             </h3>
+             <p style="margin:4px 0 0 0; font-size:0.8rem; color:var(--text-muted);">
+                Alumnos con justificante médico activo el día de hoy. Estos alumnos cuentan con permiso médico y están exentos de asistir a clases.
+             </p>
+          </div>
+          <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+             <span id="badgeTotalJustificantesHoy" class="badge" style="background:#0284c7; color:white; font-size:0.85rem; font-weight:700; padding:6px 14px; border-radius:20px;">
+                <i class="fa-solid fa-spinner fa-spin"></i> Cargando justificantes...
+             </span>
+             <button class="btn btn-outline btn-sm" id="btnImprimirJustificantesHoy" onclick="window.imprimirJustificantesVigentesHoy()" style="display:none; border-color:#0284c7; color:#0284c7;">
+                <i class="fa-solid fa-print"></i> Imprimir Lista del Día
+             </button>
+             <button class="btn btn-outline btn-sm" onclick="window.loadJustificantesVigentesHoy()" title="Actualizar lista de hoy">
+                <i class="fa-solid fa-rotate"></i>
+             </button>
+          </div>
+       </div>
+
+       <!-- Barra de Filtros Rápidos de Justificantes Vigentes -->
+       <div id="filtrosJustificantesVigentesBar" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px; margin-bottom:12px; background:#f8fafc; padding:8px 12px; border-radius:10px; border:1px solid #e2e8f0;">
+          <div style="display:flex; gap:8px; align-items:center; flex:1; min-width:240px;">
+             <i class="fa-solid fa-search" style="color:var(--text-muted); font-size:0.85rem;"></i>
+             <input type="text" id="buscarJustificanteVigenteInput" class="form-input" placeholder="Filtrar por alumno, matrícula o motivo..." oninput="window.filtrarJustificantesVigentes()" style="padding:5px 10px; font-size:0.85rem; border-radius:8px; border:1px solid var(--border); width:100%;">
+          </div>
+          <div style="display:flex; gap:8px; align-items:center;">
+             <label style="font-size:0.8rem; font-weight:600; color:var(--text-muted);">Grado:</label>
+             <select id="filtroGradoJustificanteVigente" class="form-select" onchange="window.filtrarJustificantesVigentes()" style="padding:4px 10px; font-size:0.85rem; border-radius:8px;">
+                <option value="Todos">Toda la Escuela</option>
+                <option value="1°">1° Grado</option>
+                <option value="2°">2° Grado</option>
+                <option value="3°">3° Grado</option>
+             </select>
+          </div>
+       </div>
+
+       <!-- Contenedor Dinámico de la Tabla de Justificantes Vigentes -->
+       <div id="listaJustificantesVigentesCont" style="min-height: 80px;">
+          <div style="text-align:center; padding:25px; color:var(--text-muted);">
+             <i class="fa-solid fa-spinner fa-spin" style="font-size:1.5rem; color:#0284c7; margin-bottom:8px; display:block;"></i>
+             Consultando justificantes médicos vigentes al día...
+          </div>
+       </div>
+    </div>
+
+    <!-- TARJETAS OPERATIVAS EXISTENTES -->
     <div style="display:flex; gap:24px; flex-wrap:wrap;">
       <div class="card" style="flex: 1; min-width: 350px;">
         <h3 style="margin-bottom: 16px;"><i class="fa-solid fa-notes-medical" style="color:var(--primary)"></i> Registrar Nueva Atención</h3>
@@ -8966,6 +9976,289 @@ function renderApoyoSalud() {
     </div>
   `;
 }
+
+// ========================================================
+// MÓDULO: CONTROL DE JUSTIFICANTES MÉDICOS VIGENTES AL DÍA
+// ========================================================
+window.loadJustificantesVigentesHoy = async () => {
+    const cont = document.getElementById('listaJustificantesVigentesCont');
+    const badge = document.getElementById('badgeTotalJustificantesHoy');
+    const btnPrint = document.getElementById('btnImprimirJustificantesHoy');
+    if (!cont) return;
+
+    try {
+        let pId = state.plantelId || window.currentUserProfile?.plantel_id || state.user?.user_metadata?.plantel_id;
+        if (!pId) {
+            const uid = state.user?.id || (await supabaseClient.auth.getUser())?.data?.user?.id;
+            if (uid) {
+                try {
+                    const { data: prof } = await supabaseClient.from('perfiles').select('plantel_id').eq('id', uid).maybeSingle();
+                    if (prof?.plantel_id) pId = prof.plantel_id;
+                } catch(e) {}
+            }
+        }
+
+        const now = new Date();
+        const hoy = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`;
+
+        let q = supabaseClient.from('justificantes_medicos')
+            .select('*, alumnos(id, nombre, matricula, grado, grupo_id, grupos(nombre)), perfiles(nombre)')
+            .order('fecha_emision', { ascending: false });
+        if (pId) q = q.eq('plantel_id', pId);
+
+        const { data, error } = await q;
+        if (error) throw error;
+
+        // Filtrar aquellos donde hoy cae dentro del rango [fecha_inicio, fecha_fin]
+        const vigentes = (data || []).filter(j => {
+            const fIni = String(j.fecha_inicio || '').split('T')[0];
+            const fFin = String(j.fecha_fin || '').split('T')[0];
+            return fIni && fFin && fIni <= hoy && fFin >= hoy;
+        });
+
+        // Ordenar alfabéticamente por grado/grupo y nombre
+        vigentes.sort((a, b) => {
+            const gA = a.alumnos?.grado || '';
+            const gB = b.alumnos?.grado || '';
+            if (gA !== gB) return gA.localeCompare(gB, undefined, { numeric: true });
+            return (a.alumnos?.nombre || '').localeCompare(b.alumnos?.nombre || '');
+        });
+
+        window._justificantesVigentesCacheados = vigentes;
+
+        if (badge) {
+            badge.innerHTML = `<i class="fa-solid fa-file-circle-check"></i> ${vigentes.length} Justificante${vigentes.length === 1 ? '' : 's'} Vigente${vigentes.length === 1 ? '' : 's'}`;
+            badge.style.background = vigentes.length > 0 ? '#0284c7' : '#16a34a';
+        }
+
+        if (btnPrint) {
+            btnPrint.style.display = vigentes.length > 0 ? 'inline-flex' : 'none';
+        }
+
+        window.renderTablaJustificantesVigentes(vigentes);
+
+    } catch(err) {
+        console.error("Error en loadJustificantesVigentesHoy:", err);
+        if (cont) {
+            cont.innerHTML = `<p style="text-align:center; padding:15px; color:var(--danger); font-size:0.85rem;"><i class="fa-solid fa-triangle-exclamation"></i> Error al cargar justificantes vigentes: ${err.message || err}</p>`;
+        }
+    }
+};
+
+window.renderTablaJustificantesVigentes = (lista) => {
+    const cont = document.getElementById('listaJustificantesVigentesCont');
+    if (!cont) return;
+
+    if (!lista || lista.length === 0) {
+        cont.innerHTML = `
+            <div style="text-align:center; padding:22px 15px; background:#f0fdf4; border-radius:10px; border:1px solid #bbf7d0;">
+                <i class="fa-solid fa-circle-check" style="font-size:1.8rem; color:#16a34a; margin-bottom:6px; display:block;"></i>
+                <h4 style="margin:0 0 4px 0; color:#15803d; font-size:0.95rem; font-weight:700;">No hay alumnos con justificante médico vigente hoy</h4>
+                <p style="margin:0; font-size:0.82rem; color:#166534;">Todos los alumnos deben presentarse a sus clases de manera regular. La jornada escolar no cuenta con inasistencias médicas activas registradas para el día de hoy.</p>
+            </div>
+        `;
+        return;
+    }
+
+    const now = new Date();
+    const hoy = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`;
+
+    let rowsHtml = lista.map((j) => {
+        const al = j.alumnos || { nombre: 'Alumno', matricula: '---', grado: 'S/G', grupos: { nombre: '---' } };
+        const fIni = String(j.fecha_inicio || '').split('T')[0];
+        const fFin = String(j.fecha_fin || '').split('T')[0];
+
+        const fIniDisplay = fIni ? new Date(fIni + 'T12:00:00').toLocaleDateString('es-MX', { day:'2-digit', month:'short' }) : '---';
+        const fFinDisplay = fFin ? new Date(fFin + 'T12:00:00').toLocaleDateString('es-MX', { day:'2-digit', month:'short', year:'numeric' }) : '---';
+
+        // Días restantes
+        let diffDias = 0;
+        if (fFin) {
+            diffDias = Math.round((new Date(fFin + 'T12:00:00') - new Date(hoy + 'T12:00:00')) / (1000 * 60 * 60 * 24));
+        }
+
+        let vigenciaPill = '';
+        if (diffDias === 0) {
+            vigenciaPill = `<span class="badge" style="background:#fef3c7; color:#92400e; font-weight:700; border:1px solid #fcd34d; font-size:0.75rem;"><i class="fa-solid fa-clock"></i> Vence hoy</span>`;
+        } else if (diffDias === 1) {
+            vigenciaPill = `<span class="badge" style="background:#e0f2fe; color:#0369a1; font-weight:700; border:1px solid #7dd3fc; font-size:0.75rem;"><i class="fa-solid fa-calendar-day"></i> Vence mañana (1 día restante)</span>`;
+        } else {
+            vigenciaPill = `<span class="badge" style="background:#eff6ff; color:#1e40af; font-weight:700; border:1px solid #bfdbfe; font-size:0.75rem;"><i class="fa-solid fa-calendar-check"></i> ${diffDias} días restantes</span>`;
+        }
+
+        const nombreClean = (al.nombre || '').replace(/'/g, "\\'");
+
+        return `
+            <tr style="border-bottom:1px solid var(--border);">
+                <td style="padding:8px 10px; font-weight:600;">
+                    <div>${al.nombre}</div>
+                    <div style="font-size:0.72rem; color:var(--text-muted); font-weight:normal;">Matrícula: ${al.matricula}</div>
+                </td>
+                <td style="padding:8px 10px; white-space:nowrap;">
+                    <span class="badge" style="background:var(--page-bg); border:1px solid var(--border); color:var(--text-main); font-weight:600;">
+                        ${al.grado || ''} ${al.grupos?.nombre ? al.grupos.nombre.split('°').pop() : ''}
+                    </span>
+                </td>
+                <td style="padding:8px 10px; font-size:0.83rem; color:#854d0e; font-weight:600;">
+                    ${j.motivo}
+                </td>
+                <td style="padding:8px 10px; font-size:0.82rem; white-space:nowrap;">
+                    Del <strong>${fIniDisplay}</strong> al <strong>${fFinDisplay}</strong>
+                </td>
+                <td style="padding:8px 10px; text-align:center; white-space:nowrap;">
+                    ${vigenciaPill}
+                </td>
+                <td style="padding:8px 10px; font-size:0.75rem; color:var(--text-muted); white-space:nowrap;">
+                    ${j.perfiles?.nombre || 'Trabajo Social'}
+                </td>
+                <td style="padding:8px 10px; text-align:center; white-space:nowrap;">
+                    <div style="display:inline-flex; gap:6px;">
+                        <button class="btn btn-outline btn-xs" onclick="window.verHistorialSaludUnico('${j.alumno_id}', '${nombreClean}')" style="border-color:var(--primary); color:var(--primary); padding:3px 8px; border-radius:6px;" title="Ver expediente médico">
+                            <i class="fa-solid fa-notes-medical"></i> Expediente
+                        </button>
+                        <button class="btn btn-outline btn-xs" onclick="window.abrirModalEditarJustificante('${j.id}')" style="border-color:#ca8a04; color:#854d0e; padding:3px 8px; border-radius:6px;" title="Editar justificante">
+                            <i class="fa-solid fa-pen-to-square"></i>
+                        </button>
+                        <button class="btn btn-outline btn-xs" onclick="window.eliminarJustificanteMedico('${j.id}', '${j.alumno_id}', '${nombreClean}')" style="border-color:var(--danger); color:var(--danger); padding:3px 8px; border-radius:6px;" title="Eliminar justificante">
+                            <i class="fa-solid fa-trash-can"></i>
+                        </button>
+                    </div>
+                </td>
+            </tr>
+        `;
+    }).join('');
+
+    cont.innerHTML = `
+        <div style="background:#f0f9ff; border-left:4px solid #0284c7; padding:8px 12px; border-radius:6px; margin-bottom:10px; font-size:0.82rem; color:#0369a1; display:flex; justify-content:space-between; align-items:center;">
+            <span><i class="fa-solid fa-circle-info"></i> Mostrando <strong>${lista.length}</strong> alumno(s) con justificante médico activo hoy. No deben ser marcados como inasistencia injustificada.</span>
+        </div>
+        <div style="overflow-x:auto;">
+            <table class="risk-table" style="width:100%; border-collapse:collapse; font-size:0.85rem;">
+                <thead>
+                    <tr style="border-bottom:2px solid var(--border); background:#f8fafc;">
+                        <th style="padding:8px 10px; text-align:left;">Alumno</th>
+                        <th style="padding:8px 10px; text-align:left;">Grado / Grupo</th>
+                        <th style="padding:8px 10px; text-align:left;">Motivo de Falta</th>
+                        <th style="padding:8px 10px; text-align:left;">Periodo Justificado</th>
+                        <th style="padding:8px 10px; text-align:center;">Vigencia Hoy</th>
+                        <th style="padding:8px 10px; text-align:left;">Autorizado por</th>
+                        <th style="padding:8px 10px; text-align:center;">Acciones</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${rowsHtml}
+                </tbody>
+            </table>
+        </div>
+    `;
+};
+
+window.filtrarJustificantesVigentes = () => {
+    const termino = (document.getElementById('buscarJustificanteVigenteInput')?.value || '').toLowerCase().trim();
+    const grado = document.getElementById('filtroGradoJustificanteVigente')?.value || 'Todos';
+    const cacheados = window._justificantesVigentesCacheados || [];
+
+    let filtrados = cacheados.filter(j => {
+        if (grado !== 'Todos') {
+            const numG = grado.replace(/[^0-9]/g, '');
+            const alG = String(j.alumnos?.grado || '').replace(/[^0-9]/g, '');
+            if (numG && alG !== numG) return false;
+        }
+        if (termino) {
+            const nom = String(j.alumnos?.nombre || '').toLowerCase();
+            const mat = String(j.alumnos?.matricula || '').toLowerCase();
+            const mot = String(j.motivo || '').toLowerCase();
+            return nom.includes(termino) || mat.includes(termino) || mot.includes(termino);
+        }
+        return true;
+    });
+
+    window.renderTablaJustificantesVigentes(filtrados);
+};
+
+window.imprimirJustificantesVigentesHoy = async () => {
+    const lista = window._justificantesVigentesCacheados || [];
+    if (lista.length === 0) return alert("No hay justificantes vigentes el día de hoy para imprimir.");
+
+    const printWin = window.open('', '_blank');
+    if (!printWin) return alert("Por favor permite las ventanas emergentes en tu navegador.");
+
+    const plantNom = state.plantelNombre || window.currentUserProfile?.planteles?.nombre || 'Escuela Secundaria';
+    const fechaImp = new Date().toLocaleDateString('es-MX', { weekday: 'long', year:'numeric', month:'long', day:'numeric' });
+    const fechaImpCap = fechaImp.charAt(0).toUpperCase() + fechaImp.slice(1);
+
+    let rowsHtml = lista.map((j, i) => {
+        const al = j.alumnos || { nombre: 'Alumno', matricula: '---', grado: 'S/G', grupos: { nombre: '---' } };
+        const fIni = j.fecha_inicio ? new Date(j.fecha_inicio).toLocaleDateString('es-MX') : '---';
+        const fFin = j.fecha_fin ? new Date(j.fecha_fin).toLocaleDateString('es-MX') : '---';
+        return `
+            <tr>
+                <td style="padding:6px; border:1px solid #ccc; text-align:center;">${i+1}</td>
+                <td style="padding:6px; border:1px solid #ccc; font-weight:bold;">${al.nombre}<br><small style="color:#666;">Mat: ${al.matricula}</small></td>
+                <td style="padding:6px; border:1px solid #ccc; text-align:center;">${al.grado || ''} ${al.grupos?.nombre ? al.grupos.nombre.split('°').pop() : ''}</td>
+                <td style="padding:6px; border:1px solid #ccc;">${j.motivo}</td>
+                <td style="padding:6px; border:1px solid #ccc; text-align:center; font-size:11px;">Del ${fIni} al ${fFin}</td>
+                <td style="padding:6px; border:1px solid #ccc; text-align:center; font-size:11px;">${j.perfiles?.nombre || 'Trabajo Social'}</td>
+            </tr>
+        `;
+    }).join('');
+
+    printWin.document.write(`
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <title>Lista de Justificantes Médicos Vigentes - ${plantNom}</title>
+            <style>
+                body { font-family: Arial, sans-serif; margin: 25px; color: #111; font-size: 12px; }
+                .header { text-align: center; border-bottom: 2px solid #0284c7; padding-bottom: 10px; margin-bottom: 15px; }
+                table { width: 100%; border-collapse: collapse; margin-top: 15px; }
+                th { background: #e0f2fe; padding: 7px; border: 1px solid #ccc; font-size: 11px; text-transform: uppercase; color: #0369a1; }
+                @media print { body { margin: 10mm; } }
+            </style>
+        </head>
+        <body>
+            <div class="header">
+                <h2 style="margin:0; text-transform:uppercase;">${plantNom}</h2>
+                <h3 style="margin:4px 0; color:#0284c7;">RELACIÓN DIARIA DE ALUMNOS CON JUSTIFICANTE MÉDICO VIGENTE</h3>
+                <p style="margin:2px 0; font-size:12px; font-weight:bold; color:#475569;">Fecha: ${fechaImpCap} | Total Exentos Hoy: ${lista.length} alumno(s)</p>
+            </div>
+
+            <p style="font-size:11px; color:#555; margin-bottom:12px;">
+                Los siguientes alumnos cuentan con justificación médica oficial vigente y registrada en el Sistema Edu-LM, por lo que están autorizados para ausentarse de las clases correspondientes al día de hoy sin afectación en su porcentaje de asistencia.
+            </p>
+
+            <table>
+                <thead>
+                    <tr>
+                        <th style="width:30px;">#</th>
+                        <th>Alumno</th>
+                        <th>Grado / Gpo</th>
+                        <th>Motivo del Justificante</th>
+                        <th>Periodo Autorizado</th>
+                        <th>Emitido por</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${rowsHtml}
+                </tbody>
+            </table>
+
+            <div style="margin-top:45px; display:flex; justify-content:space-around; text-align:center;">
+                <div style="width:240px; border-top:1px solid #333; padding-top:5px;">
+                    <div style="font-weight:bold; font-size:12px;">Trabajo Social / Salud Escolar</div>
+                    <div style="font-size:10px; color:#555; text-transform:uppercase;">Área Médica y Justificantes</div>
+                </div>
+                <div style="width:240px; border-top:1px solid #333; padding-top:5px;">
+                    <div style="font-weight:bold; font-size:12px;">Prefectura / Control Escolar</div>
+                    <div style="font-size:10px; color:#555; text-transform:uppercase;">Verificación de Asistencia</div>
+                </div>
+            </div>
+            <script>window.onload = () => { window.print(); };<\/script>
+        </body>
+        </html>
+    `);
+    printWin.document.close();
+};
 
 window.buscarHistorialSalud = async (query) => {
     const resDiv = document.getElementById('resBusquedaSaludLocal');
@@ -13229,6 +14522,7 @@ window.registrarJustificanteMedico = async () => {
         
         // Refrescar vistas
         if(window.loadHistorialSalud) window.loadHistorialSalud();
+        if(window.loadJustificantesVigentesHoy) window.loadJustificantesVigentesHoy();
         
         // Limpiar campos
         document.getElementById('justificanteMotivo').value = '';
@@ -13598,6 +14892,7 @@ window.guardarEdicionJustificante = async (justificanteId, alumnoId, alumnoNombr
         } else if (window.loadHistorialSalud) {
             window.loadHistorialSalud();
         }
+        if (window.loadJustificantesVigentesHoy) window.loadJustificantesVigentesHoy();
     } catch(e) {
         console.error("Error al editar justificante:", e);
         alert("Ocurrió un error al guardar los cambios: " + (e.message || ""));
@@ -13634,6 +14929,7 @@ window.eliminarJustificanteMedico = async (justificanteId, alumnoId, alumnoNombr
         } else if (window.loadHistorialSalud) {
             window.loadHistorialSalud();
         }
+        if (window.loadJustificantesVigentesHoy) window.loadJustificantesVigentesHoy();
     } catch(e) {
         console.error("Error al eliminar justificante:", e);
         alert("Error al eliminar justificante: " + (e.message || ""));
