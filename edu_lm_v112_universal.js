@@ -5,7 +5,7 @@ const CONFIG = {
 };
 
 // Supabase Configuration
-console.log("%c>>> EDU-LM V249 UNIVERSAL CARGADA: VIGILANCIA HUMANA ACTIVA", "color: yellow; background: black; padding: 12px; font-weight: 1000; border: 2px solid yellow;");
+console.log("%c>>> EDU-LM V250 UNIVERSAL CARGADA: VIGILANCIA HUMANA ACTIVA", "color: yellow; background: black; padding: 12px; font-weight: 1000; border: 2px solid yellow;");
 const SUPABASE_URL = "https://eexgjaydpuioncenlsmv.supabase.co"; 
 const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVleGdqYXlkcHVpb25jZW5sc212Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQ4NTM0MDAsImV4cCI6MjEwMDQyOTQwMH0.vrJGn_Bg04OBBntL-w21-I27XuvO61HcUNrphMYYSlY";
 const SUPABASE_KEY = SUPABASE_ANON_KEY;
@@ -9829,7 +9829,6 @@ window.imprimirExpediente = async (idAlumno, modo = 'completo') => {
 
 function renderApoyoSalud() {
   setTimeout(() => {
-      if(window.loadHistorialSalud) window.loadHistorialSalud();
       if(window.loadJustificantesVigentesHoy) window.loadJustificantesVigentesHoy();
   }, 100);
 
@@ -9954,22 +9953,28 @@ function renderApoyoSalud() {
         </button>
       </div>
 
-      <div class="card" style="flex: 1.5; min-width: 450px; border-top: 4px solid var(--success);">
-          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 16px;">
-             <h3 style="margin:0;">Historial Médico y Justificantes</h3>
-             <div style="position:relative; width:250px;">
-                <div style="position:relative; width:220px;">
-                    <i class="fa-solid fa-search" style="position:absolute; left:12px; top:10px; color:var(--text-muted); font-size:0.8rem"></i>
-                    <input type="text" class="form-input" placeholder="Filtrar por Alumno..." oninput="window.buscarHistorialSalud(this.value)" style="padding-left:35px; border-radius:15px; font-size:0.85rem">
-                    <div id="resBusquedaSaludLocal" class="card shadow-md" style="display:none; position:absolute; top:40px; left:0; right:0; z-index:100; max-height:200px; overflow-y:auto; padding:0;"></div>
-                </div>
-                <i class="fa-solid fa-search" style="position:absolute; left:12px; top:11px; color:var(--text-muted); font-size:0.8rem"></i>
+      <div class="card shadow-sm" style="flex: 1.5; min-width: 450px; border-top: 4px solid var(--success); background:white;">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 16px; flex-wrap:wrap; gap:10px;">
+             <div>
+                <h3 style="margin:0; display:flex; align-items:center; gap:8px;">
+                   <i class="fa-solid fa-clock-rotate-left" style="color:var(--success);"></i> Historial Médico y Justificantes
+                </h3>
+                <small style="color:var(--text-muted); font-size:0.75rem;">Consulta individual por estudiante (solo se muestran al buscar)</small>
+             </div>
+             <div style="position:relative; width:270px;">
+                <i class="fa-solid fa-search" style="position:absolute; left:12px; top:10px; color:var(--text-muted); font-size:0.85rem"></i>
+                <input type="text" id="busquedaSaludLocalInput" class="form-input" placeholder="Buscar por alumno o matrícula..." oninput="window.buscarHistorialSalud(this.value)" onkeydown="if(event.key === 'Enter') { const first = document.querySelector('#resBusquedaSaludLocal > div'); if(first) first.click(); }" style="padding-left:34px; padding-right:28px; border-radius:15px; font-size:0.85rem; width:100%;">
+                <button type="button" onclick="window.limpiarHistorialSalud()" title="Limpiar búsqueda" style="position:absolute; right:8px; top:7px; background:none; border:none; color:var(--text-muted); cursor:pointer; font-size:0.85rem; padding:2px;">
+                   <i class="fa-solid fa-xmark"></i>
+                </button>
+                <div id="resBusquedaSaludLocal" class="card shadow-md" style="display:none; position:absolute; top:38px; left:0; right:0; z-index:100; max-height:220px; overflow-y:auto; padding:0; background:white; border:1px solid var(--border);"></div>
              </div>
           </div>
           <div id="historialSaludCont" style="max-height: 500px; overflow-y:auto; padding:5px;">
              <div style="text-align:center; padding:40px; color:var(--text-muted)">
-                <i class="fa-solid fa-shield-heart fa-3x" style="opacity:0.2; margin-bottom:15px"></i>
-                <p>Usa el buscador para consultar el historial de salud.</p>
+                <i class="fa-solid fa-magnifying-glass" style="font-size:2.5rem; opacity:0.3; margin-bottom:12px; display:block;"></i>
+                <h4 style="margin:0 0 6px 0; font-size:0.95rem; color:var(--text-main); font-weight:600;">Historial y Justificantes por Alumno</h4>
+                <p style="margin:0; font-size:0.83rem; color:var(--text-muted);">Escribe el nombre o matrícula del estudiante en el buscador de arriba para consultar sus justificantes y expediente médico.</p>
              </div>
           </div>
       </div>
@@ -10260,27 +10265,77 @@ window.imprimirJustificantesVigentesHoy = async () => {
     printWin.document.close();
 };
 
+window.limpiarHistorialSalud = () => {
+    window._ultimoAlumnoSalud = null;
+    const inp = document.getElementById('busquedaSaludLocalInput');
+    if (inp) inp.value = '';
+    const resDiv = document.getElementById('resBusquedaSaludLocal');
+    if (resDiv) {
+        resDiv.style.display = 'none';
+        resDiv.innerHTML = '';
+    }
+    const cont = document.getElementById('historialSaludCont');
+    if (cont) {
+        cont.innerHTML = `
+            <div style="text-align:center; padding:40px; color:var(--text-muted)">
+                <i class="fa-solid fa-magnifying-glass" style="font-size:2.5rem; opacity:0.3; margin-bottom:12px; display:block;"></i>
+                <h4 style="margin:0 0 6px 0; font-size:0.95rem; color:var(--text-main); font-weight:600;">Historial y Justificantes por Alumno</h4>
+                <p style="margin:0; font-size:0.83rem; color:var(--text-muted);">Escribe el nombre o matrícula del estudiante en el buscador de arriba para consultar sus justificantes y expediente médico.</p>
+            </div>
+        `;
+    }
+};
+
 window.buscarHistorialSalud = async (query) => {
     const resDiv = document.getElementById('resBusquedaSaludLocal');
-    if(!query || query.length < 2) { resDiv.style.display = 'none'; return; }
+    if(!resDiv) return;
+    const cleanQ = (query || '').trim();
+    if(cleanQ.length < 2) { 
+        resDiv.style.display = 'none'; 
+        resDiv.innerHTML = '';
+        return; 
+    }
     try {
-        const { data } = await supabaseClient.from('alumnos').select('*, grupos(nombre)').eq('plantel_id', state.plantelId).or(`nombre.ilike.%${query}%,matricula.ilike.%${query}%`).limit(5);
-        if(!data || data.length === 0) { resDiv.style.display = 'none'; return; }
+        let q = supabaseClient.from('alumnos').select('id, nombre, matricula, grado, grupos(nombre)').or(`nombre.ilike.%${cleanQ}%,matricula.ilike.%${cleanQ}%`).limit(6);
+        if(state.plantelId) q = q.eq('plantel_id', state.plantelId);
+        const { data, error } = await q;
+        if(error || !data || data.length === 0) { 
+            resDiv.innerHTML = '<div style="padding:10px; color:var(--text-muted); font-size:0.8rem; text-align:center;">Sin resultados para esa búsqueda</div>';
+            resDiv.style.display = 'block';
+            return; 
+        }
         resDiv.style.display = 'block';
         resDiv.innerHTML = data.map(a => `
-            <div style="padding:10px; cursor:pointer; border-bottom:1px solid var(--border);" 
-                 onclick="window.verHistorialSaludUnico('${a.id}', '${a.nombre}')">
-                <b>${a.nombre}</b><br><small>${a.grupos?.nombre || 'S/G'}</small>
+            <div style="padding:8px 12px; cursor:pointer; border-bottom:1px solid var(--border); transition:background 0.2s;" 
+                 onmouseover="this.style.background='#f1f5f9'" onmouseout="this.style.background='white'"
+                 onclick="window.verHistorialSaludUnico('${a.id}', '${(a.nombre || '').replace(/'/g, "\\'")}')">
+                <div style="font-weight:600; font-size:0.85rem; color:var(--text-main);">${a.nombre}</div>
+                <small style="color:var(--text-muted); font-size:0.75rem;">${a.grado || ''} ${a.grupos?.nombre ? a.grupos.nombre.split('°').pop() : 'S/G'} &bull; Matrícula: ${a.matricula || '---'}</small>
             </div>
         `).join('');
-    } catch(e) {}
+    } catch(e) {
+        console.error("Error en buscarHistorialSalud:", e);
+    }
 };
 
 window.verHistorialSaludUnico = async (id, nombre) => {
     window._ultimoAlumnoSalud = { id, nombre };
-    document.getElementById('resBusquedaSaludLocal').style.display = 'none';
+    const resDiv = document.getElementById('resBusquedaSaludLocal');
+    if (resDiv) {
+        resDiv.style.display = 'none';
+        resDiv.innerHTML = '';
+    }
+    const inp = document.getElementById('busquedaSaludLocalInput');
+    if (inp) inp.value = nombre;
+
     const cont = document.getElementById('historialSaludCont');
-    cont.innerHTML = '<p style="text-align:center; padding:20px;"><i class="fa-solid fa-spinner fa-spin"></i> Cargando expediente completo...</p>';
+    if (!cont) return;
+    cont.innerHTML = `
+        <div style="text-align:center; padding:30px; color:var(--text-muted);">
+            <i class="fa-solid fa-spinner fa-spin" style="font-size:1.5rem; color:var(--primary); margin-bottom:8px; display:block;"></i>
+            Cargando historial y justificantes de <b>${nombre}</b>...
+        </div>
+    `;
     
     try {
         // 1. Obtener Atenciones
@@ -10303,20 +10358,37 @@ window.verHistorialSaludUnico = async (id, nombre) => {
             ...(justificantes || []).map(j => ({...j, tipoItem: 'justificante', fechaRef: j.fecha_emision}))
         ].sort((a, b) => new Date(b.fechaRef) - new Date(a.fechaRef));
 
+        const totalJust = (justificantes || []).length;
+        const totalAtenc = (atenciones || []).length;
+
         if(historico.length === 0) {
-            cont.innerHTML = `<p style="text-align:center; padding:40px; color:var(--text-muted)">No hay registros médicos para <b>${nombre}</b>.</p>`;
+            cont.innerHTML = `
+                <div style="margin-bottom:12px; padding-bottom:10px; border-bottom:1px solid var(--border); display:flex; justify-content:space-between; align-items:center;">
+                    <h4 style="margin:0; color:var(--primary); font-size:0.95rem;"><i class="fa-solid fa-user"></i> Expediente de ${nombre}</h4>
+                    <button class="btn btn-xs btn-outline" onclick="window.limpiarHistorialSalud();" style="border-color:var(--border); color:var(--text-muted);">
+                        <i class="fa-solid fa-xmark"></i> Cerrar
+                    </button>
+                </div>
+                <div style="text-align:center; padding:35px 20px; color:var(--text-muted);">
+                    <i class="fa-solid fa-folder-open" style="font-size:2rem; opacity:0.3; margin-bottom:8px; display:block;"></i>
+                    <p style="margin:0; font-size:0.85rem;">No hay registros médicos ni justificantes para <b>${nombre}</b>.</p>
+                </div>
+            `;
             return;
         }
 
         cont.innerHTML = `
-            <div style="margin-bottom:15px; padding-bottom:10px; border-bottom:1px solid var(--border); display:flex; justify-content:space-between; align-items:center;">
-                <h4 style="margin:0; color:var(--primary)">Expediente de ${nombre}</h4>
+            <div style="margin-bottom:12px; padding-bottom:10px; border-bottom:1px solid var(--border); display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">
                 <div>
-                    <button class="btn btn-xs btn-outline" onclick="window.imprimirExpedienteMedico('${id}')" style="margin-right:8px; border-color:var(--primary); color:var(--primary);">
+                    <h4 style="margin:0; color:var(--primary); font-size:0.95rem; font-weight:700;"><i class="fa-solid fa-user-check"></i> Expediente de ${nombre}</h4>
+                    <small style="color:var(--text-muted); font-size:0.75rem;">${totalJust} justificante(s) &bull; ${totalAtenc} atención(es)</small>
+                </div>
+                <div style="display:flex; gap:6px;">
+                    <button class="btn btn-xs btn-outline" onclick="window.imprimirExpedienteMedico('${id}')" style="border-color:var(--primary); color:var(--primary);">
                         <i class="fa-solid fa-print"></i> Imprimir
                     </button>
-                    <button class="btn btn-xs btn-outline" onclick="window._ultimoAlumnoSalud = null; window.loadHistorialSalud();">
-                        <i class="fa-solid fa-rotate-left"></i> Ver Recientes
+                    <button class="btn btn-xs btn-outline" onclick="window.limpiarHistorialSalud();" style="border-color:var(--border); color:var(--text-muted);">
+                        <i class="fa-solid fa-xmark"></i> Cerrar
                     </button>
                 </div>
             </div>
@@ -14442,12 +14514,12 @@ window.selectAlumnoForSalud = (id, nombre, targetId) => {
         document.getElementById('selectedAluIdJustificante').value = id;
         document.getElementById('busquedaJustificanteInput').value = nombre;
         document.getElementById('resJustificanteAlu').style.display = 'none';
+        if (window.verHistorialSaludUnico) window.verHistorialSaludUnico(id, nombre);
     } else {
         document.getElementById('selectedAluIdSalud').value = id;
         document.getElementById('busquedaSaludInput').value = nombre;
         document.getElementById('resSaludAlu').style.display = 'none';
-        // Cargar historial específico si se desea
-        window.loadHistorialSalud();
+        if (window.verHistorialSaludUnico) window.verHistorialSaludUnico(id, nombre);
     }
 };
 
@@ -14937,76 +15009,14 @@ window.eliminarJustificanteMedico = async (justificanteId, alumnoId, alumnoNombr
 };
 
 window.loadHistorialSalud = async () => {
-    const cont = document.getElementById('historialSaludCont');
-    if(!cont) return;
-    try {
-        // 1. Obtener Atenciones
-        const { data: atenciones, error: errAt } = await supabaseClient
-            .from('expedientes_salud')
-            .select('*, alumnos(nombre), perfiles(nombre)')
-            .order('creado_en', {ascending: false})
-            .limit(10);
-            
-        // 2. Obtener Justificantes
-        const { data: justificantes, error: errJust } = await supabaseClient
-            .from('justificantes_medicos')
-            .select('*, alumnos(id, nombre, grupos(nombre)), perfiles(nombre)')
-            .order('fecha_emision', {ascending: false})
-            .limit(10);
-
-        if(errAt || errJust) throw new Error("Error al cargar historial");
-
-        // 3. Unificar y Ordenar
-        const historico = [
-            ...(atenciones || []).map(a => ({...a, tipoItem: 'atencion', fechaRef: a.creado_en})),
-            ...(justificantes || []).map(j => ({...j, tipoItem: 'justificante', fechaRef: j.fecha_emision}))
-        ].sort((a, b) => new Date(b.fechaRef) - new Date(a.fechaRef));
-
-        if(historico.length === 0) {
-            cont.innerHTML = '<p style="text-align:center; padding:20px; color:var(--text-muted)">No hay registros médicos recientes.</p>';
-            return;
-        }
-
-        cont.innerHTML = historico.map(s => {
-          if(s.tipoItem === 'atencion') {
-            return `
-              <div class="card" style="margin-bottom:12px; padding:12px; border-left:4px solid var(--primary); background:white;">
-                <div style="display:flex; justify-content:space-between; align-items:start;">
-                    <strong><i class="fa-solid fa-notes-medical" style="color:var(--primary)"></i> ${s.alumnos?.nombre || 'Alumno'}</strong>
-                    <small style="color:var(--text-muted)">${new Date(s.creado_en).toLocaleDateString()}</small>
-                </div>
-                <div style="font-size:0.85rem; color:var(--text-main); margin:4px 0; font-weight:bold;">${s.tipo_alergia || 'Atención General'}</div>
-                <p style="margin:0; font-size:0.8rem; color:var(--text-muted)">${s.observaciones_medicas || ''}</p>
-                <div style="font-size:0.75rem; color:var(--text-muted); margin-top:4px;">Por: ${s.perfiles?.nombre || 'Trabajo Social'}</div>
-              </div>`;
-          } else {
-            return `
-              <div class="card" style="margin-bottom:12px; padding:12px; border-left:4px solid var(--warning); background:#fffdf7;">
-                <div style="display:flex; justify-content:space-between; align-items:start;">
-                    <div>
-                        <strong><i class="fa-solid fa-file-signature" style="color:var(--warning)"></i> ${s.alumnos?.nombre || 'Alumno'}</strong>
-                        <div style="font-size:0.75rem; color:var(--text-muted); margin-top:2px;">Grupo: ${s.alumnos?.grupos?.nombre || '---'}</div>
-                    </div>
-                    <small style="color:var(--text-muted)">${new Date(s.fecha_emision).toLocaleDateString()}</small>
-                </div>
-                <div style="font-size:0.85rem; color:#856404; margin:4px 0; font-weight:bold;">JUSTIFICANTE: ${s.motivo}</div>
-                <div style="font-size:0.75rem; color:var(--text-main); background:#fff3cd; padding:4px 8px; border-radius:4px; display:inline-block; margin:4px 0;">
-                    Válido: ${new Date(s.fecha_inicio).toLocaleDateString()} al ${new Date(s.fecha_fin).toLocaleDateString()}
-                </div>
-                <div style="font-size:0.75rem; color:var(--text-muted); margin-top:4px;">Por: ${s.perfiles?.nombre || 'Trabajo Social'}</div>
-                <p style="margin:0; font-size:0.8rem; color:var(--text-muted)">Justificante oficial enviado a maestros.</p>
-                <div style="display:flex; gap:8px; margin-top:8px; padding-top:8px; border-top:1px dashed #fde047; justify-content:flex-end; align-items:center;">
-                    <button class="btn btn-outline btn-xs" onclick="window.abrirModalEditarJustificante('${s.id}')" style="border-color:#ca8a04; color:#854d0e; display:inline-flex; align-items:center; gap:4px; font-weight:600; padding:3px 8px; border-radius:6px;">
-                        <i class="fa-solid fa-pen-to-square"></i> Editar
-                    </button>
-                    <button class="btn btn-outline btn-xs" onclick="window.eliminarJustificanteMedico('${s.id}', '${s.alumno_id}', '${(s.alumnos?.nombre || '').replace(/'/g, "\\'")}')" style="border-color:var(--danger); color:var(--danger); display:inline-flex; align-items:center; gap:4px; font-weight:600; padding:3px 8px; border-radius:6px;">
-                        <i class="fa-solid fa-trash-can"></i> Eliminar
-                    </button>
-                </div>
-              </div>`;
-          }
-        }).join('');
-    } catch(e) { console.error(e); }
+    // Si hay un alumno previamente seleccionado/buscado, refrescar su expediente
+    if (window._ultimoAlumnoSalud && window._ultimoAlumnoSalud.id && window.verHistorialSaludUnico) {
+        return window.verHistorialSaludUnico(window._ultimoAlumnoSalud.id, window._ultimoAlumnoSalud.nombre);
+    }
+    // No mostrar todos los justificantes por defecto: mantener la vista limpia con el buscador
+    if (window.limpiarHistorialSalud) {
+        window.limpiarHistorialSalud();
+    }
 };
 
 window._reconciliarMensajeBoleta = (mensajeTexto, byMateria = {}, realGradesFromActs = {}, repTrim = null) => {
