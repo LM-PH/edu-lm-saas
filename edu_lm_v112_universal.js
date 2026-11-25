@@ -5,7 +5,7 @@ const CONFIG = {
 };
 
 // Supabase Configuration
-console.log("%c>>> EDU-LM V252 UNIVERSAL CARGADA: VIGILANCIA HUMANA ACTIVA", "color: yellow; background: black; padding: 12px; font-weight: 1000; border: 2px solid yellow;");
+console.log("%c>>> EDU-LM V253 UNIVERSAL CARGADA: VIGILANCIA HUMANA ACTIVA", "color: yellow; background: black; padding: 12px; font-weight: 1000; border: 2px solid yellow;");
 const SUPABASE_URL = "https://eexgjaydpuioncenlsmv.supabase.co"; 
 const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVleGdqYXlkcHVpb25jZW5sc212Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQ4NTM0MDAsImV4cCI6MjEwMDQyOTQwMH0.vrJGn_Bg04OBBntL-w21-I27XuvO61HcUNrphMYYSlY";
 const SUPABASE_KEY = SUPABASE_ANON_KEY;
@@ -5768,13 +5768,13 @@ window.imprimirReporteRiesgoAcademico = async () => {
     const fechaImp = new Date().toLocaleDateString('es-MX', { weekday:'long', year:'numeric', month:'long', day:'numeric' });
     const fechaImpCap = fechaImp.charAt(0).toUpperCase() + fechaImp.slice(1);
 
-    const trimLabel = data.trim === 'Todos' ? 'Todos los Trimestres (Ciclo Completo)' : `Trimestre ${data.trim}`;
+    const trimLabel = data.trim === 'Todos' ? 'Ciclo Completo' : `Trimestre ${data.trim}`;
     const gradoLabel = data.gradoSel === 'Todos' ? 'Toda la Escuela' : `${data.gradoSel}`;
-    const grupoLabel = data.grupoNombre && data.grupoNombre !== 'Todos' ? `Grupo: ${data.grupoNombre}` : 'Todos los grupos';
+    const grupoLabel = data.grupoNombre && data.grupoNombre !== 'Todos' ? `Grupo ${data.grupoNombre}` : 'Todos los grupos';
     
-    let umbralLabel = '1 o más materias reprobadas (Riesgo General)';
-    if (data.umbral === '1-2') umbralLabel = '2 materias reprobadas (Riesgo Leve/Moderado)';
-    if (data.umbral === '3+') umbralLabel = '3 o más materias reprobadas (Riesgo Crítico)';
+    let umbralLabel = '1+ materias reprobadas';
+    if (data.umbral === '1-2') umbralLabel = '2 materias reprobadas';
+    if (data.umbral === '3+') umbralLabel = '3+ materias (Riesgo Crítico)';
 
     const lista = data.alumnos;
     const totalAlumnos = lista.length;
@@ -5783,29 +5783,56 @@ window.imprimirReporteRiesgoAcademico = async () => {
     const totalMateriasReprobadas = lista.reduce((acc, a) => acc + a.numReprobadas, 0);
     const promedioReprobadas = (totalMateriasReprobadas / (totalAlumnos || 1)).toFixed(1);
 
-    // Agrupación por Grado/Grupo para tabla estadística resumen
-    const gruposMap = {};
-    lista.forEach(a => {
-        const key = `${a.grado || ''} ${a.grupo || ''}`.trim() || 'Sin grupo';
-        if (!gruposMap[key]) {
-            gruposMap[key] = { grupo: key, count: 0, materiasTotal: 0, criticos: 0 };
-        }
-        gruposMap[key].count++;
-        gruposMap[key].materiasTotal += a.numReprobadas;
-        if (a.numReprobadas >= 3) gruposMap[key].criticos++;
-    });
+    // Ajuste dinámico de dimensiones y tipografía para asegurar 1 SOLA HOJA a buen tamaño
+    let orientacion = totalAlumnos <= 12 ? 'landscape' : 'portrait';
 
-    const gruposArr = Object.values(gruposMap).sort((a, b) => a.grupo.localeCompare(b.grupo, undefined, { numeric: true }));
+    let fontSize = '10px';
+    let lineHt = '1.25';
+    let cellPad = '5px 6px';
+    let pillPad = '1px 5px';
+    let pillFont = '9px';
+    let numBadgePad = '2px 7px';
+    let sigMarginTop = '18px';
+    let sigPadTop = '4px';
 
-    let gruposRowsHtml = gruposArr.map(g => `
-        <tr>
-            <td style="padding:6px 8px; border:1px solid #cbd5e1; font-weight:600;">${g.grupo}</td>
-            <td style="padding:6px 8px; border:1px solid #cbd5e1; text-align:center; font-weight:bold; color:#1e293b;">${g.count}</td>
-            <td style="padding:6px 8px; border:1px solid #cbd5e1; text-align:center; color:#dc2626; font-weight:bold;">${g.criticos}</td>
-            <td style="padding:6px 8px; border:1px solid #cbd5e1; text-align:center;">${g.materiasTotal}</td>
-            <td style="padding:6px 8px; border:1px solid #cbd5e1; text-align:center;">${(g.materiasTotal / (g.count || 1)).toFixed(1)}</td>
-        </tr>
-    `).join('');
+    if (totalAlumnos <= 6) {
+        fontSize = '12px';
+        cellPad = '7px 8px';
+        pillPad = '3px 7px';
+        pillFont = '11px';
+        numBadgePad = '3px 9px';
+        sigMarginTop = '26px';
+    } else if (totalAlumnos <= 12) {
+        fontSize = '11px';
+        cellPad = '5px 7px';
+        pillPad = '2px 6px';
+        pillFont = '10px';
+        numBadgePad = '2px 8px';
+        sigMarginTop = '20px';
+    } else if (totalAlumnos <= 20) {
+        fontSize = '10px';
+        cellPad = '4px 6px';
+        pillPad = '1px 5px';
+        pillFont = '9px';
+        numBadgePad = '1px 6px';
+        sigMarginTop = '14px';
+    } else if (totalAlumnos <= 30) {
+        fontSize = '9px';
+        cellPad = '3px 5px';
+        pillPad = '1px 4px';
+        pillFont = '8.5px';
+        numBadgePad = '1px 5px';
+        sigMarginTop = '10px';
+        sigPadTop = '3px';
+    } else {
+        fontSize = '8px';
+        cellPad = '2px 4px';
+        pillPad = '0 3px';
+        pillFont = '7.5px';
+        numBadgePad = '0 4px';
+        sigMarginTop = '8px';
+        sigPadTop = '2px';
+    }
 
     let alumnosRowsHtml = lista.map((al, idx) => {
         const isCritico = al.numReprobadas >= 3;
@@ -5815,24 +5842,24 @@ window.imprimirReporteRiesgoAcademico = async () => {
         const nivelRiesgo = isCritico ? 'CRÍTICO' : 'MODERADO';
 
         const materiasHtml = al.materias.map(m => 
-            `<span style="display:inline-block; background:#f1f5f9; border:1px solid #cbd5e1; border-radius:4px; padding:2px 6px; margin:2px; font-size:10px; color:#334155;">${m}</span>`
+            `<span style="display:inline-block; background:#f1f5f9; border:1px solid #cbd5e1; border-radius:3px; padding:${pillPad}; margin:1px 2px; font-size:${pillFont}; color:#1e293b; white-space:nowrap;">${m}</span>`
         ).join('');
 
         return `
             <tr style="page-break-inside:avoid; ${idx % 2 === 1 ? 'background:#f8fafc;' : ''}">
-                <td style="padding:6px 8px; border:1px solid #cbd5e1; text-align:center; font-weight:600; color:#64748b;">${idx + 1}</td>
-                <td style="padding:6px 8px; border:1px solid #cbd5e1; text-align:center; font-size:10px; color:#475569;">${al.matricula || '---'}</td>
-                <td style="padding:6px 8px; border:1px solid #cbd5e1; font-weight:700; color:#0f172a;">${al.nombre}</td>
-                <td style="padding:6px 8px; border:1px solid #cbd5e1; text-align:center; font-weight:600; white-space:nowrap;">${al.grado} - ${al.grupo}</td>
-                <td style="padding:6px 8px; border:1px solid #cbd5e1; text-align:center;">
-                    <span style="display:inline-block; background:${badgeBg}; color:${badgeColor}; border:1px solid ${badgeBorder}; border-radius:12px; padding:2px 8px; font-weight:bold; font-size:11px;">
+                <td style="padding:${cellPad}; border:1px solid #cbd5e1; text-align:center; color:#64748b; font-weight:600;">${idx + 1}</td>
+                <td style="padding:${cellPad}; border:1px solid #cbd5e1; text-align:center; font-size:${pillFont}; color:#475569;">${al.matricula || '---'}</td>
+                <td style="padding:${cellPad}; border:1px solid #cbd5e1; font-weight:700; color:#0f172a;">${al.nombre}</td>
+                <td style="padding:${cellPad}; border:1px solid #cbd5e1; text-align:center; font-weight:600; white-space:nowrap;">${al.grado} - ${al.grupo}</td>
+                <td style="padding:${cellPad}; border:1px solid #cbd5e1; text-align:center; white-space:nowrap;">
+                    <span style="display:inline-block; background:${badgeBg}; color:${badgeColor}; border:1px solid ${badgeBorder}; border-radius:10px; padding:${numBadgePad}; font-weight:800; font-size:${pillFont};">
                         ${al.numReprobadas} ${al.numReprobadas === 1 ? 'materia' : 'materias'}
                     </span>
-                    <div style="font-size:9px; font-weight:bold; color:${badgeColor}; margin-top:2px;">${nivelRiesgo}</div>
+                    <span style="font-size:7.5px; font-weight:bold; color:${badgeColor}; display:block; margin-top:1px;">${nivelRiesgo}</span>
                 </td>
-                <td style="padding:6px 8px; border:1px solid #cbd5e1; font-size:10px;">${materiasHtml}</td>
-                <td style="padding:6px 8px; border:1px solid #cbd5e1; width:130px;">
-                    <div style="height:25px; border-bottom:1px dashed #94a3b8;"></div>
+                <td style="padding:${cellPad}; border:1px solid #cbd5e1;">${materiasHtml}</td>
+                <td style="padding:${cellPad}; border:1px solid #cbd5e1; text-align:center;">
+                    <div style="height:14px; border-bottom:1px dashed #94a3b8; margin:0 4px;"></div>
                 </td>
             </tr>
         `;
@@ -5844,139 +5871,160 @@ window.imprimirReporteRiesgoAcademico = async () => {
         <head>
             <title>Reporte de Riesgo Académico - ${plantNom}</title>
             <meta charset="utf-8">
+            <style id="dynamicPageStyle">
+                @page { size: letter ${orientacion}; margin: 6mm 8mm 5mm 8mm; }
+            </style>
             <style>
-                @page { size: letter landscape; margin: 12mm 10mm; }
-                body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; color:#0f172a; margin: 0; padding: 15px; font-size: 11px; line-height: 1.35; }
-                .header-container { display: flex; align-items: center; justify-content: space-between; border-bottom: 2px solid #0284c7; padding-bottom: 10px; margin-bottom: 12px; }
-                .logo-box { width: 60px; height: 60px; object-fit: contain; }
-                .header-title { flex: 1; text-align: center; }
-                .header-title h2 { margin: 0; font-size: 16px; text-transform: uppercase; color: #0f172a; }
-                .header-title h3 { margin: 3px 0; font-size: 13px; color: #0284c7; text-transform: uppercase; font-weight: 800; }
-                .header-title p { margin: 2px 0; font-size: 10px; color: #475569; }
-                
-                .kpi-row { display: flex; gap: 10px; margin-bottom: 12px; flex-wrap: wrap; }
-                .kpi-card { flex: 1; min-width: 140px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 8px 12px; text-align: center; }
-                .kpi-card .num { font-size: 18px; font-weight: 800; margin-bottom: 2px; }
-                .kpi-card .label { font-size: 9px; text-transform: uppercase; color: #64748b; font-weight: 600; }
-
-                table { width: 100%; border-collapse: collapse; margin-top: 6px; margin-bottom: 16px; font-size: 10.5px; }
-                th { background: #e0f2fe; color: #0369a1; padding: 7px 8px; border: 1px solid #cbd5e1; font-size: 9.5px; text-transform: uppercase; letter-spacing: 0.3px; font-weight: 700; text-align: left; }
+                *, *::before, *::after { box-sizing: border-box; }
+                body { 
+                    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; 
+                    color: #0f172a; 
+                    margin: 0; 
+                    padding: 8px 12px; 
+                    font-size: ${fontSize}; 
+                    line-height: ${lineHt}; 
+                    background: white; 
+                }
+                .single-page-wrap {
+                    width: 100%;
+                    min-height: calc(100vh - 16px);
+                    display: flex;
+                    flex-direction: column;
+                    justify-content: space-between;
+                }
+                table { 
+                    width: 100%; 
+                    border-collapse: collapse; 
+                    margin-top: 4px; 
+                    margin-bottom: 4px; 
+                    font-size: ${fontSize}; 
+                }
+                th { 
+                    background: #e0f2fe; 
+                    color: #0369a1; 
+                    padding: ${cellPad}; 
+                    border: 1px solid #cbd5e1; 
+                    font-size: ${pillFont}; 
+                    text-transform: uppercase; 
+                    letter-spacing: 0.3px; 
+                    font-weight: 700; 
+                }
                 td { vertical-align: middle; }
-
-                .firmas-container { margin-top: 35px; display: flex; justify-content: space-around; text-align: center; page-break-inside: avoid; }
-                .firma-box { width: 220px; border-top: 1px solid #334155; padding-top: 5px; }
-                .firma-box .cargo { font-weight: 700; font-size: 11px; }
-                .firma-box .sub { font-size: 9px; color: #64748b; text-transform: uppercase; }
-
-                .no-print-bar { background: #0284c7; color: white; padding: 8px 14px; border-radius: 6px; margin-bottom: 15px; display: flex; justify-content: space-between; align-items: center; }
-                .btn-print { background: white; color: #0284c7; border: none; font-weight: bold; padding: 6px 14px; border-radius: 4px; cursor: pointer; }
-
                 @media print {
+                    html, body {
+                        width: 100% !important;
+                        height: 100% !important;
+                        max-height: 100% !important;
+                        margin: 0 !important;
+                        padding: 0 !important;
+                        overflow: hidden !important;
+                        -webkit-print-color-adjust: exact !important;
+                        print-color-adjust: exact !important;
+                    }
                     .no-print-bar { display: none !important; }
-                    body { padding: 0; }
+                    body { padding: 0 !important; }
+                    .single-page-wrap {
+                        height: 100% !important;
+                        max-height: 100% !important;
+                        min-height: 100% !important;
+                    }
+                    table, tr, td, th {
+                        page-break-inside: avoid !important;
+                        page-break-after: avoid !important;
+                    }
                 }
             </style>
         </head>
         <body>
-            <div class="no-print-bar">
-                <span><strong>Vista previa de impresión oficial:</strong> Se detectaron ${totalAlumnos} alumnos en riesgo académico.</span>
-                <button class="btn-print" onclick="window.print()">Imprimir Ahora</button>
-            </div>
-
-            <div class="header-container">
-                ${plantLogo ? `<img src="${plantLogo}" class="logo-box" alt="Logo">` : '<div style="width:60px;"></div>'}
-                <div class="header-title">
-                    <h2>${plantNom}</h2>
-                    ${plantCct ? `<div style="font-size:10px; font-weight:bold; color:#475569; margin-bottom:2px;">C.C.T. ${plantCct}</div>` : ''}
-                    <h3>Relación Oficial de Alumnos en Riesgo Académico</h3>
-                    <p><strong>Periodo:</strong> ${trimLabel} &bull; <strong>Grado:</strong> ${gradoLabel} &bull; <strong>${grupoLabel}</strong> &bull; <strong>Criterio:</strong> ${umbralLabel}</p>
-                    <p><strong>Fecha de Expedición:</strong> ${fechaImpCap} &bull; <strong>Total Alumnos Detectados:</strong> ${totalAlumnos}</p>
+            <div class="no-print-bar" style="background:#0284c7; color:white; padding:7px 14px; border-radius:6px; margin-bottom:8px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">
+                <div style="font-size:12px;">
+                    <strong>Vista Previa (Formato 1 Sola Hoja):</strong> Se detectaron <b>${totalAlumnos}</b> alumno(s) en riesgo académico.
                 </div>
-                <div style="width:60px; text-align:right; font-size:9px; color:#94a3b8;">
-                    Área de Apoyo<br>Estudiantil
+                <div style="display:flex; gap:8px; align-items:center;">
+                    <button type="button" onclick="cambiarOrientacion()" style="background:#0369a1; color:white; border:1px solid #7dd3fc; padding:4px 10px; border-radius:4px; cursor:pointer; font-size:11px; font-weight:600;">
+                        Orientación: <span id="lblOrientacion">${orientacion === 'landscape' ? 'Horizontal' : 'Vertical'}</span>
+                    </button>
+                    <button type="button" onclick="window.print()" style="background:white; color:#0284c7; border:none; padding:5px 14px; border-radius:4px; cursor:pointer; font-size:12px; font-weight:bold;">
+                        Imprimir Ahora
+                    </button>
                 </div>
             </div>
 
-            <!-- KPIs de Resumen -->
-            <div class="kpi-row">
-                <div class="kpi-card" style="border-top:3px solid #0284c7;">
-                    <div class="num" style="color:#0284c7;">${totalAlumnos}</div>
-                    <div class="label">Alumnos en Riesgo</div>
-                </div>
-                <div class="kpi-card" style="border-top:3px solid #dc2626;">
-                    <div class="num" style="color:#dc2626;">${criticosCount}</div>
-                    <div class="label">Riesgo Crítico (3+ reprobadas)</div>
-                </div>
-                <div class="kpi-card" style="border-top:3px solid #d97706;">
-                    <div class="num" style="color:#d97706;">${levesCount}</div>
-                    <div class="label">Riesgo Leve/Moderado (1-2 reprobadas)</div>
-                </div>
-                <div class="kpi-card" style="border-top:3px solid #64748b;">
-                    <div class="num" style="color:#334155;">${totalMateriasReprobadas}</div>
-                    <div class="label">Total Materias No Acreditadas</div>
-                </div>
-                <div class="kpi-card" style="border-top:3px solid #8b5cf6;">
-                    <div class="num" style="color:#7c3aed;">${promedioReprobadas}</div>
-                    <div class="label">Promedio de Reprobadas / Alumno</div>
-                </div>
-            </div>
+            <div class="single-page-wrap">
+                <div>
+                    <!-- Encabezado Oficial Compacto -->
+                    <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:2px solid #0284c7; padding-bottom:5px; margin-bottom:6px;">
+                        ${plantLogo ? `<img src="${plantLogo}" style="width:40px; height:40px; object-fit:contain; margin-right:8px;" alt="Logo">` : '<div style="width:10px;"></div>'}
+                        <div style="flex:1; text-align:center;">
+                            <h2 style="margin:0; font-size:13.5px; text-transform:uppercase; color:#0f172a; font-weight:800;">${plantNom}</h2>
+                            ${plantCct ? `<div style="font-size:9px; font-weight:bold; color:#475569;">C.C.T. ${plantCct}</div>` : ''}
+                            <h3 style="margin:1px 0; font-size:11.5px; color:#0284c7; text-transform:uppercase; font-weight:800;">Relación Oficial de Alumnos en Riesgo Académico</h3>
+                            <p style="margin:1px 0; font-size:8.5px; color:#475569;">
+                                <strong>Periodo:</strong> ${trimLabel} &bull; <strong>Grado/Gpo:</strong> ${gradoLabel} (${grupoLabel}) &bull; <strong>Criterio:</strong> ${umbralLabel} &bull; <strong>Emisión:</strong> ${fechaImpCap}
+                            </p>
+                        </div>
+                        <div style="text-align:right; font-size:8px; color:#64748b; min-width:85px;">
+                            <div style="font-weight:bold; color:#0284c7;">TRABAJO SOCIAL</div>
+                            <div>Control Escolar</div>
+                        </div>
+                    </div>
 
-            ${gruposArr.length > 1 ? `
-                <div style="margin-bottom:12px;">
-                    <h4 style="margin:4px 0; font-size:11px; text-transform:uppercase; color:#0369a1;">1. Distribución de Riesgo por Grupo</h4>
+                    <!-- Barra Resumen Compacta de KPIs (Integrada en 1 sola fila) -->
+                    <div style="display:flex; justify-content:space-between; align-items:center; background:#f0f9ff; border:1px solid #bae6fd; border-radius:5px; padding:3px 10px; margin-bottom:6px; font-size:9px; color:#0369a1;">
+                        <div><strong>Total en Riesgo:</strong> <span style="font-size:11px; font-weight:800; color:#0284c7;">${totalAlumnos}</span></div>
+                        <div><strong>Críticos (3+):</strong> <span style="font-size:11px; font-weight:800; color:#dc2626;">${criticosCount}</span></div>
+                        <div><strong>Moderados (1-2):</strong> <span style="font-size:11px; font-weight:800; color:#d97706;">${levesCount}</span></div>
+                        <div><strong>Materias Reprobadas:</strong> <span style="font-size:11px; font-weight:800; color:#334155;">${totalMateriasReprobadas}</span></div>
+                        <div><strong>Promedio / Alumno:</strong> <span style="font-size:11px; font-weight:800; color:#7c3aed;">${promedioReprobadas}</span></div>
+                    </div>
+
+                    <!-- Nómina Oficial -->
                     <table>
                         <thead>
                             <tr>
-                                <th>Grado y Grupo</th>
-                                <th style="text-align:center;">Alumnos en Riesgo</th>
-                                <th style="text-align:center;">Casos Críticos (3+)</th>
-                                <th style="text-align:center;">Materias No Acreditadas</th>
-                                <th style="text-align:center;">Promedio Reprobadas</th>
+                                <th style="width:22px; text-align:center;">#</th>
+                                <th style="width:65px; text-align:center;">Matrícula</th>
+                                <th style="text-align:left;">Nombre del Alumno</th>
+                                <th style="width:70px; text-align:center;">Grado/Gpo</th>
+                                <th style="width:90px; text-align:center;">Reprobadas</th>
+                                <th style="text-align:left;">Asignaturas No Acreditadas</th>
+                                <th style="width:110px; text-align:center;">Firma / Seguimiento</th>
                             </tr>
                         </thead>
                         <tbody>
-                            ${gruposRowsHtml}
+                            ${alumnosRowsHtml}
                         </tbody>
                     </table>
                 </div>
-            ` : ''}
 
-            <h4 style="margin:4px 0; font-size:11px; text-transform:uppercase; color:#0369a1;">${gruposArr.length > 1 ? '2. ' : ''}Nómina Oficial de Alumnos y Asignaturas Reprobadas</h4>
-            <table>
-                <thead>
-                    <tr>
-                        <th style="width:25px; text-align:center;">#</th>
-                        <th style="width:75px; text-align:center;">Matrícula</th>
-                        <th>Nombre del Alumno</th>
-                        <th style="width:85px; text-align:center;">Grado / Gpo</th>
-                        <th style="width:115px; text-align:center;">Materias Reprobadas</th>
-                        <th>Asignaturas No Acreditadas</th>
-                        <th style="text-align:center;">Firma / Seguimiento</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    ${alumnosRowsHtml}
-                </tbody>
-            </table>
-
-            <div class="firmas-container">
-                <div class="firma-box">
-                    <div class="cargo">Trabajo Social / Orientación</div>
-                    <div class="sub">Detección y Seguimiento</div>
-                </div>
-                <div class="firma-box">
-                    <div class="cargo">Subdirección Académica</div>
-                    <div class="sub">Validación Curricular</div>
-                </div>
-                <div class="firma-box">
-                    <div class="cargo">${directorName}</div>
-                    <div class="sub">Dirección Escolar / Vo.Bo.</div>
+                <!-- Firmas al Calce -->
+                <div style="margin-top:${sigMarginTop}; display:flex; justify-content:space-around; text-align:center; page-break-inside:avoid;">
+                    <div style="width:185px; border-top:1px solid #334155; padding-top:${sigPadTop};">
+                        <div style="font-weight:700; font-size:9.5px; color:#0f172a;">Trabajo Social / Orientación</div>
+                        <div style="font-size:7.5px; color:#64748b; text-transform:uppercase;">Detección y Seguimiento</div>
+                    </div>
+                    <div style="width:185px; border-top:1px solid #334155; padding-top:${sigPadTop};">
+                        <div style="font-weight:700; font-size:9.5px; color:#0f172a;">Subdirección Académica</div>
+                        <div style="font-size:7.5px; color:#64748b; text-transform:uppercase;">Validación Curricular</div>
+                    </div>
+                    <div style="width:185px; border-top:1px solid #334155; padding-top:${sigPadTop};">
+                        <div style="font-weight:700; font-size:9.5px; color:#0f172a;">${directorName}</div>
+                        <div style="font-size:7.5px; color:#64748b; text-transform:uppercase;">Dirección Escolar / Vo.Bo.</div>
+                    </div>
                 </div>
             </div>
 
             <script>
+                let currentOrient = '${orientacion}';
+                function cambiarOrientacion() {
+                    currentOrient = currentOrient === 'landscape' ? 'portrait' : 'landscape';
+                    const st = document.getElementById('dynamicPageStyle');
+                    if (st) st.innerHTML = '@page { size: letter ' + currentOrient + '; margin: 6mm 8mm 5mm 8mm; }';
+                    const lbl = document.getElementById('lblOrientacion');
+                    if (lbl) lbl.innerText = currentOrient === 'landscape' ? 'Horizontal' : 'Vertical';
+                }
                 window.onload = () => {
-                    setTimeout(() => { window.print(); }, 300);
+                    setTimeout(() => { window.print(); }, 350);
                 };
             <\/script>
         </body>
