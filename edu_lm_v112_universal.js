@@ -5,7 +5,7 @@ const CONFIG = {
 };
 
 // Supabase Configuration
-console.log("%c>>> EDU-LM V251 UNIVERSAL CARGADA: VIGILANCIA HUMANA ACTIVA", "color: yellow; background: black; padding: 12px; font-weight: 1000; border: 2px solid yellow;");
+console.log("%c>>> EDU-LM V252 UNIVERSAL CARGADA: VIGILANCIA HUMANA ACTIVA", "color: yellow; background: black; padding: 12px; font-weight: 1000; border: 2px solid yellow;");
 const SUPABASE_URL = "https://eexgjaydpuioncenlsmv.supabase.co"; 
 const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVleGdqYXlkcHVpb25jZW5sc212Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQ4NTM0MDAsImV4cCI6MjEwMDQyOTQwMH0.vrJGn_Bg04OBBntL-w21-I27XuvO61HcUNrphMYYSlY";
 const SUPABASE_KEY = SUPABASE_ANON_KEY;
@@ -4263,12 +4263,23 @@ function renderApoyoRiesgoAcademico() {
          <button class="btn btn-primary" style="width:100%; margin-top:10px;" onclick="window.loadApoyoRiesgoData()">
             <i class="fa-solid fa-search"></i> Detectar Alumnos
          </button>
+         <button class="btn btn-outline btn-sm" id="btnImprimirFiltroAcad" style="width:100%; margin-top:8px; display:none; border-color:var(--primary); color:var(--primary); font-weight:600;" onclick="window.imprimirReporteRiesgoAcademico()">
+            <i class="fa-solid fa-print"></i> Imprimir Reporte Oficial
+         </button>
       </div>
 
       <div class="card" style="flex:3; min-width:400px; width:100%;">
-        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
-          <h3 style="margin:0;"><i class="fa-solid fa-triangle-exclamation" style="color:var(--danger);"></i> Alumnos en Riesgo Académico</h3>
-          <span id="riesgoTotalBadge" class="badge" style="background:var(--danger); color:white; display:none;">0 detectados</span>
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; flex-wrap:wrap; gap:10px;">
+          <div>
+            <h3 style="margin:0;"><i class="fa-solid fa-triangle-exclamation" style="color:var(--danger);"></i> Alumnos en Riesgo Académico</h3>
+            <p style="margin:4px 0 0 0; font-size:0.8rem; color:var(--text-muted);">Detección de alumnos con materias reprobadas (calificación menor a 6.0 o en 0).</p>
+          </div>
+          <div style="display:flex; gap:8px; align-items:center;">
+            <span id="riesgoTotalBadge" class="badge" style="background:var(--danger); color:white; display:none;">0 detectados</span>
+            <button class="btn btn-outline btn-sm" id="btnImprimirRiesgoAcad" style="display:none; border-color:var(--primary); color:var(--primary); font-weight:600;" onclick="window.imprimirReporteRiesgoAcademico()">
+              <i class="fa-solid fa-print"></i> Imprimir Reporte
+            </button>
+          </div>
         </div>
         
         <div id="riesgoDataContainer" style="min-height:300px;">
@@ -5556,18 +5567,22 @@ window.handleRiesgoGradoChange = () => {
 window.loadApoyoRiesgoData = async () => {
     const hold = document.getElementById('riesgoDataContainer');
     const badge = document.getElementById('riesgoTotalBadge');
+    const btnPrint = document.getElementById('btnImprimirRiesgoAcad');
+    const btnPrintFiltro = document.getElementById('btnImprimirFiltroAcad');
     const trim = document.getElementById('riesgoTrimestreSel').value;
     const gradoSel = document.getElementById('riesgoGradoSel').value;
     const grupoSel = document.getElementById('riesgoGrupoSel') ? document.getElementById('riesgoGrupoSel').value : 'Todos';
     const umbral = document.getElementById('riesgoUmbralSel').value || '1+';
 
     hold.innerHTML = '<p style="text-align:center; padding:30px;"><i class="fa-solid fa-spinner fa-spin"></i> Escaneando calificaciones y promedios reprobatorios...</p>';
-    badge.style.display = 'none';
+    if (badge) badge.style.display = 'none';
+    if (btnPrint) btnPrint.style.display = 'none';
+    if (btnPrintFiltro) btnPrintFiltro.style.display = 'none';
 
     try {
         // ── PASO 1: Alumnos del grupo/grado seleccionado ──
         let alumnosQuery = supabaseClient.from('alumnos')
-            .select('id, nombre, grado, grupo_id, grupos(id, nombre)')
+            .select('id, nombre, matricula, grado, grupo_id, grupos(id, nombre)')
             .eq('plantel_id', state.plantelId)
             .limit(10000);
 
@@ -5588,6 +5603,9 @@ window.loadApoyoRiesgoData = async () => {
         }
 
         if (!alumnosData || alumnosData.length === 0) {
+            window._riesgoAcademicoCacheados = null;
+            if (btnPrint) btnPrint.style.display = 'none';
+            if (btnPrintFiltro) btnPrintFiltro.style.display = 'none';
             let msg = umbral === '1-2' ? 'de 1 a 2 materias reprobadas' : (umbral === '3+' ? '3 o más materias reprobadas' : 'materias reprobadas o en 0');
             hold.innerHTML = `<p style="text-align:center; padding:30px; color:var(--success);"><i class="fa-solid fa-check-circle" style="font-size:2rem; display:block; margin-bottom:10px;"></i>No hay alumnos con ${msg} bajo estos filtros.</p>`;
             return;
@@ -5597,7 +5615,7 @@ window.loadApoyoRiesgoData = async () => {
         const alumIds = [];
         alumnosData.forEach(al => {
             alumIds.push(al.id);
-            mapAlumnosById[al.id] = { id: al.id, nombre: al.nombre||'Alumno', grado: al.grado||'', grupo: al.grupos ? al.grupos.nombre : 'Sin grupo', grupo_id: al.grupo_id, materiasFallas: new Set() };
+            mapAlumnosById[al.id] = { id: al.id, nombre: al.nombre||'Alumno', matricula: al.matricula||'---', grado: al.grado||'', grupo: al.grupos ? al.grupos.nombre : 'Sin grupo', grupo_id: al.grupo_id, materiasFallas: new Set() };
         });
 
         // ── PASO 2: Calificaciones de estos alumnos ──
@@ -5640,20 +5658,46 @@ window.loadApoyoRiesgoData = async () => {
                 if (umbral === '3+') return a.numReprobadas >= 3;
                 return a.numReprobadas >= 1;
             })
-            .sort((a, b) => b.numReprobadas - a.numReprobadas);
+            .sort((a, b) => b.numReprobadas - a.numReprobadas || (a.nombre || '').localeCompare(b.nombre || ''));
 
         if (alumnosEnRiesgo.length === 0) {
+            window._riesgoAcademicoCacheados = null;
+            if (btnPrint) btnPrint.style.display = 'none';
+            if (btnPrintFiltro) btnPrintFiltro.style.display = 'none';
             let msg = umbral === '1-2' ? 'exactamente 2 materias reprobadas' : (umbral === '3+' ? '3 o más materias reprobadas' : 'materias reprobadas o en 0');
             hold.innerHTML = `<p style="text-align:center; padding:30px; color:var(--success);"><i class="fa-solid fa-check-circle" style="font-size:2rem; display:block; margin-bottom:10px;"></i>No hay alumnos con ${msg} bajo estos filtros.</p>`;
             return;
         }
 
-        badge.style.display = 'inline-block';
-        badge.innerText = `${alumnosEnRiesgo.length} detectados`;
+        let grpNombre = 'Todos';
+        if (grupoSel && grupoSel !== 'Todos') {
+            const foundG = (window._riesgoGruposCacheados || []).find(g => g.id === grupoSel);
+            grpNombre = foundG ? foundG.nombre : grupoSel;
+        }
+
+        window._riesgoAcademicoCacheados = {
+            alumnos: alumnosEnRiesgo,
+            trim,
+            gradoSel,
+            grupoSel,
+            grupoNombre: grpNombre,
+            umbral,
+            fecha: new Date()
+        };
+
+        if (badge) {
+            badge.style.display = 'inline-block';
+            badge.innerText = `${alumnosEnRiesgo.length} detectados`;
+        }
+        if (btnPrint) btnPrint.style.display = 'inline-flex';
+        if (btnPrintFiltro) btnPrintFiltro.style.display = 'inline-flex';
 
         let html = `
-            <div style="padding:10px 14px; background:#eff6ff; border:1px solid #bfdbfe; border-radius:8px; margin-bottom:15px; font-size:0.85rem; color:#1e40af;">
-                <i class="fa-solid fa-circle-info"></i> Se detectaron <strong>${alumnosEnRiesgo.length} alumnos</strong> con calificaciones reprobatorias (menores a 6.0 o en 0).
+            <div style="padding:10px 14px; background:#eff6ff; border:1px solid #bfdbfe; border-radius:8px; margin-bottom:15px; font-size:0.85rem; color:#1e40af; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
+                <span><i class="fa-solid fa-circle-info"></i> Se detectaron <strong>${alumnosEnRiesgo.length} alumnos</strong> con calificaciones reprobatorias (menores a 6.0 o en 0).</span>
+                <button class="btn btn-primary btn-sm" onclick="window.imprimirReporteRiesgoAcademico()" style="font-weight:600; display:inline-flex; align-items:center; gap:6px;">
+                    <i class="fa-solid fa-print"></i> Imprimir Reporte Oficial
+                </button>
             </div>
             <div style="overflow-x:auto;">
                 <table class="risk-table" style="width:100%;">
@@ -5693,6 +5737,252 @@ window.loadApoyoRiesgoData = async () => {
         console.error("Error en loadApoyoRiesgoData:", err);
         hold.innerHTML = `<p style="text-align:center; color:var(--danger); padding:20px;"><i class="fa-solid fa-triangle-exclamation"></i> Error al calcular el riesgo académico: ${err.message || err}</p>`;
     }
+};
+
+window.imprimirReporteRiesgoAcademico = async () => {
+    const data = window._riesgoAcademicoCacheados;
+    if (!data || !data.alumnos || data.alumnos.length === 0) {
+        return alert("Primero realiza una búsqueda con alumnos en riesgo para poder imprimir.");
+    }
+
+    const printWin = window.open('', '_blank');
+    if (!printWin) return alert("Por favor permite las ventanas emergentes en tu navegador para imprimir.");
+
+    let pId = state.plantelId || window.currentUserProfile?.plantel_id || state.user?.user_metadata?.plantel_id;
+    let plantNom = state.plantelNombre || window.currentUserProfile?.planteles?.nombre || 'Escuela Secundaria';
+    let plantCct = '';
+    let plantLogo = '';
+
+    try {
+        if (pId) {
+            const { data: pt } = await supabaseClient.from('planteles').select('nombre, cct, logo_url').eq('id', pId).maybeSingle();
+            if (pt) {
+                if (pt.nombre) plantNom = pt.nombre;
+                if (pt.cct) plantCct = pt.cct;
+                if (pt.logo_url) plantLogo = window.getCleanLogoUrl ? window.getCleanLogoUrl(pt.logo_url) : pt.logo_url;
+            }
+        }
+    } catch(e) {}
+
+    const directorName = await window.obtenerNombreDirector(pId);
+    const fechaImp = new Date().toLocaleDateString('es-MX', { weekday:'long', year:'numeric', month:'long', day:'numeric' });
+    const fechaImpCap = fechaImp.charAt(0).toUpperCase() + fechaImp.slice(1);
+
+    const trimLabel = data.trim === 'Todos' ? 'Todos los Trimestres (Ciclo Completo)' : `Trimestre ${data.trim}`;
+    const gradoLabel = data.gradoSel === 'Todos' ? 'Toda la Escuela' : `${data.gradoSel}`;
+    const grupoLabel = data.grupoNombre && data.grupoNombre !== 'Todos' ? `Grupo: ${data.grupoNombre}` : 'Todos los grupos';
+    
+    let umbralLabel = '1 o más materias reprobadas (Riesgo General)';
+    if (data.umbral === '1-2') umbralLabel = '2 materias reprobadas (Riesgo Leve/Moderado)';
+    if (data.umbral === '3+') umbralLabel = '3 o más materias reprobadas (Riesgo Crítico)';
+
+    const lista = data.alumnos;
+    const totalAlumnos = lista.length;
+    const criticosCount = lista.filter(a => a.numReprobadas >= 3).length;
+    const levesCount = lista.filter(a => a.numReprobadas < 3).length;
+    const totalMateriasReprobadas = lista.reduce((acc, a) => acc + a.numReprobadas, 0);
+    const promedioReprobadas = (totalMateriasReprobadas / (totalAlumnos || 1)).toFixed(1);
+
+    // Agrupación por Grado/Grupo para tabla estadística resumen
+    const gruposMap = {};
+    lista.forEach(a => {
+        const key = `${a.grado || ''} ${a.grupo || ''}`.trim() || 'Sin grupo';
+        if (!gruposMap[key]) {
+            gruposMap[key] = { grupo: key, count: 0, materiasTotal: 0, criticos: 0 };
+        }
+        gruposMap[key].count++;
+        gruposMap[key].materiasTotal += a.numReprobadas;
+        if (a.numReprobadas >= 3) gruposMap[key].criticos++;
+    });
+
+    const gruposArr = Object.values(gruposMap).sort((a, b) => a.grupo.localeCompare(b.grupo, undefined, { numeric: true }));
+
+    let gruposRowsHtml = gruposArr.map(g => `
+        <tr>
+            <td style="padding:6px 8px; border:1px solid #cbd5e1; font-weight:600;">${g.grupo}</td>
+            <td style="padding:6px 8px; border:1px solid #cbd5e1; text-align:center; font-weight:bold; color:#1e293b;">${g.count}</td>
+            <td style="padding:6px 8px; border:1px solid #cbd5e1; text-align:center; color:#dc2626; font-weight:bold;">${g.criticos}</td>
+            <td style="padding:6px 8px; border:1px solid #cbd5e1; text-align:center;">${g.materiasTotal}</td>
+            <td style="padding:6px 8px; border:1px solid #cbd5e1; text-align:center;">${(g.materiasTotal / (g.count || 1)).toFixed(1)}</td>
+        </tr>
+    `).join('');
+
+    let alumnosRowsHtml = lista.map((al, idx) => {
+        const isCritico = al.numReprobadas >= 3;
+        const badgeColor = isCritico ? '#dc2626' : '#d97706';
+        const badgeBg = isCritico ? '#fee2e2' : '#fef3c7';
+        const badgeBorder = isCritico ? '#fca5a5' : '#fde68a';
+        const nivelRiesgo = isCritico ? 'CRÍTICO' : 'MODERADO';
+
+        const materiasHtml = al.materias.map(m => 
+            `<span style="display:inline-block; background:#f1f5f9; border:1px solid #cbd5e1; border-radius:4px; padding:2px 6px; margin:2px; font-size:10px; color:#334155;">${m}</span>`
+        ).join('');
+
+        return `
+            <tr style="page-break-inside:avoid; ${idx % 2 === 1 ? 'background:#f8fafc;' : ''}">
+                <td style="padding:6px 8px; border:1px solid #cbd5e1; text-align:center; font-weight:600; color:#64748b;">${idx + 1}</td>
+                <td style="padding:6px 8px; border:1px solid #cbd5e1; text-align:center; font-size:10px; color:#475569;">${al.matricula || '---'}</td>
+                <td style="padding:6px 8px; border:1px solid #cbd5e1; font-weight:700; color:#0f172a;">${al.nombre}</td>
+                <td style="padding:6px 8px; border:1px solid #cbd5e1; text-align:center; font-weight:600; white-space:nowrap;">${al.grado} - ${al.grupo}</td>
+                <td style="padding:6px 8px; border:1px solid #cbd5e1; text-align:center;">
+                    <span style="display:inline-block; background:${badgeBg}; color:${badgeColor}; border:1px solid ${badgeBorder}; border-radius:12px; padding:2px 8px; font-weight:bold; font-size:11px;">
+                        ${al.numReprobadas} ${al.numReprobadas === 1 ? 'materia' : 'materias'}
+                    </span>
+                    <div style="font-size:9px; font-weight:bold; color:${badgeColor}; margin-top:2px;">${nivelRiesgo}</div>
+                </td>
+                <td style="padding:6px 8px; border:1px solid #cbd5e1; font-size:10px;">${materiasHtml}</td>
+                <td style="padding:6px 8px; border:1px solid #cbd5e1; width:130px;">
+                    <div style="height:25px; border-bottom:1px dashed #94a3b8;"></div>
+                </td>
+            </tr>
+        `;
+    }).join('');
+
+    printWin.document.write(`
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <title>Reporte de Riesgo Académico - ${plantNom}</title>
+            <meta charset="utf-8">
+            <style>
+                @page { size: letter landscape; margin: 12mm 10mm; }
+                body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; color:#0f172a; margin: 0; padding: 15px; font-size: 11px; line-height: 1.35; }
+                .header-container { display: flex; align-items: center; justify-content: space-between; border-bottom: 2px solid #0284c7; padding-bottom: 10px; margin-bottom: 12px; }
+                .logo-box { width: 60px; height: 60px; object-fit: contain; }
+                .header-title { flex: 1; text-align: center; }
+                .header-title h2 { margin: 0; font-size: 16px; text-transform: uppercase; color: #0f172a; }
+                .header-title h3 { margin: 3px 0; font-size: 13px; color: #0284c7; text-transform: uppercase; font-weight: 800; }
+                .header-title p { margin: 2px 0; font-size: 10px; color: #475569; }
+                
+                .kpi-row { display: flex; gap: 10px; margin-bottom: 12px; flex-wrap: wrap; }
+                .kpi-card { flex: 1; min-width: 140px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 8px 12px; text-align: center; }
+                .kpi-card .num { font-size: 18px; font-weight: 800; margin-bottom: 2px; }
+                .kpi-card .label { font-size: 9px; text-transform: uppercase; color: #64748b; font-weight: 600; }
+
+                table { width: 100%; border-collapse: collapse; margin-top: 6px; margin-bottom: 16px; font-size: 10.5px; }
+                th { background: #e0f2fe; color: #0369a1; padding: 7px 8px; border: 1px solid #cbd5e1; font-size: 9.5px; text-transform: uppercase; letter-spacing: 0.3px; font-weight: 700; text-align: left; }
+                td { vertical-align: middle; }
+
+                .firmas-container { margin-top: 35px; display: flex; justify-content: space-around; text-align: center; page-break-inside: avoid; }
+                .firma-box { width: 220px; border-top: 1px solid #334155; padding-top: 5px; }
+                .firma-box .cargo { font-weight: 700; font-size: 11px; }
+                .firma-box .sub { font-size: 9px; color: #64748b; text-transform: uppercase; }
+
+                .no-print-bar { background: #0284c7; color: white; padding: 8px 14px; border-radius: 6px; margin-bottom: 15px; display: flex; justify-content: space-between; align-items: center; }
+                .btn-print { background: white; color: #0284c7; border: none; font-weight: bold; padding: 6px 14px; border-radius: 4px; cursor: pointer; }
+
+                @media print {
+                    .no-print-bar { display: none !important; }
+                    body { padding: 0; }
+                }
+            </style>
+        </head>
+        <body>
+            <div class="no-print-bar">
+                <span><strong>Vista previa de impresión oficial:</strong> Se detectaron ${totalAlumnos} alumnos en riesgo académico.</span>
+                <button class="btn-print" onclick="window.print()">Imprimir Ahora</button>
+            </div>
+
+            <div class="header-container">
+                ${plantLogo ? `<img src="${plantLogo}" class="logo-box" alt="Logo">` : '<div style="width:60px;"></div>'}
+                <div class="header-title">
+                    <h2>${plantNom}</h2>
+                    ${plantCct ? `<div style="font-size:10px; font-weight:bold; color:#475569; margin-bottom:2px;">C.C.T. ${plantCct}</div>` : ''}
+                    <h3>Relación Oficial de Alumnos en Riesgo Académico</h3>
+                    <p><strong>Periodo:</strong> ${trimLabel} &bull; <strong>Grado:</strong> ${gradoLabel} &bull; <strong>${grupoLabel}</strong> &bull; <strong>Criterio:</strong> ${umbralLabel}</p>
+                    <p><strong>Fecha de Expedición:</strong> ${fechaImpCap} &bull; <strong>Total Alumnos Detectados:</strong> ${totalAlumnos}</p>
+                </div>
+                <div style="width:60px; text-align:right; font-size:9px; color:#94a3b8;">
+                    Área de Apoyo<br>Estudiantil
+                </div>
+            </div>
+
+            <!-- KPIs de Resumen -->
+            <div class="kpi-row">
+                <div class="kpi-card" style="border-top:3px solid #0284c7;">
+                    <div class="num" style="color:#0284c7;">${totalAlumnos}</div>
+                    <div class="label">Alumnos en Riesgo</div>
+                </div>
+                <div class="kpi-card" style="border-top:3px solid #dc2626;">
+                    <div class="num" style="color:#dc2626;">${criticosCount}</div>
+                    <div class="label">Riesgo Crítico (3+ reprobadas)</div>
+                </div>
+                <div class="kpi-card" style="border-top:3px solid #d97706;">
+                    <div class="num" style="color:#d97706;">${levesCount}</div>
+                    <div class="label">Riesgo Leve/Moderado (1-2 reprobadas)</div>
+                </div>
+                <div class="kpi-card" style="border-top:3px solid #64748b;">
+                    <div class="num" style="color:#334155;">${totalMateriasReprobadas}</div>
+                    <div class="label">Total Materias No Acreditadas</div>
+                </div>
+                <div class="kpi-card" style="border-top:3px solid #8b5cf6;">
+                    <div class="num" style="color:#7c3aed;">${promedioReprobadas}</div>
+                    <div class="label">Promedio de Reprobadas / Alumno</div>
+                </div>
+            </div>
+
+            ${gruposArr.length > 1 ? `
+                <div style="margin-bottom:12px;">
+                    <h4 style="margin:4px 0; font-size:11px; text-transform:uppercase; color:#0369a1;">1. Distribución de Riesgo por Grupo</h4>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Grado y Grupo</th>
+                                <th style="text-align:center;">Alumnos en Riesgo</th>
+                                <th style="text-align:center;">Casos Críticos (3+)</th>
+                                <th style="text-align:center;">Materias No Acreditadas</th>
+                                <th style="text-align:center;">Promedio Reprobadas</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${gruposRowsHtml}
+                        </tbody>
+                    </table>
+                </div>
+            ` : ''}
+
+            <h4 style="margin:4px 0; font-size:11px; text-transform:uppercase; color:#0369a1;">${gruposArr.length > 1 ? '2. ' : ''}Nómina Oficial de Alumnos y Asignaturas Reprobadas</h4>
+            <table>
+                <thead>
+                    <tr>
+                        <th style="width:25px; text-align:center;">#</th>
+                        <th style="width:75px; text-align:center;">Matrícula</th>
+                        <th>Nombre del Alumno</th>
+                        <th style="width:85px; text-align:center;">Grado / Gpo</th>
+                        <th style="width:115px; text-align:center;">Materias Reprobadas</th>
+                        <th>Asignaturas No Acreditadas</th>
+                        <th style="text-align:center;">Firma / Seguimiento</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${alumnosRowsHtml}
+                </tbody>
+            </table>
+
+            <div class="firmas-container">
+                <div class="firma-box">
+                    <div class="cargo">Trabajo Social / Orientación</div>
+                    <div class="sub">Detección y Seguimiento</div>
+                </div>
+                <div class="firma-box">
+                    <div class="cargo">Subdirección Académica</div>
+                    <div class="sub">Validación Curricular</div>
+                </div>
+                <div class="firma-box">
+                    <div class="cargo">${directorName}</div>
+                    <div class="sub">Dirección Escolar / Vo.Bo.</div>
+                </div>
+            </div>
+
+            <script>
+                window.onload = () => {
+                    setTimeout(() => { window.print(); }, 300);
+                };
+            <\/script>
+        </body>
+        </html>
+    `);
+    printWin.document.close();
 };
 
 window.cambiarTabRiesgo = (tab) => {
