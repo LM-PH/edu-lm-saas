@@ -5,7 +5,7 @@ const CONFIG = {
 };
 
 // Supabase Configuration
-console.log("%c>>> EDU-LM V250 UNIVERSAL CARGADA: VIGILANCIA HUMANA ACTIVA", "color: yellow; background: black; padding: 12px; font-weight: 1000; border: 2px solid yellow;");
+console.log("%c>>> EDU-LM V251 UNIVERSAL CARGADA: VIGILANCIA HUMANA ACTIVA", "color: yellow; background: black; padding: 12px; font-weight: 1000; border: 2px solid yellow;");
 const SUPABASE_URL = "https://eexgjaydpuioncenlsmv.supabase.co"; 
 const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVleGdqYXlkcHVpb25jZW5sc212Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQ4NTM0MDAsImV4cCI6MjEwMDQyOTQwMH0.vrJGn_Bg04OBBntL-w21-I27XuvO61HcUNrphMYYSlY";
 const SUPABASE_KEY = SUPABASE_ANON_KEY;
@@ -4465,7 +4465,7 @@ function renderApoyoDashboard() {
     <div style="display: flex; gap: 24px; flex-wrap:wrap;">
       <div class="card" style="flex: 2; min-width: 400px; border-top: 5px solid var(--danger);">
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
-           <h3 style="margin:0;">Focos Rojos (Acumulación 3+)</h3>
+           <h3 style="margin:0;"><i class="fa-solid fa-triangle-exclamation" style="color:var(--danger); margin-right:6px;"></i>Focos Rojos (Casos Críticos)</h3>
            <button class="btn btn-outline btn-sm" onclick="window.loadFocosRojos()"><i class="fa-solid fa-sync"></i> Actualizar</button>
         </div>
         <div style="overflow-x:auto;">
@@ -4482,7 +4482,7 @@ function renderApoyoDashboard() {
                 </tr>
               </thead>
               <tbody id="focosRojosContenedor">
-                 <tr><td colspan="5" style="text-align:center; padding:40px; color:var(--text-muted)">Cargando expedientes...</td></tr>
+                 <tr><td colspan="7" style="text-align:center; padding:40px; color:var(--text-muted)"><i class="fa-solid fa-spinner fa-spin"></i> Cargando expedientes críticos...</td></tr>
               </tbody>
             </table>
         </div>
@@ -7558,25 +7558,27 @@ window.loadFocosRojos = async () => {
                 };
             }
             conteo[aid].count++;
-            if(r.gravedad === 'Grave') conteo[aid].graves++;
+            
+            const gravNorm = (r.gravedad || '').trim().toLowerCase();
+            if(gravNorm === 'grave') conteo[aid].graves++;
             
             if (r.descripcion) {
                 const descUpper = r.descripcion.toUpperCase();
-                if (descUpper.startsWith('[ACADÉMICO]')) {
-                    if (r.gravedad === 'Leve') conteo[aid].aL++;
-                    else if (r.gravedad === 'Moderado') conteo[aid].aM++;
-                    else if (r.gravedad === 'Grave') conteo[aid].aG++;
-                } else if (descUpper.startsWith('[CONVIVENCIA]') || descUpper.startsWith('[CONDUCTA]')) {
-                    if (r.gravedad === 'Leve') conteo[aid].cL++;
-                    else if (r.gravedad === 'Moderado') conteo[aid].cM++;
-                    else if (r.gravedad === 'Grave') conteo[aid].cG++;
-                } else if (descUpper.startsWith('[ATENCIÓN PRIORITARIA]')) {
+                if (descUpper.startsWith('[ACADÉMICO]') || descUpper.startsWith('[ACADEMICO]')) {
+                    if (gravNorm === 'leve') conteo[aid].aL++;
+                    else if (gravNorm === 'moderado') conteo[aid].aM++;
+                    else if (gravNorm === 'grave') conteo[aid].aG++;
+                } else if (descUpper.startsWith('[CONVIVENCIA]') || descUpper.startsWith('[CONDUCTA]') || descUpper.startsWith('[CONDUCTUAL]')) {
+                    if (gravNorm === 'leve') conteo[aid].cL++;
+                    else if (gravNorm === 'moderado') conteo[aid].cM++;
+                    else if (gravNorm === 'grave') conteo[aid].cG++;
+                } else if (descUpper.startsWith('[ATENCIÓN PRIORITARIA]') || descUpper.startsWith('[ATENCION PRIORITARIA]')) {
                     conteo[aid].pTotal++;
                 }
             }
         });
 
-        // 2. Obtener citatorios activos de toda la escuela
+        // 2. Obtener citatorios activos de toda la escuela (no atendidos)
         let citQuery = supabaseClient
             .from('citatorios')
             .select('alumno_id, estado, tipo')
@@ -7625,11 +7627,31 @@ window.loadFocosRojos = async () => {
             }
         });
 
-        // Mostramos si tiene al menos 1 reporte activo O algún citatorio pendiente/firmado
-        const focos = Object.entries(conteo).map(([id, info]) => ({ id, ...info })).filter(f => f.count >= 1 || f.citNormal?.total > 0 || f.citAcademico?.total > 0 || f.citConductual?.total > 0 || f.citPrioritaria?.total > 0);
+        // FILTRO DE VISUALIZACIÓN: Solo visualizar aquellos casos donde tienen reportes graves O que tengan citatorio no atendido
+        const focos = Object.entries(conteo)
+            .map(([id, info]) => ({ id, ...info }))
+            .filter(f => {
+                const tieneReporteGrave = (f.graves > 0 || (f.pTotal || 0) > 0);
+                const tieneCitatorioNoAtendido = (
+                    (f.citNormal?.total || 0) > 0 ||
+                    (f.citAcademico?.total || 0) > 0 ||
+                    (f.citConductual?.total || 0) > 0 ||
+                    (f.citPrioritaria?.total || 0) > 0
+                );
+                return tieneReporteGrave || tieneCitatorioNoAtendido;
+            });
+
+        // Ordenar casos: citatorios no atendidos y mayor cantidad de reportes graves primero
+        focos.sort((a, b) => {
+            const aCits = (a.citNormal?.total || 0) + (a.citAcademico?.total || 0) + (a.citConductual?.total || 0) + (a.citPrioritaria?.total || 0);
+            const bCits = (b.citNormal?.total || 0) + (b.citAcademico?.total || 0) + (b.citConductual?.total || 0) + (b.citPrioritaria?.total || 0);
+            if (bCits !== aCits) return bCits - aCits;
+            if (b.graves !== a.graves) return b.graves - a.graves;
+            return (a.nombre || '').localeCompare(b.nombre || '');
+        });
         
         if(focos.length === 0) {
-            cont.innerHTML = '<tr><td colspan="7" style="text-align:center; padding:40px; color:var(--text-muted)">No hay alumnos con reportes activos ni citatorios.</td></tr>';
+            cont.innerHTML = '<tr><td colspan="7" style="text-align:center; padding:40px; color:var(--text-muted)"><i class="fa-solid fa-circle-check" style="color:var(--success); font-size:1.6rem; display:block; margin-bottom:8px;"></i>No hay alumnos con reportes graves ni citatorios pendientes por atender.</td></tr>';
             return;
         }
 
@@ -7648,15 +7670,19 @@ window.loadFocosRojos = async () => {
                 return badges.join('<br>') || '<span style="color:var(--text-muted); font-size:0.8rem;">Ninguno</span>';
             };
 
+            const reportesCell = f.count === 0 
+                ? '<span style="color:var(--text-muted); font-size:0.8rem;">Sin reportes activos</span>'
+                : `<div style="font-size:0.75rem; text-align:left; display:inline-block; line-height:1.5;">
+                     <div style="color:#0369a1;"><strong style="background:#e0f2fe; padding:2px 4px; border-radius:4px;">A</strong> L:${f.aL} M:${f.aM} ${f.aG > 0 ? `<b style="color:var(--danger); background:#ffe4e6; padding:1px 4px; border-radius:3px;">G:${f.aG}</b>` : `G:${f.aG}`}</div>
+                     <div style="color:#854d0e; margin-top:3px;"><strong style="background:#fef08a; padding:2px 4px; border-radius:4px;">C</strong> L:${f.cL} M:${f.cM} ${f.cG > 0 ? `<b style="color:var(--danger); background:#ffe4e6; padding:1px 4px; border-radius:3px;">G:${f.cG}</b>` : `G:${f.cG}`}</div>
+                     <div style="color:#be123c; margin-top:3px;"><strong style="background:#fecdd3; padding:2px 4px; border-radius:4px;">P</strong> Total: ${f.pTotal}</div>
+                   </div>`;
+
             return `
             <tr>
               <td style="padding:15px;"><b>${f.nombre}</b><br><small style="color:var(--text-muted)">${f.matricula} - ${f.grupo}</small></td>
               <td style="padding:15px; text-align:center;">
-                 <div style="font-size:0.75rem; text-align:left; display:inline-block; line-height:1.5;">
-                     <div style="color:#0369a1;"><strong style="background:#e0f2fe; padding:2px 4px; border-radius:4px;">A</strong> L:${f.aL} M:${f.aM} G:${f.aG}</div>
-                     <div style="color:#854d0e; margin-top:3px;"><strong style="background:#fef08a; padding:2px 4px; border-radius:4px;">C</strong> L:${f.cL} M:${f.cM} G:${f.cG}</div>
-                     <div style="color:#be123c; margin-top:3px;"><strong style="background:#fecdd3; padding:2px 4px; border-radius:4px;">P</strong> Total: ${f.pTotal}</div>
-                 </div>
+                 ${reportesCell}
               </td>
               <td style="padding:15px; text-align:center;">${renderBadge(f.citAcademico)}</td>
               <td style="padding:15px; text-align:center;">${renderBadge(f.citConductual)}</td>
@@ -7664,7 +7690,7 @@ window.loadFocosRojos = async () => {
               <td style="padding:15px; text-align:center;">${renderBadge(f.citNormal)}</td>
               <td style="padding:15px; text-align:right; display:flex; gap:8px; justify-content:flex-end;">
                   <button class="btn btn-outline btn-xs" style="border-color:var(--primary); color:var(--primary)" onclick="window.showAlumnoExpediente('${f.id}')">Ver Expediente</button>
-                  <button class="btn btn-xs" style="background:var(--success); color:white; border:none;" onclick="window.abrirModalAtencionFoco('${f.id}', '${f.nombre}')">Atender</button>
+                  <button class="btn btn-xs" style="background:var(--success); color:white; border:none;" onclick="window.abrirModalAtencionFoco('${f.id}', '${(f.nombre || '').replace(/'/g, "\\'")}')">Atender</button>
               </td>
             </tr>`;
         }).join('');
