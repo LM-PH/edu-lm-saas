@@ -1405,6 +1405,7 @@ function renderSidebar() {
       { name: 'Autorizaciones', path: '/directivo/autorizaciones', icon: 'fa-stamp' },
       { name: 'Pase de Lista Entrada', path: '/directivo/prefectura', icon: 'fa-qrcode' },
       { name: 'Pase de Lista Salida', path: '/directivo/ts_escaner', icon: 'fa-person-walking-arrow-right' },
+      { name: 'Firma por QR', path: '/directivo/firma-qr', icon: 'fa-qrcode' },
       { name: 'Maestros y Materias', path: '/directivo/maestros', icon: 'fa-chalkboard-user' },
       { name: 'Grupos y Asignación', path: '/directivo/grupos', icon: 'fa-users-gear' },
       { name: 'Horarios de Clase', path: '/directivo/horarios', icon: 'fa-calendar-days' },
@@ -13649,6 +13650,7 @@ async function renderPage(path) {
     case '/directivo/gestion-personal': return renderDirectivoPersonal();
     case '/directivo/comunicados': return renderDirectivoComunicados();
     case '/directivo/reportes': return renderApoyoReportes();
+    case '/directivo/firma-qr': return renderApoyoFirmaQR();
     case '/directivo/prefectura':
     case '/directivo/escaner_entrada':
     case '/directivo/pase_lista_entrada':
