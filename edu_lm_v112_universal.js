@@ -5490,9 +5490,16 @@ window.buscarMisReportes = async (term = '') => {
                             <span class="badge" style="background:var(--${badgeCls}); color:white; font-size:0.75rem;">${r.gravedad}</span>
                             ${lecturaBadge}
                         </div>
-                        <span style="font-size:0.8rem; color:${r.resuelto ? 'var(--success)' : 'var(--warning)'}; font-weight:bold;">
-                            <i class="fa-solid ${r.resuelto ? 'fa-check-double' : 'fa-folder-open'}"></i> ${r.resuelto ? 'Atendido' : 'Caso Activo'}
-                        </span>
+                        <div style="display:flex; align-items:center; gap:8px;">
+                            <span style="font-size:0.8rem; color:${r.resuelto ? 'var(--success)' : 'var(--warning)'}; font-weight:bold;">
+                                <i class="fa-solid ${r.resuelto ? 'fa-check-double' : 'fa-folder-open'}"></i> ${r.resuelto ? 'Atendido' : 'Caso Activo'}
+                            </span>
+                            ${(state.role === 'maestro' || state.role === 'docente') ? `
+                                <button type="button" class="btn btn-outline btn-xs" style="border-color:var(--danger); color:var(--danger); padding:3px 9px; font-size:0.75rem;" onclick="window.eliminarMiReporteMaestro('${r.id}')" title="Eliminar este reporte y su citatorio si se generó">
+                                    <i class="fa-solid fa-trash-can"></i> Eliminar
+                                </button>
+                            ` : ''}
+                        </div>
                     </div>
                 </div>
             `;
@@ -5502,6 +5509,167 @@ window.buscarMisReportes = async (term = '') => {
     } catch(e) {
         console.error("Error loading mis reportes", e);
         container.innerHTML = '<div style="text-align:center; padding:30px; color:var(--danger); grid-column:1/-1;">Error al cargar reportes.</div>';
+    }
+};
+
+window.eliminarMiReporteMaestro = async (reporteId) => {
+    if (!reporteId) return;
+    if (!confirm("¿Estás seguro de eliminar este reporte?\n\nSe borrará el registro y, si se generó algún citatorio o aviso vinculado a este reporte, también se eliminará permanentemente.")) {
+        return;
+    }
+
+    try {
+        const u = await supabaseClient.auth.getUser();
+        const userId = u?.data?.user?.id;
+        if (!userId) return alert("Sesión no válida. Recarga la página e intenta de nuevo.");
+
+        const { data: rep, error: repErr } = await supabaseClient
+            .from('reportes_conducta')
+            .select('*')
+            .eq('id', reporteId)
+            .maybeSingle();
+
+        if (repErr) throw repErr;
+        if (!rep) return alert("El reporte ya no existe o fue eliminado previamente.");
+        if (rep.autor_id !== userId || (state.plantelId && rep.plantel_id !== state.plantelId)) {
+            return alert("Solo puedes eliminar los reportes que tú mismo hayas elaborado en tu plantel.");
+        }
+
+        const safeDeleteIds = async (table, col, ids) => {
+            const cleanIds = [...new Set((ids || []).filter(Boolean))];
+            if (cleanIds.length === 0) return 0;
+
+            const { data: d1, error: e1 } = await supabaseClient
+                .from(table)
+                .delete()
+                .in(col, cleanIds)
+                .select(col);
+            if (!e1 && d1 && d1.length > 0) return d1.length;
+
+            if (window.getSystemSupabaseClient) {
+                const sys = await window.getSystemSupabaseClient();
+                if (sys) {
+                    const { data: d2, error: e2 } = await sys
+                        .from(table)
+                        .delete()
+                        .in(col, cleanIds)
+                        .select(col);
+                    if (e2) throw e2;
+                    return (d2 || []).length;
+                }
+            }
+            if (e1) throw e1;
+            return 0;
+        };
+
+        const aud = `Alumno_${rep.alumno_id}`;
+        const comIdsSet = new Set();
+        const citIdsSet = new Set();
+        const reportIdsSet = new Set([reporteId]);
+
+        const { data: comsByRep } = await supabaseClient
+            .from('comunicados')
+            .select('id, mensaje, fecha_envio')
+            .eq('audiencia', aud)
+            .ilike('mensaje', `%[REF_REPORTE: ${reporteId}]%`);
+
+        (comsByRep || []).forEach(c => {
+            comIdsSet.add(c.id);
+            const matches = String(c.mensaje || '').matchAll(/\[REF_CITATORIO:\s*([a-f0-9-]+)\]/gi);
+            for (const m of matches) {
+                if (m[1]) citIdsSet.add(m[1]);
+            }
+        });
+
+        const repTimeStr = rep.fecha || rep.creado_en || rep.created_at;
+        const repTimeMs = repTimeStr ? new Date(repTimeStr).getTime() : NaN;
+        if (!isNaN(repTimeMs)) {
+            const winStart = new Date(repTimeMs - 15000).toISOString();
+            const winEnd = new Date(repTimeMs + 30000).toISOString();
+
+            const { data: citsNear } = await supabaseClient
+                .from('citatorios')
+                .select('id, tipo, motivo, creado_en')
+                .eq('alumno_id', rep.alumno_id)
+                .eq('emisor_id', userId)
+                .gte('creado_en', winStart)
+                .lte('creado_en', winEnd);
+
+            const isPrio = String(rep.descripcion || '').toUpperCase().includes('PRIORITARIA') || rep.gravedad === 'N/A';
+            (citsNear || []).forEach(cit => {
+                const citMot = String(cit.motivo || '');
+                if ((isPrio && cit.tipo === 'Atención Prioritaria') || citMot.includes('Protocolo:') || citIdsSet.has(cit.id)) {
+                    citIdsSet.add(cit.id);
+                }
+            });
+
+            const { data: autoReps } = await supabaseClient
+                .from('reportes_conducta')
+                .select('id, descripcion, fecha')
+                .eq('alumno_id', rep.alumno_id)
+                .eq('autor_id', userId)
+                .ilike('descripcion', '%[AUTOMÁTICO] Escalamiento%')
+                .gte('fecha', winStart)
+                .lte('fecha', winEnd);
+
+            (autoReps || []).forEach(ar => reportIdsSet.add(ar.id));
+        }
+
+        if (citIdsSet.size > 0) {
+            const citArr = [...citIdsSet];
+            const { data: comsAlu } = await supabaseClient
+                .from('comunicados')
+                .select('id, mensaje')
+                .eq('audiencia', aud)
+                .ilike('mensaje', '%[REF_CITATORIO:%');
+            (comsAlu || []).forEach(c => {
+                if (citArr.some(cid => String(c.mensaje || '').includes(cid))) {
+                    comIdsSet.add(c.id);
+                }
+            });
+        }
+
+        const comIdsArr = [...comIdsSet];
+        if (comIdsArr.length > 0) {
+            await safeDeleteIds('comunicados_vistos', 'comunicado_id', comIdsArr);
+            await safeDeleteIds('comunicados', 'id', comIdsArr);
+        }
+
+        const citIdsArr = [...citIdsSet];
+        if (citIdsArr.length > 0) {
+            await safeDeleteIds('citatorios', 'id', citIdsArr);
+        }
+
+        const deletedReps = await safeDeleteIds('reportes_conducta', 'id', [...reportIdsSet]);
+        if (deletedReps === 0) {
+            throw new Error("No se pudo eliminar el registro en la base de datos (verifica permisos).");
+        }
+
+        if (window.registrarMovimientoAuditoria) {
+            window.registrarMovimientoAuditoria({
+                accion: 'Eliminación de Reporte Docente',
+                modulo: 'reportes_conducta',
+                detalle: `Reporte ${reporteId} eliminado${citIdsArr.length > 0 ? ` junto con ${citIdsArr.length} citatorio(s)` : ''}`,
+                plantelId: state.plantelId
+            });
+        }
+
+        if (window.showToast) {
+            window.showToast(
+                citIdsArr.length > 0
+                    ? "Reporte y citatorio eliminado correctamente"
+                    : "Reporte eliminado correctamente",
+                "success"
+            );
+        }
+
+        const term = document.getElementById('busquedaMisReportesInput')?.value || '';
+        if (window.buscarMisReportes) await window.buscarMisReportes(term);
+        if (window.loadHistorialReportesApoyo) window.loadHistorialReportesApoyo();
+        if (window.loadFocosRojos) window.loadFocosRojos();
+    } catch (err) {
+        console.error("Error al eliminar reporte:", err);
+        alert("Error al eliminar el reporte: " + (err.message || err));
     }
 };
 
@@ -17628,6 +17796,88 @@ window.loadActividadesMaestro = async () => {
     }
 };
 
+window._notificarIncumplimientoActividad = async ({ actividadId, alumnoIds = [], eliminarParaIds = [], actData = null }) => {
+    try {
+        if (!actividadId) return;
+        const addIds = [...new Set((alumnoIds || []).filter(Boolean))];
+        const remIds = [...new Set((eliminarParaIds || []).filter(Boolean))];
+        if (addIds.length === 0 && remIds.length === 0) return;
+
+        let act = actData;
+        if (!act || !act.titulo || !act.maestro_id) {
+            const { data } = await supabaseClient.from('actividades_maestro')
+                .select('id, titulo, materia, maestro_id, plantel_id, rubro_name')
+                .eq('id', actividadId).maybeSingle();
+            act = data;
+        }
+        if (!act || !act.titulo) return;
+
+        const titClean = String(act.titulo).trim();
+        const titNorm = titClean.toLowerCase();
+        const rubroNorm = String(act.rubro_name || '').trim().toLowerCase();
+        if (titNorm.includes('asistencia') || titNorm.includes('disciplina') || rubroNorm.includes('asistencia') || rubroNorm.includes('disciplina')) {
+            return;
+        }
+
+        const pId = act.plantel_id || state.plantelId;
+
+        if (remIds.length > 0) {
+            const remAuds = remIds.map(id => `Alumno_${id}`);
+            const { data: prevComs } = await supabaseClient.from('comunicados')
+                .select('id, titulo, audiencia')
+                .in('audiencia', remAuds)
+                .ilike('titulo', '%INCUMPLIMIENTO%');
+            const toDeleteIds = (prevComs || []).filter(c => {
+                const cTit = String(c.titulo || '').replace(/^🔔\s*INCUMPLIMIENTO:\s*/i, '').trim().toLowerCase();
+                return cTit === titNorm;
+            }).map(c => c.id);
+            if (toDeleteIds.length > 0) {
+                await supabaseClient.from('comunicados_vistos').delete().in('comunicado_id', toDeleteIds);
+                const { error: delErr } = await supabaseClient.from('comunicados').delete().in('id', toDeleteIds);
+                if (delErr && window.getSystemSupabaseClient) {
+                    const sys = await window.getSystemSupabaseClient();
+                    if (sys) {
+                        await sys.from('comunicados_vistos').delete().in('comunicado_id', toDeleteIds);
+                        await sys.from('comunicados').delete().in('id', toDeleteIds);
+                    }
+                }
+            }
+        }
+
+        if (addIds.length === 0) return;
+
+        const addAuds = addIds.map(id => `Alumno_${id}`);
+        const { data: existingComs } = await supabaseClient.from('comunicados')
+            .select('titulo, audiencia')
+            .in('audiencia', addAuds)
+            .ilike('titulo', '%INCUMPLIMIENTO%');
+
+        const alreadyNotified = new Set();
+        (existingComs || []).forEach(c => {
+            const cTit = String(c.titulo || '').replace(/^🔔\s*INCUMPLIMIENTO:\s*/i, '').trim().toLowerCase();
+            if (cTit === titNorm) alreadyNotified.add(c.audiencia);
+        });
+
+        const pendingIds = addIds.filter(id => !alreadyNotified.has(`Alumno_${id}`));
+        if (pendingIds.length === 0) return;
+
+        const notifs = pendingIds.map(alId => ({
+            autor_id: act.maestro_id,
+            titulo: `🔔 INCUMPLIMIENTO: ${titClean}`,
+            mensaje: `Se informa que el alumno no entregó o no cumplió con la actividad "${titClean}" en la asignatura de ${act.materia || 'la asignatura'}. \n\n⚠️ Nota: Debido al incumplimiento, se ha asignado una calificación de 0. Si el maestro lo permite, esta calificación aún puede ser modificada si el docente decide reabrir la actividad para una entrega extemporánea. Por favor, fomente el cumplimiento de sus tareas escolares.`,
+            audiencia: `Alumno_${alId}`,
+            plantel_id: pId
+        }));
+
+        const { error: errComs } = await (window.insertarComunicadoSeguro
+            ? window.insertarComunicadoSeguro(notifs)
+            : supabaseClient.from('comunicados').insert(notifs));
+        if (errComs) console.error("Error al enviar avisos de incumplimiento:", errComs);
+    } catch (errInc) {
+        console.warn("Aviso en _notificarIncumplimientoActividad:", errInc);
+    }
+};
+
 window.finalizarActividad = async (id) => {
     if(!confirm("¿Deseas cerrar esta actividad? Se moverá al archivo pero podrás reabrirla si necesitas evaluar más alumnos. Además, se enviará un aviso automático a los alumnos que no cumplieron con la actividad.")) return;
 
@@ -17635,7 +17885,7 @@ window.finalizarActividad = async (id) => {
         // v117: Notificar automáticamente a quienes no cumplieron
         // 1. Obtener detalles de la actividad
         const { data: act } = await supabaseClient.from('actividades_maestro')
-            .select('titulo, grupo_id, target_grado, materia, maestro_id, plantel_id')
+            .select('id, titulo, grupo_id, target_grado, materia, maestro_id, plantel_id, rubro_name')
             .eq('id', id).single();
 
         if (act) {
@@ -17652,17 +17902,17 @@ window.finalizarActividad = async (id) => {
 
             // 3. Obtener quienes ya tienen calificación
             const { data: evaluados } = await supabaseClient.from('evaluaciones_actividades')
-                .select('alumno_id')
+                .select('alumno_id, calificacion')
                 .eq('actividad_id', id);
             
             const evaluadosIds = new Set((evaluados || []).map(e => e.alumno_id));
 
-            // 4. Identificar quienes no cumplieron (no están en la lista de evaluados)
+            // 4. Identificar quienes no tienen calificación aún + quienes ya tenían 0 manual
             const noCumplieron = (todosAlumnos || []).filter(a => !evaluadosIds.has(a.id));
+            const conCeroIds = (evaluados || []).filter(e => parseFloat(e.calificacion) === 0).map(e => e.alumno_id);
 
-            // 5. Asignar 0 automático y enviar comunicados
+            // 5. Asignar 0 automático a quienes faltan y enviar comunicados deduplicados para todos los 0
             if(noCumplieron.length > 0) {
-                // 5a. Insertar calificaciones en 0 para que existan los registros
                 const dataEval = noCumplieron.map(al => ({
                     actividad_id: id,
                     alumno_id: al.id,
@@ -17672,20 +17922,16 @@ window.finalizarActividad = async (id) => {
                 }));
                 const { error: errZero } = await supabaseClient.from('evaluaciones_actividades').insert(dataEval);
                 if(errZero) console.error("Error al asignar 0 automático:", errZero);
-
-                // 5b. Enviar comunicados automáticos
-                const notifs = noCumplieron.map(al => ({
-                    autor_id: act.maestro_id,
-                    titulo: `🔔 INCUMPLIMIENTO: ${act.titulo}`,
-                    mensaje: `Se informa que el alumno no entregó o no cumplió con la actividad "${act.titulo}" en la asignatura de ${act.materia}. \n\n⚠️ Nota: Debido al incumplimiento, se ha asignado una calificación de 0. Si el maestro lo permite, esta calificación aún puede ser modificada si el docente decide reabrir la actividad para una entrega extemporánea. Por favor, fomente el cumplimiento de sus tareas escolares.`,
-                    audiencia: `Alumno_${al.id}`,
-                    plantel_id: act.plantel_id || state.plantelId
-                }));
-                const { error: errComs } = await supabaseClient.from('comunicados').insert(notifs);
-                if(errComs) console.error("Error al enviar avisos de incumplimiento:", errComs);
             }
 
-
+            const allZeroIds = [...noCumplieron.map(al => al.id), ...conCeroIds];
+            if (allZeroIds.length > 0 && window._notificarIncumplimientoActividad) {
+                await window._notificarIncumplimientoActividad({
+                    actividadId: id,
+                    alumnoIds: allZeroIds,
+                    actData: act
+                });
+            }
         }
 
         // 6. Cerrar actividad oficialmente
@@ -19011,7 +19257,14 @@ window.guardarEvaluacionQR = async () => {
         
         if(error) throw error;
 
-        // Sincronizar cola local offline y estado en memoria para que Listas y Seguimiento se actualice de inmediato
+        const notaNum = parseFloat(nota);
+        if (!isNaN(notaNum) && window._notificarIncumplimientoActividad) {
+            window._notificarIncumplimientoActividad({
+                actividadId: currentActividadId,
+                alumnoIds: notaNum === 0 ? [targetStudentId] : [],
+                eliminarParaIds: notaNum > 0 ? [targetStudentId] : []
+            });
+        }
         if (window._obtenerColaEvaluaciones && window._guardarColaEvaluaciones) {
             const cola = window._obtenerColaEvaluaciones().filter(item => !(item.actividad_id === currentActividadId && item.alumno_id === targetStudentId));
             window._guardarColaEvaluaciones(cola);
@@ -19389,6 +19642,18 @@ window.guardarTodasEvaluacionesManual = async () => {
           .upsert(toSave, { onConflict: 'actividad_id,alumno_id' });
         
         if(error) throw error;
+
+        if (window._notificarIncumplimientoActividad) {
+            const zeroIds = toSave.filter(s => parseFloat(s.calificacion) === 0).map(s => s.alumno_id);
+            const posIds = toSave.filter(s => parseFloat(s.calificacion) > 0).map(s => s.alumno_id);
+            if (zeroIds.length > 0 || posIds.length > 0) {
+                window._notificarIncumplimientoActividad({
+                    actividadId: currentActividadId,
+                    alumnoIds: zeroIds,
+                    eliminarParaIds: posIds
+                });
+            }
+        }
         
         // 1. Limpiar la cola offline local para esta actividad para que Listas y Seguimiento no sobreescriba con datos viejos
         if (window._obtenerColaEvaluaciones && window._guardarColaEvaluaciones) {
@@ -19828,6 +20093,14 @@ window._procesarColaEvaluacionesPendientes = async () => {
         const paraUpsert = queue.filter(item => !item.es_borrado);
 
         const idsCompletados = new Set();
+        const cambiosNotifPorAct = new Map();
+        const registrarCambioNotif = (actId, alId, tipo) => {
+            if (!actId || !alId) return;
+            if (!cambiosNotifPorAct.has(actId)) cambiosNotifPorAct.set(actId, { add: [], rem: [] });
+            const entry = cambiosNotifPorAct.get(actId);
+            if (tipo === 'add') entry.add.push(alId);
+            else entry.rem.push(alId);
+        };
 
         // 1. Procesar eliminaciones
         for (const item of paraEliminar) {
@@ -19838,6 +20111,7 @@ window._procesarColaEvaluacionesPendientes = async () => {
                     .eq('alumno_id', item.alumno_id);
                 if (!error) {
                     idsCompletados.add(item.id);
+                    registrarCambioNotif(item.actividad_id, item.alumno_id, 'rem');
                 } else {
                     console.warn("Error borrando evaluación en sync:", error);
                 }
@@ -19863,13 +20137,28 @@ window._procesarColaEvaluacionesPendientes = async () => {
                     const { error } = await supabaseClient.from('evaluaciones_actividades')
                         .upsert(payload, { onConflict: 'actividad_id,alumno_id' });
                     if (!error) {
-                        lote.forEach(it => idsCompletados.add(it.id));
+                        lote.forEach(it => {
+                            idsCompletados.add(it.id);
+                            const nVal = parseFloat(it.calificacion);
+                            if (nVal === 0) registrarCambioNotif(it.actividad_id, it.alumno_id, 'add');
+                            else if (!isNaN(nVal) && nVal > 0) registrarCambioNotif(it.actividad_id, it.alumno_id, 'rem');
+                        });
                     } else {
                         console.error("Error upserting evaluaciones en sync:", error);
                     }
                 } catch(e) {
                     console.error("Excepción en upsert batch sync:", e);
                 }
+            }
+        }
+
+        if (window._notificarIncumplimientoActividad && cambiosNotifPorAct.size > 0) {
+            for (const [actId, ch] of cambiosNotifPorAct.entries()) {
+                window._notificarIncumplimientoActividad({
+                    actividadId: actId,
+                    alumnoIds: ch.add,
+                    eliminarParaIds: ch.rem
+                });
             }
         }
 
@@ -24799,16 +25088,23 @@ window.finalizarSesionAsistencia = async () => {
         let reg = [];
         if (studentIds.length > 0) {
             const { data: rawReg } = await supabaseClient.from('asistencias')
-                .select('alumno_id, estado, materia')
+                .select('alumno_id, estado, materia, creado_en')
                 .in('alumno_id', studentIds)
                 .or(`fecha.eq.${hoy},and(creado_en.gte.${hoy}T00:00:00Z,creado_en.lte.${hoy}T23:59:59.999Z)`)
-                .eq('plantel_id', state.plantelId);
+                .eq('plantel_id', state.plantelId)
+                .order('creado_en', { ascending: false });
 
-            // Filtrar por materia en JS para ser más permisivos con espacios o nulos si es necesario
-            reg = (rawReg || []).filter(r => {
+            // Filtrar por materia y conservar únicamente el registro más reciente por alumno
+            const seenAlumnos = new Set();
+            (rawReg || []).forEach(r => {
                 const mRecord = (r.materia || '').trim().toLowerCase();
                 const mTarget = materia.toLowerCase();
-                return mRecord === mTarget || mRecord === ''; // Permitir vacíos para justificaciones generales
+                if (mRecord === mTarget || mRecord === '') {
+                    if (!seenAlumnos.has(r.alumno_id)) {
+                        seenAlumnos.add(r.alumno_id);
+                        reg.push(r);
+                    }
+                }
             });
         }
         
@@ -24939,23 +25235,28 @@ window.finalizarSesionAsistencia = async () => {
                                mensaje: `⚠️ ATENCIÓN: El alumno registró ingreso al plantel el día de hoy, pero NO se presentó a la clase de ${materia}. \n\nAdicionalmente, acumula ${conteoMat[id]} faltas en esta asignatura. Se requiere atención inmediata por parte de Prefectura y Trabajo Social.`,
                                plantel_id: state.plantelId
                           }));
-                          await supabaseClient.from('comunicados').insert(evasoresInserts);
+                          const { error: errEva } = await (window.insertarComunicadoSeguro
+                              ? window.insertarComunicadoSeguro(evasoresInserts)
+                              : supabaseClient.from('comunicados').insert(evasoresInserts));
+                          if (errEva) console.error("Error al enviar alerta evasión clase:", errEva);
                      }
                 }
             }
         } catch(e) { console.error("Error alertas evasión clase:", e); }
         // ----------------------------------------------
 
-        // Consultar comunicados ya enviados hoy para no duplicar
+        // Consultar comunicados ya enviados hoy (en horario local) para no duplicar
+        const dayStartIso = new Date(`${hoy}T00:00:00`).toISOString();
+        const dayEndIso = new Date(`${hoy}T23:59:59.999`).toISOString();
         const { data: comunicadosHoy } = await supabaseClient.from('comunicados')
             .select('audiencia, titulo')
-            .gte('fecha_envio', `${hoy}T00:00:00Z`)
-            .lte('fecha_envio', `${hoy}T23:59:59.999Z`)
+            .gte('fecha_envio', dayStartIso)
+            .lte('fecha_envio', dayEndIso)
             .eq('plantel_id', state.plantelId)
             .ilike('mensaje', `%${materia}%`);
             
-        const enviadosRetardo = (comunicadosHoy || []).filter(c => c.titulo.includes('RETARDO')).map(c => c.audiencia);
-        const enviadosFalta = (comunicadosHoy || []).filter(c => c.titulo.includes('INASISTENCIA')).map(c => c.audiencia);
+        const enviadosRetardo = (comunicadosHoy || []).filter(c => (c.titulo || '').includes('RETARDO')).map(c => c.audiencia);
+        const enviadosFalta = (comunicadosHoy || []).filter(c => (c.titulo || '').includes('INASISTENCIA')).map(c => c.audiencia);
 
         let comunicadosAInsertar = [];
         
@@ -24986,7 +25287,10 @@ window.finalizarSesionAsistencia = async () => {
         });
 
         if (comunicadosAInsertar.length > 0) {
-            await supabaseClient.from('comunicados').insert(comunicadosAInsertar);
+            const { error: errComAsist } = await (window.insertarComunicadoSeguro
+                ? window.insertarComunicadoSeguro(comunicadosAInsertar)
+                : supabaseClient.from('comunicados').insert(comunicadosAInsertar));
+            if (errComAsist) console.error("Error al enviar avisos de asistencia:", errComAsist);
         }
 
         // Purgar inmediatamente cualquier aviso erróneo previo para alumnos que sí tienen Asistencia o Justificada
@@ -27027,24 +27331,36 @@ window.cargarEncuadreActivo = async () => {
                 audiencia: `Alumno_${alum.id}`,
                 plantel_id: state.plantelId
             }));
-            const { error: errIns } = await supabaseClient.from('comunicados').insert(notificaciones);
+            const { error: errIns } = await (window.insertarComunicadoSeguro
+                ? window.insertarComunicadoSeguro(notificaciones)
+                : supabaseClient.from('comunicados').insert(notificaciones));
             if(errIns) throw errIns;
 
             // 4. Marcar encuadre como enviado
+            const fechaNotifIso = new Date().toISOString();
+            let errFlag = null;
             if(encId) {
-                await supabaseClient.from('encuadres').update({ 
+                const { error: eUp } = await supabaseClient.from('encuadres').update({ 
                     notificacion_enviada: true, 
-                    fecha_envio_notif: new Date().toISOString() 
+                    fecha_envio_notif: fechaNotifIso 
                 }).eq('id', encId);
+                errFlag = eUp;
             } else {
                 let qUpdate = supabaseClient.from('encuadres').update({ 
                     notificacion_enviada: true, 
-                    fecha_envio_notif: new Date().toISOString() 
-                }).eq('plantel_id', state.plantelId).eq('maestro_id', u.data.user.id).eq('materia', mat).eq('trimestre', window.currentTrimestre || 1);
+                    fecha_envio_notif: fechaNotifIso 
+                }).eq('plantel_id', state.plantelId).eq('maestro_id', u.data.user.id).eq('materia', (mat || '').trim()).eq('trimestre', window.currentTrimestre || 1);
 
                 if(isTec) qUpdate = qUpdate.is('grupo_id', null).eq('target_grado', targetGrado);
                 else qUpdate = qUpdate.eq('grupo_id', gid);
-                await qUpdate;
+                const { error: eUp } = await qUpdate;
+                errFlag = eUp;
+            }
+            if (errFlag && window.getSystemSupabaseClient) {
+                const sysClient = await window.getSystemSupabaseClient();
+                if (sysClient && encId) {
+                    await sysClient.from('encuadres').update({ notificacion_enviada: true, fecha_envio_notif: fechaNotifIso }).eq('id', encId);
+                }
             }
 
             const fechaHoy = new Date().toLocaleString('es-MX', { dateStyle: 'medium', timeStyle: 'short' });
@@ -27700,7 +28016,7 @@ window.cargarSabanaGrupo = async () => {
                 studentAvgsList.push({ nombre: al.nombre, promedio: parseFloat(promX) });
             }
             htmlRows += `
-               <tr>
+               <tr data-alumno-id="${al.id}">
                  <td style="text-align:left; font-weight:bold; position:sticky; left:0; background:white; z-index:1; border-right:1px solid var(--border);">${al.nombre}</td>
                  ${cols}
                  <td style="background:var(--primary); font-weight:bold; color:white; font-size:1.1rem; position:sticky; right:0; z-index:1;">${promX}</td>
@@ -29019,7 +29335,9 @@ window.notificarRevisionSabana = async () => {
                 : (!isNaN(cellProm) ? (window._truncarUnDecimalNum ? window._truncarUnDecimalNum(cellProm) : cellProm) : 0);
 
 
-            const aluMatch = alums.find(a => norm(a.nombre) === norm(nombreAlumno));
+            const rowAlumnoId = row.getAttribute('data-alumno-id');
+            const aluMatch = (rowAlumnoId && alums.find(a => a.id === rowAlumnoId))
+                || alums.find(a => norm(a.nombre) === norm(nombreAlumno));
 
             if(aluMatch) {
                 results.push({
@@ -29038,6 +29356,7 @@ window.notificarRevisionSabana = async () => {
 
         // 2. Procesar Envíos
         let conteo = 0;
+        let erroresEnvio = [];
         for (const res of results) {
             let mensajeEspecial = "";
             let tituloFinal = `BOLETA DIGITAL: ${trim}`;
@@ -29055,8 +29374,7 @@ window.notificarRevisionSabana = async () => {
                 mensajeEspecial = `\n\n🌟 ¡MUCHAS FELICIDADES!:\nHas logrado un desempeño sobresaliente con un promedio de ${prom}. Reconocemos tu gran disciplina y compromiso escolar. ¡Sigue así, eres un orgullo para nuestra comunidad! 👏`;
             }
 
-            // Enviar notificación individual marcada como automática para filtrado
-            await supabaseClient.from('comunicados').insert([{
+            const payloadCom = {
                 autor_id: uRes.data.user.id,
                 receptor_id: res.perfil_id, // Vinculación directa a la cuenta del alumno
                 titulo: tituloFinal,
@@ -29064,12 +29382,27 @@ window.notificarRevisionSabana = async () => {
                 audiencia: `Alumno_${res.id}`,
                 tipo: 'reporte_academico_automatico',
                 plantel_id: state.plantelId
-            }]);
-            conteo++;
+            };
+
+            // Enviar notificación individual marcada como automática (con 1 reintento si falla)
+            let { error: insErr } = await supabaseClient.from('comunicados').insert([payloadCom]);
+            if (insErr) {
+                const retryRes = await supabaseClient.from('comunicados').insert([payloadCom]);
+                insErr = retryRes.error;
+            }
+            if (insErr) {
+                console.error(`Error enviando boleta a ${res.nombre}:`, insErr);
+                erroresEnvio.push(res.nombre);
+            } else {
+                conteo++;
+            }
         }
 
-        if(noEncontrados.length > 0) {
-            alert(`¡Proceso completado!\n\n✅ Enviados: ${conteo}\n❌ No vinculados (por nombre): ${noEncontrados.length}\n\nLos siguientes alumnos no recibieron boleta porque su nombre en la tabla no coincide exactamente con el registro escolar:\n- ${noEncontrados.join('\n- ')}\n\nPor favor, verifica los nombres y reintenta.`);
+        if(noEncontrados.length > 0 || erroresEnvio.length > 0) {
+            let msg = `¡Proceso completado!\n\n✅ Enviados: ${conteo}`;
+            if(noEncontrados.length > 0) msg += `\n❌ No vinculados (por nombre): ${noEncontrados.length}\n- ${noEncontrados.join('\n- ')}`;
+            if(erroresEnvio.length > 0) msg += `\n⚠️ Con error de red al enviar: ${erroresEnvio.length}\n- ${erroresEnvio.join('\n- ')}`;
+            alert(msg);
         } else {
             alert(`¡Éxito total! Se enviaron ${conteo} reportes individuales de calificaciones a los alumnos de ${grupoName}.`);
         }
@@ -29312,12 +29645,45 @@ window.onFirmaQrScanSuccess = (decodedText) => {
 };
 
 /**
+ * Búsqueda de alumnos insensible a acentos, espacios múltiples y orden de palabras.
+ */
+window._buscarAlumnosPlantelNormalizado = async (rawQuery, limit = 10) => {
+    const norm = (s) => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, ' ').trim().toLowerCase();
+    const tokens = norm(rawQuery).split(' ').filter(Boolean);
+    if (tokens.length === 0) return [];
+
+    const pId = state.plantelId || state.user?.user_metadata?.plantel_id || 'all';
+    window.__alumnosSearchCache = window.__alumnosSearchCache || {};
+    const cached = window.__alumnosSearchCache[pId];
+
+    let lista = null;
+    if (cached && (Date.now() - cached.ts) < 60000) {
+        lista = cached.data;
+    } else {
+        let query = supabaseClient
+            .from('alumnos')
+            .select('id, nombre, matricula, grupos(nombre)')
+            .order('nombre', { ascending: true });
+        if (pId !== 'all') query = query.eq('plantel_id', pId);
+        const { data, error } = await query;
+        if (error) throw error;
+        lista = data || [];
+        window.__alumnosSearchCache[pId] = { ts: Date.now(), data: lista };
+    }
+
+    return lista.filter(a => {
+        const haystack = norm(`${a.nombre || ''} ${a.matricula || ''}`);
+        return tokens.every(t => haystack.includes(t));
+    }).slice(0, limit);
+};
+
+/**
  * Búsqueda manual de alumnos por nombre o matrícula en Firma por QR.
  */
 window.buscarAlumnoManualFirmaQR = async (val) => {
     const resDiv = document.getElementById('firmaResBusquedaManual');
     if(!resDiv) return;
-    const term = (val || '').trim().replace(/[,()]/g, ' ');
+    const term = (val || '').trim();
     if(term.length < 2) {
         resDiv.style.display = 'none';
         resDiv.innerHTML = '';
@@ -29326,18 +29692,8 @@ window.buscarAlumnoManualFirmaQR = async (val) => {
 
     const seq = (window.__firmaManualSearchSeq = (window.__firmaManualSearchSeq || 0) + 1);
     try {
-        const pId = state.plantelId || state.user?.user_metadata?.plantel_id;
-        let query = supabaseClient
-            .from('alumnos')
-            .select('id, nombre, matricula, grupos(nombre)')
-            .order('nombre', { ascending: true })
-            .limit(10);
-        if(pId) query = query.eq('plantel_id', pId);
-        query = query.or(`nombre.ilike.%${term}%,matricula.ilike.%${term}%`);
-
-        const { data, error } = await query;
+        const data = await window._buscarAlumnosPlantelNormalizado(term, 10);
         if(seq !== window.__firmaManualSearchSeq) return;
-        if(error) throw error;
 
         if(data && data.length > 0) {
             const esc = (str) => String(str || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
@@ -29664,9 +30020,9 @@ window.loadHistorialFirmas = async () => {
 window.liveSearchAlumnoCalificaciones = async (q) => {
     const res = document.getElementById('resSearchAlumnoDownload');
     if(!res) return;
-    if(q.length < 2) { res.style.display='none'; return; }
+    if((q || '').trim().length < 2) { res.style.display='none'; return; }
     try {
-        const { data } = await supabaseClient.from('alumnos').select('id, nombre, matricula, grupos(nombre)').eq('plantel_id', state.plantelId).or(`nombre.ilike.%${q}%,matricula.ilike.%${q}%`).limit(10);
+        const data = await window._buscarAlumnosPlantelNormalizado(q, 10);
         if(!data || data.length === 0) { res.innerHTML='<p style="padding:10px; color:var(--text-muted)">Sin resultados</p>'; res.style.display='block'; return; }
         res.style.display='block';
         res.innerHTML = data.map(a => `
@@ -34008,7 +34364,7 @@ window.loadMaestroAvisosGrupos = async () => {
         
         const { data: asigs } = await supabaseClient.from('asignaciones_maestros')
            .select('materia, grupo_id, target_grado, grupos(id, nombre)')
-           .eq('docente_email', u.data.user.email)
+           .ilike('docente_email', u.data.user.email)
            .eq('plantel_id', state.plantelId)
            .or('grupo_id.not.is.null,target_grado.not.is.null');
 
@@ -34579,7 +34935,9 @@ window.publicarComunicadoMaestro = async () => {
                 insertRow.receptor_id = alum.perfil_id;
             }
 
-            const { error: errIns } = await supabaseClient.from('comunicados').insert([insertRow]);
+            const { error: errIns } = await (window.insertarComunicadoSeguro
+                ? window.insertarComunicadoSeguro([insertRow])
+                : supabaseClient.from('comunicados').insert([insertRow]));
             if (errIns) throw errIns;
 
             window.showToast(`Aviso individual enviado exitosamente a ${alum.nombre}.`, "success");
@@ -34611,7 +34969,7 @@ window.publicarComunicadoMaestro = async () => {
             if (isTec) {
                 // Consultar únicamente los alumnos de este grupo que cursan este taller
                 let qAlu = supabaseClient.from('alumnos')
-                    .select('id, nombre, grado, taller, grupo_id')
+                    .select('id, nombre, grado, taller, grupo_id, perfil_id')
                     .eq('plantel_id', state.plantelId);
                 
                 if (gid) {
@@ -34630,7 +34988,7 @@ window.publicarComunicadoMaestro = async () => {
 
                 if (alumnosTaller.length > 0) {
                     alumnosTaller.forEach(alum => {
-                        inserts.push({
+                        const rowIns = {
                             autor_id: uRes.data.user.id,
                             tipo: 'AvisoMaestro',
                             titulo: titulo,
@@ -34638,7 +34996,9 @@ window.publicarComunicadoMaestro = async () => {
                             audiencia: `Alumno_${alum.id}`,
                             archivo_url: fileUrl,
                             plantel_id: state.plantelId
-                        });
+                        };
+                        if (alum.perfil_id) rowIns.receptor_id = alum.perfil_id;
+                        inserts.push(rowIns);
                     });
                     totalDestinatariosTaller += alumnosTaller.length;
                     gruposAfectados++;
@@ -34664,7 +35024,9 @@ window.publicarComunicadoMaestro = async () => {
             throw new Error("No se encontraron alumnos pertenecientes al taller seleccionado en los grupos marcados.");
         }
 
-        const { error } = await supabaseClient.from('comunicados').insert(inserts);
+        const { error } = await (window.insertarComunicadoSeguro
+            ? window.insertarComunicadoSeguro(inserts)
+            : supabaseClient.from('comunicados').insert(inserts));
         if(error) throw error;
         
         const txtExito = totalDestinatariosTaller > 0
@@ -35189,13 +35551,16 @@ window.marcarAsistenciaManual = async (alumnoId, estado) => {
             return alert("⚠️ El pase de lista de hoy ya fue CERRADO y finalizado.\n\nNo es posible modificar las asistencias directamente hasta el próximo día de pase de lista. Si el alumno presenta justificante médico o institucional, utiliza el botón 'Justificar'.");
         }
 
-        const { data: existente } = await supabaseClient.from('asistencias')
-            .select('id, estado')
+        const { data: existentesRows } = await supabaseClient.from('asistencias')
+            .select('id, estado, creado_en')
             .eq('alumno_id', alumnoId)
             .eq('materia', materiaGuardar)
             .or(`fecha.eq.${hoy},and(creado_en.gte.${hoy}T00:00:00Z,creado_en.lte.${hoy}T23:59:59.999Z)`)
             .eq('plantel_id', state.plantelId)
-            .maybeSingle();
+            .order('creado_en', { ascending: false });
+
+        const existente = (existentesRows && existentesRows.length > 0) ? existentesRows[0] : null;
+        const duplicadosIds = (existentesRows && existentesRows.length > 1) ? existentesRows.slice(1).map(r => r.id) : [];
 
         // Si ya está justificada institucionalmente y se intenta cambiar, confirmar con el usuario
         if (existente && existente.estado === 'Justificada' && estado !== 'Justificada') {
@@ -35227,6 +35592,9 @@ window.marcarAsistenciaManual = async (alumnoId, estado) => {
 
         if (existente) {
             await supabaseClient.from('asistencias').update({ estado: estado, fecha: hoy }).eq('id', existente.id);
+            if (duplicadosIds.length > 0) {
+                await supabaseClient.from('asistencias').delete().in('id', duplicadosIds);
+            }
         } else {
             await supabaseClient.from('asistencias').insert([{
                 alumno_id: alumnoId, 
@@ -35240,27 +35608,64 @@ window.marcarAsistenciaManual = async (alumnoId, estado) => {
             }]);
         }
 
-        // Si se cambia a Asistencia, Retardo o Justificada: purgar avisos falsos de inasistencia/evasión
-        if (estado === 'Asistencia' || estado === 'Retardo' || estado === 'Justificada') {
+        const dayStartIso = new Date(`${hoy}T00:00:00`).toISOString();
+        const dayEndIso = new Date(`${hoy}T23:59:59.999`).toISOString();
+        const aud = 'Alumno_' + alumnoId;
+
+        // Si se cambia a Asistencia, Retardo, Falta o Justificada: purgar avisos incompatibles
+        if (estado === 'Asistencia' || estado === 'Retardo' || estado === 'Falta' || estado === 'Justificada') {
             try {
-                const aud = 'Alumno_' + alumnoId;
                 const { data: comsBorrar } = await supabaseClient.from('comunicados')
                     .select('id, titulo, mensaje')
                     .or(`audiencia.eq.${aud},receptor_id.eq.${alumnoId}`)
-                    .gte('fecha_envio', `${hoy}T00:00:00Z`)
+                    .gte('fecha_envio', dayStartIso)
+                    .lte('fecha_envio', dayEndIso)
                     .eq('plantel_id', state.plantelId);
 
                 const idsABorrar = (comsBorrar || []).filter(c => {
-                    const esInasistencia = (c.titulo || '').includes('INASISTENCIA') || (c.titulo || '').includes('Evasión de Clase');
+                    const tit = c.titulo || '';
+                    const esInasistencia = tit.includes('INASISTENCIA') || tit.includes('Evasión de Clase');
+                    const esRetardo = tit.includes('RETARDO');
                     const coincideMateria = !materiaGuardar || materiaGuardar === 'N/A' || (c.mensaje || '').toLowerCase().includes(materiaGuardar.toLowerCase());
-                    return esInasistencia && coincideMateria;
+                    if (!coincideMateria) return false;
+                    if (estado === 'Falta') return esRetardo;
+                    if (estado === 'Retardo') return esInasistencia;
+                    return esInasistencia || esRetardo;
                 }).map(c => c.id);
 
                 if (idsABorrar.length > 0) {
                     await supabaseClient.from('comunicados').delete().in('id', idsABorrar);
                 }
+
+                // Enviar notificación inmediata si se marcó Falta o Retardo manualmente (evitando duplicados)
+                if (estado === 'Falta' || estado === 'Retardo') {
+                    const claveTit = estado === 'Falta' ? 'INASISTENCIA' : 'RETARDO';
+                    const yaNotificado = (comsBorrar || []).some(c => {
+                        const tit = c.titulo || '';
+                        const coincideMat = !materiaGuardar || materiaGuardar === 'N/A' || (c.mensaje || '').toLowerCase().includes(materiaGuardar.toLowerCase());
+                        return tit.includes(claveTit) && coincideMat;
+                    });
+                    if (!yaNotificado) {
+                        const payloadManual = estado === 'Falta' ? {
+                            autor_id: u.data.user.id,
+                            titulo: '⚠️ AVISO DE INASISTENCIA',
+                            audiencia: aud,
+                            mensaje: `Se ha registrado una FALTA en la materia: "${materiaGuardar}" el día de hoy (${hoy}). \n\nRecuerda que las inasistencias acumuladas afectan tu porcentaje de aprobación.`,
+                            plantel_id: state.plantelId
+                        } : {
+                            autor_id: u.data.user.id,
+                            titulo: '⚠️ AVISO DE RETARDO',
+                            audiencia: aud,
+                            mensaje: `Hola. Se ha registrado un RETARDO en la materia: "${materiaGuardar}" el día de hoy (${hoy}). \n\nRecuerda que la puntualidad es parte de tu evaluación formativa.`,
+                            plantel_id: state.plantelId
+                        };
+                        await (window.insertarComunicadoSeguro
+                            ? window.insertarComunicadoSeguro([payloadManual])
+                            : supabaseClient.from('comunicados').insert([payloadManual]));
+                    }
+                }
             } catch(eClean) {
-                console.error("Error al purgar comunicados de inasistencia:", eClean);
+                console.error("Error al sincronizar comunicados de asistencia manual:", eClean);
             }
         }
 
@@ -35271,6 +35676,8 @@ window.marcarAsistenciaManual = async (alumnoId, estado) => {
 };
 
 window.marcarTodosAsistenciaManual = async () => {
+    if (window._marcarTodosAsistenciaLock) return;
+    window._marcarTodosAsistenciaLock = true;
     try {
         const u = await supabaseClient.auth.getUser();
         if(!u.data.user) throw new Error("Sesión expirada");
@@ -35455,6 +35862,8 @@ window.marcarTodosAsistenciaManual = async () => {
         console.error("Error al marcar asistencia a todos:", err);
         window.showToast("Error: " + err.message, "error");
         if (window.loadListaAsistenciaManual) window.loadListaAsistenciaManual();
+    } finally {
+        window._marcarTodosAsistenciaLock = false;
     }
 };
 
