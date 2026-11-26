@@ -11680,6 +11680,15 @@ function renderApoyoFirmaQR() {
         <div id="firmaQrReader" style="width:100%; border-radius:12px; overflow:hidden; border:2px solid var(--border);"></div>
         <p id="firmaQrStatus" style="text-align:center; font-size:0.85rem; color:var(--text-muted); margin-top:10px; min-height:20px;"></p>
 
+        <!-- Búsqueda Manual de Alumno -->
+        <div style="margin-top:14px; padding-top:14px; border-top:1px solid var(--border); position:relative;">
+          <label class="form-label" style="font-size:0.8rem; display:flex; align-items:center; gap:6px;">
+            <i class="fa-solid fa-magnifying-glass" style="color:var(--primary);"></i> Búsqueda manual (si no tiene QR)
+          </label>
+          <input type="text" id="firmaBusquedaManual" class="form-input" placeholder="Buscar alumno por nombre o matrícula..." oninput="window.buscarAlumnoManualFirmaQR(this.value)" autocomplete="off" style="margin-bottom:0;">
+          <div id="firmaResBusquedaManual" style="display:none; position:absolute; top:100%; left:0; width:100%; background:white; border:1px solid var(--border); border-radius:8px; max-height:220px; overflow-y:auto; z-index:1000; box-shadow:0 6px 18px rgba(0,0,0,0.12); margin-top:4px;"></div>
+        </div>
+
         <!-- Log de escaneos rápidos -->
         <div id="firmaQrScanLog" style="margin-top:12px; max-height:250px; overflow-y:auto;"></div>
 
@@ -29146,22 +29155,29 @@ window._addScanLogEntry = (nombre, grupo, status, statusColor) => {
 };
 
 /**
- * Callback automático al detectar QR: busca alumno → envía aviso → reanuda escáner.
+ * Procesa el envío de aviso de firma de boleta (por QR o búsqueda manual).
  */
-window.onFirmaQrScanSuccess = async (decodedText) => {
+window._procesarFirmaBoletaAlumno = async (decodedText, isManual = false) => {
     const statusEl = document.getElementById('firmaQrStatus');
     if(!statusEl) return;
 
-    const code = decodedText.trim();
+    const code = (decodedText || '').trim();
+    if(!code) return;
 
     // Evitar escaneos duplicados mientras se procesa
-    if(window.__firmaQrState.processing) return;
+    if(window.__firmaQrState.processing) {
+        if(isManual && window.showToast) window.showToast('Procesando un alumno, espera un momento...', 'info');
+        return;
+    }
 
     // Evitar re-escanear el mismo código en la sesión actual
     const trimestre = document.getElementById('firmaTrimestreSel')?.value || 'Trimestre 1';
     const scanKey = `${code}_${trimestre}`;
     if(window.__firmaQrState.recentScans.has(scanKey)) {
-        // Ya se envió este — ignorar silenciosamente
+        if(isManual) {
+            statusEl.innerHTML = 'ℹ️ Ya se envió el aviso a este alumno en esta sesión.';
+            if(window.showToast) window.showToast('Ya se envió el aviso a este alumno en esta sesión.', 'info');
+        }
         return;
     }
 
@@ -29200,6 +29216,17 @@ window.onFirmaQrScanSuccess = async (decodedText) => {
             return;
         }
 
+        const alumnoScanKey = `${alumno.id}_${trimestre}`;
+        if(window.__firmaQrState.recentScans.has(alumnoScanKey)) {
+            if(isManual) {
+                statusEl.innerHTML = `ℹ️ Ya se envió el aviso a <strong>${alumno.nombre}</strong> en esta sesión.`;
+                if(window.showToast) window.showToast(`Ya se envió el aviso a ${alumno.nombre} en esta sesión.`, 'info');
+            }
+            window.__firmaQrState.processing = false;
+            setTimeout(() => { try { window.__firmaQrState.scanner?.resume(); } catch(e) {} statusEl.innerHTML = '📷 <strong>Listo.</strong> Escanea el siguiente.'; }, 1000);
+            return;
+        }
+
         // 2. Verificar que tenga cuenta
         if(!alumno.perfil_id && !alumno.contacto_email) {
             window._addScanLogEntry(alumno.nombre, alumno.grupos?.nombre || 'N/A', '⚠️ SIN CUENTA', '#f59e0b');
@@ -29220,6 +29247,7 @@ window.onFirmaQrScanSuccess = async (decodedText) => {
         if(firmaExistente) {
             window._addScanLogEntry(alumno.nombre, alumno.grupos?.nombre || 'N/A', '✅ YA FIRMÓ', '#10b981');
             window.__firmaQrState.recentScans.add(scanKey);
+            window.__firmaQrState.recentScans.add(alumnoScanKey);
             statusEl.innerHTML = `✅ ${alumno.nombre} ya tiene firma — escaneando siguiente...`;
             window.__firmaQrState.processing = false;
             setTimeout(() => { try { window.__firmaQrState.scanner?.resume(); } catch(e) {} statusEl.innerHTML = '📷 <strong>Listo.</strong> Escanea el siguiente.'; }, 1000);
@@ -29245,9 +29273,10 @@ window.onFirmaQrScanSuccess = async (decodedText) => {
 
         // Marcar como enviado para no repetir
         window.__firmaQrState.recentScans.add(scanKey);
+        window.__firmaQrState.recentScans.add(alumnoScanKey);
 
         // Log visual
-        window._addScanLogEntry(alumno.nombre, alumno.grupos?.nombre || 'N/A', '📨 ENVIADO', '#3b82f6');
+        window._addScanLogEntry(alumno.nombre, alumno.grupos?.nombre || 'N/A', isManual ? '📨 ENVIADO (MANUAL)' : '📨 ENVIADO', '#3b82f6');
         statusEl.innerHTML = `📨 Aviso enviado a <strong>${alumno.nombre}</strong> — escaneando siguiente...`;
 
         // Sonido de confirmación (beep sutil)
@@ -29273,6 +29302,76 @@ window.onFirmaQrScanSuccess = async (decodedText) => {
         const s = document.getElementById('firmaQrStatus');
         if(s) s.innerHTML = '📷 <strong>Listo.</strong> Escanea el siguiente.';
     }, 1200);
+};
+
+/**
+ * Callback automático al detectar QR: busca alumno → envía aviso → reanuda escáner.
+ */
+window.onFirmaQrScanSuccess = (decodedText) => {
+    window._procesarFirmaBoletaAlumno(decodedText, false);
+};
+
+/**
+ * Búsqueda manual de alumnos por nombre o matrícula en Firma por QR.
+ */
+window.buscarAlumnoManualFirmaQR = async (val) => {
+    const resDiv = document.getElementById('firmaResBusquedaManual');
+    if(!resDiv) return;
+    const term = (val || '').trim().replace(/[,()]/g, ' ');
+    if(term.length < 2) {
+        resDiv.style.display = 'none';
+        resDiv.innerHTML = '';
+        return;
+    }
+
+    const seq = (window.__firmaManualSearchSeq = (window.__firmaManualSearchSeq || 0) + 1);
+    try {
+        const pId = state.plantelId || state.user?.user_metadata?.plantel_id;
+        let query = supabaseClient
+            .from('alumnos')
+            .select('id, nombre, matricula, grupos(nombre)')
+            .order('nombre', { ascending: true })
+            .limit(10);
+        if(pId) query = query.eq('plantel_id', pId);
+        query = query.or(`nombre.ilike.%${term}%,matricula.ilike.%${term}%`);
+
+        const { data, error } = await query;
+        if(seq !== window.__firmaManualSearchSeq) return;
+        if(error) throw error;
+
+        if(data && data.length > 0) {
+            const esc = (str) => String(str || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+            resDiv.innerHTML = data.map(a => `
+                <div style="padding:10px 12px; border-bottom:1px solid var(--border); cursor:pointer; font-size:0.85rem; text-align:left;"
+                     onmouseover="this.style.background='#f8fafc'"
+                     onmouseout="this.style.background='white'"
+                     onclick="window.seleccionarAlumnoManualFirmaQR('${a.id}')">
+                    <div style="font-weight:600;">${esc(a.nombre)}</div>
+                    <div style="font-size:0.75rem; color:var(--text-muted);">${esc(a.matricula || 'Sin matrícula')} · ${esc(a.grupos?.nombre || 'S/G')}</div>
+                </div>
+            `).join('');
+            resDiv.style.display = 'block';
+        } else {
+            resDiv.innerHTML = '<div style="padding:10px 12px; font-size:0.85rem; color:var(--text-muted);">No se encontraron alumnos</div>';
+            resDiv.style.display = 'block';
+        }
+    } catch(e) {
+        console.error('[FirmaQR] Error en búsqueda manual:', e);
+    }
+};
+
+/**
+ * Selecciona un alumno de la búsqueda manual y dispara el envío de aviso de firma.
+ */
+window.seleccionarAlumnoManualFirmaQR = (alumnoId) => {
+    const input = document.getElementById('firmaBusquedaManual');
+    const resDiv = document.getElementById('firmaResBusquedaManual');
+    if(input) input.value = '';
+    if(resDiv) {
+        resDiv.style.display = 'none';
+        resDiv.innerHTML = '';
+    }
+    window._procesarFirmaBoletaAlumno(alumnoId, true);
 };
 
 /**
